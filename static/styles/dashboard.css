@@ -1,0 +1,264 @@
+/* Claude Control Dashboard - Manager Dashboard Styles */
+
+/* ========================================
+   Dashboard Panel
+   ======================================== */
+
+.dashboard-panel {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary);
+}
+
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-primary);
+}
+
+.dashboard-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.dashboard-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.dashboard-session-name {
+    font-size: 13px;
+    color: var(--text-muted);
+    padding: 4px 10px;
+    background: var(--bg-tertiary);
+    border-radius: var(--border-radius);
+}
+
+/* Dashboard Content Grid */
+.dashboard-content {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 350px 1fr;
+    gap: 1px;
+    background: var(--border-color);
+    overflow: hidden;
+}
+
+.dashboard-section {
+    background: var(--bg-secondary);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.section-header h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.worker-count {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+/* Workers List */
+.workers-list {
+    flex: 1;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+}
+
+.worker-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--bg-tertiary);
+    border-radius: var(--border-radius-lg);
+    transition: all var(--transition-fast);
+}
+
+.worker-item:hover {
+    background: var(--bg-hover);
+}
+
+.worker-item.busy {
+    border-left: 3px solid var(--warning-color);
+}
+
+.worker-item.idle {
+    border-left: 3px solid var(--success-color);
+}
+
+.worker-status-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.worker-status-indicator.running {
+    background: var(--success-color);
+    box-shadow: 0 0 6px var(--success-color);
+}
+
+.worker-status-indicator.stopped {
+    background: var(--text-muted);
+}
+
+.worker-status-indicator.error {
+    background: var(--danger-color);
+}
+
+.worker-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.worker-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+
+.worker-status-text {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: capitalize;
+}
+
+.worker-task-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.worker-busy-badge {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--warning-color);
+    background: rgba(245, 158, 11, 0.15);
+    padding: 2px 8px;
+    border-radius: 10px;
+    animation: pulse 1.5s infinite;
+}
+
+.worker-idle-badge {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--success-color);
+    background: rgba(16, 185, 129, 0.15);
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.worker-task-text {
+    font-size: 11px;
+    color: var(--text-muted);
+    max-width: 100px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Activity Timeline */
+.activity-timeline {
+    flex: 1;
+    padding: 12px 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.timeline-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--bg-tertiary);
+    border-radius: var(--border-radius-lg);
+    border-left: 3px solid var(--border-color);
+}
+
+.timeline-item.event-success {
+    border-left-color: var(--success-color);
+}
+
+.timeline-item.event-error {
+    border-left-color: var(--danger-color);
+}
+
+.timeline-item.event-info {
+    border-left-color: var(--primary-color);
+}
+
+.timeline-item.event-progress {
+    border-left-color: var(--warning-color);
+}
+
+.timeline-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.timeline-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.timeline-type {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.timeline-time {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.timeline-message {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.timeline-worker {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}

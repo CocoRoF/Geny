@@ -1,0 +1,111 @@
+/* Claude Control Dashboard - Command Panel Styles */
+
+/* ========================================
+   Command Panel
+   ======================================== */
+
+.command-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 24px;
+    gap: 20px;
+}
+
+.selected-session-info {
+    padding: 16px 20px;
+    background-color: var(--bg-secondary);
+    border-radius: var(--border-radius);
+    border-left: 3px solid var(--primary-color);
+}
+
+.selected-session-info h4 {
+    margin-bottom: 4px;
+    font-weight: 500;
+}
+
+.selected-session-info .session-meta {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+
+/* Command Input Area */
+.command-input-area {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.command-input-area textarea {
+    width: 100%;
+    padding: 16px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 120px;
+    transition: border-color var(--transition-fast);
+}
+
+.command-input-area textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.command-input-area textarea::placeholder {
+    color: var(--text-muted);
+}
+
+/* Command Options */
+.command-options {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* Command Actions */
+.command-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* Command Output Area */
+.command-output-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 200px;
+}
+
+.output-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.output-header h3 {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.output-content {
+    flex: 1;
+    padding: 20px;
+    background-color: var(--bg-secondary);
+    border-radius: var(--border-radius);
+    font-family: 'SF Mono', Monaco, Consolas, 'Liberation Mono', monospace;
+    font-size: 0.8125rem;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}

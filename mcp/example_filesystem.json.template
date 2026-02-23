@@ -1,0 +1,6 @@
+{
+  "type": "stdio",
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"],
+  "description": "Filesystem MCP - Read/write/search files"
+}

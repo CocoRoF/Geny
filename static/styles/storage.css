@@ -1,0 +1,180 @@
+/* Claude Control Dashboard - Storage Panel Styles */
+
+/* ========================================
+   Storage Panel
+   ======================================== */
+
+.storage-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    padding: 24px;
+    gap: 20px;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.storage-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.storage-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Storage Content Layout */
+.storage-content {
+    display: flex;
+    gap: 16px;
+    flex: 1;
+    min-height: 0;
+}
+
+/* Storage Tree */
+.storage-tree {
+    flex: 0 0 280px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 12px;
+    overflow-y: auto;
+}
+
+.storage-placeholder {
+    color: var(--text-muted);
+    font-size: 13px;
+    text-align: center;
+    padding: 24px 12px;
+}
+
+/* Storage Preview */
+.storage-preview {
+    flex: 1;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.preview-header {
+    padding: 10px 14px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+}
+
+.preview-header span {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.preview-content {
+    flex: 1;
+    padding: 14px;
+    margin: 0;
+    overflow: auto;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* ========================================
+   File Tree Styles
+   ======================================== */
+
+.file-tree {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.file-tree-item {
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    transition: var(--transition-fast);
+}
+
+.file-tree-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.file-tree-item.active {
+    background: var(--primary-subtle);
+    color: var(--primary-color);
+}
+
+.file-tree-item .file-icon {
+    font-size: 14px;
+}
+
+.file-tree-item .file-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-tree-item .file-size {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+/* File Tree Folder */
+.file-tree-folder {
+    margin-bottom: 4px;
+}
+
+.file-tree-folder-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    border-radius: 4px;
+}
+
+.file-tree-folder-header:hover {
+    background: var(--bg-hover);
+}
+
+.file-tree-folder-children {
+    padding-left: 16px;
+    border-left: 1px solid var(--border-subtle);
+    margin-left: 10px;
+}
+
+.file-tree-folder.collapsed .file-tree-folder-children {
+    display: none;
+}
+
+.file-tree-folder .folder-toggle {
+    font-size: 10px;
+    transition: transform var(--transition-fast);
+}
+
+.file-tree-folder.collapsed .folder-toggle {
+    transform: rotate(-90deg);
+}

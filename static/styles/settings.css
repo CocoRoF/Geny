@@ -1,0 +1,353 @@
+/* Claude Control Dashboard - Settings Panel Styles */
+
+/* ========================================
+   Settings Panel
+   ======================================== */
+
+.settings-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--bg-secondary);
+}
+
+.settings-header h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.settings-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* Settings Layout */
+.settings-content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+.settings-sidebar {
+    width: 200px;
+    border-right: 1px solid var(--border-color);
+    background-color: var(--bg-secondary);
+    overflow-y: auto;
+}
+
+.settings-categories {
+    padding: 12px;
+}
+
+.settings-category {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    margin-bottom: 4px;
+}
+
+.settings-category:hover {
+    background-color: var(--bg-hover);
+}
+
+.settings-category.active {
+    background-color: var(--primary-subtle);
+    color: var(--primary-color);
+}
+
+.category-icon {
+    font-size: 1rem;
+}
+
+.category-name {
+    flex: 1;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.category-count {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    background-color: var(--bg-tertiary);
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.settings-main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+/* Config List */
+.config-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.config-card {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+    padding: 16px 20px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.config-card:hover {
+    border-color: var(--border-subtle);
+    background-color: var(--bg-hover);
+}
+
+.config-card.enabled {
+    border-left: 3px solid var(--success-color);
+}
+
+.config-card.disabled {
+    border-left: 3px solid var(--text-muted);
+    opacity: 0.8;
+}
+
+.config-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+}
+
+.config-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.config-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.config-name {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 4px 0;
+}
+
+.config-description {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.config-status {
+    flex-shrink: 0;
+}
+
+.config-status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.status-enabled {
+    background-color: rgba(16, 185, 129, 0.15);
+    color: var(--success-color);
+}
+
+.status-disabled {
+    background-color: var(--bg-tertiary);
+    color: var(--text-muted);
+}
+
+.config-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+}
+
+.config-progress {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.config-warning {
+    font-size: 0.75rem;
+    color: var(--warning-color);
+}
+
+/* Config Form */
+.config-form {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.config-group {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+}
+
+.config-group-title {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    padding: 12px 16px;
+    background-color: var(--bg-tertiary);
+    margin: 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.config-group-fields {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.config-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.config-field-label-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.config-field-label-group label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.config-field-hint {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    cursor: help;
+    flex-shrink: 0;
+    transition: color var(--transition-fast);
+}
+
+.config-field-hint:hover {
+    color: var(--text-secondary);
+}
+
+.config-field-hint:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%);
+    background-color: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 400;
+    line-height: 1.4;
+    padding: 8px 12px;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-subtle);
+    white-space: normal;
+    width: max-content;
+    max-width: 280px;
+    z-index: 100;
+    pointer-events: none;
+    box-shadow: var(--shadow-md);
+}
+
+.config-field-hint:hover::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 4px);
+    transform: translateX(-50%);
+    border: 4px solid transparent;
+    border-top-color: var(--border-subtle);
+    z-index: 101;
+    pointer-events: none;
+}
+
+.config-field input,
+.config-field select,
+.config-field textarea {
+    width: 100%;
+    padding: 10px 12px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    transition: border-color var(--transition-fast);
+}
+
+/* Hide number input spinners */
+.config-field input[type="number"]::-webkit-outer-spin-button,
+.config-field input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.config-field input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.config-field input:focus,
+.config-field select:focus,
+.config-field textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.config-field textarea {
+    resize: vertical;
+    min-height: 60px;
+}
+
+.config-field-toggle {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 0;
+}
+
+.config-field-toggle .config-field-label-group {
+    flex: 1;
+    min-width: 0;
+}
+
+.field-required {
+    color: var(--danger-color);
+    margin-left: 2px;
+}

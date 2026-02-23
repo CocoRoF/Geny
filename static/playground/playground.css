@@ -1,0 +1,246 @@
+/* Playground View - 3D City Styles */
+
+/* ==================== Playground Tab Container ==================== */
+.playground-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 50%, #16213e 100%);
+    border-radius: var(--border-radius-lg);
+    overflow: hidden;
+    position: relative;
+}
+
+/* ==================== Toolbar ==================== */
+.playground-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    z-index: 10;
+    min-height: 44px;
+    flex-shrink: 0;
+}
+
+.playground-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.playground-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.playground-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.playground-title-icon {
+    font-size: 1.1rem;
+}
+
+.playground-session-count {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.06);
+    padding: 2px 8px;
+    border-radius: 100px;
+}
+
+/* Toolbar Buttons */
+.playground-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    font-size: 0.85rem;
+    padding: 0;
+}
+
+.playground-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.playground-btn:active {
+    transform: scale(0.95);
+}
+
+.playground-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* ==================== Canvas Container ==================== */
+.playground-canvas-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    cursor: grab;
+}
+
+.playground-canvas-container:active {
+    cursor: grabbing;
+}
+
+.playground-canvas-container canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* ==================== Status Overlay ==================== */
+.playground-status-overlay {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.playground-status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    backdrop-filter: blur(8px);
+}
+
+.playground-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.playground-status-dot.running {
+    background: var(--success-color);
+    box-shadow: 0 0 6px var(--success-color);
+    animation: pulse-dot 2s infinite;
+}
+
+.playground-status-dot.idle {
+    background: var(--text-muted);
+}
+
+.playground-status-dot.error {
+    background: var(--error-color);
+    box-shadow: 0 0 6px var(--error-color);
+}
+
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* ==================== Loading State ==================== */
+.playground-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    background: rgba(15, 15, 30, 0.95);
+    z-index: 20;
+}
+
+.playground-loading-text {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.playground-loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ==================== Empty State ==================== */
+.playground-empty-state {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.playground-empty-text {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    background: rgba(0, 0, 0, 0.5);
+    padding: 6px 16px;
+    border-radius: 100px;
+    backdrop-filter: blur(8px);
+}
+
+/* ==================== Minimap (optional future) ==================== */
+.playground-minimap {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 120px;
+    height: 80px;
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    z-index: 10;
+    overflow: hidden;
+    display: none; /* Hidden by default */
+}
+
+/* ==================== Responsive ==================== */
+@media (max-width: 768px) {
+    .playground-toolbar {
+        padding: 6px 10px;
+    }
+
+    .playground-title {
+        font-size: 0.8rem;
+    }
+
+    .playground-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 0.8rem;
+    }
+
+    .playground-session-count {
+        font-size: 0.65rem;
+    }
+}

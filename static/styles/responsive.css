@@ -1,0 +1,550 @@
+/* Claude Control Dashboard - Responsive Styles */
+/* All media queries and mobile-specific styles */
+
+/* ========================================
+   Tablet (768px and below)
+   ======================================== */
+
+@media (max-width: 768px) {
+    body {
+        font-size: 15px;
+    }
+
+    .main-content {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        transition: max-height 0.3s ease;
+    }
+
+    .sidebar.collapsed {
+        max-height: 60px;
+        overflow: hidden;
+    }
+
+    .sidebar.collapsed .session-stats,
+    .sidebar.collapsed .session-list,
+    .sidebar.collapsed .sidebar-deleted-section {
+        display: none;
+    }
+
+    .sidebar-toggle-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .sidebar-header {
+        padding: 12px 16px;
+    }
+
+    .session-stats {
+        padding: 12px 16px;
+    }
+
+    .session-list {
+        max-height: 200px;
+        padding: 8px;
+    }
+
+    .batch-session-list {
+        grid-template-columns: 1fr;
+    }
+
+    .header {
+        padding: 0 16px;
+        height: 52px;
+    }
+
+    .logo {
+        font-size: 1rem;
+    }
+
+    .command-panel,
+    .logs-panel,
+    .batch-panel {
+        padding: 16px;
+    }
+
+    .tab-navigation {
+        padding: 8px 12px;
+        gap: 4px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .tab-btn {
+        padding: 10px 16px;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .command-options {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .command-actions {
+        width: 100%;
+    }
+
+    .command-actions .btn {
+        flex: 1;
+    }
+
+    .logs-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .logs-controls {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .logs-controls select {
+        flex: 1;
+        min-width: 120px;
+    }
+
+    .batch-options {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    /* Settings Responsive */
+    .settings-content {
+        flex-direction: column;
+    }
+
+    .settings-sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .settings-categories {
+        display: flex;
+        gap: 8px;
+        padding: 12px;
+        overflow-x: auto;
+    }
+
+    .settings-category {
+        flex-shrink: 0;
+        margin-bottom: 0;
+    }
+
+    .config-card-header {
+        flex-wrap: wrap;
+    }
+
+    .config-status {
+        width: 100%;
+        margin-top: 8px;
+    }
+
+    .modal-lg {
+        max-width: 100%;
+        margin: 12px;
+    }
+
+    /* Dashboard Responsive */
+    .dashboard-content {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+    }
+
+    .workers-section {
+        max-height: 200px;
+    }
+}
+
+/* ========================================
+   Mobile (480px and below)
+   ======================================== */
+
+@media (max-width: 480px) {
+    body {
+        font-size: 14px;
+    }
+
+    .header {
+        height: 48px;
+        padding: 0 12px;
+    }
+
+    .logo {
+        font-size: 0.9375rem;
+    }
+
+    .health-indicator {
+        padding: 4px 10px;
+        font-size: 0.75rem;
+    }
+
+    .health-indicator .health-text {
+        display: none;
+    }
+
+    .sidebar-header {
+        padding: 10px 12px;
+    }
+
+    .sidebar-header h2 {
+        font-size: 0.75rem;
+    }
+
+    .btn-sm {
+        padding: 6px 10px;
+        font-size: 0.6875rem;
+    }
+
+    .session-stats {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+
+    .stat-value {
+        font-size: 1.25rem;
+    }
+
+    .stat-label {
+        font-size: 0.625rem;
+    }
+
+    .session-list {
+        padding: 6px;
+        max-height: 180px;
+    }
+
+    .session-item {
+        padding: 10px 12px;
+        margin-bottom: 4px;
+    }
+
+    .session-name {
+        font-size: 0.8125rem;
+    }
+
+    .session-id {
+        font-size: 0.6875rem;
+    }
+
+    .session-status-dot {
+        width: 6px;
+        height: 6px;
+        margin-right: 10px;
+    }
+
+    .session-actions {
+        opacity: 1;
+    }
+
+    .tab-navigation {
+        padding: 6px 8px;
+    }
+
+    .tab-btn {
+        padding: 8px 12px;
+        font-size: 0.8125rem;
+    }
+
+    .tab-btn.active::after {
+        bottom: -6px;
+        width: 20px;
+    }
+
+    .command-panel,
+    .logs-panel,
+    .batch-panel {
+        padding: 12px;
+        gap: 12px;
+    }
+
+    .selected-session-info {
+        padding: 12px 14px;
+    }
+
+    .selected-session-info h4 {
+        font-size: 0.875rem;
+    }
+
+    .selected-session-info .session-meta {
+        font-size: 0.75rem;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .selected-session-info .session-meta span {
+        display: block;
+    }
+
+    .command-input-area textarea,
+    .batch-input textarea {
+        min-height: 100px;
+        padding: 12px;
+        font-size: 0.875rem;
+    }
+
+    .command-options,
+    .batch-options {
+        gap: 10px;
+    }
+
+    .checkbox-label,
+    .input-label {
+        font-size: 0.75rem;
+    }
+
+    .input-label input {
+        width: 70px;
+        padding: 6px 8px;
+        font-size: 0.75rem;
+    }
+
+    .command-actions {
+        gap: 8px;
+    }
+
+    .btn {
+        padding: 10px 14px;
+        font-size: 0.8125rem;
+    }
+
+    .output-header h3,
+    .logs-header h3,
+    .batch-header h3 {
+        font-size: 0.75rem;
+    }
+
+    .output-content {
+        padding: 12px;
+        font-size: 0.75rem;
+        min-height: 150px;
+    }
+
+    .logs-content {
+        padding: 4px;
+    }
+
+    .log-entry {
+        padding: 8px 10px;
+        font-size: 0.75rem;
+        flex-wrap: wrap;
+    }
+
+    .log-entry .log-timestamp {
+        font-size: 0.6875rem;
+        margin-right: 8px;
+    }
+
+    .log-entry .log-level {
+        font-size: 0.625rem;
+        padding: 2px 6px;
+        min-width: 56px;
+        margin-right: 8px;
+    }
+
+    .log-entry .log-message {
+        width: 100%;
+        margin-top: 6px;
+        word-break: break-word;
+    }
+
+    .batch-sessions > label {
+        font-size: 0.8125rem;
+    }
+
+    .batch-session-list {
+        max-height: 120px;
+        padding: 8px;
+    }
+
+    .batch-session-item {
+        padding: 8px 10px;
+        font-size: 0.75rem;
+    }
+
+    .batch-select-actions {
+        gap: 8px;
+    }
+
+    .batch-result-item {
+        padding: 12px;
+    }
+
+    .batch-result-header {
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .batch-result-output {
+        font-size: 0.75rem;
+        padding: 10px;
+        max-height: 100px;
+    }
+
+    .empty-state {
+        padding: 40px 20px;
+    }
+
+    .empty-state h3 {
+        font-size: 1rem;
+    }
+
+    .empty-state p {
+        font-size: 0.8125rem;
+    }
+
+    /* Modal Mobile Optimization */
+    .modal-overlay {
+        padding: 16px;
+        align-items: flex-end;
+    }
+
+    .modal {
+        max-width: 100%;
+        max-height: 85vh;
+        border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
+    }
+
+    .modal-header {
+        padding: 16px;
+    }
+
+    .modal-header h3 {
+        font-size: 0.9375rem;
+    }
+
+    .modal-body {
+        padding: 16px;
+    }
+
+    .modal-footer {
+        padding: 16px;
+    }
+
+    .form-group label {
+        font-size: 0.75rem;
+    }
+
+    .form-group input,
+    .form-group select {
+        padding: 10px 12px;
+        font-size: 0.875rem;
+    }
+}
+
+/* ========================================
+   Touch-friendly enhancements
+   ======================================== */
+
+@media (hover: none) and (pointer: coarse) {
+    .session-item {
+        padding: 14px 16px;
+    }
+
+    .session-actions {
+        opacity: 1;
+    }
+
+    .btn {
+        min-height: 44px;
+    }
+
+    .btn-sm {
+        min-height: 36px;
+    }
+
+    .btn-icon {
+        width: 44px;
+        height: 44px;
+    }
+
+    .tab-btn {
+        min-height: 44px;
+    }
+
+    .checkbox-label,
+    .input-label {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+    }
+
+    .checkbox-label input[type="checkbox"] {
+        width: 20px;
+        height: 20px;
+    }
+
+    .log-entry {
+        padding: 12px 14px;
+    }
+
+    .batch-session-item {
+        padding: 12px 14px;
+    }
+
+    /* Larger touch targets for form controls */
+    input[type="number"],
+    select {
+        min-height: 44px;
+    }
+
+    textarea {
+        min-height: 120px;
+    }
+}
+
+/* ========================================
+   Landscape mode on mobile
+   ======================================== */
+
+@media (max-width: 768px) and (orientation: landscape) {
+    .sidebar {
+        max-height: 150px;
+    }
+
+    .session-list {
+        max-height: 80px;
+    }
+
+    .modal-overlay {
+        align-items: center;
+    }
+
+    .modal {
+        border-radius: var(--border-radius-lg);
+        max-height: 90vh;
+    }
+}
+
+/* ========================================
+   Safe area for notched devices
+   ======================================== */
+
+@supports (padding: max(0px)) {
+    .header {
+        padding-left: max(16px, env(safe-area-inset-left));
+        padding-right: max(16px, env(safe-area-inset-right));
+    }
+
+    .sidebar,
+    .main-panel {
+        padding-left: max(0px, env(safe-area-inset-left));
+        padding-right: max(0px, env(safe-area-inset-right));
+    }
+
+    .modal-footer {
+        padding-bottom: max(16px, env(safe-area-inset-bottom));
+    }
+}
