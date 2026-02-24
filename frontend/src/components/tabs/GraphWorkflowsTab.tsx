@@ -43,6 +43,7 @@ function WorkflowCard({
   isBuiltIn,
   isSelected,
   onSelect,
+  onView,
   onEdit,
   onClone,
   onDelete,
@@ -51,6 +52,7 @@ function WorkflowCard({
   isBuiltIn?: boolean;
   isSelected: boolean;
   onSelect: () => void;
+  onView?: () => void;
   onEdit?: () => void;
   onClone?: () => void;
   onDelete?: () => void;
@@ -100,37 +102,44 @@ function WorkflowCard({
       </div>
 
       {/* Action Buttons (visible on hover) */}
-      {(!isBuiltIn) && (
-        <div className="absolute bottom-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          {onEdit && (
-            <button
-              className="h-7 px-2 flex items-center justify-center rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.6875rem] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
-              title="Edit"
-              onClick={e => { e.stopPropagation(); onEdit(); }}
-            >
-              Edit
-            </button>
-          )}
-          {onClone && (
-            <button
-              className="h-7 px-2 flex items-center justify-center rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.6875rem] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
-              title="Clone"
-              onClick={e => { e.stopPropagation(); onClone(); }}
-            >
-              Clone
-            </button>
-          )}
-          {onDelete && !workflow.is_template && (
-            <button
-              className="w-7 h-7 flex items-center justify-center rounded-md bg-[var(--bg-primary)] border border-[rgba(239,68,68,0.2)] text-[var(--text-muted)] hover:text-[var(--danger-color)] hover:bg-[rgba(239,68,68,0.08)] text-sm font-medium transition-colors"
-              title="Delete"
-              onClick={e => { e.stopPropagation(); onDelete(); }}
-            >
-              ×
-            </button>
-          )}
-        </div>
-      )}
+      <div className="absolute bottom-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {onView && (
+          <button
+            className="h-7 px-2 flex items-center justify-center rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.6875rem] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+            title="View"
+            onClick={e => { e.stopPropagation(); onView(); }}
+          >
+            View
+          </button>
+        )}
+        {onEdit && (
+          <button
+            className="h-7 px-2 flex items-center justify-center rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.6875rem] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+            title="Edit"
+            onClick={e => { e.stopPropagation(); onEdit(); }}
+          >
+            Edit
+          </button>
+        )}
+        {onClone && (
+          <button
+            className="h-7 px-2 flex items-center justify-center rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.6875rem] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+            title="Clone"
+            onClick={e => { e.stopPropagation(); onClone(); }}
+          >
+            Clone
+          </button>
+        )}
+        {onDelete && !workflow.is_template && (
+          <button
+            className="w-7 h-7 flex items-center justify-center rounded-md bg-[var(--bg-primary)] border border-[rgba(239,68,68,0.2)] text-[var(--text-muted)] hover:text-[var(--danger-color)] hover:bg-[rgba(239,68,68,0.08)] text-sm font-medium transition-colors"
+            title="Delete"
+            onClick={e => { e.stopPropagation(); onDelete(); }}
+          >
+            ×
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -143,10 +152,11 @@ export default function GraphWorkflowsTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [mode, setMode] = useState<'list' | 'editor'>('list');
+  const [mode, setMode] = useState<'list' | 'editor' | 'viewer'>('list');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [viewName, setViewName] = useState('');
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -200,7 +210,10 @@ export default function GraphWorkflowsTab() {
     }
   }, [fetchAll, selectedId]);
 
-  const { loadWorkflow } = useWorkflowStore();
+  const { loadWorkflow, loadFromDefinition, loadCatalog } = useWorkflowStore();
+
+  // Ensure node catalog is loaded so loadFromDefinition can resolve styles
+  useEffect(() => { loadCatalog(); }, [loadCatalog]);
 
   const openEditor = useCallback(() => {
     setMode('editor');
@@ -210,6 +223,26 @@ export default function GraphWorkflowsTab() {
     await loadWorkflow(id);
     setMode('editor');
   }, [loadWorkflow]);
+
+  const handleView = useCallback(async (def: WorkflowDefinition) => {
+    const store = useWorkflowStore.getState();
+    if (!store.nodeCatalog) await store.loadCatalog();
+    loadFromDefinition(def);
+    setViewName(def.name);
+    setMode('viewer');
+  }, [loadFromDefinition]);
+
+  const handleViewBuiltIn = useCallback(async (templateName: string, displayName: string) => {
+    // Built-in graphs correspond to templates; find the matching template
+    const tmpl = templates.find(t => t.template_name === templateName || t.name?.toLowerCase().includes(templateName));
+    if (tmpl) {
+      const store = useWorkflowStore.getState();
+      if (!store.nodeCatalog) await store.loadCatalog();
+      loadFromDefinition(tmpl);
+      setViewName(displayName);
+      setMode('viewer');
+    }
+  }, [templates, loadFromDefinition]);
 
   // Editor mode → full WorkflowEditor
   if (mode === 'editor') {
@@ -226,6 +259,29 @@ export default function GraphWorkflowsTab() {
         </div>
         <div className="flex-1 min-h-0">
           <WorkflowEditor />
+        </div>
+      </div>
+    );
+  }
+
+  // Viewer mode → read-only WorkflowEditor
+  if (mode === 'viewer') {
+    return (
+      <div className="flex flex-col h-full min-h-0 overflow-hidden">
+        <div className="flex items-center gap-3 h-10 px-4 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] shrink-0">
+          <button
+            className="flex items-center gap-1.5 h-7 px-3 text-[11px] font-medium rounded-md border border-[var(--border-color)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)] transition-colors"
+            onClick={() => { setMode('list'); }}
+          >
+            ← Back to Workflows
+          </button>
+          <span className="text-[0.8125rem] font-semibold text-[var(--text-primary)]">View: {viewName}</span>
+          <span className="text-[10px] font-semibold py-0.5 px-1.5 rounded-md bg-[rgba(107,114,128,0.12)] text-[var(--text-muted)] border border-[rgba(107,114,128,0.2)] uppercase tracking-wide">
+            Read-only
+          </span>
+        </div>
+        <div className="flex-1 min-h-0">
+          <WorkflowEditor readOnly />
         </div>
       </div>
     );
@@ -286,6 +342,11 @@ export default function GraphWorkflowsTab() {
                     isBuiltIn
                     isSelected={selectedId === g.id}
                     onSelect={() => setSelectedId(g.id)}
+                    onView={() => handleViewBuiltIn(g.graph_type, g.name)}
+                    onClone={() => {
+                      const tmpl = templates.find(t => t.template_name === g.graph_type || t.name?.toLowerCase().includes(g.graph_type));
+                      if (tmpl) handleClone(tmpl.id);
+                    }}
                   />
                 ))}
               </div>
@@ -306,6 +367,7 @@ export default function GraphWorkflowsTab() {
                       workflow={{ ...t, nodeCount: t.nodes?.length, edgeCount: t.edges?.length }}
                       isSelected={selectedId === t.id}
                       onSelect={() => setSelectedId(t.id)}
+                      onView={() => handleView(t)}
                       onClone={() => handleClone(t.id)}
                     />
                   ))}

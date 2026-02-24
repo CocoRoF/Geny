@@ -213,14 +213,14 @@ function ToolbarBtn({
 
 // ==================== Main Tab ====================
 
-export default function WorkflowTab() {
+export default function WorkflowTab({ readOnly = false }: { readOnly?: boolean }) {
   const { loadCatalog, loadWorkflows, selectedNodeId } = useWorkflowStore();
 
   // Init on mount — catalog must load before workflows so nodes get proper metadata
   useEffect(() => {
     const init = async () => {
       await loadCatalog();
-      await loadWorkflows();
+      if (!readOnly) await loadWorkflows();
     };
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -229,22 +229,24 @@ export default function WorkflowTab() {
   return (
     <ReactFlowProvider>
       <div className="flex flex-col h-full">
-        <WorkflowToolbar />
+        {!readOnly && <WorkflowToolbar />}
         <div className="flex flex-1 min-h-0">
-          {/* Left: Node Palette */}
-          <div className="w-[240px] shrink-0 border-r border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-y-auto">
-            <NodePalette />
-          </div>
+          {/* Left: Node Palette (hidden in readOnly) */}
+          {!readOnly && (
+            <div className="w-[240px] shrink-0 border-r border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-y-auto">
+              <NodePalette />
+            </div>
+          )}
 
           {/* Center: Canvas */}
           <div className="flex-1 min-w-0">
-            <WorkflowCanvas />
+            <WorkflowCanvas readOnly={readOnly} />
           </div>
 
           {/* Right: Property Panel */}
           {selectedNodeId && (
             <div className="w-[300px] shrink-0 border-l border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-y-auto">
-              <PropertyPanel />
+              <PropertyPanel readOnly={readOnly} />
             </div>
           )}
         </div>

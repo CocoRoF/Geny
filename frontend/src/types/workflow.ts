@@ -93,6 +93,7 @@ export interface WorkflowExecuteResponse {
 // ==================== Category Display Info ====================
 
 export const CATEGORY_INFO: Record<string, { label: string; icon: string; color: string }> = {
+  special: { label: 'Special', icon: '⚡', color: '#10b981' },
   model: { label: 'Model', icon: '🤖', color: '#8b5cf6' },
   task: { label: 'Task', icon: '📋', color: '#ef4444' },
   logic: { label: 'Logic', icon: '🔀', color: '#6366f1' },

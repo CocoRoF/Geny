@@ -47,12 +47,12 @@ def create_autonomous_template() -> WorkflowDefinition:
 
     # Layout constants
     col_w = 260
-    step_h = 78
-    branch_gap = 100
-    top_center_x = 520
-    col_easy_x = 180
-    col_medium_x = 180 + col_w
-    col_hard_x = 180 + col_w * 2
+    step_h = 140
+    branch_gap = 120
+    col_easy_x = 40
+    col_medium_x = 40 + col_w
+    col_hard_x = 40 + col_w * 2
+    top_center_x = col_medium_x
     padding = 40
 
     nodes: List[WorkflowNodeInstance] = []
@@ -297,13 +297,12 @@ ALL_TEMPLATES = [
 def install_templates(store) -> int:
     """Install built-in templates into the workflow store.
 
-    Only creates templates that don't already exist.
+    Always overwrites existing templates to keep them up-to-date.
     Returns the number of templates installed.
     """
     installed = 0
     for factory in ALL_TEMPLATES:
         template = factory()
-        if not store.exists(template.id):
-            store.save(template)
-            installed += 1
+        store.save(template)
+        installed += 1
     return installed

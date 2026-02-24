@@ -72,43 +72,43 @@
   ],
   "edges": [
     {
-      "id": "99a2a1dc",
+      "id": "0f34d5c5",
       "source": "start",
       "target": "mem",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "543811d3",
+      "id": "d676ba42",
       "source": "mem",
       "target": "guard",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "14ccd291",
+      "id": "78e5dd2e",
       "source": "guard",
       "target": "llm",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "7bfcd7ae",
+      "id": "59fe323d",
       "source": "llm",
       "target": "post",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "e2aaac29",
+      "id": "a3bc8251",
       "source": "post",
       "target": "end",
       "source_port": "default",
       "label": ""
     }
   ],
-  "created_at": "2026-02-24T07:16:17.280610+00:00",
-  "updated_at": "2026-02-24T07:16:17.280610+00:00",
+  "created_at": "2026-02-24T15:03:28.637388+00:00",
+  "updated_at": "2026-02-24T15:03:28.637388+00:00",
   "is_template": true,
   "template_name": "simple"
 }

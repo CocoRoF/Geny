@@ -9,7 +9,7 @@
       "label": "Start",
       "config": {},
       "position": {
-        "x": 520.0,
+        "x": 300.0,
         "y": 40.0
       }
     },
@@ -19,8 +19,8 @@
       "label": "Memory Inject",
       "config": {},
       "position": {
-        "x": 520.0,
-        "y": 118.0
+        "x": 300.0,
+        "y": 180.0
       }
     },
     {
@@ -31,8 +31,8 @@
         "position_label": "classify"
       },
       "position": {
-        "x": 520.0,
-        "y": 196.0
+        "x": 300.0,
+        "y": 320.0
       }
     },
     {
@@ -41,8 +41,8 @@
       "label": "Classify Difficulty",
       "config": {},
       "position": {
-        "x": 520.0,
-        "y": 274.0
+        "x": 300.0,
+        "y": 460.0
       }
     },
     {
@@ -53,8 +53,8 @@
         "detect_completion": false
       },
       "position": {
-        "x": 520.0,
-        "y": 352.0
+        "x": 300.0,
+        "y": 600.0
       }
     },
     {
@@ -65,8 +65,8 @@
         "position_label": "direct"
       },
       "position": {
-        "x": 180.0,
-        "y": 452.0
+        "x": 40.0,
+        "y": 720.0
       }
     },
     {
@@ -75,8 +75,8 @@
       "label": "Direct Answer",
       "config": {},
       "position": {
-        "x": 180.0,
-        "y": 530.0
+        "x": 40.0,
+        "y": 860.0
       }
     },
     {
@@ -85,8 +85,8 @@
       "label": "Post Direct",
       "config": {},
       "position": {
-        "x": 180.0,
-        "y": 608.0
+        "x": 40.0,
+        "y": 1000.0
       }
     },
     {
@@ -97,8 +97,8 @@
         "position_label": "answer"
       },
       "position": {
-        "x": 440.0,
-        "y": 452.0
+        "x": 300.0,
+        "y": 720.0
       }
     },
     {
@@ -107,8 +107,8 @@
       "label": "Answer",
       "config": {},
       "position": {
-        "x": 440.0,
-        "y": 530.0
+        "x": 300.0,
+        "y": 860.0
       }
     },
     {
@@ -119,8 +119,8 @@
         "detect_completion": false
       },
       "position": {
-        "x": 440.0,
-        "y": 608.0
+        "x": 300.0,
+        "y": 1000.0
       }
     },
     {
@@ -131,8 +131,8 @@
         "position_label": "review"
       },
       "position": {
-        "x": 440.0,
-        "y": 686.0
+        "x": 300.0,
+        "y": 1140.0
       }
     },
     {
@@ -141,8 +141,8 @@
       "label": "Review",
       "config": {},
       "position": {
-        "x": 440.0,
-        "y": 764.0
+        "x": 300.0,
+        "y": 1280.0
       }
     },
     {
@@ -151,8 +151,8 @@
       "label": "Post Review",
       "config": {},
       "position": {
-        "x": 440.0,
-        "y": 842.0
+        "x": 300.0,
+        "y": 1420.0
       }
     },
     {
@@ -161,8 +161,8 @@
       "label": "Iter Gate (Medium)",
       "config": {},
       "position": {
-        "x": 440.0,
-        "y": 920.0
+        "x": 300.0,
+        "y": 1560.0
       }
     },
     {
@@ -173,8 +173,8 @@
         "position_label": "create_todos"
       },
       "position": {
-        "x": 700.0,
-        "y": 452.0
+        "x": 560.0,
+        "y": 720.0
       }
     },
     {
@@ -183,8 +183,8 @@
       "label": "Create TODOs",
       "config": {},
       "position": {
-        "x": 700.0,
-        "y": 530.0
+        "x": 560.0,
+        "y": 860.0
       }
     },
     {
@@ -195,8 +195,8 @@
         "detect_completion": false
       },
       "position": {
-        "x": 700.0,
-        "y": 608.0
+        "x": 560.0,
+        "y": 1000.0
       }
     },
     {
@@ -207,8 +207,8 @@
         "position_label": "execute"
       },
       "position": {
-        "x": 700.0,
-        "y": 686.0
+        "x": 560.0,
+        "y": 1140.0
       }
     },
     {
@@ -217,8 +217,8 @@
       "label": "Execute TODO",
       "config": {},
       "position": {
-        "x": 700.0,
-        "y": 764.0
+        "x": 560.0,
+        "y": 1280.0
       }
     },
     {
@@ -227,8 +227,8 @@
       "label": "Post Execute",
       "config": {},
       "position": {
-        "x": 700.0,
-        "y": 842.0
+        "x": 560.0,
+        "y": 1420.0
       }
     },
     {
@@ -237,8 +237,8 @@
       "label": "Check Progress",
       "config": {},
       "position": {
-        "x": 700.0,
-        "y": 920.0
+        "x": 560.0,
+        "y": 1560.0
       }
     },
     {
@@ -247,8 +247,8 @@
       "label": "Iter Gate (Hard)",
       "config": {},
       "position": {
-        "x": 700.0,
-        "y": 998.0
+        "x": 560.0,
+        "y": 1700.0
       }
     },
     {
@@ -259,8 +259,8 @@
         "position_label": "final_review"
       },
       "position": {
-        "x": 700.0,
-        "y": 1076.0
+        "x": 560.0,
+        "y": 1840.0
       }
     },
     {
@@ -269,8 +269,8 @@
       "label": "Final Review",
       "config": {},
       "position": {
-        "x": 700.0,
-        "y": 1154.0
+        "x": 560.0,
+        "y": 1980.0
       }
     },
     {
@@ -279,8 +279,8 @@
       "label": "Post Final Review",
       "config": {},
       "position": {
-        "x": 700.0,
-        "y": 1232.0
+        "x": 560.0,
+        "y": 2120.0
       }
     },
     {
@@ -291,8 +291,8 @@
         "position_label": "final_answer"
       },
       "position": {
-        "x": 700.0,
-        "y": 1310.0
+        "x": 560.0,
+        "y": 2260.0
       }
     },
     {
@@ -301,8 +301,8 @@
       "label": "Final Answer",
       "config": {},
       "position": {
-        "x": 700.0,
-        "y": 1388.0
+        "x": 560.0,
+        "y": 2400.0
       }
     },
     {
@@ -311,8 +311,8 @@
       "label": "Post Final Answer",
       "config": {},
       "position": {
-        "x": 700.0,
-        "y": 1466.0
+        "x": 560.0,
+        "y": 2540.0
       }
     },
     {
@@ -321,274 +321,274 @@
       "label": "End",
       "config": {},
       "position": {
-        "x": 520.0,
-        "y": 1566.0
+        "x": 300.0,
+        "y": 2660.0
       }
     }
   ],
   "edges": [
     {
-      "id": "773077ac",
+      "id": "7dd744c7",
       "source": "start",
       "target": "mem_inject",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "6247d0b0",
+      "id": "0003a4ab",
       "source": "mem_inject",
       "target": "guard_cls",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "f99b59d4",
+      "id": "cd665423",
       "source": "guard_cls",
       "target": "classify",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "027cc89a",
+      "id": "83ffd503",
       "source": "classify",
       "target": "post_cls",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "ee51380c",
+      "id": "0f6ebf82",
       "source": "guard_dir",
       "target": "dir_ans",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "0c55ce53",
+      "id": "98c0887e",
       "source": "dir_ans",
       "target": "post_dir",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "641ec100",
+      "id": "e4faa9fc",
       "source": "guard_ans",
       "target": "answer",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "4337a64b",
+      "id": "bd622902",
       "source": "answer",
       "target": "post_ans",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "fb0f500b",
+      "id": "d00a45fb",
       "source": "post_ans",
       "target": "guard_rev",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "5b07bbef",
+      "id": "7b47f84a",
       "source": "guard_rev",
       "target": "review",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "9f6d1080",
+      "id": "01acb0f6",
       "source": "review",
       "target": "post_rev",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "a1692e97",
+      "id": "a226c0ca",
       "source": "guard_todo",
       "target": "mk_todos",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "e566ff49",
+      "id": "f64b4e22",
       "source": "mk_todos",
       "target": "post_todos",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "4565f2c7",
+      "id": "cb4047fc",
       "source": "post_todos",
       "target": "guard_exec",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "be9e2e9c",
+      "id": "3d9c99cb",
       "source": "guard_exec",
       "target": "exec_todo",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "dda767ea",
+      "id": "f3be2690",
       "source": "exec_todo",
       "target": "post_exec",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "c7e70d0c",
+      "id": "b2706e91",
       "source": "post_exec",
       "target": "chk_prog",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "48cb4afd",
+      "id": "e441b649",
       "source": "post_cls",
       "target": "guard_dir",
       "source_port": "easy",
       "label": "Easy"
     },
     {
-      "id": "00b09d10",
+      "id": "188087ef",
       "source": "post_cls",
       "target": "guard_ans",
       "source_port": "medium",
       "label": "Medium"
     },
     {
-      "id": "b0072ad4",
+      "id": "a314fa86",
       "source": "post_cls",
       "target": "guard_todo",
       "source_port": "hard",
       "label": "Hard"
     },
     {
-      "id": "9f86df26",
+      "id": "993a7f90",
       "source": "post_cls",
       "target": "end",
       "source_port": "end",
       "label": "End"
     },
     {
-      "id": "35da4b86",
+      "id": "d1c6dc94",
       "source": "post_dir",
       "target": "end",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "a6368a8d",
+      "id": "efdf9ef1",
       "source": "post_rev",
       "target": "end",
       "source_port": "approved",
       "label": "Approved"
     },
     {
-      "id": "4884a3d9",
+      "id": "4a88d94f",
       "source": "post_rev",
       "target": "gate_med",
       "source_port": "retry",
       "label": "Retry"
     },
     {
-      "id": "c59b2af1",
+      "id": "112fe3eb",
       "source": "post_rev",
       "target": "end",
       "source_port": "end",
       "label": "End"
     },
     {
-      "id": "46b88240",
+      "id": "6413932e",
       "source": "gate_med",
       "target": "guard_ans",
       "source_port": "continue",
       "label": "Continue"
     },
     {
-      "id": "feae7b91",
+      "id": "51bbdd28",
       "source": "gate_med",
       "target": "end",
       "source_port": "stop",
       "label": "Stop"
     },
     {
-      "id": "4fe4464f",
+      "id": "8fa37292",
       "source": "chk_prog",
       "target": "gate_hard",
       "source_port": "continue",
       "label": "Continue"
     },
     {
-      "id": "b1e91bea",
+      "id": "cdeee4c0",
       "source": "chk_prog",
       "target": "guard_fr",
       "source_port": "complete",
       "label": "Complete"
     },
     {
-      "id": "5a35943e",
+      "id": "1a3047de",
       "source": "gate_hard",
       "target": "guard_exec",
       "source_port": "continue",
       "label": "Continue"
     },
     {
-      "id": "9bc07a58",
+      "id": "588c2539",
       "source": "gate_hard",
       "target": "guard_fr",
       "source_port": "stop",
       "label": "Stop"
     },
     {
-      "id": "f41a6d30",
+      "id": "1225bb30",
       "source": "guard_fr",
       "target": "fin_rev",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "1fbc2410",
+      "id": "e63621a1",
       "source": "fin_rev",
       "target": "post_fr",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "6f63b106",
+      "id": "2d855511",
       "source": "post_fr",
       "target": "guard_fa",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "e7710011",
+      "id": "a45fa8d3",
       "source": "guard_fa",
       "target": "fin_ans",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "9c54e516",
+      "id": "88d60abe",
       "source": "fin_ans",
       "target": "post_fa",
       "source_port": "default",
       "label": ""
     },
     {
-      "id": "2f46b4b9",
+      "id": "f742175a",
       "source": "post_fa",
       "target": "end",
       "source_port": "default",
       "label": ""
     }
   ],
-  "created_at": "2026-02-24T07:16:17.279610+00:00",
-  "updated_at": "2026-02-24T07:16:17.279610+00:00",
+  "created_at": "2026-02-24T15:03:28.637388+00:00",
+  "updated_at": "2026-02-24T15:03:28.637388+00:00",
   "is_template": true,
   "template_name": "autonomous"
 }

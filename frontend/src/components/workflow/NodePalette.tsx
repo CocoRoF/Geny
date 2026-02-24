@@ -4,6 +4,33 @@ import { useState, useCallback } from 'react';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { CATEGORY_INFO, type WfNodeTypeDef } from '@/types/workflow';
 
+// ========== Special pseudo-nodes (frontend-only) ==========
+
+const SPECIAL_NODES: WfNodeTypeDef[] = [
+  {
+    node_type: 'start',
+    label: 'Start',
+    description: 'Entry point of the workflow',
+    category: 'special',
+    icon: '▶',
+    color: '#10b981',
+    is_conditional: false,
+    parameters: [],
+    output_ports: [{ id: 'default', label: 'Output' }],
+  },
+  {
+    node_type: 'end',
+    label: 'End',
+    description: 'Exit point of the workflow',
+    category: 'special',
+    icon: '⏹',
+    color: '#6b7280',
+    is_conditional: false,
+    parameters: [],
+    output_ports: [],
+  },
+];
+
 // ========== Draggable Palette Item ==========
 
 function PaletteItem({ nodeDef }: { nodeDef: WfNodeTypeDef }) {
@@ -121,7 +148,7 @@ function CategorySection({
 export default function NodePalette() {
   const { nodeCatalog } = useWorkflowStore();
   const [openCategories, setOpenCategories] = useState<Set<string>>(
-    new Set(['model', 'task', 'logic', 'memory', 'resilience']),
+    new Set(['special', 'model', 'task', 'logic', 'memory', 'resilience']),
   );
   const [search, setSearch] = useState('');
 
@@ -142,10 +169,16 @@ export default function NodePalette() {
     );
   }
 
+  // Merge catalog categories with special pseudo-nodes
+  const allCategories: Record<string, WfNodeTypeDef[]> = { special: SPECIAL_NODES };
+  for (const [cat, nodes] of Object.entries(nodeCatalog.categories)) {
+    allCategories[cat] = nodes;
+  }
+
   // Filter by search
   const filtered: Record<string, WfNodeTypeDef[]> = {};
   const q = search.toLowerCase();
-  for (const [cat, nodes] of Object.entries(nodeCatalog.categories)) {
+  for (const [cat, nodes] of Object.entries(allCategories)) {
     const matching = q
       ? nodes.filter(n => n.label.toLowerCase().includes(q) || n.description.toLowerCase().includes(q))
       : nodes;
@@ -153,7 +186,7 @@ export default function NodePalette() {
   }
 
   // Category sort order
-  const order = ['model', 'task', 'logic', 'memory', 'resilience'];
+  const order = ['special', 'model', 'task', 'logic', 'memory', 'resilience'];
   const sortedCategories = Object.keys(filtered).sort(
     (a, b) => (order.indexOf(a) === -1 ? 99 : order.indexOf(a)) - (order.indexOf(b) === -1 ? 99 : order.indexOf(b)),
   );

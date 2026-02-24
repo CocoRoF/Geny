@@ -1,0 +1,4 @@
+# Ignore all workflow files except templates
+*
+!.gitignore
+!template-*.json

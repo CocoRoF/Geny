@@ -205,7 +205,7 @@ function ParameterField({ param, value, onChange }: {
 
 // ========== Main Property Panel ==========
 
-export default function PropertyPanel() {
+export default function PropertyPanel({ readOnly = false }: { readOnly?: boolean }) {
   const { selectedNodeId, nodes, nodeCatalog, updateNodeConfig, updateNodeLabel, deleteSelectedNode } = useWorkflowStore();
 
   const selectedNode = useMemo(
@@ -301,11 +301,14 @@ export default function PropertyPanel() {
             type="text"
             value={data.label}
             onChange={handleLabelChange}
+            readOnly={readOnly}
+            disabled={readOnly}
             className="
               w-full px-2.5 py-1.5 text-[12px]
               bg-[var(--bg-tertiary)] border border-[var(--border-color)]
               rounded-md text-[var(--text-primary)]
               focus:outline-none focus:border-[var(--primary-color)]
+              disabled:opacity-60 disabled:cursor-not-allowed
             "
           />
         </div>
@@ -326,7 +329,7 @@ export default function PropertyPanel() {
             <div className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2 pb-1 border-b border-[var(--border-color)]">
               {group}
             </div>
-            <div className="space-y-3">
+            <div className={`space-y-3 ${readOnly ? 'opacity-70 pointer-events-none' : ''}`}>
               {groups[group].map(param => {
                 const val = data.config?.[param.name] ?? param.default;
                 return (
@@ -389,7 +392,7 @@ export default function PropertyPanel() {
       </div>
 
       {/* Actions footer */}
-      {!isStartOrEnd && (
+      {!isStartOrEnd && !readOnly && (
         <div className="px-3 py-2.5 border-t border-[var(--border-color)]">
           <button
             onClick={deleteSelectedNode}

@@ -17,7 +17,7 @@ import '@xyflow/react/dist/style.css';
 import { useWorkflowStore, type WorkflowNodeData } from '@/store/useWorkflowStore';
 import { workflowNodeTypes } from './CustomNodes';
 
-export default function WorkflowCanvas() {
+export default function WorkflowCanvas({ readOnly = false }: { readOnly?: boolean }) {
   const rfRef = useRef<ReactFlowInstance<Node<WorkflowNodeData>, Edge> | null>(null);
   const { fitView } = useReactFlow();
   const currentWorkflow = useWorkflowStore(s => s.currentWorkflow);
@@ -81,7 +81,7 @@ export default function WorkflowCanvas() {
       const raw = e.dataTransfer.getData('application/workflow-node');
       if (!raw || !rfRef.current || !nodeCatalog) return;
 
-      let payload: { node_type: string };
+      let payload: { node_type: string; label?: string; category?: string; icon?: string; color?: string; is_conditional?: boolean; parameters?: unknown[]; output_ports?: unknown[]; description?: string };
       try {
         payload = JSON.parse(raw);
       } catch {
@@ -89,13 +89,20 @@ export default function WorkflowCanvas() {
       }
       if (!payload.node_type) return;
 
-      // Find the type definition from catalog
+      // Find the type definition from catalog, or use the dragged payload directly (for special frontend-only nodes like Start/End)
       let typeDef = null;
       for (const catNodes of Object.values(nodeCatalog.categories)) {
         const found = catNodes.find(n => n.node_type === payload.node_type);
         if (found) { typeDef = found; break; }
       }
-      if (!typeDef) return;
+      if (!typeDef) {
+        // Fallback: use the payload itself (covers frontend-only pseudo-nodes)
+        if (payload.label && payload.category) {
+          typeDef = payload;
+        } else {
+          return;
+        }
+      }
 
       // Convert screen coords → flow coords
       const position = rfRef.current.screenToFlowPosition({
@@ -103,7 +110,7 @@ export default function WorkflowCanvas() {
         y: e.clientY,
       });
 
-      addNode(typeDef, position);
+      addNode(typeDef as import('@/types/workflow').WfNodeTypeDef, position);
     },
     [nodeCatalog, addNode],
   );
@@ -127,23 +134,26 @@ export default function WorkflowCanvas() {
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
+        onNodesChange={readOnly ? undefined : onNodesChange}
+        onEdgesChange={readOnly ? undefined : onEdgesChange}
+        onConnect={readOnly ? undefined : onConnect}
         onInit={handleInit}
         onSelectionChange={handleSelectionChange}
-        isValidConnection={isValidConnection}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
+        isValidConnection={readOnly ? () => false : isValidConnection}
+        onDragOver={readOnly ? undefined : handleDragOver}
+        onDrop={readOnly ? undefined : handleDrop}
         nodeTypes={workflowNodeTypes}
         defaultEdgeOptions={defaultEdgeOptions}
         fitView
         fitViewOptions={{ padding: 0.3 }}
-        snapToGrid
+        snapToGrid={!readOnly}
         snapGrid={[16, 16]}
-        minZoom={0.15}
-        maxZoom={2}
-        deleteKeyCode="Delete"
+        minZoom={0.1}
+        maxZoom={3}
+        nodesDraggable={!readOnly}
+        nodesConnectable={!readOnly}
+        elementsSelectable
+        deleteKeyCode={readOnly ? undefined : "Delete"}
         multiSelectionKeyCode="Shift"
         proOptions={{ hideAttribution: true }}
         className="bg-[var(--bg-primary)]"
@@ -167,7 +177,7 @@ export default function WorkflowCanvas() {
       </ReactFlow>
 
       {/* Canvas hint overlay (shown when empty) */}
-      {nodes.length === 0 && (
+      {nodes.length === 0 && !readOnly && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
           <div className="text-center p-6 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-color)] shadow-lg">
             <div className="text-[28px] mb-2">🎨</div>
