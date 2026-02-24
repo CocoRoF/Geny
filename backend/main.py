@@ -14,6 +14,7 @@ from controller.claude_controller import router as claude_router
 from controller.command_controller import router as command_router, get_prompts_list
 from controller.agent_controller import router as agent_router, agent_manager
 from controller.config_controller import router as config_router
+from controller.workflow_controller import router as workflow_router
 from service.redis.redis_client import RedisClient, get_redis_client
 from service.config import get_config_manager, ConfigManager
 from service.pod.pod_info import init_pod_info, get_pod_info
@@ -164,6 +165,17 @@ async def lifespan(app: FastAPI):
     logger.info(f"   - MCP Servers: {mcp_loader.get_server_count()}")
     logger.info(f"   - Custom Tools: {mcp_loader.get_tool_count()}")
 
+    # Register workflow nodes and install templates
+    print_step_banner("WORKFLOW", "WORKFLOW ENGINE", "Registering workflow nodes and templates...")
+    from service.workflow.nodes import register_all_nodes
+    from service.workflow.workflow_store import get_workflow_store
+    from service.workflow.templates import install_templates
+    register_all_nodes()
+    workflow_store = get_workflow_store()
+    templates_installed = install_templates(workflow_store)
+    logger.info(f"   - Workflow templates installed: {templates_installed}")
+    logger.info(f"   - Total workflows: {len(workflow_store.list_all())}")
+
     print_step_banner("READY", "CLAUDE CONTROL READY", "All systems operational! 🎉")
     logger.info("🎉 Claude Control startup complete! Ready to serve requests.")
 
@@ -263,6 +275,7 @@ app.include_router(claude_router)
 app.include_router(command_router)
 app.include_router(agent_router)  # LangGraph agent sessions
 app.include_router(config_router)  # Configuration management
+app.include_router(workflow_router)  # Workflow editor
 
 # Mount static files for Web UI Dashboard
 static_dir = Path(__file__).parent / "static"
