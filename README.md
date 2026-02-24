@@ -1,3 +1,4 @@
+![](img/Geny_full_logo.png)
 # 🧞 Geny — *Geny Execute, Not You*
 
 > 지니가 할게, 넌 가만히 있어.
