@@ -3,8 +3,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { agentApi } from '@/lib/api';
-import { cn, btn, empty } from '@/lib/tw';
+import { twMerge } from 'tailwind-merge';
 import type { GraphStructure, GraphNode, GraphEdge } from '@/types';
+
+function cn(...classes: (string | boolean | undefined | null)[]) {
+  return twMerge(classes.filter(Boolean).join(' '));
+}
 
 // ========== Layout Constants ==========
 const L = {
@@ -183,10 +187,10 @@ export default function GraphTab() {
 
   if (!selectedSessionId) {
     return (
-      <div className={empty.noSession}>
-        <div className={empty.state}>
-          <h3 className={empty.title}>Select a Session</h3>
-          <p className={empty.desc}>Choose a session to view its graph</p>
+      <div className="flex items-center justify-center h-full">
+        <div className="flex flex-col items-center justify-center py-12 px-4">
+          <h3 className="text-[1rem] font-medium text-[var(--text-secondary)] mb-2">Select a Session</h3>
+          <p className="text-[0.8125rem] text-[var(--text-muted)]">Choose a session to view its graph</p>
         </div>
       </div>
     );
@@ -221,7 +225,7 @@ export default function GraphTab() {
                   onClick={() => setScale(s => Math.min(2.5, s + 0.15))}>+</button>
           <button className="flex items-center justify-center w-8 h-8 border border-[var(--border-color)] rounded-[6px] bg-[var(--bg-tertiary)] text-[var(--text-secondary)] cursor-pointer transition-all hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
                   onClick={() => setScale(s => Math.max(0.15, s - 0.15))}>−</button>
-          <button className={cn(btn.ghost, btn.sm)} onClick={fetchGraph}>⟳ Reset</button>
+          <button className="py-1.5 px-3 text-[0.75rem] bg-transparent hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border border-[var(--border-color)]" onClick={fetchGraph}>⟳ Reset</button>
         </div>
       </div>
 
@@ -355,7 +359,7 @@ export default function GraphTab() {
               <span className="text-[16px]">{NODE_ICONS[selectedNode.id] || '●'}</span>
               <h3 className="text-[0.875rem] font-semibold text-[var(--text-primary)]">{selectedNode.label}</h3>
             </div>
-            <button className={btn.close} style={{ width: '28px', height: '28px' }} onClick={() => setSelectedNode(null)}>×</button>
+            <button className="flex items-center justify-center w-8 h-8 rounded-[var(--border-radius)] bg-transparent border-none text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] cursor-pointer text-lg" style={{ width: '28px', height: '28px' }} onClick={() => setSelectedNode(null)}>×</button>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4 text-[0.75rem]">
             {/* Badges */}

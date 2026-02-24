@@ -3,8 +3,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { commandApi } from '@/lib/api';
-import { cn, btn, empty } from '@/lib/tw';
+import { twMerge } from 'tailwind-merge';
 import type { LogEntry } from '@/types';
+
+function cn(...classes: (string | boolean | undefined | null)[]) {
+  return twMerge(classes.filter(Boolean).join(' '));
+}
 
 export default function LogsTab() {
   const { selectedSessionId } = useAppStore();
@@ -50,10 +54,10 @@ export default function LogsTab() {
 
   if (!selectedSessionId) {
     return (
-      <div className={empty.noSession}>
-        <div className={empty.state}>
-          <h3 className={empty.title}>Select a Session</h3>
-          <p className={empty.desc}>Choose a session from the list to view logs</p>
+      <div className="flex items-center justify-center h-full">
+        <div className="flex flex-col items-center justify-center py-12 px-4">
+          <h3 className="text-[1rem] font-medium text-[var(--text-secondary)] mb-2">Select a Session</h3>
+          <p className="text-[0.8125rem] text-[var(--text-muted)]">Choose a session from the list to view logs</p>
         </div>
       </div>
     );
@@ -83,15 +87,15 @@ export default function LogsTab() {
             <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} />
             Auto-refresh
           </label>
-          <button className={cn(btn.ghost, btn.sm)} onClick={fetchLogs}>↻ Refresh</button>
+          <button className={cn("py-2 px-4 bg-transparent hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border border-[var(--border-color)]", "!py-1.5 !px-3 text-[0.75rem]")} onClick={fetchLogs}>↻ Refresh</button>
         </div>
       </div>
 
       {/* Log Content */}
       <div className="flex-1 min-h-0 overflow-auto bg-[var(--bg-secondary)] rounded-[var(--border-radius)] p-1">
         {entries.length === 0 ? (
-          <div className={empty.state}>
-            <p className={empty.desc}>No log entries</p>
+          <div className="flex flex-col items-center justify-center py-12 px-4">
+            <p className="text-[0.8125rem] text-[var(--text-muted)]">No log entries</p>
           </div>
         ) : (
           entries.map((entry, idx) => {

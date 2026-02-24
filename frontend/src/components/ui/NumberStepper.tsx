@@ -1,7 +1,11 @@
 'use client';
 
 import { useCallback, useRef, useEffect } from 'react';
-import { cn } from '@/lib/tw';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...classes: (string | boolean | undefined | null)[]) {
+  return twMerge(classes.filter(Boolean).join(' '));
+}
 
 interface Props {
   value: number;

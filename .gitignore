@@ -1,6 +1,6 @@
 # config
 /service/config/variables/*.json
-
+/frontend-legacy
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

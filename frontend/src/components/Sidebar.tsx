@@ -2,8 +2,12 @@
 
 import { useState, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { cn, btn, empty } from '@/lib/tw';
+import { twMerge } from 'tailwind-merge';
 import type { SessionInfo } from '@/types';
+
+function cn(...classes: (string | boolean | undefined | null)[]) {
+  return twMerge(classes.filter(Boolean).join(' '));
+}
 import CreateSessionModal from '@/components/modals/CreateSessionModal';
 import DeleteSessionModal from '@/components/modals/DeleteSessionModal';
 
@@ -87,7 +91,7 @@ export default function Sidebar() {
             Sessions
           </h2>
           <div className="flex items-center gap-2">
-            <button className={cn(btn.primary, btn.sm)} onClick={() => setShowCreateModal(true)}>
+            <button className="py-1.5 px-3 bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white text-[0.75rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border-none disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => setShowCreateModal(true)}>
               New Session
             </button>
           </div>
@@ -124,8 +128,8 @@ export default function Sidebar() {
         {/* Session List */}
         <div className="flex-1 min-h-0 overflow-y-auto p-3">
           {sessions.length === 0 ? (
-            <div className={empty.state}>
-              <p className={empty.desc}>No sessions yet</p>
+            <div className="flex flex-col items-center justify-center py-12 px-4">
+              <p className="text-[0.8125rem] text-[var(--text-muted)]">No sessions yet</p>
             </div>
           ) : (
             sessions.map(session => (
@@ -171,14 +175,14 @@ export default function Sidebar() {
                       {session.session_name || session.session_id.substring(0, 12)}
                     </span>
                     <button
-                      className={btn.icon}
+                      className="flex items-center justify-center w-7 h-7 rounded bg-transparent border-none text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer transition-colors duration-150"
                       onClick={() => restoreSession(session.session_id)}
                       title="Restore"
                     >
                       ↩
                     </button>
                     <button
-                      className={cn(btn.icon, 'text-[var(--text-muted)] hover:!text-[var(--danger-color)]')}
+                      className="flex items-center justify-center w-7 h-7 rounded bg-transparent border-none text-[var(--text-muted)] hover:!text-[var(--danger-color)] cursor-pointer transition-colors duration-150"
                       onClick={() => permanentDeleteSession(session.session_id)}
                       title="Permanently delete"
                     >

@@ -1,7 +1,11 @@
 'use client';
 
 import { useAppStore } from '@/store/useAppStore';
-import { cn } from '@/lib/tw';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...classes: (string | boolean | undefined | null)[]) {
+  return twMerge(classes.filter(Boolean).join(' '));
+}
 
 const GLOBAL_TABS = [
   { id: 'playground', label: 'Playground' },

@@ -3,8 +3,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { agentApi } from '@/lib/api';
-import { cn, btn, empty } from '@/lib/tw';
+import { twMerge } from 'tailwind-merge';
 import type { SessionInfo } from '@/types';
+
+function cn(...classes: (string | boolean | undefined | null)[]) {
+  return twMerge(classes.filter(Boolean).join(' '));
+}
 
 function formatTimestamp(ts: string) {
   try { return new Date(ts).toLocaleString(); } catch { return ts; }
@@ -42,10 +46,10 @@ export default function InfoTab() {
 
   if (!selectedSessionId) {
     return (
-      <div className={empty.noSession}>
-        <div className={empty.state}>
-          <h3 className={empty.title}>Select a Session</h3>
-          <p className={empty.desc}>Choose a session to view its details</p>
+      <div className="flex items-center justify-center h-full">
+        <div className="flex flex-col items-center justify-center py-12 px-4">
+          <h3 className="text-[1rem] font-medium text-[var(--text-secondary)] mb-2">Select a Session</h3>
+          <p className="text-[0.8125rem] text-[var(--text-muted)]">Choose a session to view its details</p>
         </div>
       </div>
     );
@@ -107,8 +111,8 @@ export default function InfoTab() {
       {/* Actions for deleted */}
       {isDeleted && (
         <div className="flex gap-2 mt-4 pt-4 border-t border-[var(--border-color)]">
-          <button className={cn(btn.primary, btn.sm)} onClick={() => restoreSession(data.session_id)}>↻ Restore Session</button>
-          <button className={cn(btn.danger, btn.sm)} onClick={() => permanentDeleteSession(data.session_id)}>🗑️ Permanently Delete</button>
+          <button className={cn("py-2 px-4 bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border-none disabled:opacity-50 disabled:cursor-not-allowed", "!py-1.5 !px-3 text-[0.75rem]")} onClick={() => restoreSession(data.session_id)}>↻ Restore Session</button>
+          <button className={cn("py-2 px-4 bg-[var(--danger-color)] hover:brightness-110 text-white text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border-none disabled:opacity-50 disabled:cursor-not-allowed", "!py-1.5 !px-3 text-[0.75rem]")} onClick={() => permanentDeleteSession(data.session_id)}>🗑️ Permanently Delete</button>
         </div>
       )}
     </div>

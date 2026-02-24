@@ -3,9 +3,19 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { agentApi } from '@/lib/api';
-import { cn, btn, modal, form, selectArrowStyle } from '@/lib/tw';
+import { twMerge } from 'tailwind-merge';
 import NumberStepper from '@/components/ui/NumberStepper';
 import type { CreateAgentRequest, SessionInfo } from '@/types';
+
+function cn(...classes: (string | boolean | undefined | null)[]) {
+  return twMerge(classes.filter(Boolean).join(' '));
+}
+
+const selectArrow: React.CSSProperties = {
+  backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",
+  backgroundRepeat: 'no-repeat',
+  backgroundPosition: 'right 12px center',
+};
 
 interface Props { onClose: () => void; }
 
@@ -39,7 +49,6 @@ export default function CreateSessionModal({ onClose }: Props) {
 
   useEffect(() => { loadPrompts(); }, [loadPrompts]);
 
-  // Load managers dynamically when role is worker
   useEffect(() => {
     if (formState.role === 'worker') {
       agentApi.listManagers().then(setAvailableManagers).catch(() => setAvailableManagers([]));
@@ -72,37 +81,39 @@ export default function CreateSessionModal({ onClose }: Props) {
   };
 
   return (
-    <div className={modal.overlay} onClick={onClose}>
-        <div className={cn(modal.box, 'max-w-[480px]')} onClick={e => e.stopPropagation()}>
-        <div className={modal.header}>
-          <h3 className={modal.title}>Create New Session</h3>
-          <button className={btn.close} onClick={onClose}>×</button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg w-full max-w-[480px] max-h-[85vh] flex flex-col shadow-[var(--shadow-lg)]" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex justify-between items-center py-4 px-6 border-b border-[var(--border-color)]">
+          <h3 className="text-[1rem] font-semibold text-[var(--text-primary)]">Create New Session</h3>
+          <button className="flex items-center justify-center w-8 h-8 rounded-[var(--border-radius)] bg-transparent border-none text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] cursor-pointer text-lg" onClick={onClose}>×</button>
         </div>
 
-        <div className={modal.body}>
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
           {error && <div className="text-[0.8125rem] text-[var(--danger-color)] bg-[rgba(239,68,68,0.1)] p-2.5 rounded-[6px] mb-2">{error}</div>}
 
           {/* Session Name */}
-          <div className={form.group}>
-            <label className={form.label}>Session Name</label>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">Session Name</label>
             <input
-              className={form.input}
+              className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)]"
               placeholder="e.g. my-worker-1"
               value={formState.session_name || ''} onChange={e => setFormState(f => ({ ...f, session_name: e.target.value }))} />
           </div>
 
           {/* Role + Model */}
           <div className="grid grid-cols-2 gap-4">
-            <div className={form.group}>
-              <label className={form.label}>Role</label>
-              <select className={form.select} style={selectArrowStyle} value={formState.role} onChange={e => handleRoleChange(e.target.value)}>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">Role</label>
+              <select className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8" style={selectArrow} value={formState.role} onChange={e => handleRoleChange(e.target.value)}>
                 <option value="worker">Worker</option>
                 <option value="manager">Manager</option>
               </select>
             </div>
-            <div className={form.group}>
-              <label className={form.label}>Model</label>
-              <select className={form.select} style={selectArrowStyle} value={formState.model || ''} onChange={e => setFormState(f => ({ ...f, model: e.target.value }))}>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">Model</label>
+              <select className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8" style={selectArrow} value={formState.model || ''} onChange={e => setFormState(f => ({ ...f, model: e.target.value }))}>
                 {MODEL_OPTIONS.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
@@ -110,11 +121,11 @@ export default function CreateSessionModal({ onClose }: Props) {
             </div>
           </div>
 
-          {/* Manager selection – only for workers */}
+          {/* Manager selection */}
           {formState.role === 'worker' && (
-            <div className={form.group}>
-              <label className={form.label}>Manager Session</label>
-              <select className={form.select} style={selectArrowStyle} value={formState.manager_id || ''} onChange={e => setFormState(f => ({ ...f, manager_id: e.target.value }))}>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">Manager Session</label>
+              <select className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8" style={selectArrow} value={formState.manager_id || ''} onChange={e => setFormState(f => ({ ...f, manager_id: e.target.value }))}>
                 <option value="">None (Standalone)</option>
                 {availableManagers.map(m => {
                   const statusIcon = m.status === 'running' ? '🟢' : '⚪';
@@ -125,14 +136,14 @@ export default function CreateSessionModal({ onClose }: Props) {
                   );
                 })}
               </select>
-              <small className={form.hint}>Select a manager to control this worker</small>
+              <small className="text-[0.75rem] text-[var(--text-muted)] mt-0.5">Select a manager to control this worker</small>
             </div>
           )}
 
           {/* Prompt Template */}
-          <div className={form.group}>
-            <label className={form.label}>Prompt Template</label>
-            <select className={form.select} style={selectArrowStyle} value={selectedPrompt} onChange={e => handlePromptChange(e.target.value)}>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">Prompt Template</label>
+            <select className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8" style={selectArrow} value={selectedPrompt} onChange={e => handlePromptChange(e.target.value)}>
               <option value="">Custom / None</option>
               {prompts.map(p => (
                 <option key={p.name} value={p.name}>{p.name}</option>
@@ -142,17 +153,17 @@ export default function CreateSessionModal({ onClose }: Props) {
 
           {/* Max Turns + Timeout */}
           <div className="grid grid-cols-2 gap-4">
-            <div className={form.group}>
-              <label className={form.label}>Max Turns</label>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">Max Turns</label>
               <NumberStepper value={formState.max_turns ?? 25} onChange={v => setFormState(f => ({ ...f, max_turns: v }))} min={1} max={500} step={5} />
             </div>
-            <div className={form.group}>
-              <label className={form.label}>Timeout (s)</label>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">Timeout (s)</label>
               <NumberStepper value={formState.timeout ?? 300} onChange={v => setFormState(f => ({ ...f, timeout: v }))} min={10} max={7200} step={30} />
             </div>
           </div>
 
-          {/* Autonomous Mode – toggle */}
+          {/* Autonomous Mode */}
           <div className="flex items-center justify-between py-2 mb-1">
             <span className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">Autonomous Mode</span>
             <button
@@ -176,24 +187,25 @@ export default function CreateSessionModal({ onClose }: Props) {
 
           {formState.autonomous && (
             <div className="grid grid-cols-2 gap-4">
-              <div className={form.group}>
-                <label className={form.label}>Max Iterations</label>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">Max Iterations</label>
                 <NumberStepper value={formState.autonomous_max_iterations ?? 10} onChange={v => setFormState(f => ({ ...f, autonomous_max_iterations: v }))} min={1} max={500} step={5} />
               </div>
             </div>
           )}
 
           {/* System Prompt */}
-          <div className={form.group}>
-            <label className={form.label}>System Prompt</label>
-            <textarea className={form.textarea} rows={4} placeholder="Optional system prompt..."
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">System Prompt</label>
+            <textarea className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] resize-y" rows={4} placeholder="Optional system prompt..."
               value={formState.system_prompt || ''} onChange={e => setFormState(f => ({ ...f, system_prompt: e.target.value }))} />
           </div>
         </div>
 
-        <div className={modal.footer}>
-          <button className={btn.ghost} onClick={onClose}>Cancel</button>
-          <button className={btn.primary} onClick={handleSubmit} disabled={submitting}>
+        {/* Footer */}
+        <div className="flex justify-end items-center gap-3 py-4 px-6 border-t border-[var(--border-color)]">
+          <button className="py-2 px-4 bg-transparent hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border border-[var(--border-color)]" onClick={onClose}>Cancel</button>
+          <button className="py-2 px-4 bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border-none disabled:opacity-50 disabled:cursor-not-allowed" onClick={handleSubmit} disabled={submitting}>
             {submitting ? 'Creating...' : 'Create Session'}
           </button>
         </div>

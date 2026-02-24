@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { agentApi } from '@/lib/api';
-import { empty } from '@/lib/tw';
 import type { ManagerDashboard, WorkerInfo, ManagerEvent } from '@/types';
 
 const EVENT_ICONS: Record<string, string> = {
@@ -53,10 +52,10 @@ export default function DashboardTab() {
 
   if (!selectedSessionId) {
     return (
-      <div className={empty.noSession}>
-        <div className={empty.state}>
-          <h3 className={empty.title}>Select a Session</h3>
-          <p className={empty.desc}>Choose a session to view its dashboard</p>
+      <div className="flex items-center justify-center h-full">
+        <div className="flex flex-col items-center justify-center py-12 px-4">
+          <h3 className="text-[1rem] font-medium text-[var(--text-secondary)] mb-2">Select a Session</h3>
+          <p className="text-[0.8125rem] text-[var(--text-muted)]">Choose a session to view its dashboard</p>
         </div>
       </div>
     );
@@ -64,10 +63,10 @@ export default function DashboardTab() {
 
   if (!isManager) {
     return (
-      <div className={empty.noSession}>
-        <div className={empty.state}>
-          <h3 className={empty.title}>Manager Only</h3>
-          <p className={empty.desc}>Dashboard is only available for manager sessions</p>
+      <div className="flex items-center justify-center h-full">
+        <div className="flex flex-col items-center justify-center py-12 px-4">
+          <h3 className="text-[1rem] font-medium text-[var(--text-secondary)] mb-2">Manager Only</h3>
+          <p className="text-[0.8125rem] text-[var(--text-muted)]">Dashboard is only available for manager sessions</p>
         </div>
       </div>
     );
@@ -109,7 +108,7 @@ export default function DashboardTab() {
           </div>
           <div className="flex-1 p-3 flex flex-col gap-2 overflow-y-auto">
             {!dashboard?.workers.length ? (
-              <div className={empty.state}><p className={empty.desc}>No workers assigned</p></div>
+              <div className="flex flex-col items-center justify-center py-12 px-4"><p className="text-[0.8125rem] text-[var(--text-muted)]">No workers assigned</p></div>
             ) : (
               dashboard.workers.map((w: WorkerInfo) => (
                 <div key={w.worker_id}
@@ -145,7 +144,7 @@ export default function DashboardTab() {
           </div>
           <div className="flex-1 py-3 px-4 overflow-y-auto flex flex-col gap-3">
             {!dashboard?.recent_events.length ? (
-              <div className={empty.state}><p className={empty.desc}>No activity yet</p></div>
+              <div className="flex flex-col items-center justify-center py-12 px-4"><p className="text-[0.8125rem] text-[var(--text-muted)]">No activity yet</p></div>
             ) : (
               dashboard.recent_events.map((ev: ManagerEvent, idx: number) => (
                 <div key={idx}

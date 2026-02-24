@@ -61,5 +61,26 @@
     "is_deleted": false,
     "deleted_at": null,
     "registered_at": "2026-02-23T13:16:39.392577+00:00"
+  },
+  "b8fd7962-7e63-4164-8853-184d3936360f": {
+    "session_id": "b8fd7962-7e63-4164-8853-184d3936360f",
+    "session_name": "worker1",
+    "status": "running",
+    "created_at": "2026-02-24T10:25:12.594445",
+    "pid": null,
+    "error_message": null,
+    "model": "",
+    "max_turns": 25,
+    "timeout": 300.0,
+    "autonomous": false,
+    "autonomous_max_iterations": 10,
+    "storage_path": "C:\\Users\\gkfua\\AppData\\Local\\claude_sessions\\b8fd7962-7e63-4164-8853-184d3936360f",
+    "pod_name": "HR_Work",
+    "pod_ip": "192.168.1.237",
+    "role": "worker",
+    "manager_id": "",
+    "is_deleted": false,
+    "deleted_at": null,
+    "registered_at": "2026-02-24T01:25:12.677816+00:00"
   }
 }

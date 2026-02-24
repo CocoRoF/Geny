@@ -453,7 +453,7 @@ function CitySceneInner({ sessions, onProgress }: CitySceneInnerProps) {
 
       // Sky background
       const texLoader = new THREE.TextureLoader();
-      texLoader.load('/static/assets/kloofendal_48d_partly_cloudy_puresky_4k.jpg', (tex) => {
+      texLoader.load('/assets/kloofendal_48d_partly_cloudy_puresky_4k.jpg', (tex) => {
         tex.mapping = THREE.EquirectangularReflectionMapping;
         scene.background = tex;
         scene.environment = tex;
