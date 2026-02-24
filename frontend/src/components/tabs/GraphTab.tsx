@@ -109,7 +109,7 @@ function getNodeStroke(node: GraphNode) {
 // ========== Main Component ==========
 
 export default function GraphTab() {
-  const { selectedSessionId, sessions } = useAppStore();
+  const { selectedSessionId, sessions, setActiveTab } = useAppStore();
   const [graphData, setGraphData] = useState<GraphStructure | null>(null);
   const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
@@ -185,12 +185,15 @@ export default function GraphTab() {
     setScale(newScale);
   };
 
+  // ── No session selected ──
   if (!selectedSessionId) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="flex flex-col items-center justify-center py-12 px-4">
-          <h3 className="text-[1rem] font-medium text-[var(--text-secondary)] mb-2">Select a Session</h3>
-          <p className="text-[0.8125rem] text-[var(--text-muted)]">Choose a session to view its graph</p>
+      <div className="flex flex-col h-full min-h-0 overflow-hidden">
+        <div className="flex items-center justify-center flex-1">
+          <div className="flex flex-col items-center justify-center py-12 px-4">
+            <h3 className="text-[1rem] font-medium text-[var(--text-secondary)] mb-2">Select a Session</h3>
+            <p className="text-[0.8125rem] text-[var(--text-muted)]">Choose a session to view its graph, or go to <button className="text-[var(--primary-color)] underline underline-offset-2 font-medium bg-transparent border-none cursor-pointer" onClick={() => setActiveTab('workflows')}>Workflows</button> to manage graph workflows</p>
+          </div>
         </div>
       </div>
     );

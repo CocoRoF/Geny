@@ -179,6 +179,12 @@ class CreateSessionRequest(BaseModel):
         description="List of allowed tools (None allows all tools)"
     )
 
+    # Workflow / Graph settings
+    workflow_id: Optional[str] = Field(
+        default=None,
+        description="Workflow (graph) ID to use for this session. None uses built-in default/autonomous graph."
+    )
+
     # MCP server settings
     mcp_config: Optional[MCPConfig] = Field(
         default=None,
@@ -254,6 +260,12 @@ class SessionInfo(BaseModel):
     manager_id: Optional[str] = Field(
         default=None,
         description="Manager session ID (for worker role)"
+    )
+
+    # Workflow / Graph settings
+    workflow_id: Optional[str] = Field(
+        default=None,
+        description="Workflow (graph) ID used by this session"
     )
 
 

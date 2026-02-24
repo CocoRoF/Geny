@@ -343,3 +343,4 @@ storybook-static/
 
 # Lock files (optional - uncomment if needed)
 # shrinkwrap.yaml
+backend/service/claude_manager/sessions.json

@@ -132,6 +132,7 @@ class AgentSession:
         role: SessionRole = SessionRole.WORKER,
         manager_id: Optional[str] = None,
         enable_checkpointing: bool = False,
+        workflow_id: Optional[str] = None,
     ):
         """Initialize AgentSession.
 
@@ -170,6 +171,9 @@ class AgentSession:
         # Role
         self._role = role
         self._manager_id = manager_id
+
+        # Workflow / Graph
+        self._workflow_id = workflow_id
 
         # Internal components
         self._model: Optional[ClaudeCLIChatModel] = None
@@ -1299,6 +1303,7 @@ class AgentSession:
             pod_ip=pod_ip,
             role=self._role,
             manager_id=self._manager_id,
+            workflow_id=self._workflow_id,
         )
 
     # ========================================================================

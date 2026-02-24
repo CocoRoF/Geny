@@ -16,6 +16,7 @@ export interface SessionInfo {
   pod_name: string | null;
   pod_ip: string | null;
   manager_id: string | null;
+  workflow_id: string | null;
   is_deleted?: boolean;
   deleted_at?: string | null;
 }
@@ -32,6 +33,7 @@ export interface CreateAgentRequest {
   manager_id?: string;
   system_prompt?: string;
   enable_checkpointing?: boolean;
+  workflow_id?: string;
 }
 
 export interface ExecuteRequest {

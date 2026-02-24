@@ -3,13 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { agentApi } from '@/lib/api';
-import { twMerge } from 'tailwind-merge';
+import { workflowApi } from '@/lib/workflowApi';
 import NumberStepper from '@/components/ui/NumberStepper';
 import type { CreateAgentRequest, SessionInfo } from '@/types';
-
-function cn(...classes: (string | boolean | undefined | null)[]) {
-  return twMerge(classes.filter(Boolean).join(' '));
-}
+import type { WorkflowDefinition } from '@/types/workflow';
 
 const selectArrow: React.CSSProperties = {
   backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",
@@ -46,8 +43,21 @@ export default function CreateSessionModal({ onClose }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [availableManagers, setAvailableManagers] = useState<SessionInfo[]>([]);
+  const [availableWorkflows, setAvailableWorkflows] = useState<WorkflowDefinition[]>([]);
+  const [selectedWorkflow, setSelectedWorkflow] = useState('__default');
 
   useEffect(() => { loadPrompts(); }, [loadPrompts]);
+
+  // Load available workflows
+  useEffect(() => {
+    Promise.all([
+      workflowApi.list().catch(() => ({ workflows: [] })),
+      workflowApi.listTemplates().catch(() => ({ templates: [] })),
+    ]).then(([wfRes, tmplRes]) => {
+      const all = [...(tmplRes.templates || []), ...(wfRes.workflows || []).filter(w => !w.is_template)];
+      setAvailableWorkflows(all);
+    });
+  }, []);
 
   useEffect(() => {
     if (formState.role === 'worker') {
@@ -71,7 +81,22 @@ export default function CreateSessionModal({ onClose }: Props) {
     setSubmitting(true);
     setError('');
     try {
-      await createSession(formState);
+      const payload: CreateAgentRequest = { ...formState };
+      // Map workflow selection
+      if (selectedWorkflow === '__default') {
+        // Simple/default → autonomous off
+        payload.autonomous = false;
+        payload.workflow_id = undefined;
+      } else if (selectedWorkflow === '__autonomous') {
+        // Autonomous built-in
+        payload.autonomous = true;
+        payload.workflow_id = undefined;
+      } else {
+        // Custom workflow
+        payload.workflow_id = selectedWorkflow;
+        payload.autonomous = true; // custom workflows run in autonomous mode
+      }
+      await createSession(payload);
       onClose();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to create session');
@@ -163,29 +188,35 @@ export default function CreateSessionModal({ onClose }: Props) {
             </div>
           </div>
 
-          {/* Autonomous Mode */}
-          <div className="flex items-center justify-between py-2 mb-1">
-            <span className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">Autonomous Mode</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={formState.autonomous || false}
-              className={cn(
-                'relative w-[42px] h-6 rounded-xl cursor-pointer transition-all duration-200 p-0 shrink-0 border',
-                formState.autonomous
-                  ? 'bg-[var(--primary-color)] border-[var(--primary-color)]'
-                  : 'bg-[var(--bg-tertiary)] border-[var(--border-color)]',
+          {/* Graph Workflow */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">Graph Workflow</label>
+            <select className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8" style={selectArrow} value={selectedWorkflow} onChange={e => setSelectedWorkflow(e.target.value)}>
+              <optgroup label="Built-in">
+                <option value="__default">Simple (Default)</option>
+                <option value="__autonomous">Autonomous</option>
+              </optgroup>
+              {availableWorkflows.length > 0 && (
+                <optgroup label="Custom / Templates">
+                  {availableWorkflows.map(w => (
+                    <option key={w.id} value={w.id}>
+                      {w.name}
+                    </option>
+                  ))}
+                </optgroup>
               )}
-              onClick={() => setFormState(f => ({ ...f, autonomous: !f.autonomous }))}
-            >
-              <span className={cn(
-                'absolute top-0.5 left-0.5 w-[18px] h-[18px] rounded-full bg-white transition-transform duration-200 pointer-events-none',
-                formState.autonomous && 'translate-x-[18px]',
-              )} />
-            </button>
+            </select>
+            <small className="text-[0.75rem] text-[var(--text-muted)] mt-0.5">
+              {selectedWorkflow === '__default'
+                ? 'Basic agent loop: guard → LLM → output'
+                : selectedWorkflow === '__autonomous'
+                  ? 'Difficulty-based routing with review loops and TODO management'
+                  : 'Custom workflow graph'}
+            </small>
           </div>
 
-          {formState.autonomous && (
+          {/* Max Iterations (for autonomous / custom workflows) */}
+          {selectedWorkflow !== '__default' && (
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">Max Iterations</label>

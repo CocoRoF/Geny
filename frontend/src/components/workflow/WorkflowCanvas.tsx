@@ -1,0 +1,227 @@
+'use client';
+
+import { useCallback, useRef, useMemo, useEffect, type DragEvent } from 'react';
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  MiniMap,
+  BackgroundVariant,
+  useReactFlow,
+  type Edge,
+  type Node,
+  type ReactFlowInstance,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+
+import { useWorkflowStore, type WorkflowNodeData } from '@/store/useWorkflowStore';
+import { workflowNodeTypes } from './CustomNodes';
+
+export default function WorkflowCanvas({ readOnly = false }: { readOnly?: boolean }) {
+  const rfRef = useRef<ReactFlowInstance<Node<WorkflowNodeData>, Edge> | null>(null);
+  const { fitView } = useReactFlow();
+  const currentWorkflow = useWorkflowStore(s => s.currentWorkflow);
+
+  const {
+    nodes,
+    edges,
+    onNodesChange,
+    onEdgesChange,
+    onConnect,
+    addNode,
+    setSelectedNode,
+    nodeCatalog,
+  } = useWorkflowStore();
+
+  // ── Fit view when workflow changes ──
+  useEffect(() => {
+    if (currentWorkflow && nodes.length > 0) {
+      // Small delay to let React Flow measure the new nodes
+      const timer = setTimeout(() => fitView({ padding: 0.3 }), 80);
+      return () => clearTimeout(timer);
+    }
+    // Only trigger on workflow identity change, not node edits
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWorkflow?.id, fitView]);
+
+  // ── Selection tracking ──
+  const handleSelectionChange = useCallback(
+    ({ nodes: sel }: { nodes: Array<{ id: string }> }) => {
+      if (sel.length === 1) {
+        setSelectedNode(sel[0].id);
+      } else if (sel.length === 0) {
+        setSelectedNode(null);
+      }
+    },
+    [setSelectedNode],
+  );
+
+  // ── Edge validation: prevent duplicate / self-connections ──
+  const isValidConnection = useCallback((connection: { source: string | null; target: string | null; sourceHandle?: string | null }) => {
+    if (!connection.source || !connection.target) return false;
+    if (connection.source === connection.target) return false;
+    const existing = useWorkflowStore.getState().edges;
+    return !existing.some(
+      e =>
+        e.source === connection.source &&
+        e.target === connection.target &&
+        e.sourceHandle === connection.sourceHandle,
+    );
+  }, []);
+
+  // ── Drag & Drop from palette ──
+  const handleDragOver = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: DragEvent) => {
+      e.preventDefault();
+      const raw = e.dataTransfer.getData('application/workflow-node');
+      if (!raw || !rfRef.current || !nodeCatalog) return;
+
+      let payload: { node_type: string; label?: string; category?: string; icon?: string; color?: string; is_conditional?: boolean; parameters?: unknown[]; output_ports?: unknown[]; description?: string };
+      try {
+        payload = JSON.parse(raw);
+      } catch {
+        return;
+      }
+      if (!payload.node_type) return;
+
+      // Find the type definition from catalog, or use the dragged payload directly (for special frontend-only nodes like Start/End)
+      let typeDef = null;
+      for (const catNodes of Object.values(nodeCatalog.categories)) {
+        const found = catNodes.find(n => n.node_type === payload.node_type);
+        if (found) { typeDef = found; break; }
+      }
+      if (!typeDef) {
+        // Fallback: use the payload itself (covers frontend-only pseudo-nodes)
+        if (payload.label && payload.category) {
+          typeDef = payload;
+        } else {
+          return;
+        }
+      }
+
+      // Convert screen coords → flow coords
+      const position = rfRef.current.screenToFlowPosition({
+        x: e.clientX,
+        y: e.clientY,
+      });
+
+      addNode(typeDef as import('@/types/workflow').WfNodeTypeDef, position);
+    },
+    [nodeCatalog, addNode],
+  );
+
+  const handleInit = useCallback((instance: ReactFlowInstance<Node<WorkflowNodeData>, Edge>) => {
+    rfRef.current = instance;
+  }, []);
+
+  // ── Default edge options ──
+  const defaultEdgeOptions = useMemo(
+    () => ({
+      type: 'smoothstep' as const,
+      animated: false,
+      style: { stroke: 'var(--text-muted)', strokeWidth: 1.5 },
+    }),
+    [],
+  );
+
+  return (
+    <div className="h-full w-full relative workflow-canvas">
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={readOnly ? undefined : onNodesChange}
+        onEdgesChange={readOnly ? undefined : onEdgesChange}
+        onConnect={readOnly ? undefined : onConnect}
+        onInit={handleInit}
+        onSelectionChange={handleSelectionChange}
+        isValidConnection={readOnly ? () => false : isValidConnection}
+        onDragOver={readOnly ? undefined : handleDragOver}
+        onDrop={readOnly ? undefined : handleDrop}
+        nodeTypes={workflowNodeTypes}
+        defaultEdgeOptions={defaultEdgeOptions}
+        fitView
+        fitViewOptions={{ padding: 0.3 }}
+        snapToGrid={!readOnly}
+        snapGrid={[16, 16]}
+        minZoom={0.1}
+        maxZoom={3}
+        nodesDraggable={!readOnly}
+        nodesConnectable={!readOnly}
+        elementsSelectable
+        deleteKeyCode={readOnly ? undefined : "Delete"}
+        multiSelectionKeyCode="Shift"
+        proOptions={{ hideAttribution: true }}
+        className="bg-[var(--bg-primary)]"
+      >
+        <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="var(--border-color)" />
+        <Controls
+          showZoom
+          showFitView
+          showInteractive={false}
+          className="!bg-[var(--bg-secondary)] !border-[var(--border-color)] !shadow-lg [&>button]:!bg-[var(--bg-secondary)] [&>button]:!border-[var(--border-color)] [&>button]:!fill-[var(--text-secondary)] [&>button:hover]:!bg-[var(--bg-tertiary)]"
+        />
+        <MiniMap
+          nodeStrokeWidth={3}
+          nodeColor={(n) => {
+            const d = n.data as WorkflowNodeData;
+            return d.color || '#6366f1';
+          }}
+          maskColor="rgba(0,0,0,0.65)"
+          className="!bg-[var(--bg-secondary)] !border-[var(--border-color)]"
+        />
+      </ReactFlow>
+
+      {/* Canvas hint overlay (shown when empty) */}
+      {nodes.length === 0 && !readOnly && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+          <div className="text-center p-6 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-color)] shadow-lg">
+            <div className="text-[28px] mb-2">🎨</div>
+            <div className="text-[13px] font-semibold text-[var(--text-secondary)] mb-1">
+              Design Your Workflow
+            </div>
+            <div className="text-[11px] text-[var(--text-muted)] leading-relaxed max-w-[260px]">
+              Drag nodes from the palette or load a template to get started.
+              Connect nodes by dragging from handles.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global canvas styles */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .workflow-canvas .react-flow__edge-path {
+          stroke: var(--text-muted);
+          stroke-width: 1.5px;
+        }
+        .workflow-canvas .react-flow__edge.selected .react-flow__edge-path {
+          stroke: var(--primary-color);
+          stroke-width: 2px;
+        }
+        .workflow-canvas .react-flow__edge-text {
+          font-size: 10px;
+          fill: var(--text-muted);
+        }
+        .workflow-canvas .react-flow__handle {
+          width: 8px;
+          height: 8px;
+          border: 1.5px solid var(--text-muted);
+          background: var(--bg-secondary);
+        }
+        .workflow-canvas .react-flow__handle:hover {
+          background: var(--primary-color);
+          border-color: var(--primary-color);
+        }
+        .workflow-canvas .react-flow__connection-line {
+          stroke: var(--primary-color);
+          stroke-width: 2px;
+          stroke-dasharray: 5 5;
+        }
+      `}} />
+    </div>
+  );
+}

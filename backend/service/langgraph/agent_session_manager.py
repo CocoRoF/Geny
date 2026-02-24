@@ -258,6 +258,7 @@ class AgentSessionManager(SessionManager):
             role=request.role or SessionRole.WORKER,
             manager_id=request.manager_id,
             enable_checkpointing=enable_checkpointing,
+            workflow_id=getattr(request, 'workflow_id', None),
         )
 
         session_id = agent.session_id

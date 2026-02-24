@@ -11,6 +11,7 @@ const DashboardTab = dynamic(() => import('@/components/tabs/DashboardTab'));
 const LogsTab = dynamic(() => import('@/components/tabs/LogsTab'));
 const StorageTab = dynamic(() => import('@/components/tabs/StorageTab'));
 const GraphTab = dynamic(() => import('@/components/tabs/GraphTab'), { ssr: false });
+const GraphWorkflowsTab = dynamic(() => import('@/components/tabs/GraphWorkflowsTab'), { ssr: false });
 const InfoTab = dynamic(() => import('@/components/tabs/InfoTab'));
 const SettingsTab = dynamic(() => import('@/components/tabs/SettingsTab'));
 
@@ -22,6 +23,7 @@ const TAB_MAP: Record<string, React.ComponentType> = {
   logs: LogsTab,
   storage: StorageTab,
   graph: GraphTab,
+  workflows: GraphWorkflowsTab,
   info: InfoTab,
   settings: SettingsTab,
 };

@@ -10,6 +10,7 @@ function cn(...classes: (string | boolean | undefined | null)[]) {
 const GLOBAL_TABS = [
   { id: 'main', label: 'Main' },
   { id: 'playground', label: 'Playground' },
+  { id: 'workflows', label: 'Workflows' },
   { id: 'settings', label: 'Settings' },
 ];
 
