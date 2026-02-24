@@ -65,7 +65,7 @@ interface WorkflowEditorState {
   setSelectedNode: (id: string | null) => void;
 
   // Actions — Node manipulation
-  addNode: (nodeType: WfNodeTypeDef, position: { x: number; y: number }) => void;
+  addNode: (nodeType: WfNodeTypeDef, position: { x: number; y: number }) => string;
   updateNodeConfig: (nodeId: string, config: Record<string, unknown>) => void;
   updateNodeLabel: (nodeId: string, label: string) => void;
   deleteSelectedNode: () => void;

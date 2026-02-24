@@ -1,0 +1,594 @@
+{
+  "id": "16d0f489-ce28-4b41-93af-57c7bdeb13fb",
+  "name": "Autonomous Difficulty-Based (Copy)",
+  "description": "Full autonomous execution graph with difficulty classification, easy/medium/hard paths, review loops, TODO management, and resilience infrastructure.",
+  "nodes": [
+    {
+      "id": "start",
+      "node_type": "start",
+      "label": "Start",
+      "config": {},
+      "position": {
+        "x": 520.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "mem_inject",
+      "node_type": "memory_inject",
+      "label": "Memory Inject",
+      "config": {},
+      "position": {
+        "x": 520.0,
+        "y": 118.0
+      }
+    },
+    {
+      "id": "guard_cls",
+      "node_type": "context_guard",
+      "label": "Guard (Classify)",
+      "config": {
+        "position_label": "classify"
+      },
+      "position": {
+        "x": 520.0,
+        "y": 196.0
+      }
+    },
+    {
+      "id": "classify",
+      "node_type": "classify_difficulty",
+      "label": "Classify Difficulty",
+      "config": {},
+      "position": {
+        "x": 520.0,
+        "y": 274.0
+      }
+    },
+    {
+      "id": "post_cls",
+      "node_type": "post_model",
+      "label": "Post Classify",
+      "config": {
+        "detect_completion": false
+      },
+      "position": {
+        "x": 520.0,
+        "y": 352.0
+      }
+    },
+    {
+      "id": "guard_dir",
+      "node_type": "context_guard",
+      "label": "Guard (Direct)",
+      "config": {
+        "position_label": "direct"
+      },
+      "position": {
+        "x": 180.0,
+        "y": 452.0
+      }
+    },
+    {
+      "id": "dir_ans",
+      "node_type": "direct_answer",
+      "label": "Direct Answer",
+      "config": {},
+      "position": {
+        "x": 180.0,
+        "y": 530.0
+      }
+    },
+    {
+      "id": "post_dir",
+      "node_type": "post_model",
+      "label": "Post Direct",
+      "config": {},
+      "position": {
+        "x": 180.0,
+        "y": 608.0
+      }
+    },
+    {
+      "id": "guard_ans",
+      "node_type": "context_guard",
+      "label": "Guard (Answer)",
+      "config": {
+        "position_label": "answer"
+      },
+      "position": {
+        "x": 440.0,
+        "y": 452.0
+      }
+    },
+    {
+      "id": "answer",
+      "node_type": "answer",
+      "label": "Answer",
+      "config": {},
+      "position": {
+        "x": 440.0,
+        "y": 530.0
+      }
+    },
+    {
+      "id": "post_ans",
+      "node_type": "post_model",
+      "label": "Post Answer",
+      "config": {
+        "detect_completion": false
+      },
+      "position": {
+        "x": 440.0,
+        "y": 608.0
+      }
+    },
+    {
+      "id": "guard_rev",
+      "node_type": "context_guard",
+      "label": "Guard (Review)",
+      "config": {
+        "position_label": "review"
+      },
+      "position": {
+        "x": 440.0,
+        "y": 686.0
+      }
+    },
+    {
+      "id": "review",
+      "node_type": "review",
+      "label": "Review",
+      "config": {},
+      "position": {
+        "x": 440.0,
+        "y": 764.0
+      }
+    },
+    {
+      "id": "post_rev",
+      "node_type": "post_model",
+      "label": "Post Review",
+      "config": {},
+      "position": {
+        "x": 440.0,
+        "y": 842.0
+      }
+    },
+    {
+      "id": "gate_med",
+      "node_type": "iteration_gate",
+      "label": "Iter Gate (Medium)",
+      "config": {},
+      "position": {
+        "x": 440.0,
+        "y": 920.0
+      }
+    },
+    {
+      "id": "guard_todo",
+      "node_type": "context_guard",
+      "label": "Guard (Todos)",
+      "config": {
+        "position_label": "create_todos"
+      },
+      "position": {
+        "x": 700.0,
+        "y": 452.0
+      }
+    },
+    {
+      "id": "mk_todos",
+      "node_type": "create_todos",
+      "label": "Create TODOs",
+      "config": {},
+      "position": {
+        "x": 700.0,
+        "y": 530.0
+      }
+    },
+    {
+      "id": "post_todos",
+      "node_type": "post_model",
+      "label": "Post Create Todos",
+      "config": {
+        "detect_completion": false
+      },
+      "position": {
+        "x": 700.0,
+        "y": 608.0
+      }
+    },
+    {
+      "id": "guard_exec",
+      "node_type": "context_guard",
+      "label": "Guard (Execute)",
+      "config": {
+        "position_label": "execute"
+      },
+      "position": {
+        "x": 700.0,
+        "y": 686.0
+      }
+    },
+    {
+      "id": "exec_todo",
+      "node_type": "execute_todo",
+      "label": "Execute TODO",
+      "config": {},
+      "position": {
+        "x": 700.0,
+        "y": 764.0
+      }
+    },
+    {
+      "id": "post_exec",
+      "node_type": "post_model",
+      "label": "Post Execute",
+      "config": {},
+      "position": {
+        "x": 700.0,
+        "y": 842.0
+      }
+    },
+    {
+      "id": "chk_prog",
+      "node_type": "check_progress",
+      "label": "Check Progress",
+      "config": {},
+      "position": {
+        "x": 700.0,
+        "y": 920.0
+      }
+    },
+    {
+      "id": "gate_hard",
+      "node_type": "iteration_gate",
+      "label": "Iter Gate (Hard)",
+      "config": {},
+      "position": {
+        "x": 700.0,
+        "y": 998.0
+      }
+    },
+    {
+      "id": "guard_fr",
+      "node_type": "context_guard",
+      "label": "Guard (Final Review)",
+      "config": {
+        "position_label": "final_review"
+      },
+      "position": {
+        "x": 700.0,
+        "y": 1076.0
+      }
+    },
+    {
+      "id": "fin_rev",
+      "node_type": "final_review",
+      "label": "Final Review",
+      "config": {},
+      "position": {
+        "x": 700.0,
+        "y": 1154.0
+      }
+    },
+    {
+      "id": "post_fr",
+      "node_type": "post_model",
+      "label": "Post Final Review",
+      "config": {},
+      "position": {
+        "x": 700.0,
+        "y": 1232.0
+      }
+    },
+    {
+      "id": "guard_fa",
+      "node_type": "context_guard",
+      "label": "Guard (Final Answer)",
+      "config": {
+        "position_label": "final_answer"
+      },
+      "position": {
+        "x": 700.0,
+        "y": 1310.0
+      }
+    },
+    {
+      "id": "fin_ans",
+      "node_type": "final_answer",
+      "label": "Final Answer",
+      "config": {},
+      "position": {
+        "x": 700.0,
+        "y": 1388.0
+      }
+    },
+    {
+      "id": "post_fa",
+      "node_type": "post_model",
+      "label": "Post Final Answer",
+      "config": {},
+      "position": {
+        "x": 700.0,
+        "y": 1466.0
+      }
+    },
+    {
+      "id": "end",
+      "node_type": "end",
+      "label": "End",
+      "config": {},
+      "position": {
+        "x": 520.0,
+        "y": 1566.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "773077ac",
+      "source": "start",
+      "target": "mem_inject",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "6247d0b0",
+      "source": "mem_inject",
+      "target": "guard_cls",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "f99b59d4",
+      "source": "guard_cls",
+      "target": "classify",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "027cc89a",
+      "source": "classify",
+      "target": "post_cls",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "ee51380c",
+      "source": "guard_dir",
+      "target": "dir_ans",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "0c55ce53",
+      "source": "dir_ans",
+      "target": "post_dir",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "641ec100",
+      "source": "guard_ans",
+      "target": "answer",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "4337a64b",
+      "source": "answer",
+      "target": "post_ans",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "fb0f500b",
+      "source": "post_ans",
+      "target": "guard_rev",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "5b07bbef",
+      "source": "guard_rev",
+      "target": "review",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "9f6d1080",
+      "source": "review",
+      "target": "post_rev",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "a1692e97",
+      "source": "guard_todo",
+      "target": "mk_todos",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "e566ff49",
+      "source": "mk_todos",
+      "target": "post_todos",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "4565f2c7",
+      "source": "post_todos",
+      "target": "guard_exec",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "be9e2e9c",
+      "source": "guard_exec",
+      "target": "exec_todo",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "dda767ea",
+      "source": "exec_todo",
+      "target": "post_exec",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "c7e70d0c",
+      "source": "post_exec",
+      "target": "chk_prog",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "48cb4afd",
+      "source": "post_cls",
+      "target": "guard_dir",
+      "source_port": "easy",
+      "label": "Easy"
+    },
+    {
+      "id": "00b09d10",
+      "source": "post_cls",
+      "target": "guard_ans",
+      "source_port": "medium",
+      "label": "Medium"
+    },
+    {
+      "id": "b0072ad4",
+      "source": "post_cls",
+      "target": "guard_todo",
+      "source_port": "hard",
+      "label": "Hard"
+    },
+    {
+      "id": "9f86df26",
+      "source": "post_cls",
+      "target": "end",
+      "source_port": "end",
+      "label": "End"
+    },
+    {
+      "id": "35da4b86",
+      "source": "post_dir",
+      "target": "end",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "a6368a8d",
+      "source": "post_rev",
+      "target": "end",
+      "source_port": "approved",
+      "label": "Approved"
+    },
+    {
+      "id": "4884a3d9",
+      "source": "post_rev",
+      "target": "gate_med",
+      "source_port": "retry",
+      "label": "Retry"
+    },
+    {
+      "id": "c59b2af1",
+      "source": "post_rev",
+      "target": "end",
+      "source_port": "end",
+      "label": "End"
+    },
+    {
+      "id": "46b88240",
+      "source": "gate_med",
+      "target": "guard_ans",
+      "source_port": "continue",
+      "label": "Continue"
+    },
+    {
+      "id": "feae7b91",
+      "source": "gate_med",
+      "target": "end",
+      "source_port": "stop",
+      "label": "Stop"
+    },
+    {
+      "id": "4fe4464f",
+      "source": "chk_prog",
+      "target": "gate_hard",
+      "source_port": "continue",
+      "label": "Continue"
+    },
+    {
+      "id": "b1e91bea",
+      "source": "chk_prog",
+      "target": "guard_fr",
+      "source_port": "complete",
+      "label": "Complete"
+    },
+    {
+      "id": "5a35943e",
+      "source": "gate_hard",
+      "target": "guard_exec",
+      "source_port": "continue",
+      "label": "Continue"
+    },
+    {
+      "id": "9bc07a58",
+      "source": "gate_hard",
+      "target": "guard_fr",
+      "source_port": "stop",
+      "label": "Stop"
+    },
+    {
+      "id": "f41a6d30",
+      "source": "guard_fr",
+      "target": "fin_rev",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "1fbc2410",
+      "source": "fin_rev",
+      "target": "post_fr",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "6f63b106",
+      "source": "post_fr",
+      "target": "guard_fa",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "e7710011",
+      "source": "guard_fa",
+      "target": "fin_ans",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "9c54e516",
+      "source": "fin_ans",
+      "target": "post_fa",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "2f46b4b9",
+      "source": "post_fa",
+      "target": "end",
+      "source_port": "default",
+      "label": ""
+    }
+  ],
+  "created_at": "2026-02-24T08:01:27.452632+00:00",
+  "updated_at": "2026-02-24T08:01:29.014129+00:00",
+  "is_template": false,
+  "template_name": null
+}

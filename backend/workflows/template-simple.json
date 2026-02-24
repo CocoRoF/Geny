@@ -1,0 +1,114 @@
+{
+  "id": "template-simple",
+  "name": "Simple Agent",
+  "description": "Basic agent loop: memory → guard → LLM call → post-processing → end.",
+  "nodes": [
+    {
+      "id": "start",
+      "node_type": "start",
+      "label": "Start",
+      "config": {},
+      "position": {
+        "x": 400.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "mem",
+      "node_type": "memory_inject",
+      "label": "Memory Inject",
+      "config": {},
+      "position": {
+        "x": 400.0,
+        "y": 120.0
+      }
+    },
+    {
+      "id": "guard",
+      "node_type": "context_guard",
+      "label": "Context Guard",
+      "config": {
+        "position_label": "main"
+      },
+      "position": {
+        "x": 400.0,
+        "y": 200.0
+      }
+    },
+    {
+      "id": "llm",
+      "node_type": "llm_call",
+      "label": "LLM Call",
+      "config": {
+        "prompt_template": "{input}",
+        "output_field": "last_output",
+        "set_complete": true
+      },
+      "position": {
+        "x": 400.0,
+        "y": 280.0
+      }
+    },
+    {
+      "id": "post",
+      "node_type": "post_model",
+      "label": "Post Model",
+      "config": {},
+      "position": {
+        "x": 400.0,
+        "y": 360.0
+      }
+    },
+    {
+      "id": "end",
+      "node_type": "end",
+      "label": "End",
+      "config": {},
+      "position": {
+        "x": 400.0,
+        "y": 440.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "99a2a1dc",
+      "source": "start",
+      "target": "mem",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "543811d3",
+      "source": "mem",
+      "target": "guard",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "14ccd291",
+      "source": "guard",
+      "target": "llm",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "7bfcd7ae",
+      "source": "llm",
+      "target": "post",
+      "source_port": "default",
+      "label": ""
+    },
+    {
+      "id": "e2aaac29",
+      "source": "post",
+      "target": "end",
+      "source_port": "default",
+      "label": ""
+    }
+  ],
+  "created_at": "2026-02-24T07:16:17.280610+00:00",
+  "updated_at": "2026-02-24T07:16:17.280610+00:00",
+  "is_template": true,
+  "template_name": "simple"
+}

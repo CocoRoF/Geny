@@ -216,10 +216,13 @@ function ToolbarBtn({
 export default function WorkflowTab() {
   const { loadCatalog, loadWorkflows, selectedNodeId } = useWorkflowStore();
 
-  // Init on mount
+  // Init on mount — catalog must load before workflows so nodes get proper metadata
   useEffect(() => {
-    loadCatalog();
-    loadWorkflows();
+    const init = async () => {
+      await loadCatalog();
+      await loadWorkflows();
+    };
+    init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

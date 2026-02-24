@@ -1,12 +1,13 @@
 'use client';
 
-import { useCallback, useRef, useMemo, type DragEvent } from 'react';
+import { useCallback, useRef, useMemo, useEffect, type DragEvent } from 'react';
 import {
   ReactFlow,
   Background,
   Controls,
   MiniMap,
   BackgroundVariant,
+  useReactFlow,
   type Edge,
   type Node,
   type ReactFlowInstance,
@@ -18,11 +19,12 @@ import { workflowNodeTypes } from './CustomNodes';
 
 export default function WorkflowCanvas() {
   const rfRef = useRef<ReactFlowInstance<Node<WorkflowNodeData>, Edge> | null>(null);
+  const { fitView } = useReactFlow();
+  const currentWorkflow = useWorkflowStore(s => s.currentWorkflow);
 
   const {
     nodes,
     edges,
-    selectedNodeId,
     onNodesChange,
     onEdgesChange,
     onConnect,
@@ -31,16 +33,27 @@ export default function WorkflowCanvas() {
     nodeCatalog,
   } = useWorkflowStore();
 
+  // ── Fit view when workflow changes ──
+  useEffect(() => {
+    if (currentWorkflow && nodes.length > 0) {
+      // Small delay to let React Flow measure the new nodes
+      const timer = setTimeout(() => fitView({ padding: 0.3 }), 80);
+      return () => clearTimeout(timer);
+    }
+    // Only trigger on workflow identity change, not node edits
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWorkflow?.id, fitView]);
+
   // ── Selection tracking ──
   const handleSelectionChange = useCallback(
     ({ nodes: sel }: { nodes: Array<{ id: string }> }) => {
       if (sel.length === 1) {
         setSelectedNode(sel[0].id);
-      } else if (sel.length === 0 && selectedNodeId) {
+      } else if (sel.length === 0) {
         setSelectedNode(null);
       }
     },
-    [setSelectedNode, selectedNodeId],
+    [setSelectedNode],
   );
 
   // ── Edge validation: prevent duplicate / self-connections ──
@@ -68,17 +81,18 @@ export default function WorkflowCanvas() {
       const raw = e.dataTransfer.getData('application/workflow-node');
       if (!raw || !rfRef.current || !nodeCatalog) return;
 
-      let payload: { nodeType: string };
+      let payload: { node_type: string };
       try {
         payload = JSON.parse(raw);
       } catch {
         return;
       }
+      if (!payload.node_type) return;
 
       // Find the type definition from catalog
       let typeDef = null;
       for (const catNodes of Object.values(nodeCatalog.categories)) {
-        const found = catNodes.find(n => n.node_type === payload.nodeType);
+        const found = catNodes.find(n => n.node_type === payload.node_type);
         if (found) { typeDef = found; break; }
       }
       if (!typeDef) return;
@@ -169,7 +183,7 @@ export default function WorkflowCanvas() {
       )}
 
       {/* Global canvas styles */}
-      <style jsx global>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         .workflow-canvas .react-flow__edge-path {
           stroke: var(--text-muted);
           stroke-width: 1.5px;
@@ -197,7 +211,7 @@ export default function WorkflowCanvas() {
           stroke-width: 2px;
           stroke-dasharray: 5 5;
         }
-      `}</style>
+      `}} />
     </div>
   );
 }

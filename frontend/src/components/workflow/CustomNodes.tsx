@@ -166,7 +166,7 @@ export const ConditionalNode = memo(({ data, selected }: NodeProps) => {
 
       {/* Output ports */}
       <div className="px-3 py-2 space-y-1">
-        {ports.map((port, i) => (
+        {ports.map((port) => (
           <div
             key={port.id}
             className="flex items-center gap-1.5 text-[11px] text-[var(--text-secondary)]"
