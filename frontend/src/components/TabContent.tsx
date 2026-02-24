@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { useAppStore } from '@/store/useAppStore';
 
 // Lazy load tab components
+const MainTab = dynamic(() => import('@/components/tabs/MainTab'));
 const PlaygroundTab = dynamic(() => import('@/components/tabs/PlaygroundTab'), { ssr: false });
 const CommandTab = dynamic(() => import('@/components/tabs/CommandTab'));
 const DashboardTab = dynamic(() => import('@/components/tabs/DashboardTab'));
@@ -14,6 +15,7 @@ const InfoTab = dynamic(() => import('@/components/tabs/InfoTab'));
 const SettingsTab = dynamic(() => import('@/components/tabs/SettingsTab'));
 
 const TAB_MAP: Record<string, React.ComponentType> = {
+  main: MainTab,
   playground: PlaygroundTab,
   command: CommandTab,
   dashboard: DashboardTab,

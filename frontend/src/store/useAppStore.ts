@@ -70,7 +70,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   healthData: null,
   prompts: [],
   promptContents: {},
-  activeTab: 'playground',
+  activeTab: 'main',
   sidebarCollapsed: false,
   isExecuting: false,
   deletedSectionOpen: false,
@@ -100,8 +100,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Selecting a session while on a global tab → jump to Command
       updates.activeTab = 'command';
     } else if (!id && SESSION_TAB_IDS.has(activeTab)) {
-      // Deselecting session while on a session tab → fall back to Playground
-      updates.activeTab = 'playground';
+      // Deselecting session while on a session tab → fall back to Main
+      updates.activeTab = 'main';
     }
     set(updates);
   },

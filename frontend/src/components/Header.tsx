@@ -11,15 +11,15 @@ export default function Header() {
   return (
     <header className="flex justify-between items-center px-6 h-14 bg-[var(--bg-secondary)] border-b border-[var(--border-color)]">
       <div className="flex items-center gap-3">
-        <Image
+        {/* <Image
           src="/geny_logo.png"
           alt="Geny"
           width={160}
           height={44}
           className="h-11 w-auto object-contain"
           priority
-        />
-        <span className="text-[0.8rem] text-[var(--text-tertiary)] tracking-[0.08em] italic hidden sm:inline">
+        /> */}
+        <span className="text-[0.9rem] text-[var(--text-tertiary)] tracking-[0.08em] italic hidden sm:inline">
           Geny Execute, Not You
         </span>
       </div>
