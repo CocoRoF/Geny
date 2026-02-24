@@ -1,0 +1,21 @@
+{
+  "enabled": false,
+  "bot_token": "",
+  "app_token": "",
+  "signing_secret": "",
+  "workspace_id": "",
+  "allowed_channel_ids": [],
+  "default_channel_id": "",
+  "admin_user_ids": [],
+  "allowed_user_ids": [],
+  "respond_to_mentions": true,
+  "respond_to_dms": true,
+  "respond_in_thread": true,
+  "use_blocks": true,
+  "max_message_length": 4000,
+  "session_timeout_minutes": 30,
+  "max_sessions_per_user": 3,
+  "default_prompt": "",
+  "enable_slash_commands": true,
+  "slash_command_name": "/claude"
+}

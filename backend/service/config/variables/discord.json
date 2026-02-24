@@ -1,0 +1,17 @@
+{
+  "enabled": false,
+  "bot_token": "",
+  "application_id": "",
+  "guild_ids": [],
+  "allowed_channel_ids": [],
+  "command_prefix": "!",
+  "admin_role_ids": [],
+  "allowed_user_ids": [],
+  "respond_to_mentions": true,
+  "respond_to_dms": false,
+  "auto_thread": true,
+  "max_message_length": 2000,
+  "session_timeout_minutes": 30,
+  "max_sessions_per_user": 3,
+  "default_prompt": ""
+}

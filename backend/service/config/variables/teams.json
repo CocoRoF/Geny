@@ -1,0 +1,21 @@
+{
+  "enabled": false,
+  "app_id": "",
+  "app_password": "",
+  "tenant_id": "",
+  "bot_endpoint": "",
+  "allowed_team_ids": [],
+  "allowed_channel_ids": [],
+  "admin_user_ids": [],
+  "allowed_user_ids": [],
+  "respond_to_mentions": true,
+  "respond_to_direct_messages": true,
+  "respond_in_threads": true,
+  "use_adaptive_cards": true,
+  "max_message_length": 28000,
+  "session_timeout_minutes": 30,
+  "max_sessions_per_user": 3,
+  "default_prompt": "",
+  "enable_graph_api": false,
+  "graph_client_secret": ""
+}

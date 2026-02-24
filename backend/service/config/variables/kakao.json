@@ -1,0 +1,26 @@
+{
+  "enabled": false,
+  "rest_api_key": "",
+  "admin_key": "",
+  "bot_id": "",
+  "channel_public_id": "",
+  "skill_endpoint_path": "/api/kakao/skill",
+  "skill_verify_header_key": "X-Kakao-Skill-Token",
+  "skill_verify_token": "",
+  "use_callback": true,
+  "callback_timeout_seconds": 60,
+  "admin_user_ids": [],
+  "allowed_user_ids": [],
+  "block_user_ids": [],
+  "max_message_length": 1000,
+  "response_format": "simpleText",
+  "show_quick_replies": true,
+  "quick_reply_labels": [
+    "계속",
+    "새 대화",
+    "도움말"
+  ],
+  "session_timeout_minutes": 30,
+  "max_sessions_per_user": 1,
+  "default_prompt": ""
+}
