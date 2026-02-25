@@ -7,7 +7,7 @@ Controls GitHub personal access token.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List
+from typing import Any, Dict, List
 
 from service.config.base import BaseConfig, ConfigField, FieldType, register_config
 from service.config.sub_config.general.env_utils import env_sync, read_env_defaults
@@ -48,6 +48,24 @@ class GitHubConfig(BaseConfig):
     @classmethod
     def get_icon(cls) -> str:
         return "github"
+
+    @classmethod
+    def get_i18n(cls) -> Dict[str, Dict[str, Any]]:
+        return {
+            "ko": {
+                "display_name": "GitHub",
+                "description": "Git Push 및 PR 생성을 위한 GitHub 개인 액세스 토큰.",
+                "groups": {
+                    "github": "GitHub 설정",
+                },
+                "fields": {
+                    "github_token": {
+                        "label": "GitHub 토큰",
+                        "description": "Git Push 및 PR 생성을 위한 개인 액세스 토큰",
+                    },
+                },
+            }
+        }
 
     @classmethod
     def get_fields_metadata(cls) -> List[ConfigField]:

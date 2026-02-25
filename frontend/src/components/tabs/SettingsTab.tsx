@@ -7,14 +7,39 @@ import { Eye, EyeOff } from 'lucide-react';
 import NumberStepper from '@/components/ui/NumberStepper';
 import InfoTooltip from '@/components/ui/InfoTooltip';
 import { useI18n, type Locale } from '@/lib/i18n';
-import type { ConfigItem, ConfigCategory, ConfigField, ConfigSchema } from '@/types';
+import type { ConfigItem, ConfigCategory, ConfigField, ConfigSchema, ConfigI18nLocale } from '@/types';
 
 function cn(...classes: (string | boolean | undefined | null)[]) {
   return twMerge(classes.filter(Boolean).join(' '));
 }
 
+/** Resolve localized config-level metadata from schema i18n data */
+function getLocalizedSchema(schema: ConfigSchema, locale: Locale) {
+  const loc: ConfigI18nLocale | undefined = locale !== 'en' ? schema.i18n?.[locale] : undefined;
+  return {
+    display_name: loc?.display_name || schema.display_name || schema.name,
+    description: loc?.description || schema.description || '',
+  };
+}
+
+/** Resolve localized field metadata from schema i18n data */
+function getLocalizedField(field: ConfigField, schema: ConfigSchema, locale: Locale) {
+  const loc = locale !== 'en' ? schema.i18n?.[locale]?.fields?.[field.name] : undefined;
+  return {
+    label: loc?.label || field.label,
+    description: loc?.description || field.description || '',
+    placeholder: loc?.placeholder || field.placeholder || '',
+  };
+}
+
+/** Resolve localized group name from schema i18n data */
+function getLocalizedGroup(groupName: string, schema: ConfigSchema, locale: Locale, fallbackGroups: Record<string, string>) {
+  const loc = locale !== 'en' ? schema.i18n?.[locale]?.groups?.[groupName] : undefined;
+  return loc || fallbackGroups[groupName] || groupName;
+}
+
 export default function SettingsTab() {
-  const { t, tRaw, setLocale } = useI18n();
+  const { t, tRaw, locale, setLocale } = useI18n();
   const [configs, setConfigs] = useState<ConfigItem[]>([]);
   const [categories, setCategories] = useState<ConfigCategory[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -80,7 +105,7 @@ export default function SettingsTab() {
   };
 
   const resetConfig = async () => {
-    if (!editing || !confirm(t('settings.resetConfirm', { name: editing.schema.display_name }))) return;
+    if (!editing || !confirm(t('settings.resetConfirm', { name: getLocalizedSchema(editing.schema, locale).display_name }))) return;
     try {
       const res = await configApi.reset(editing.name);
       if (res.success) { setMsg({ type: 'success', text: t('settings.resetSuccess') }); setEditing(null); loadConfigs(); }
@@ -173,6 +198,7 @@ export default function SettingsTab() {
                   return v !== undefined && v !== '' && v !== f.default;
                 }).length || 0;
                 const total = schema.fields?.length || 0;
+                const ls = getLocalizedSchema(schema, locale);
 
                 return (
                   <div key={schema.name}
@@ -181,8 +207,8 @@ export default function SettingsTab() {
                        onClick={() => openEdit(schema.name)}>
                     <div className="flex items-start gap-3.5">
                       <div className="flex-1 min-w-0">
-                        <h4 className="text-[0.9375rem] font-semibold text-[var(--text-primary)] mb-1">{schema.display_name || schema.name}</h4>
-                        <p className="text-[0.8125rem] text-[var(--text-secondary)] leading-[1.4] line-clamp-2">{schema.description || ''}</p>
+                        <h4 className="text-[0.9375rem] font-semibold text-[var(--text-primary)] mb-1">{ls.display_name}</h4>
+                        <p className="text-[0.8125rem] text-[var(--text-secondary)] leading-[1.4] line-clamp-2">{ls.description}</p>
                       </div>
                       <span className={`shrink-0 inline-block py-1 px-2.5 rounded-[12px] text-[0.75rem] font-medium ${isEnabled ? 'text-[var(--success-color)]' : 'text-[var(--text-muted)] bg-[var(--bg-tertiary)]'}`}
                             style={isEnabled ? { background: 'rgba(16, 185, 129, 0.15)' } : {}}>
@@ -206,7 +232,7 @@ export default function SettingsTab() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setEditing(null)}>
           <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg w-[600px] max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center py-4 px-6 border-b border-[var(--border-color)]">
-              <h3 className="text-[1rem] font-semibold text-[var(--text-primary)]">{t('settings.editPrefix')}{editing.schema.display_name || editing.schema.name}</h3>
+              <h3 className="text-[1rem] font-semibold text-[var(--text-primary)]">{t('settings.editPrefix')}{getLocalizedSchema(editing.schema, locale).display_name}</h3>
               <button className="flex items-center justify-center w-8 h-8 rounded-[var(--border-radius)] bg-transparent border-none text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] cursor-pointer text-lg" onClick={() => setEditing(null)}>×</button>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-5">
@@ -222,12 +248,13 @@ export default function SettingsTab() {
                   return Object.entries(groups).map(([groupName, fields]) => (
                     <div key={groupName} className="border border-[var(--border-color)] rounded-[var(--border-radius)] overflow-hidden">
                       <h4 className="text-[0.8125rem] font-semibold text-[var(--text-secondary)] py-3 px-4 bg-[var(--bg-tertiary)] m-0 border-b border-[var(--border-color)]">
-                        {groupLabels[groupName] || groupName}
+                        {getLocalizedGroup(groupName, editing.schema, locale, groupLabels)}
                       </h4>
                       <div className="p-4 flex flex-col gap-4">
                         {fields.map(field => {
                           const value = editing.values[field.name] ?? field.default ?? '';
-                          return <ConfigFieldInput key={field.name} field={field} value={value} onChange={v => updateField(field.name, v)} />;
+                          const lf = getLocalizedField(field, editing.schema, locale);
+                          return <ConfigFieldInput key={field.name} field={field} value={value} onChange={v => updateField(field.name, v)} localizedLabel={lf.label} localizedDescription={lf.description} localizedPlaceholder={lf.placeholder} />;
                         })}
                       </div>
                     </div>
@@ -272,17 +299,20 @@ export default function SettingsTab() {
   );
 }
 
-function ConfigFieldInput({ field, value, onChange }: { field: ConfigField; value: any; onChange: (v: any) => void }) {
+function ConfigFieldInput({ field, value, onChange, localizedLabel, localizedDescription, localizedPlaceholder }: { field: ConfigField; value: any; onChange: (v: any) => void; localizedLabel?: string; localizedDescription?: string; localizedPlaceholder?: string }) {
   const { t } = useI18n();
   const [showPass, setShowPass] = useState(false);
   const id = `cf-${field.name}`;
   const effectiveType = field.type === 'password' ? 'string' : field.type;
+  const label = localizedLabel || field.label;
+  const description = localizedDescription || field.description;
+  const placeholder = localizedPlaceholder || field.placeholder;
 
   const labelEl = (
     <div className="flex items-center gap-1.5 mb-2">
-      <label htmlFor={id} className="text-[0.8125rem] font-medium text-[var(--text-primary)]">{field.label}</label>
+      <label htmlFor={id} className="text-[0.8125rem] font-medium text-[var(--text-primary)]">{label}</label>
       {field.required && <span className="text-[var(--danger-color)]">*</span>}
-      {field.description && <InfoTooltip text={field.description} />}
+      {description && <InfoTooltip text={description} />}
     </div>
   );
 
@@ -293,8 +323,8 @@ function ConfigFieldInput({ field, value, onChange }: { field: ConfigField; valu
     return (
       <div className="flex items-center justify-between gap-3 py-1">
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <label className="text-[0.8125rem] font-medium text-[var(--text-primary)]">{field.label}</label>
-          {field.description && <InfoTooltip text={field.description} />}
+          <label className="text-[0.8125rem] font-medium text-[var(--text-primary)]">{label}</label>
+          {description && <InfoTooltip text={description} />}
         </div>
         <button
           type="button"
@@ -330,7 +360,7 @@ function ConfigFieldInput({ field, value, onChange }: { field: ConfigField; valu
         {labelEl}
         <textarea id={id} name={field.name} value={textValue}
                   onChange={e => onChange(e.target.value)}
-                  rows={3} placeholder={field.placeholder || ''} className={inputClasses + ' resize-none font-mono'} />
+                  rows={3} placeholder={placeholder} className={inputClasses + ' resize-none font-mono'} />
       </div>
     );
   }
@@ -361,7 +391,7 @@ function ConfigFieldInput({ field, value, onChange }: { field: ConfigField; valu
       <div className="relative">
         <input type={inputType} id={id} name={field.name} value={value || ''}
                onChange={e => onChange(e.target.value)}
-               placeholder={field.placeholder || ''} className={inputClasses + (field.secure ? ' pr-10' : '')} />
+               placeholder={placeholder} className={inputClasses + (field.secure ? ' pr-10' : '')} />
         {field.secure && (
           <button type="button"
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center justify-center w-7 h-7 rounded-[var(--border-radius)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-all duration-150 border-none bg-transparent cursor-pointer"

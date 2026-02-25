@@ -8,7 +8,7 @@ and autonomous permission mode.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List
+from typing import Any, Dict, List
 
 from service.config.base import BaseConfig, ConfigField, FieldType, register_config
 from service.config.sub_config.general.env_utils import env_sync, read_env_defaults
@@ -62,6 +62,37 @@ class APIConfig(BaseConfig):
     @classmethod
     def get_icon(cls) -> str:
         return "api"
+
+    @classmethod
+    def get_i18n(cls) -> Dict[str, Dict[str, Any]]:
+        return {
+            "ko": {
+                "display_name": "Claude API",
+                "description": "Anthropic API 키, 기본 모델, 사고 토큰 예산 및 권한 모드 설정.",
+                "groups": {
+                    "api": "API 설정",
+                    "permissions": "권한",
+                },
+                "fields": {
+                    "anthropic_api_key": {
+                        "label": "Anthropic API 키",
+                        "description": "Anthropic Claude 모델용 API 키",
+                    },
+                    "anthropic_model": {
+                        "label": "기본 모델",
+                        "description": "새 세션의 기본 Claude 모델",
+                    },
+                    "max_thinking_tokens": {
+                        "label": "최대 사고 토큰",
+                        "description": "확장 사고 예산 (비활성화하려면 0)",
+                    },
+                    "skip_permissions": {
+                        "label": "권한 확인 건너뛰기",
+                        "description": "⚠️ 자율 모드 — 모든 확인 대화상자 건너뛰기",
+                    },
+                },
+            }
+        }
 
     @classmethod
     def get_fields_metadata(cls) -> List[ConfigField]:
