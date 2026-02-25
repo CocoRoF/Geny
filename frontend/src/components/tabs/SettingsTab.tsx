@@ -3,18 +3,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { configApi } from '@/lib/api';
 import { twMerge } from 'tailwind-merge';
+import { Eye, EyeOff } from 'lucide-react';
+import NumberStepper from '@/components/ui/NumberStepper';
+import InfoTooltip from '@/components/ui/InfoTooltip';
 import type { ConfigItem, ConfigCategory, ConfigField, ConfigSchema } from '@/types';
 
 function cn(...classes: (string | boolean | undefined | null)[]) {
   return twMerge(classes.filter(Boolean).join(' '));
 }
-
-const CATEGORY_ICONS: Record<string, string> = { general: '🔧', channels: '💬', security: '🔒', advanced: '⚡' };
-const CONFIG_ICONS: Record<string, string> = {
-  discord: '🎮', slack: '💼', teams: '👥', kakao: '💬',
-  language: '🌐', api: '🤖', limits: '📊', telemetry: '📡', github: '🐙',
-  settings: '⚙️',
-};
 
 export default function SettingsTab() {
   const [configs, setConfigs] = useState<ConfigItem[]>([]);
@@ -51,22 +47,22 @@ export default function SettingsTab() {
     }
   };
 
+  const updateField = (fieldName: string, value: any) => {
+    setEditing(prev => prev ? { ...prev, values: { ...prev.values, [fieldName]: value } } : prev);
+  };
+
   const saveConfig = async () => {
     if (!editing) return;
-    const form = document.getElementById('config-form') as HTMLFormElement;
     const values: Record<string, any> = {};
-
     editing.schema.fields.forEach((field: ConfigField) => {
-      const el = document.getElementById(`cf-${field.name}`) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null;
-      if (!el) return;
-      if (field.type === 'boolean') values[field.name] = (el as HTMLInputElement).checked;
-      else if (field.type === 'number') values[field.name] = el.value ? Number(el.value) : null;
-      else if (field.type === 'textarea' && field.name.includes('_ids')) {
-        const text = (el as HTMLTextAreaElement).value.trim();
-        values[field.name] = text ? text.split(',').map(s => s.trim()).filter(Boolean) : [];
-      } else values[field.name] = el.value;
+      const v = editing.values[field.name];
+      if (field.type === 'textarea' && field.name.includes('_ids') && typeof v === 'string') {
+        const text = v.trim();
+        values[field.name] = text ? text.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+      } else {
+        values[field.name] = v;
+      }
     });
-
     try {
       const res = await configApi.update(editing.name, values);
       if (res.success) { setMsg({ type: 'success', text: 'Configuration saved' }); setEditing(null); loadConfigs(); }
@@ -135,7 +131,6 @@ export default function SettingsTab() {
               className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-[var(--border-radius)] text-[0.875rem] font-medium text-left mb-1 transition-colors ${selectedCategory === 'all' ? 'bg-[rgba(59,130,246,0.1)] text-[var(--primary-color)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'}`}
               onClick={() => setSelectedCategory('all')}
             >
-              <span className="text-[1rem]">⚙️</span>
               <span className="flex-1">All</span>
               <span className="text-[0.75rem] text-[var(--text-muted)] bg-[var(--bg-tertiary)] py-[2px] px-2 rounded-[10px]">{configs.length}</span>
             </button>
@@ -146,7 +141,6 @@ export default function SettingsTab() {
                   className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-[var(--border-radius)] text-[0.875rem] font-medium text-left mb-1 transition-colors ${selectedCategory === cat.name ? 'bg-[rgba(59,130,246,0.1)] text-[var(--primary-color)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'}`}
                   onClick={() => setSelectedCategory(cat.name)}
                 >
-                  <span className="text-[1rem]">{CATEGORY_ICONS[cat.name] || '📁'}</span>
                   <span className="flex-1">{cat.label}</span>
                   <span className="text-[0.75rem] text-[var(--text-muted)] bg-[var(--bg-tertiary)] py-[2px] px-2 rounded-[10px]">{count}</span>
                 </button>
@@ -177,9 +171,6 @@ export default function SettingsTab() {
                        style={{ borderLeft: `3px solid ${isEnabled ? 'var(--success-color)' : 'var(--text-muted)'}`, opacity: isEnabled ? 1 : 0.8 }}
                        onClick={() => openEdit(schema.name)}>
                     <div className="flex items-start gap-3.5">
-                      <div className="text-[1.5rem] leading-none shrink-0">
-                        {CONFIG_ICONS[schema.icon || ''] || CONFIG_ICONS[schema.name] || '⚙️'}
-                      </div>
                       <div className="flex-1 min-w-0">
                         <h4 className="text-[0.9375rem] font-semibold text-[var(--text-primary)] mb-1">{schema.display_name || schema.name}</h4>
                         <p className="text-[0.8125rem] text-[var(--text-secondary)] leading-[1.4] line-clamp-2">{schema.description || ''}</p>
@@ -233,7 +224,7 @@ export default function SettingsTab() {
                       <div className="p-4 flex flex-col gap-4">
                         {fields.map(field => {
                           const value = editing.values[field.name] ?? field.default ?? '';
-                          return <ConfigFieldInput key={field.name} field={field} value={value} />;
+                          return <ConfigFieldInput key={field.name} field={field} value={value} onChange={v => updateField(field.name, v)} />;
                         })}
                       </div>
                     </div>
@@ -278,7 +269,7 @@ export default function SettingsTab() {
   );
 }
 
-function ConfigFieldInput({ field, value }: { field: ConfigField; value: any }) {
+function ConfigFieldInput({ field, value, onChange }: { field: ConfigField; value: any; onChange: (v: any) => void }) {
   const [showPass, setShowPass] = useState(false);
   const id = `cf-${field.name}`;
   const effectiveType = field.type === 'password' ? 'string' : field.type;
@@ -287,24 +278,29 @@ function ConfigFieldInput({ field, value }: { field: ConfigField; value: any }) 
     <div className="flex items-center gap-1.5 mb-2">
       <label htmlFor={id} className="text-[0.8125rem] font-medium text-[var(--text-primary)]">{field.label}</label>
       {field.required && <span className="text-[var(--danger-color)]">*</span>}
-      {field.description && (
-        <span className="text-[var(--text-muted)] cursor-help hover:text-[var(--text-secondary)] transition-colors" title={field.description}>ⓘ</span>
-      )}
+      {field.description && <InfoTooltip text={field.description} />}
     </div>
   );
 
   const inputClasses = "w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] transition-[border-color] focus:outline-none focus:border-[var(--primary-color)]";
 
   if (effectiveType === 'boolean') {
+    const checked = !!value;
     return (
       <div className="flex items-center justify-between gap-3 py-1">
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <label htmlFor={id} className="text-[0.8125rem] font-medium text-[var(--text-primary)]">{field.label}</label>
-          {field.description && (
-            <span className="text-[var(--text-muted)] cursor-help hover:text-[var(--text-secondary)] transition-colors" title={field.description}>ⓘ</span>
-          )}
+          <label className="text-[0.8125rem] font-medium text-[var(--text-primary)]">{field.label}</label>
+          {field.description && <InfoTooltip text={field.description} />}
         </div>
-        <input type="checkbox" id={id} name={field.name} defaultChecked={!!value} className="rounded" />
+        <button
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          onClick={() => onChange(!checked)}
+          className={`relative inline-flex h-[22px] w-[40px] shrink-0 cursor-pointer items-center rounded-full border-none transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-color)] focus-visible:ring-offset-2 ${checked ? 'bg-[var(--primary-color)]' : 'bg-[var(--border-color)]'}`}
+        >
+          <span className={`pointer-events-none inline-block h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${checked ? 'translate-x-[20px]' : 'translate-x-[2px]'}`} />
+        </button>
       </div>
     );
   }
@@ -313,7 +309,7 @@ function ConfigFieldInput({ field, value }: { field: ConfigField; value: any }) 
     return (
       <div>
         {labelEl}
-        <select id={id} name={field.name} defaultValue={value} className={inputClasses}>
+        <select id={id} name={field.name} value={value ?? ''} onChange={e => onChange(e.target.value)} className={inputClasses}>
           <option value="">-- Select --</option>
           {(field.options || []).map((opt: any) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -328,7 +324,8 @@ function ConfigFieldInput({ field, value }: { field: ConfigField; value: any }) 
     return (
       <div>
         {labelEl}
-        <textarea id={id} name={field.name} defaultValue={textValue}
+        <textarea id={id} name={field.name} value={textValue}
+                  onChange={e => onChange(e.target.value)}
                   rows={3} placeholder={field.placeholder || ''} className={inputClasses + ' resize-none font-mono'} />
       </div>
     );
@@ -338,8 +335,12 @@ function ConfigFieldInput({ field, value }: { field: ConfigField; value: any }) 
     return (
       <div>
         {labelEl}
-        <input type="number" id={id} name={field.name} defaultValue={value}
-               placeholder={field.placeholder || ''} min={field.min} max={field.max} className={inputClasses} />
+        <NumberStepper
+          value={typeof value === 'number' ? value : (value ? Number(value) : 0)}
+          onChange={onChange}
+          min={field.min ?? 0}
+          max={field.max ?? 99999}
+        />
       </div>
     );
   }
@@ -354,12 +355,15 @@ function ConfigFieldInput({ field, value }: { field: ConfigField; value: any }) 
     <div>
       {labelEl}
       <div className="relative">
-        <input type={inputType} id={id} name={field.name} defaultValue={value || ''}
+        <input type={inputType} id={id} name={field.name} value={value || ''}
+               onChange={e => onChange(e.target.value)}
                placeholder={field.placeholder || ''} className={inputClasses + (field.secure ? ' pr-10' : '')} />
         {field.secure && (
-          <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                  onClick={() => setShowPass(!showPass)}>
-            {showPass ? '🙈' : '👁️'}
+          <button type="button"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center justify-center w-7 h-7 rounded-[var(--border-radius)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-all duration-150 border-none bg-transparent cursor-pointer"
+                  onClick={() => setShowPass(!showPass)}
+                  aria-label={showPass ? 'Hide' : 'Show'}>
+            {showPass ? <EyeOff size={16} strokeWidth={1.8} /> : <Eye size={16} strokeWidth={1.8} />}
           </button>
         )}
       </div>
