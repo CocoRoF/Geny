@@ -7,7 +7,7 @@ Controls auto-updater, error reporting, and usage telemetry.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List
+from typing import Any, Dict, List
 
 from service.config.base import BaseConfig, ConfigField, FieldType, register_config
 from service.config.sub_config.general.env_utils import env_sync, read_env_defaults
@@ -52,6 +52,32 @@ class TelemetryConfig(BaseConfig):
     @classmethod
     def get_icon(cls) -> str:
         return "telemetry"
+
+    @classmethod
+    def get_i18n(cls) -> Dict[str, Dict[str, Any]]:
+        return {
+            "ko": {
+                "display_name": "텔레메트리",
+                "description": "자동 업데이트, 오류 보고 및 사용 텔레메트리 제어.",
+                "groups": {
+                    "telemetry": "텔레메트리 설정",
+                },
+                "fields": {
+                    "disable_autoupdater": {
+                        "label": "자동 업데이트 비활성화",
+                        "description": "자동 업데이트 방지",
+                    },
+                    "disable_error_reporting": {
+                        "label": "오류 보고 비활성화",
+                        "description": "오류 보고 전송 중지",
+                    },
+                    "disable_telemetry": {
+                        "label": "텔레메트리 비활성화",
+                        "description": "사용 텔레메트리 전송 중지",
+                    },
+                },
+            }
+        }
 
     @classmethod
     def get_fields_metadata(cls) -> List[ConfigField]:

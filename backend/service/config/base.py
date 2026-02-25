@@ -157,6 +157,33 @@ class BaseConfig(ABC):
         """Return an icon identifier for the config (optional)"""
         return "settings"
 
+    @classmethod
+    def get_i18n(cls) -> Dict[str, Dict[str, Any]]:
+        """
+        Return i18n translations keyed by locale code.
+
+        Override in subclasses to provide translations.
+        Structure::
+
+            {
+                "ko": {
+                    "display_name": "...",
+                    "description": "...",
+                    "groups": {
+                        "group_name": "그룹 이름",
+                    },
+                    "fields": {
+                        "field_name": {
+                            "label": "...",
+                            "description": "...",
+                            "placeholder": "...",
+                        },
+                    },
+                }
+            }
+        """
+        return {}
+
     def to_dict(self) -> Dict[str, Any]:
         """Serialize config to dictionary"""
         if hasattr(self, '__dataclass_fields__'):
@@ -290,7 +317,7 @@ class BaseConfig(ABC):
         Get the full schema for this config.
         Used by frontend to render the configuration UI.
         """
-        return {
+        schema: Dict[str, Any] = {
             "name": cls.get_config_name(),
             "display_name": cls.get_display_name(),
             "description": cls.get_description(),
@@ -313,5 +340,9 @@ class BaseConfig(ABC):
                     "secure": f.secure
                 }
                 for f in cls.get_fields_metadata()
-            ]
+            ],
         }
+        i18n = cls.get_i18n()
+        if i18n:
+            schema["i18n"] = i18n
+        return schema

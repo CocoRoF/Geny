@@ -147,6 +147,17 @@ export interface ConfigField {
   max?: number;
 }
 
+export interface ConfigI18nLocale {
+  display_name?: string;
+  description?: string;
+  groups?: Record<string, string>;
+  fields?: Record<string, {
+    label?: string;
+    description?: string;
+    placeholder?: string;
+  }>;
+}
+
 export interface ConfigSchema {
   name: string;
   display_name: string;
@@ -154,6 +165,7 @@ export interface ConfigSchema {
   category?: string;
   icon?: string;
   fields: ConfigField[];
+  i18n?: Record<string, ConfigI18nLocale>;
 }
 
 export interface ConfigItem {

@@ -6,7 +6,7 @@ Allows users to interact with Claude sessions via Discord messages.
 """
 
 from dataclasses import dataclass, field
-from typing import List
+from typing import Any, Dict, List
 
 from service.config.base import BaseConfig, ConfigField, FieldType, register_config
 
@@ -67,6 +67,84 @@ class DiscordConfig(BaseConfig):
     @classmethod
     def get_icon(cls) -> str:
         return "discord"
+
+    @classmethod
+    def get_i18n(cls) -> Dict[str, Dict[str, Any]]:
+        return {
+            "ko": {
+                "display_name": "Discord",
+                "description": "Discord 봇 연동 설정. 사용자가 Discord 메시지를 통해 Claude 세션과 대화할 수 있습니다.",
+                "groups": {
+                    "connection": "연결 설정",
+                    "server": "서버 설정",
+                    "permissions": "권한",
+                    "behavior": "동작 설정",
+                    "session": "세션 설정",
+                },
+                "fields": {
+                    "enabled": {
+                        "label": "Discord 연동 활성화",
+                        "description": "Discord 봇 연동 활성화 또는 비활성화",
+                    },
+                    "bot_token": {
+                        "label": "봇 토큰",
+                        "description": "Discord Developer Portal의 Discord 봇 토큰",
+                    },
+                    "application_id": {
+                        "label": "애플리케이션 ID",
+                        "description": "Developer Portal의 Discord 애플리케이션 ID",
+                    },
+                    "guild_ids": {
+                        "label": "길드 ID (선택)",
+                        "description": "쉼표로 구분된 길드/서버 ID 목록. 비워두면 모든 길드 허용.",
+                    },
+                    "allowed_channel_ids": {
+                        "label": "허용된 채널 ID (선택)",
+                        "description": "쉼표로 구분된 봇이 응답하는 채널 ID 목록. 비워두면 모든 채널 허용.",
+                    },
+                    "command_prefix": {
+                        "label": "명령 접두사",
+                        "description": "봇 명령 접두사 (예: !claude, /ask)",
+                    },
+                    "admin_role_ids": {
+                        "label": "관리자 역할 ID",
+                        "description": "쉼표로 구분된 관리자 권한 역할 ID 목록",
+                    },
+                    "allowed_user_ids": {
+                        "label": "허용된 사용자 ID (선택)",
+                        "description": "쉼표로 구분된 봇 사용 허용 사용자 ID 목록. 비워두면 모든 사용자 허용.",
+                    },
+                    "respond_to_mentions": {
+                        "label": "멘션에 응답",
+                        "description": "메시지에서 봇이 멘션되었을 때 응답",
+                    },
+                    "respond_to_dms": {
+                        "label": "DM에 응답",
+                        "description": "사용자가 DM으로 대화 허용",
+                    },
+                    "auto_thread": {
+                        "label": "자동 스레드 생성",
+                        "description": "대화를 위한 스레드 자동 생성",
+                    },
+                    "max_message_length": {
+                        "label": "최대 메시지 길이",
+                        "description": "메시지당 최대 글자 수 (Discord 제한: 2000)",
+                    },
+                    "session_timeout_minutes": {
+                        "label": "세션 타임아웃 (분)",
+                        "description": "비활성 세션을 지정 시간 후 자동 종료",
+                    },
+                    "max_sessions_per_user": {
+                        "label": "사용자당 최대 세션 수",
+                        "description": "사용자당 최대 동시 세션 수",
+                    },
+                    "default_prompt": {
+                        "label": "기본 시스템 프롬프트",
+                        "description": "Discord에서 시작된 세션의 기본 시스템 프롬프트",
+                    },
+                },
+            }
+        }
 
     @classmethod
     def get_fields_metadata(cls) -> List[ConfigField]:

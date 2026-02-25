@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import List
+from typing import Any, Dict, List
 
 from service.config.base import BaseConfig, ConfigField, FieldType, register_config
 from service.config.sub_config.general.env_utils import env_sync, read_env_defaults
@@ -55,6 +55,24 @@ class LanguageConfig(BaseConfig):
     @classmethod
     def get_icon(cls) -> str:
         return "language"
+
+    @classmethod
+    def get_i18n(cls) -> Dict[str, Dict[str, Any]]:
+        return {
+            "ko": {
+                "display_name": "언어",
+                "description": "UI 표시 언어 설정.",
+                "groups": {
+                    "language": "언어 설정",
+                },
+                "fields": {
+                    "language": {
+                        "label": "UI 언어",
+                        "description": "사용자 인터페이스에 사용할 언어",
+                    },
+                },
+            }
+        }
 
     @classmethod
     def get_fields_metadata(cls) -> List[ConfigField]:

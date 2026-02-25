@@ -7,7 +7,7 @@ Controls API cost budgets, agent turn limits, and bash command timeouts.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List
+from typing import Any, Dict, List
 
 from service.config.base import BaseConfig, ConfigField, FieldType, register_config
 from service.config.sub_config.general.env_utils import env_sync, read_env_defaults
@@ -54,6 +54,36 @@ class LimitsConfig(BaseConfig):
     @classmethod
     def get_icon(cls) -> str:
         return "limits"
+
+    @classmethod
+    def get_i18n(cls) -> Dict[str, Dict[str, Any]]:
+        return {
+            "ko": {
+                "display_name": "제한",
+                "description": "API 비용 예산, 에이전트 턴 제한 및 Bash 명령 타임아웃.",
+                "groups": {
+                    "limits": "제한 설정",
+                },
+                "fields": {
+                    "max_budget_usd": {
+                        "label": "최대 예산 (USD)",
+                        "description": "세션당 최대 API 비용 제한",
+                    },
+                    "max_turns": {
+                        "label": "최대 에이전트 턴",
+                        "description": "작업당 최대 에이전트 턴 수",
+                    },
+                    "bash_default_timeout_ms": {
+                        "label": "Bash 기본 타임아웃 (ms)",
+                        "description": "Bash 명령의 기본 타임아웃",
+                    },
+                    "bash_max_timeout_ms": {
+                        "label": "Bash 최대 타임아웃 (ms)",
+                        "description": "Bash 명령의 최대 허용 타임아웃",
+                    },
+                },
+            }
+        }
 
     @classmethod
     def get_fields_metadata(cls) -> List[ConfigField]:
