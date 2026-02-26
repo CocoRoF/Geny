@@ -45,7 +45,8 @@ export default function CreateSessionModal({ onClose }: Props) {
   const [error, setError] = useState('');
   const [availableManagers, setAvailableManagers] = useState<SessionInfo[]>([]);
   const [availableWorkflows, setAvailableWorkflows] = useState<WorkflowDefinition[]>([]);
-  const [selectedWorkflow, setSelectedWorkflow] = useState('__default');
+  const [templateWorkflows, setTemplateWorkflows] = useState<WorkflowDefinition[]>([]);
+  const [selectedWorkflow, setSelectedWorkflow] = useState('template-simple');
 
   useEffect(() => { loadPrompts(); }, [loadPrompts]);
 
@@ -55,8 +56,10 @@ export default function CreateSessionModal({ onClose }: Props) {
       workflowApi.list().catch(() => ({ workflows: [] })),
       workflowApi.listTemplates().catch(() => ({ templates: [] })),
     ]).then(([wfRes, tmplRes]) => {
-      const all = [...(tmplRes.templates || []), ...(wfRes.workflows || []).filter(w => !w.is_template)];
-      setAvailableWorkflows(all);
+      const tmpls = tmplRes.templates || [];
+      setTemplateWorkflows(tmpls);
+      const userWfs = (wfRes.workflows || []).filter(w => !w.is_template);
+      setAvailableWorkflows(userWfs);
     });
   }, []);
 
@@ -83,19 +86,11 @@ export default function CreateSessionModal({ onClose }: Props) {
     setError('');
     try {
       const payload: CreateAgentRequest = { ...formState };
-      // Map workflow selection to graph_name / workflow_id
-      if (selectedWorkflow === '__default') {
-        payload.workflow_id = undefined;
-        payload.graph_name = 'Simple Agent';
-      } else if (selectedWorkflow === '__autonomous') {
-        payload.workflow_id = undefined;
-        payload.graph_name = 'Autonomous Difficulty-Based';
-      } else {
-        // Custom workflow
-        const wf = availableWorkflows.find(w => w.id === selectedWorkflow);
-        payload.workflow_id = selectedWorkflow;
-        payload.graph_name = wf?.name || selectedWorkflow;
-      }
+      // Always send workflow_id directly — backend resolves from store
+      const allWfs = [...templateWorkflows, ...availableWorkflows];
+      const wf = allWfs.find(w => w.id === selectedWorkflow);
+      payload.workflow_id = selectedWorkflow;
+      payload.graph_name = wf?.name || selectedWorkflow;
       await createSession(payload);
       onClose();
     } catch (e: unknown) {
@@ -192,12 +187,17 @@ export default function CreateSessionModal({ onClose }: Props) {
           <div className="flex flex-col gap-1.5">
             <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">{t('createSession.graphWorkflow')}</label>
             <select className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8" style={selectArrow} value={selectedWorkflow} onChange={e => setSelectedWorkflow(e.target.value)}>
-              <optgroup label={t('createSession.builtIn')}>
-                <option value="__default">{t('createSession.simpleDefault')}</option>
-                <option value="__autonomous">{t('createSession.autonomous')}</option>
-              </optgroup>
+              {templateWorkflows.length > 0 && (
+                <optgroup label={t('createSession.officialTemplates')}>
+                  {templateWorkflows.map(w => (
+                    <option key={w.id} value={w.id}>
+                      {w.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
               {availableWorkflows.length > 0 && (
-                <optgroup label={t('createSession.customTemplates')}>
+                <optgroup label={t('createSession.customWorkflows')}>
                   {availableWorkflows.map(w => (
                     <option key={w.id} value={w.id}>
                       {w.name}
@@ -207,16 +207,16 @@ export default function CreateSessionModal({ onClose }: Props) {
               )}
             </select>
             <small className="text-[0.75rem] text-[var(--text-muted)] mt-0.5">
-              {selectedWorkflow === '__default'
-                ? t('createSession.simpleHelp')
-                : selectedWorkflow === '__autonomous'
-                  ? t('createSession.autonomousHelp')
-                  : t('createSession.customHelp')}
+              {(() => {
+                const allWfs = [...templateWorkflows, ...availableWorkflows];
+                const wf = allWfs.find(w => w.id === selectedWorkflow);
+                return wf?.description || t('createSession.customHelp');
+              })()}
             </small>
           </div>
 
-          {/* Max Iterations (for non-default workflows) */}
-          {selectedWorkflow !== '__default' && (
+          {/* Max Iterations (for non-simple workflows) */}
+          {selectedWorkflow !== 'template-simple' && (
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">{t('createSession.maxIterations')}</label>

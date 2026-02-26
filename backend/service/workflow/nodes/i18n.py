@@ -562,15 +562,36 @@ ANSWER_I18N = {
 REVIEW_I18N = {
     "en": NodeI18n(
         label="Review",
-        description="Quality gate that reviews a generated answer and emits an approved/rejected verdict. Parses structured VERDICT/FEEDBACK lines using configurable prefixes and keywords. Forces approval after max retries.",
+        description=(
+            "Self-routing quality gate that reviews a generated answer via LLM "
+            "and routes to a configurable set of verdict ports. "
+            "Parses structured VERDICT/FEEDBACK lines from the model response. "
+            "Each configured verdict becomes an output port. "
+            "Forces the first verdict after max retries to prevent infinite loops."
+        ),
         parameters={
             "prompt_template": {
                 "label": "Review Prompt",
                 "description": "Prompt template for the quality review.",
             },
+            "verdicts": {
+                "label": "Verdicts (JSON)",
+                "description": (
+                    "List of verdict names the LLM may emit. Each becomes an output port. "
+                    'Example: ["approved", "retry"] or ["pass", "minor_fix", "major_rewrite"]'
+                ),
+            },
+            "default_verdict": {
+                "label": "Default Verdict",
+                "description": "Verdict to use when the model's response doesn't match any configured verdict.",
+            },
+            "output_field": {
+                "label": "Output State Field",
+                "description": "State field to store the matched verdict string.",
+            },
             "max_retries": {
                 "label": "Max Review Retries",
-                "description": "Force approval after this many retries.",
+                "description": "Force the first verdict (typically 'approved') after this many review cycles.",
             },
             "verdict_prefix": {
                 "label": "Verdict Prefix",
@@ -579,14 +600,6 @@ REVIEW_I18N = {
             "feedback_prefix": {
                 "label": "Feedback Prefix",
                 "description": "Line prefix the LLM uses to emit detailed feedback.",
-            },
-            "approved_keywords": {
-                "label": "Approved Keywords (JSON)",
-                "description": "Keywords in the verdict line that signal approval.",
-            },
-            "rejected_keywords": {
-                "label": "Rejected Keywords (JSON)",
-                "description": "Keywords in the verdict line that signal rejection.",
             },
             "answer_field": {
                 "label": "Answer State Field",
@@ -600,54 +613,93 @@ REVIEW_I18N = {
         output_ports={
             "approved": {"label": "Approved", "description": "Answer passed review"},
             "retry": {"label": "Retry", "description": "Answer needs improvement"},
-            "end": {"label": "End", "description": "Completed or error"},
+            "end": {"label": "End", "description": "Error or early termination"},
         },
-        groups={"prompt": "Prompt", "behavior": "Behavior", "parsing": "Parsing", "state_fields": "State Fields"},
+        groups={
+            "prompt": "Prompt",
+            "routing": "Routing",
+            "behavior": "Behavior",
+            "parsing": "Parsing",
+            "output": "Output",
+            "state_fields": "State Fields",
+        },
         help=_help(
             "Review Node",
-            "Evaluates a generated answer for quality and routes to approved, retry, or end.",
+            "Self-routing quality gate that reviews answers and routes by verdict — like Classify, each verdict becomes a port.",
             [
                 ("Overview", (
-                    "The Review node is a **conditional node** that evaluates the quality of a generated answer. "
+                    "The Review node is a **self-routing conditional node** that evaluates the quality of a generated answer. "
                     "It sends the question and answer to the model for assessment, "
                     "then parses a structured VERDICT/FEEDBACK response.\n\n"
-                    "**Output ports:**\n"
+                    "Like the Classify node, the **Verdicts** parameter uses ``generates_ports``: "
+                    "each configured verdict becomes a named output port. "
+                    "An additional **End** port is always present for errors.\n\n"
+                    "**Default ports (with default verdicts):**\n"
                     "- **Approved** — answer meets quality standards\n"
                     "- **Retry** — answer needs improvement (feedback provided)\n"
-                    "- **End** — max retries exceeded or error"
+                    "- **End** — error or early termination"
+                )),
+                ("Configurable Verdicts", (
+                    "The **Verdicts** parameter accepts a JSON list of verdict names:\n\n"
+                    '- Default: ``["approved", "retry"]``\n'
+                    '- Custom: ``["pass", "minor_fix", "major_rewrite"]``\n\n'
+                    "Each verdict becomes an output port. The LLM's ``VERDICT:`` line "
+                    "is matched against these keywords. If no match, the **Default Verdict** is used."
                 )),
                 ("Review Format", (
                     "The model is expected to respond with a structured format:\n\n"
-                    "```\nVERDICT: approved/rejected\nFEEDBACK: <improvement suggestions>\n```\n\n"
-                    "The node parses this to determine the routing. "
-                    "If the format is not detected, the full response is treated as feedback."
+                    "```\nVERDICT: approved\nFEEDBACK: <improvement suggestions>\n```\n\n"
+                    "The node parses this to determine routing. "
+                    "If the format is not detected, the whole response is treated as feedback "
+                    "and keyword matching is attempted against the full text."
                 )),
                 ("Max Retries", (
                     "The **Max Review Retries** parameter prevents infinite review loops. "
-                    "After this many retries, the answer is force-approved regardless of quality.\n\n"
-                    "Default: 3 retries. Range: 1–10."
+                    "After this many cycles, the **first verdict** in the list "
+                    "(typically 'approved') is forced regardless of model output.\n\n"
+                    "Default: 3 cycles. Range: 1–10."
                 )),
                 ("Usage Tips", (
-                    "1. Connect after an Answer node.\n"
-                    "2. Loop the 'Retry' port back to the Answer node.\n"
-                    "3. Connect 'Approved' to the next step (e.g., Post Model → End).\n"
-                    "4. Review feedback is stored in `review_feedback` state field.\n"
-                    "5. Review count is tracked in `review_count`."
+                    "1. Connect after an Answer node (optionally via a Guard).\n"
+                    "2. Wire verdict ports directly — no separate router node needed.\n"
+                    "3. Loop 'Retry' back to a Guard node to re-enter the answer loop.\n"
+                    "4. Review feedback is stored in ``review_feedback`` state field.\n"
+                    "5. Review cycle count is tracked in the configured Count Field."
                 )),
             ],
         ),
     ),
     "ko": NodeI18n(
         label="리뷰",
-        description="생성된 답변을 리뷰하고 승인/거부 판정을 내리는 품질 게이트입니다. 구성 가능한 접두사와 키워드를 사용하여 구조화된 VERDICT/FEEDBACK 라인을 파싱합니다. 최대 재시도 후 자동 승인합니다.",
+        description=(
+            "LLM을 통해 생성된 답변을 리뷰하고 구성 가능한 판정 포트로 라우팅하는 "
+            "자체 라우팅 품질 게이트입니다. 모델 응답에서 구조화된 VERDICT/FEEDBACK 라인을 파싱합니다. "
+            "각 구성된 판정은 출력 포트가 됩니다. "
+            "무한 루프 방지를 위해 최대 재시도 후 첫 번째 판정을 강제합니다."
+        ),
         parameters={
             "prompt_template": {
                 "label": "리뷰 프롬프트",
                 "description": "품질 리뷰를 위한 프롬프트 템플릿입니다.",
             },
+            "verdicts": {
+                "label": "판정 목록 (JSON)",
+                "description": (
+                    "LLM이 출력할 수 있는 판정 이름 목록입니다. 각 판정이 출력 포트가 됩니다. "
+                    '예: ["approved", "retry"] 또는 ["pass", "minor_fix", "major_rewrite"]'
+                ),
+            },
+            "default_verdict": {
+                "label": "기본 판정",
+                "description": "모델 응답이 어떤 판정과도 일치하지 않을 때 사용할 판정입니다.",
+            },
+            "output_field": {
+                "label": "출력 상태 필드",
+                "description": "일치된 판정 문자열을 저장할 상태 필드입니다.",
+            },
             "max_retries": {
                 "label": "최대 리뷰 재시도",
-                "description": "이 횟수만큼 재시도 후 강제 승인합니다.",
+                "description": "이 횟수만큼 리뷰 사이클 후 첫 번째 판정(보통 'approved')을 강제합니다.",
             },
             "verdict_prefix": {
                 "label": "판정 접두사",
@@ -656,14 +708,6 @@ REVIEW_I18N = {
             "feedback_prefix": {
                 "label": "피드백 접두사",
                 "description": "LLM이 상세 피드백을 출력할 때 사용하는 줄 접두사입니다.",
-            },
-            "approved_keywords": {
-                "label": "승인 키워드 (JSON)",
-                "description": "판정 줄에서 승인을 나타내는 키워드입니다.",
-            },
-            "rejected_keywords": {
-                "label": "거부 키워드 (JSON)",
-                "description": "판정 줄에서 거부를 나타내는 키워드입니다.",
             },
             "answer_field": {
                 "label": "답변 상태 필드",
@@ -677,39 +721,58 @@ REVIEW_I18N = {
         output_ports={
             "approved": {"label": "승인", "description": "답변이 리뷰를 통과함"},
             "retry": {"label": "재시도", "description": "답변 개선 필요"},
-            "end": {"label": "종료", "description": "완료 또는 오류"},
+            "end": {"label": "종료", "description": "오류 또는 조기 종료"},
         },
-        groups={"prompt": "프롬프트", "behavior": "동작", "parsing": "파싱", "state_fields": "상태 필드"},
+        groups={
+            "prompt": "프롬프트",
+            "routing": "라우팅",
+            "behavior": "동작",
+            "parsing": "파싱",
+            "output": "출력",
+            "state_fields": "상태 필드",
+        },
         help=_help(
             "리뷰 노드",
-            "생성된 답변의 품질을 평가하고 승인, 재시도, 종료로 라우팅합니다.",
+            "답변을 리뷰하고 판정별로 라우팅하는 자체 라우팅 품질 게이트 — Classify처럼 각 판정이 포트가 됩니다.",
             [
                 ("개요", (
-                    "리뷰 노드는 생성된 답변의 품질을 평가하는 **조건부 노드**입니다. "
+                    "리뷰 노드는 생성된 답변의 품질을 평가하는 **자체 라우팅 조건부 노드**입니다. "
                     "질문과 답변을 모델에 전송하여 평가하고, "
                     "구조화된 VERDICT/FEEDBACK 응답을 파싱합니다.\n\n"
-                    "**출력 포트:**\n"
+                    "Classify 노드처럼 **판정 목록** 파라미터가 ``generates_ports``를 사용합니다: "
+                    "각 구성된 판정이 이름 있는 출력 포트가 됩니다. "
+                    "추가로 **종료** 포트가 항상 오류용으로 존재합니다.\n\n"
+                    "**기본 포트 (기본 판정 사용 시):**\n"
                     "- **승인** — 답변이 품질 기준을 충족함\n"
                     "- **재시도** — 답변 개선 필요 (피드백 제공)\n"
-                    "- **종료** — 최대 재시도 초과 또는 오류"
+                    "- **종료** — 오류 또는 조기 종료"
+                )),
+                ("구성 가능한 판정", (
+                    "**판정 목록** 파라미터는 판정 이름의 JSON 목록을 받습니다:\n\n"
+                    '- 기본값: ``["approved", "retry"]``\n'
+                    '- 커스텀: ``["pass", "minor_fix", "major_rewrite"]``\n\n'
+                    "각 판정이 출력 포트가 됩니다. LLM의 ``VERDICT:`` 줄이 "
+                    "이 키워드와 매칭됩니다. 일치하지 않으면 **기본 판정**이 사용됩니다."
                 )),
                 ("리뷰 형식", (
                     "모델은 구조화된 형식으로 응답해야 합니다:\n\n"
-                    "```\nVERDICT: approved/rejected\nFEEDBACK: <개선 제안>\n```\n\n"
+                    "```\nVERDICT: approved\nFEEDBACK: <개선 제안>\n```\n\n"
                     "노드는 이를 파싱하여 라우팅을 결정합니다. "
-                    "형식이 감지되지 않으면 전체 응답이 피드백으로 처리됩니다."
+                    "형식이 감지되지 않으면 전체 응답이 피드백으로 처리되고 "
+                    "전체 텍스트에서 키워드 매칭이 시도됩니다."
                 )),
                 ("최대 재시도", (
                     "**최대 리뷰 재시도** 파라미터는 무한 리뷰 루프를 방지합니다. "
-                    "이 횟수만큼 재시도 후에는 품질에 관계없이 답변이 강제 승인됩니다.\n\n"
-                    "기본값: 3회 재시도. 범위: 1~10."
+                    "이 횟수만큼 사이클 후에는 목록의 **첫 번째 판정** "
+                    "(보통 'approved')이 모델 출력에 관계없이 강제됩니다.\n\n"
+                    "기본값: 3회 사이클. 범위: 1~10."
                 )),
                 ("사용 팁", (
-                    "1. 답변 노드 뒤에 연결하세요.\n"
-                    "2. '재시도' 포트를 답변 노드로 다시 루프하세요.\n"
-                    "3. '승인'을 다음 단계(예: 후처리 → 종료)에 연결하세요.\n"
-                    "4. 리뷰 피드백은 `review_feedback` 상태 필드에 저장됩니다.\n"
-                    "5. 리뷰 횟수는 `review_count`에서 추적됩니다."
+                    "1. 답변 노드 뒤에 연결하세요 (선택적으로 가드를 통해).\n"
+                    "2. 판정 포트를 직접 연결하세요 — 별도의 라우터 노드가 필요 없습니다.\n"
+                    "3. '재시도'를 가드 노드로 루프하여 답변 루프에 재진입하세요.\n"
+                    "4. 리뷰 피드백은 ``review_feedback`` 상태 필드에 저장됩니다.\n"
+                    "5. 리뷰 사이클 횟수는 구성된 횟수 필드에서 추적됩니다."
                 )),
             ],
         ),

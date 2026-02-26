@@ -25,7 +25,6 @@ from langchain_core.messages import HumanMessage
 from service.langgraph.state import (
     CompletionSignal,
     Difficulty,
-    ReviewResult,
 )
 from service.prompt.sections import AutonomousPrompts
 from service.workflow.nodes.base import (
@@ -705,18 +704,36 @@ class AnswerNode(BaseNode):
 
 @register_node
 class ReviewNode(BaseNode):
-    """Review a generated answer and emit approved/rejected verdict.
+    """Review a generated answer and route by verdict.
 
-    Conditional node — outputs to approved / retry / end.
+    Conditional, self-routing node — like Classify, the user
+    configures a list of **verdicts** (e.g. ``approved``, ``retry``)
+    and each verdict becomes a named output port.  An extra ``end``
+    port is always present for error / early-termination.
 
-    Generalised: Configurable parsing prefixes, verdict/rejection
-    keywords, answer field, and review counter field. Works for any
-    quality-gate pattern, not just the medium-path review loop.
+    The model is given the original question and the generated
+    answer, then its response is parsed for a structured
+    ``VERDICT: <name>`` line.  The matched verdict determines the
+    output port.  After a configurable *max_retries* the first
+    verdict in the list is force-selected (typically *approved*).
+
+    Generalisation design mirrors ``ClassifyNode``:
+
+    * ``verdicts`` parameter with ``generates_ports=True``
+    * ``get_dynamic_output_ports()`` computes ports from config
+    * ``get_routing_function()`` reads configurable ``output_field``
+    * ``default_verdict`` fallback when no keyword matches
     """
 
     node_type = "review"
     label = "Review"
-    description = "Quality gate that reviews a generated answer and emits an approved/rejected verdict. Parses structured VERDICT/FEEDBACK lines from the model response using configurable prefixes and keywords. Forces approval after a configurable max retry count to prevent infinite loops."
+    description = (
+        "Self-routing quality gate that reviews a generated answer via LLM "
+        "and routes to a configurable set of verdict ports. "
+        "Parses structured VERDICT/FEEDBACK lines from the model response. "
+        "Each configured verdict becomes an output port. "
+        "Forces the first verdict after max retries to prevent infinite loops."
+    )
     category = "model"
     icon = "📋"
     color = "#f59e0b"
@@ -735,13 +752,42 @@ class ReviewNode(BaseNode):
             group="prompt",
         ),
         NodeParameter(
+            name="verdicts",
+            label="Verdicts (JSON)",
+            type="json",
+            default='["approved", "retry"]',
+            description=(
+                "List of verdict names the LLM may emit. "
+                "Each verdict becomes an output port. "
+                'Example: ["approved", "retry"] or ["pass", "minor_fix", "major_rewrite"]'
+            ),
+            group="routing",
+            generates_ports=True,
+        ),
+        NodeParameter(
+            name="default_verdict",
+            label="Default Verdict",
+            type="string",
+            default="retry",
+            description="Verdict to use when the model's response doesn't match any configured verdict.",
+            group="routing",
+        ),
+        NodeParameter(
+            name="output_field",
+            label="Output State Field",
+            type="string",
+            default="review_result",
+            description="State field to store the matched verdict string.",
+            group="output",
+        ),
+        NodeParameter(
             name="max_retries",
             label="Max Review Retries",
             type="number",
             default=3,
             min=1,
             max=10,
-            description="Force approval after this many retries.",
+            description="Force the first verdict (typically 'approved') after this many review cycles.",
             group="behavior",
         ),
         NodeParameter(
@@ -758,22 +804,6 @@ class ReviewNode(BaseNode):
             type="string",
             default="FEEDBACK:",
             description="Line prefix the LLM uses to emit detailed feedback.",
-            group="parsing",
-        ),
-        NodeParameter(
-            name="approved_keywords",
-            label="Approved Keywords (JSON)",
-            type="json",
-            default='["approved"]',
-            description='Keywords in the verdict line that signal approval.',
-            group="parsing",
-        ),
-        NodeParameter(
-            name="rejected_keywords",
-            label="Rejected Keywords (JSON)",
-            type="json",
-            default='["rejected"]',
-            description='Keywords in the verdict line that signal rejection.',
             group="parsing",
         ),
         NodeParameter(
@@ -811,23 +841,20 @@ class ReviewNode(BaseNode):
         max_retries = int(config.get("max_retries", 3))
 
         answer_field = config.get("answer_field", "answer")
+        output_field = config.get("output_field", "review_result")
         verdict_prefix = config.get("verdict_prefix", "VERDICT:")
         feedback_prefix = config.get("feedback_prefix", "FEEDBACK:")
 
-        # Parse keyword lists
-        def _parse_keywords(key: str, default: List[str]) -> List[str]:
-            raw = config.get(key, json.dumps(default))
-            if isinstance(raw, str):
-                try:
-                    kw = json.loads(raw)
-                except (json.JSONDecodeError, TypeError):
-                    kw = default
-            else:
-                kw = raw
-            return kw if isinstance(kw, list) else default
+        verdicts = _parse_categories(
+            config.get("verdicts", "approved, retry"),
+            fallback=["approved", "retry"],
+        )
+        default_verdict = config.get("default_verdict", "retry")
+        if default_verdict not in verdicts:
+            default_verdict = verdicts[-1] if verdicts else "retry"
 
-        approved_kw = _parse_keywords("approved_keywords", ["approved"])
-        rejected_kw = _parse_keywords("rejected_keywords", ["rejected"])
+        # The first verdict is the "positive" one (forced on max retries)
+        force_verdict = verdicts[0] if verdicts else "approved"
 
         try:
             input_text = state.get("input", "")
@@ -843,7 +870,7 @@ class ReviewNode(BaseNode):
             response, fallback = await context.resilient_invoke(messages, "review")
             review_text = response.content
 
-            review_result = ReviewResult.APPROVED
+            matched_verdict = default_verdict
             feedback = ""
 
             if verdict_prefix in review_text:
@@ -851,30 +878,43 @@ class ReviewNode(BaseNode):
                 for line in lines:
                     if line.startswith(verdict_prefix):
                         verdict_str = line.replace(verdict_prefix, "").strip().lower()
-                        if any(kw.lower() in verdict_str for kw in rejected_kw):
-                            review_result = ReviewResult.REJECTED
-                        elif any(kw.lower() in verdict_str for kw in approved_kw):
-                            review_result = ReviewResult.APPROVED
+                        for v in verdicts:
+                            if v.lower() in verdict_str:
+                                matched_verdict = v
+                                break
                     elif line.startswith(feedback_prefix):
                         feedback = line.replace(feedback_prefix, "").strip()
                         idx = lines.index(line)
                         feedback = "\n".join([feedback] + lines[idx + 1:])
                         break
             else:
+                # No structured prefix found — treat whole response as feedback
                 feedback = review_text
+                # Still try to detect verdict keywords in full text
+                review_lower = review_text.lower()
+                for v in verdicts:
+                    if v.lower() in review_lower:
+                        matched_verdict = v
+                        break
 
             is_complete = False
-            if review_result == ReviewResult.REJECTED and review_count >= max_retries:
+            if matched_verdict != force_verdict and review_count >= max_retries:
                 logger.warning(
-                    f"[{context.session_id}] review: max retries ({max_retries}), forcing approval"
+                    f"[{context.session_id}] review: max retries ({max_retries}), "
+                    f"forcing verdict '{force_verdict}'"
                 )
-                review_result = ReviewResult.APPROVED
+                matched_verdict = force_verdict
                 is_complete = True
-            elif review_result == ReviewResult.APPROVED:
+            elif matched_verdict == force_verdict:
                 is_complete = True
 
+            logger.info(
+                f"[{context.session_id}] review: verdict={matched_verdict} "
+                f"(cycle {review_count}, field={output_field})"
+            )
+
             result: Dict[str, Any] = {
-                "review_result": review_result,
+                output_field: matched_verdict,
                 "review_feedback": feedback,
                 count_field: review_count,
                 "messages": [response],
@@ -894,14 +934,56 @@ class ReviewNode(BaseNode):
     def get_routing_function(
         self, config: Dict[str, Any],
     ) -> Optional[Callable[[Dict[str, Any]], str]]:
+        output_field = config.get("output_field", "review_result")
+        verdicts = _parse_categories(
+            config.get("verdicts", "approved, retry"),
+            fallback=["approved", "retry"],
+        )
+        default_verdict = config.get("default_verdict", "retry")
+        if default_verdict not in verdicts:
+            default_verdict = verdicts[-1] if verdicts else "retry"
+
+        # First verdict is the "positive" one
+        force_verdict = verdicts[0] if verdicts else "approved"
+        verdict_set = {v.lower() for v in verdicts}
+
         def _route(state: Dict[str, Any]) -> str:
-            if state.get("is_complete") or state.get("error"):
+            if state.get("error"):
                 return "end"
+            if state.get("is_complete"):
+                # is_complete with matching force_verdict → route to force_verdict port
+                value = state.get(output_field)
+                if hasattr(value, "value"):
+                    value = value.value
+                if isinstance(value, str):
+                    value = value.strip().lower()
+                if value in verdict_set:
+                    return value
+                return force_verdict
             signal = state.get("completion_signal")
             if signal in (CompletionSignal.COMPLETE.value, CompletionSignal.BLOCKED.value):
-                return "approved"
-            review_result = state.get("review_result")
-            if review_result == ReviewResult.APPROVED:
-                return "approved"
-            return "retry"
+                return force_verdict
+            value = state.get(output_field)
+            if hasattr(value, "value"):
+                value = value.value
+            if isinstance(value, str):
+                value = value.strip().lower()
+            if value in verdict_set:
+                return value
+            return default_verdict
         return _route
+
+    def get_dynamic_output_ports(
+        self, config: Dict[str, Any],
+    ) -> Optional[List[OutputPort]]:
+        """Generate output ports from configured verdicts."""
+        verdicts = _parse_categories(
+            config.get("verdicts", "approved, retry"),
+            fallback=["approved", "retry"],
+        )
+        ports = [
+            OutputPort(id=v, label=v.capitalize(), description=f"Route for '{v}'")
+            for v in verdicts
+        ]
+        ports.append(OutputPort(id="end", label="End", description="Error / early termination"))
+        return ports

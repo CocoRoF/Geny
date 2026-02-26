@@ -14,36 +14,10 @@ function cn(...classes: (string | boolean | undefined | null)[]) {
   return twMerge(classes.filter(Boolean).join(' '));
 }
 
-// ==================== Built-in Graph Cards ====================
-
-function getBuiltInGraphs(t: (key: string) => string) {
-  return [
-    {
-      id: '__builtin_simple',
-      name: t('workflowsTab.simpleDefault'),
-      description: t('workflowsTab.simpleDesc'),
-      graph_type: 'simple' as const,
-      nodeCount: 5,
-      edgeCount: 4,
-      isBuiltIn: true,
-    },
-    {
-      id: '__builtin_autonomous',
-      name: t('workflowsTab.autonomousName'),
-      description: t('workflowsTab.autonomousDesc'),
-      graph_type: 'autonomous' as const,
-      nodeCount: 24,
-      edgeCount: 30,
-      isBuiltIn: true,
-    },
-  ];
-}
-
-// ==================== Workflow Card ====================
+// ==================== Workflow Card ==
 
 function WorkflowCard({
   workflow,
-  isBuiltIn,
   isSelected,
   onSelect,
   onView,
@@ -52,7 +26,6 @@ function WorkflowCard({
   onDelete,
 }: {
   workflow: { id: string; name: string; description: string; nodeCount?: number; edgeCount?: number; graph_type?: string; is_template?: boolean };
-  isBuiltIn?: boolean;
   isSelected: boolean;
   onSelect: () => void;
   onView?: () => void;
@@ -61,7 +34,7 @@ function WorkflowCard({
   onDelete?: () => void;
 }) {
   const { t } = useI18n();
-  const isTemplate = isBuiltIn || workflow.is_template;
+  const isTemplate = workflow.is_template;
   return (
     <div
       className={cn(
@@ -80,7 +53,7 @@ function WorkflowCard({
         <div className="flex items-center gap-1 shrink-0">
           {isTemplate && (
             <span className="text-[10px] font-semibold py-0.5 px-1.5 rounded-md bg-[rgba(168,85,247,0.12)] text-[#c084fc] border border-[rgba(168,85,247,0.2)] uppercase tracking-wide">
-              {isBuiltIn ? t('workflowsTab.builtIn') : t('workflowsTab.template')}
+              {t('workflowsTab.official')}
             </span>
           )}
         </div>
@@ -216,7 +189,6 @@ export default function GraphWorkflowsTab() {
 
   const { loadWorkflow, loadFromDefinition, loadCatalog } = useWorkflowStore();
   const { t } = useI18n();
-  const builtInGraphs = getBuiltInGraphs(t);
 
   // Ensure node catalog is loaded so loadFromDefinition can resolve styles
   useEffect(() => { loadCatalog(); }, [loadCatalog]);
@@ -237,18 +209,6 @@ export default function GraphWorkflowsTab() {
     setViewName(def.name);
     setMode('viewer');
   }, [loadFromDefinition]);
-
-  const handleViewBuiltIn = useCallback(async (templateName: string, displayName: string) => {
-    // Built-in graphs correspond to templates; find the matching template
-    const tmpl = templates.find(t => t.template_name === templateName || t.name?.toLowerCase().includes(templateName));
-    if (tmpl) {
-      const store = useWorkflowStore.getState();
-      if (!store.nodeCatalog) await store.loadCatalog();
-      loadFromDefinition(tmpl);
-      setViewName(displayName);
-      setMode('viewer');
-    }
-  }, [templates, loadFromDefinition]);
 
   // Editor mode → full WorkflowEditor
   if (mode === 'editor') {
@@ -334,47 +294,23 @@ export default function GraphWorkflowsTab() {
           <div className="flex items-center justify-center py-12 text-[var(--text-muted)] text-[0.875rem]">{t('workflowsTab.loadingWorkflows')}</div>
         ) : (
           <div className="space-y-6">
-            {/* Built-in Graphs */}
-            <section>
-              <h3 className="text-[0.8125rem] font-semibold text-[var(--text-secondary)] mb-3 flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--success-color)]" />
-                {t('workflowsTab.builtInGraphs')}
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                {builtInGraphs.map(g => (
-                  <WorkflowCard
-                    key={g.id}
-                    workflow={g}
-                    isBuiltIn
-                    isSelected={selectedId === g.id}
-                    onSelect={() => setSelectedId(g.id)}
-                    onView={() => handleViewBuiltIn(g.graph_type, g.name)}
-                    onClone={() => {
-                      const tmpl = templates.find(t => t.template_name === g.graph_type || t.name?.toLowerCase().includes(g.graph_type));
-                      if (tmpl) handleClone(tmpl.id);
-                    }}
-                  />
-                ))}
-              </div>
-            </section>
-
-            {/* Templates */}
+            {/* Official Templates */}
             {templates.length > 0 && (
               <section>
                 <h3 className="text-[0.8125rem] font-semibold text-[var(--text-secondary)] mb-3 flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#c084fc]" />
-                  {t('workflowsTab.templates')}
+                  {t('workflowsTab.officialTemplates')}
                   <span className="text-[0.6875rem] text-[var(--text-muted)] font-normal">({templates.length})</span>
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {templates.map(t => (
+                  {templates.map(tmpl => (
                     <WorkflowCard
-                      key={t.id}
-                      workflow={{ ...t, nodeCount: t.nodes?.length, edgeCount: t.edges?.length }}
-                      isSelected={selectedId === t.id}
-                      onSelect={() => setSelectedId(t.id)}
-                      onView={() => handleView(t)}
-                      onClone={() => handleClone(t.id)}
+                      key={tmpl.id}
+                      workflow={{ ...tmpl, nodeCount: tmpl.nodes?.length, edgeCount: tmpl.edges?.length }}
+                      isSelected={selectedId === tmpl.id}
+                      onSelect={() => setSelectedId(tmpl.id)}
+                      onView={() => handleView(tmpl)}
+                      onClone={() => handleClone(tmpl.id)}
                     />
                   ))}
                 </div>

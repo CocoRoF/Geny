@@ -35,8 +35,7 @@ def create_autonomous_template() -> WorkflowDefinition:
 
         EASY:   guard_direct → direct_answer → post_direct → END
         MEDIUM: guard_answer → answer → post_answer → guard_review
-                → review → post_review → rev_router
-                → [approved→END | retry→iter_gate_medium]
+                → review → [approved→END | retry→iter_gate_medium | end→END]
                 iter_gate_medium → [continue→guard_answer | stop→END]
         HARD:   guard_create_todos → create_todos → post_create_todos
                 → guard_execute → execute_todo → post_execute → check_progress
@@ -49,7 +48,7 @@ def create_autonomous_template() -> WorkflowDefinition:
     # Layout constants
     col_w = 260
     step_h = 140
-    branch_gap = 120
+    branch_gap = 220
     col_easy_x = 40
     col_medium_x = 40 + col_w
     col_hard_x = 40 + col_w * 2
@@ -118,15 +117,6 @@ def create_autonomous_template() -> WorkflowDefinition:
     y += step_h
     _add("review", "review", "Review", col_medium_x, y)
     y += step_h
-    _add("post_model", "post_rev", "Post Review", col_medium_x, y)
-    y += step_h
-    _add("conditional_router", "rev_router", "Review Router",
-         col_medium_x, y, {
-             "routing_field": "review_result",
-             "route_map": {"approved": "approved", "rejected": "retry"},
-             "default_port": "end",
-         })
-    y += step_h
     _add("iteration_gate", "gate_med", "Iter Gate (Medium)", col_medium_x, y)
     y += step_h
 
@@ -134,8 +124,6 @@ def create_autonomous_template() -> WorkflowDefinition:
     _edge("answer", "post_ans")
     _edge("post_ans", "guard_rev")
     _edge("guard_rev", "review")
-    _edge("review", "post_rev")
-    _edge("post_rev", "rev_router")
 
     # ── HARD PATH ──
     y = branch_base
@@ -193,10 +181,10 @@ def create_autonomous_template() -> WorkflowDefinition:
     # Easy → END
     _edge("post_dir", "end")
 
-    # Medium review routing
-    _edge("rev_router", "end", port="approved", lbl="Approved")
-    _edge("rev_router", "gate_med", port="retry", lbl="Retry")
-    _edge("rev_router", "end", port="end", lbl="End")
+    # Medium review self-routing (Review is now a conditional self-router)
+    _edge("review", "end", port="approved", lbl="Approved")
+    _edge("review", "gate_med", port="retry", lbl="Retry")
+    _edge("review", "end", port="end", lbl="End")
 
     # Medium iteration gate
     _edge("gate_med", "guard_ans", port="continue", lbl="Continue")
