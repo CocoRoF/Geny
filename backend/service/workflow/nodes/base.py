@@ -261,6 +261,134 @@ class ExecutionContext:
 
         raise last_error  # type: ignore[misc]
 
+    async def resilient_structured_invoke(
+        self,
+        messages: list,
+        node_name: str,
+        schema_cls: Any,
+        *,
+        allowed_values: Optional[Dict[str, List[str]]] = None,
+        coerce_field: Optional[str] = None,
+        coerce_values: Optional[List[str]] = None,
+        coerce_default: Optional[str] = None,
+        extra_instruction: str = "",
+    ) -> tuple:
+        """Invoke model with structured output: parse + validate + retry.
+
+        Appends a JSON schema instruction to the last human message,
+        invokes the model, extracts JSON, and validates against
+        ``schema_cls`` (a Pydantic BaseModel).
+
+        If parsing or validation fails on the first attempt, sends
+        a correction prompt and retries once.
+
+        Returns:
+            (parsed_pydantic_instance, fallback_updates_dict)
+
+        Raises:
+            ValueError  if structured output cannot be obtained
+                        after the correction retry.
+        """
+        from service.workflow.nodes.structured_output import (
+            build_schema_instruction,
+            build_correction_prompt,
+            parse_structured_output,
+        )
+
+        schema_instruction = build_schema_instruction(
+            schema_cls,
+            allowed_values=allowed_values,
+            extra_instruction=extra_instruction,
+        )
+
+        # Clone messages and inject the schema instruction into the
+        # last human message (or append as a new HumanMessage).
+        augmented = list(messages)
+        if augmented and hasattr(augmented[-1], "content"):
+            from langchain_core.messages import HumanMessage
+
+            last_msg = augmented[-1]
+            augmented[-1] = HumanMessage(
+                content=f"{last_msg.content}\n\n{schema_instruction}"
+            )
+        else:
+            from langchain_core.messages import HumanMessage
+
+            augmented.append(HumanMessage(content=schema_instruction))
+
+        # ── First attempt ──
+        response, fallback = await self.resilient_invoke(augmented, node_name)
+        raw_text = (
+            response.content
+            if hasattr(response, "content")
+            else str(response)
+        )
+
+        result = parse_structured_output(
+            raw_text,
+            schema_cls,
+            allowed_values=allowed_values,
+            coerce_field=coerce_field,
+            coerce_values=coerce_values,
+            coerce_default=coerce_default,
+        )
+
+        if result.success and result.data is not None:
+            logger.info(
+                f"[{self.session_id}] {node_name}: "
+                f"structured output OK (method={result.method})"
+            )
+            return result.data, fallback
+
+        # ── Correction retry ──
+        logger.warning(
+            f"[{self.session_id}] {node_name}: "
+            f"structured parse failed ({result.error}), "
+            f"sending correction prompt…"
+        )
+        from langchain_core.messages import HumanMessage
+
+        correction = build_correction_prompt(
+            raw_text, schema_cls, result.error or "unknown error",
+        )
+        correction_messages = list(messages) + [
+            HumanMessage(content=correction),
+        ]
+
+        response2, fallback2 = await self.resilient_invoke(
+            correction_messages, f"{node_name}_correction",
+        )
+        raw_text2 = (
+            response2.content
+            if hasattr(response2, "content")
+            else str(response2)
+        )
+
+        result2 = parse_structured_output(
+            raw_text2,
+            schema_cls,
+            allowed_values=allowed_values,
+            coerce_field=coerce_field,
+            coerce_values=coerce_values,
+            coerce_default=coerce_default,
+        )
+
+        if result2.success and result2.data is not None:
+            logger.info(
+                f"[{self.session_id}] {node_name}: "
+                f"structured output OK after correction (method={result2.method})"
+            )
+            merged = {**fallback, **fallback2} if fallback2 else fallback
+            return result2.data, merged
+
+        # ── Final failure ──
+        error_msg = (
+            f"Structured output parsing failed for {node_name} "
+            f"after correction retry: {result2.error}"
+        )
+        logger.error(f"[{self.session_id}] {error_msg}")
+        raise ValueError(error_msg)
+
 
 # ============================================================================
 # BaseNode — abstract interface every node must implement

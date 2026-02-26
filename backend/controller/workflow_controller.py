@@ -10,7 +10,8 @@ Endpoints:
     DELETE /api/workflows/{id}        — delete workflow
     POST   /api/workflows/{id}/clone  — clone a workflow
     GET    /api/workflows/templates   — list templates
-    POST   /api/workflows/{id}/validate — validate workflow
+    POST   /api/workflows/{id}/validate  — validate workflow
+    POST   /api/workflows/{id}/compile-view — compiled graph inspection
     POST   /api/workflows/{id}/execute  — execute workflow on a session
 """
 
@@ -278,6 +279,29 @@ async def validate_workflow(workflow_id: str):
 
     errors = workflow.validate_graph()
     return ValidateResponse(valid=len(errors) == 0, errors=errors)
+
+
+@router.post("/{workflow_id}/compile-view")
+async def compile_view(workflow_id: str):
+    """Return a code-level inspection of the compiled graph.
+
+    Does NOT actually execute anything — it simulates the compilation
+    process and produces Python pseudo-code plus structured metadata
+    showing how the workflow becomes a CompiledStateGraph.
+    """
+    from service.workflow.workflow_inspector import inspect_workflow
+
+    store = get_workflow_store()
+    workflow = store.load(workflow_id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
+    try:
+        report = inspect_workflow(workflow)
+        return report
+    except Exception as e:
+        logger.exception(f"Compile-view failed for {workflow_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Inspection failed: {str(e)}")
 
 
 @router.post("/{workflow_id}/execute")

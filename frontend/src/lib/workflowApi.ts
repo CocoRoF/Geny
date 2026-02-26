@@ -8,6 +8,7 @@ import type {
   WorkflowListResponse,
   WorkflowValidateResponse,
   WorkflowExecuteResponse,
+  CompileViewResponse,
 } from '@/types/workflow';
 
 async function apiCall<T = unknown>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -71,6 +72,10 @@ export const workflowApi = {
   /** POST /api/workflows/:id/validate */
   validate: (id: string) =>
     apiCall<WorkflowValidateResponse>(`/api/workflows/${id}/validate`, { method: 'POST' }),
+
+  /** POST /api/workflows/:id/compile-view */
+  compileView: (id: string) =>
+    apiCall<CompileViewResponse>(`/api/workflows/${id}/compile-view`, { method: 'POST' }),
 
   /** POST /api/workflows/:id/execute */
   execute: (id: string, data: { session_id: string; input_text: string; max_iterations?: number }) =>

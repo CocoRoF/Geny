@@ -7,6 +7,7 @@ import { twMerge } from 'tailwind-merge';
 import { useI18n } from '@/lib/i18n';
 import type { WorkflowDefinition } from '@/types/workflow';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
+import CompiledViewModal from '@/components/modals/CompiledViewModal';
 
 const WorkflowEditor = dynamic(() => import('@/components/tabs/WorkflowTab'), { ssr: false });
 
@@ -134,6 +135,8 @@ export default function GraphWorkflowsTab() {
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [viewName, setViewName] = useState('');
+  const [viewWorkflowId, setViewWorkflowId] = useState('');
+  const [showCompiledView, setShowCompiledView] = useState(false);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -207,6 +210,7 @@ export default function GraphWorkflowsTab() {
     if (!store.nodeCatalog) await store.loadCatalog();
     loadFromDefinition(def);
     setViewName(def.name);
+    setViewWorkflowId(def.id);
     setMode('viewer');
   }, [loadFromDefinition]);
 
@@ -245,10 +249,24 @@ export default function GraphWorkflowsTab() {
           <span className="text-[10px] font-semibold py-0.5 px-1.5 rounded-md bg-[rgba(107,114,128,0.12)] text-[var(--text-muted)] border border-[rgba(107,114,128,0.2)] uppercase tracking-wide">
             {t('workflowsTab.readOnly')}
           </span>
+          <div className="flex-1" />
+          <button
+            className="flex items-center gap-1.5 h-7 px-3 text-[11px] font-medium rounded-md border border-[rgba(59,130,246,0.3)] bg-[rgba(59,130,246,0.1)] text-[var(--primary-color)] hover:bg-[rgba(59,130,246,0.18)] transition-colors"
+            onClick={() => setShowCompiledView(true)}
+          >
+            {t('workflowEditor.viewCompiled')}
+          </button>
         </div>
         <div className="flex-1 min-h-0">
           <WorkflowEditor readOnly />
         </div>
+        {showCompiledView && viewWorkflowId && (
+          <CompiledViewModal
+            workflowId={viewWorkflowId}
+            workflowName={viewName}
+            onClose={() => setShowCompiledView(false)}
+          />
+        )}
       </div>
     );
   }

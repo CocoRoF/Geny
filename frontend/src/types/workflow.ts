@@ -117,6 +117,61 @@ export interface WorkflowExecuteResponse {
   error?: string;
 }
 
+/** Compiled graph inspection response. */
+export interface CompileViewNodeDetail {
+  id: string;
+  label: string;
+  node_type: string;
+  category?: string;
+  role: string;
+  description: string;
+  is_conditional?: boolean;
+  has_routing_function?: boolean;
+  output_ports?: { id: string; label: string; description: string }[];
+  targets?: { port: string; target_id: string; target_label: string; label: string }[];
+  config?: Record<string, unknown>;
+  routing_logic?: string;
+}
+
+export interface CompileViewEdgeBranch {
+  port: string;
+  target: string;
+  target_label: string;
+  label: string;
+}
+
+export interface CompileViewEdgeDetail {
+  source: string;
+  source_label: string;
+  target: string | null;
+  target_label: string | null;
+  port: string | null;
+  wiring: 'start' | 'simple' | 'conditional';
+  has_routing_function?: boolean;
+  description: string;
+  branches?: CompileViewEdgeBranch[];
+}
+
+export interface CompileViewResponse {
+  code: string;
+  nodes: CompileViewNodeDetail[];
+  edges: CompileViewEdgeDetail[];
+  summary: {
+    workflow_name: string;
+    workflow_id: string;
+    total_nodes: number;
+    total_edges: number;
+    conditional_edges: number;
+    simple_edges: number;
+    pseudo_nodes: number;
+    is_valid: boolean;
+  };
+  validation: {
+    valid: boolean;
+    errors: string[];
+  };
+}
+
 // ==================== Category Display Info ====================
 
 export const CATEGORY_INFO: Record<string, { label: string; icon: string; color: string }> = {

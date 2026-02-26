@@ -382,20 +382,26 @@ class ClassifyNode(BaseNode):
             default_cat = categories[1] if len(categories) > 1 else categories[0]
 
         try:
+            from service.workflow.nodes.structured_output import ClassifyOutput
+
             prompt = _safe_format(template, {**state, "input": input_text})
             messages = [HumanMessage(content=prompt)]
 
-            response, fallback = await context.resilient_invoke(
-                messages, "classify"
+            # ── Structured output: schema-validated classification ──
+            parsed, fallback = await context.resilient_structured_invoke(
+                messages,
+                "classify",
+                ClassifyOutput,
+                allowed_values={"classification": categories},
+                coerce_field="classification",
+                coerce_values=categories,
+                coerce_default=default_cat,
+                extra_instruction=(
+                    f"The 'classification' field MUST be exactly one of: "
+                    f"{', '.join(categories)}"
+                ),
             )
-            response_text = response.content.strip().lower()
-
-            # Match response against configured categories
-            matched = default_cat
-            for cat in categories:
-                if cat.lower() in response_text:
-                    matched = cat
-                    break
+            matched = parsed.classification
 
             # Backward-compat: also set Difficulty enum if field == "difficulty"
             if output_field == "difficulty":
@@ -409,14 +415,14 @@ class ClassifyNode(BaseNode):
 
             logger.info(
                 f"[{context.session_id}] classify: {matched} "
-                f"(field={output_field})"
+                f"(field={output_field}, confidence={parsed.confidence})"
             )
 
             result: Dict[str, Any] = {
                 output_field: store_value,
                 "current_step": "classified",
                 "messages": [HumanMessage(content=input_text)],
-                "last_output": response.content,
+                "last_output": matched,
             }
             result.update(fallback)
             return result
@@ -791,22 +797,6 @@ class ReviewNode(BaseNode):
             group="behavior",
         ),
         NodeParameter(
-            name="verdict_prefix",
-            label="Verdict Prefix",
-            type="string",
-            default="VERDICT:",
-            description="Line prefix the LLM uses to emit the verdict.",
-            group="parsing",
-        ),
-        NodeParameter(
-            name="feedback_prefix",
-            label="Feedback Prefix",
-            type="string",
-            default="FEEDBACK:",
-            description="Line prefix the LLM uses to emit detailed feedback.",
-            group="parsing",
-        ),
-        NodeParameter(
             name="answer_field",
             label="Answer State Field",
             type="string",
@@ -842,8 +832,6 @@ class ReviewNode(BaseNode):
 
         answer_field = config.get("answer_field", "answer")
         output_field = config.get("output_field", "review_result")
-        verdict_prefix = config.get("verdict_prefix", "VERDICT:")
-        feedback_prefix = config.get("feedback_prefix", "FEEDBACK:")
 
         verdicts = _parse_categories(
             config.get("verdicts", "approved, retry"),
@@ -857,6 +845,8 @@ class ReviewNode(BaseNode):
         force_verdict = verdicts[0] if verdicts else "approved"
 
         try:
+            from service.workflow.nodes.structured_output import ReviewOutput
+
             input_text = state.get("input", "")
             answer = state.get(answer_field, "")
             template = config.get("prompt_template", AutonomousPrompts.review())
@@ -867,35 +857,25 @@ class ReviewNode(BaseNode):
                 prompt = template
 
             messages = [HumanMessage(content=prompt)]
-            response, fallback = await context.resilient_invoke(messages, "review")
-            review_text = response.content
 
-            matched_verdict = default_verdict
-            feedback = ""
+            # ── Structured output: schema-validated verdict + feedback ──
+            parsed, fallback = await context.resilient_structured_invoke(
+                messages,
+                "review",
+                ReviewOutput,
+                allowed_values={"verdict": verdicts},
+                coerce_field="verdict",
+                coerce_values=verdicts,
+                coerce_default=default_verdict,
+                extra_instruction=(
+                    f"The 'verdict' field MUST be exactly one of: "
+                    f"{', '.join(verdicts)}. "
+                    f"The 'feedback' field should contain detailed reasoning."
+                ),
+            )
 
-            if verdict_prefix in review_text:
-                lines = review_text.split("\n")
-                for line in lines:
-                    if line.startswith(verdict_prefix):
-                        verdict_str = line.replace(verdict_prefix, "").strip().lower()
-                        for v in verdicts:
-                            if v.lower() in verdict_str:
-                                matched_verdict = v
-                                break
-                    elif line.startswith(feedback_prefix):
-                        feedback = line.replace(feedback_prefix, "").strip()
-                        idx = lines.index(line)
-                        feedback = "\n".join([feedback] + lines[idx + 1:])
-                        break
-            else:
-                # No structured prefix found — treat whole response as feedback
-                feedback = review_text
-                # Still try to detect verdict keywords in full text
-                review_lower = review_text.lower()
-                for v in verdicts:
-                    if v.lower() in review_lower:
-                        matched_verdict = v
-                        break
+            matched_verdict = parsed.verdict
+            feedback = parsed.feedback or ""
 
             is_complete = False
             if matched_verdict != force_verdict and review_count >= max_retries:
@@ -917,8 +897,8 @@ class ReviewNode(BaseNode):
                 output_field: matched_verdict,
                 "review_feedback": feedback,
                 count_field: review_count,
-                "messages": [response],
-                "last_output": review_text,
+                "messages": [HumanMessage(content=f"Review verdict: {matched_verdict}")],
+                "last_output": f"VERDICT: {matched_verdict}\nFEEDBACK: {feedback}",
                 "current_step": "review_complete",
             }
             if is_complete:

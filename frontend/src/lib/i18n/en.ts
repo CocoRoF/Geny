@@ -381,6 +381,8 @@ const en = {
     cloneTooltip: 'Clone workflow',
     deleteBtn: '🗑 Delete',
     deleteTooltip: 'Delete workflow',
+    viewCompiled: '🔍 View Compiled',
+    viewCompiledTooltip: 'Inspect how this workflow compiles into a LangGraph StateGraph',
     loading: 'Loading…',
     nodesEdges: '{nodes} nodes · {edges} edges',
     designTitle: 'Design Your Workflow',
@@ -478,6 +480,32 @@ const en = {
   a11y: {
     decrease: 'Decrease',
     increase: 'Increase',
+  },
+
+  // ─── Compiled View Modal ───
+  compiledView: {
+    title: 'Compiled Graph Inspector',
+    nodes: 'nodes',
+    edges: 'edges',
+    valid: 'Valid',
+    invalid: 'Invalid',
+    tabCode: 'Code',
+    tabNodes: 'Nodes',
+    tabEdges: 'Edges',
+    search: 'Search nodes/edges…',
+    copyCode: '📋 Copy',
+    loading: 'Compiling graph…',
+    conditional: 'Conditional',
+    outputPorts: 'Output Ports',
+    routingLogic: 'Routing Logic',
+    targets: 'Targets',
+    config: 'Configuration',
+    hasRouter: 'has routing fn',
+    summaryNodes: '{count} nodes',
+    summaryEdges: '{count} edges',
+    summaryConditional: '{count} conditional',
+    summarySimple: '{count} simple',
+    summaryErrors: '{count} errors',
   },
 };
 

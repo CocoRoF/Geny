@@ -381,6 +381,8 @@ const ko: Translations = {
     cloneTooltip: '워크플로우 복제',
     deleteBtn: '🗑 삭제',
     deleteTooltip: '워크플로우 삭제',
+    viewCompiled: '🔍 컴파일 보기',
+    viewCompiledTooltip: '워크플로우가 LangGraph StateGraph로 컴파일되는 방식을 검사합니다',
     loading: '불러오는 중…',
     nodesEdges: '{nodes}개 노드 · {edges}개 엣지',
     designTitle: '워크플로우를 설계하세요',
@@ -478,6 +480,32 @@ const ko: Translations = {
   a11y: {
     decrease: '감소',
     increase: '증가',
+  },
+
+  // ─── Compiled View ───
+  compiledView: {
+    title: '컴파일 그래프 검사기',
+    nodes: '노드',
+    edges: '엣지',
+    valid: '유효',
+    invalid: '무효',
+    tabCode: '코드',
+    tabNodes: '노드',
+    tabEdges: '엣지',
+    search: '노드/엣지 검색…',
+    copyCode: '📋 복사',
+    loading: '그래프 컴파일 중…',
+    conditional: '조건부',
+    outputPorts: '출력 포트',
+    routingLogic: '라우팅 로직',
+    targets: '대상',
+    config: '구성',
+    hasRouter: '라우팅 함수 있음',
+    summaryNodes: '{count}개 노드',
+    summaryEdges: '{count}개 엣지',
+    summaryConditional: '{count}개 조건부',
+    summarySimple: '{count}개 단순',
+    summaryErrors: '{count}개 오류',
   },
 };
 

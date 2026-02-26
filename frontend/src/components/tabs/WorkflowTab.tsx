@@ -6,6 +6,7 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import NodePalette from '@/components/workflow/NodePalette';
 import PropertyPanel from '@/components/workflow/PropertyPanel';
 import WorkflowCanvas from '@/components/workflow/WorkflowCanvas';
+import CompiledViewModal from '@/components/modals/CompiledViewModal';
 import { workflowApi } from '@/lib/workflowApi';
 import { useI18n } from '@/lib/i18n';
 import type { WorkflowDefinition } from '@/types/workflow';
@@ -32,6 +33,7 @@ function WorkflowToolbar() {
   const [newName, setNewName] = useState('');
   const [templates, setTemplates] = useState<WorkflowDefinition[]>([]);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showCompiledView, setShowCompiledView] = useState(false);
 
   // Load templates on mount
   useEffect(() => {
@@ -146,6 +148,13 @@ function WorkflowToolbar() {
         </ToolbarBtn>
       )}
 
+      {/* View Compiled */}
+      {currentWorkflow && (
+        <ToolbarBtn onClick={() => setShowCompiledView(true)} title={t('workflowEditor.viewCompiledTooltip')}>
+          {t('workflowEditor.viewCompiled')}
+        </ToolbarBtn>
+      )}
+
       {/* Delete */}
       {currentWorkflow && !currentWorkflow.is_template && (
         <ToolbarBtn onClick={handleDelete} danger title={t('workflowEditor.deleteTooltip')}>
@@ -171,6 +180,15 @@ function WorkflowToolbar() {
         <span className="text-[10px] text-[var(--text-muted)]">
           {t('workflowEditor.nodesEdges', { nodes: currentWorkflow.nodes?.length || 0, edges: currentWorkflow.edges?.length || 0 })}
         </span>
+      )}
+
+      {/* Compiled View Modal */}
+      {showCompiledView && currentWorkflow && (
+        <CompiledViewModal
+          workflowId={currentWorkflow.id}
+          workflowName={currentWorkflow.name}
+          onClose={() => setShowCompiledView(false)}
+        />
       )}
     </div>
   );

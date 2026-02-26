@@ -147,29 +147,29 @@ class CreateTodosNode(BaseNode):
         index_field = config.get("output_index_field", "current_todo_index")
 
         try:
+            from service.workflow.nodes.structured_output import CreateTodosOutput
+
             prompt = _safe_format(template, {**state, "input": input_text})
             messages = [HumanMessage(content=prompt)]
-            response, fallback = await context.resilient_invoke(messages, "create_todos")
-            response_text = response.content.strip()
 
-            # Parse JSON — handle markdown code block wrappers
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0]
-            elif "```" in response_text:
-                response_text = response_text.split("```")[1].split("```")[0]
-
-            try:
-                todos_raw = json.loads(response_text.strip())
-            except json.JSONDecodeError:
-                logger.warning(f"[{context.session_id}] create_todos: JSON parse failed, fallback")
-                todos_raw = [{"id": 1, "title": "Execute task", "description": input_text}]
+            # ── Structured output: schema-validated TODO list ──
+            parsed, fallback = await context.resilient_structured_invoke(
+                messages,
+                "create_todos",
+                CreateTodosOutput,
+                extra_instruction=(
+                    "Each TODO item MUST have 'id' (integer), 'title' (string), "
+                    "and 'description' (string). Return between 1 and "
+                    f"{max_todos} items."
+                ),
+            )
 
             todos: List[TodoItem] = []
-            for item in todos_raw:
+            for item in parsed.todos:
                 todos.append({
-                    "id": item.get("id", len(todos) + 1),
-                    "title": item.get("title", f"Task {len(todos) + 1}"),
-                    "description": item.get("description", ""),
+                    "id": item.id,
+                    "title": item.title,
+                    "description": item.description,
                     "status": TodoStatus.PENDING,
                     "result": None,
                 })
@@ -177,13 +177,28 @@ class CreateTodosNode(BaseNode):
             if len(todos) > max_todos:
                 todos = todos[:max_todos]
 
+            if not todos:
+                logger.warning(
+                    f"[{context.session_id}] create_todos: structured output "
+                    f"returned empty list, using single-item fallback"
+                )
+                todos = [{
+                    "id": 1,
+                    "title": "Execute task",
+                    "description": input_text,
+                    "status": TodoStatus.PENDING,
+                    "result": None,
+                }]
+
             logger.info(f"[{context.session_id}] create_todos: {len(todos)} items")
 
             result: Dict[str, Any] = {
                 list_field: todos,
                 index_field: 0,
-                "messages": [response],
-                "last_output": response.content,
+                "messages": [HumanMessage(content=f"Created {len(todos)} TODO items")],
+                "last_output": json.dumps([
+                    {"id": t["id"], "title": t["title"]} for t in todos
+                ]),
                 "current_step": "todos_created",
             }
             result.update(fallback)

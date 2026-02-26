@@ -593,14 +593,6 @@ REVIEW_I18N = {
                 "label": "Max Review Retries",
                 "description": "Force the first verdict (typically 'approved') after this many review cycles.",
             },
-            "verdict_prefix": {
-                "label": "Verdict Prefix",
-                "description": "Line prefix the LLM uses to emit the verdict.",
-            },
-            "feedback_prefix": {
-                "label": "Feedback Prefix",
-                "description": "Line prefix the LLM uses to emit detailed feedback.",
-            },
             "answer_field": {
                 "label": "Answer State Field",
                 "description": "State field containing the answer to review.",
@@ -619,7 +611,6 @@ REVIEW_I18N = {
             "prompt": "Prompt",
             "routing": "Routing",
             "behavior": "Behavior",
-            "parsing": "Parsing",
             "output": "Output",
             "state_fields": "State Fields",
         },
@@ -647,11 +638,11 @@ REVIEW_I18N = {
                     "is matched against these keywords. If no match, the **Default Verdict** is used."
                 )),
                 ("Review Format", (
-                    "The model is expected to respond with a structured format:\n\n"
-                    "```\nVERDICT: approved\nFEEDBACK: <improvement suggestions>\n```\n\n"
-                    "The node parses this to determine routing. "
-                    "If the format is not detected, the whole response is treated as feedback "
-                    "and keyword matching is attempted against the full text."
+                    "The model is required to respond with a **structured JSON output** "
+                    "containing ``verdict`` and ``feedback`` fields:\n\n"
+                    '```json\n{"verdict": "approved", "feedback": "Good answer."}\n```\n\n'
+                    "The node uses Pydantic schema validation to enforce the output format. "
+                    "If the initial response fails validation, an automatic correction retry is attempted."
                 )),
                 ("Max Retries", (
                     "The **Max Review Retries** parameter prevents infinite review loops. "
@@ -700,14 +691,6 @@ REVIEW_I18N = {
             "max_retries": {
                 "label": "최대 리뷰 재시도",
                 "description": "이 횟수만큼 리뷰 사이클 후 첫 번째 판정(보통 'approved')을 강제합니다.",
-            },
-            "verdict_prefix": {
-                "label": "판정 접두사",
-                "description": "LLM이 판정을 출력할 때 사용하는 줄 접두사입니다.",
-            },
-            "feedback_prefix": {
-                "label": "피드백 접두사",
-                "description": "LLM이 상세 피드백을 출력할 때 사용하는 줄 접두사입니다.",
             },
             "answer_field": {
                 "label": "답변 상태 필드",
