@@ -145,8 +145,6 @@ class SessionManager:
             timeout=request.timeout,  # Execution timeout
             mcp_config=merged_mcp_config,  # Use merged MCP config
             system_prompt=system_prompt,  # System prompt (includes manager prompt if role is manager)
-            autonomous=request.autonomous,  # Autonomous mode flag
-            autonomous_max_iterations=request.autonomous_max_iterations,  # Max iterations
             role=request.role.value if request.role else "worker",  # Session role
             manager_id=request.manager_id  # Manager ID for worker sessions
         )
@@ -174,8 +172,6 @@ class SessionManager:
             model=process.model,
             max_turns=process.max_turns,
             timeout=process.timeout,
-            autonomous=process.autonomous,
-            autonomous_max_iterations=process.autonomous_max_iterations,
             storage_path=process.storage_path,
             pod_name=pod_info.pod_name,
             pod_ip=pod_info.pod_ip,
@@ -348,8 +344,6 @@ class SessionManager:
             'model': session_info.model,
             'max_turns': session_info.max_turns,
             'timeout': session_info.timeout,
-            'autonomous': session_info.autonomous,
-            'autonomous_max_iterations': session_info.autonomous_max_iterations,
             'storage_path': session_info.storage_path,
             'pod_name': session_info.pod_name,
             'pod_ip': session_info.pod_ip,
@@ -391,8 +385,6 @@ class SessionManager:
             model=process.model,
             max_turns=process.max_turns,
             timeout=process.timeout,
-            autonomous=process.autonomous,
-            autonomous_max_iterations=process.autonomous_max_iterations,
             storage_path=process.storage_path,
             pod_name=pod_info.pod_name,
             pod_ip=pod_info.pod_ip,
@@ -420,13 +412,13 @@ class SessionManager:
             model=data.get('model'),
             max_turns=data.get('max_turns', 100),
             timeout=data.get('timeout', 1800.0),
-            autonomous=data.get('autonomous', True),
-            autonomous_max_iterations=data.get('autonomous_max_iterations', 100),
             storage_path=data.get('storage_path'),
             pod_name=data.get('pod_name'),
             pod_ip=data.get('pod_ip'),
             role=role,
-            manager_id=data.get('manager_id')
+            manager_id=data.get('manager_id'),
+            workflow_id=data.get('workflow_id'),
+            graph_name=data.get('graph_name'),
         )
 
     # ========== Manager/Worker Methods ==========

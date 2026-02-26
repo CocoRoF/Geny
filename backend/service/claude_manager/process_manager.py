@@ -66,8 +66,6 @@ class ClaudeProcess:
         storage_root: Optional[str] = None,
         mcp_config: Optional[MCPConfig] = None,
         system_prompt: Optional[str] = None,
-        autonomous: Optional[bool] = True,
-        autonomous_max_iterations: Optional[int] = 100,
         role: Optional[str] = "worker",
         manager_id: Optional[str] = None
     ):
@@ -79,10 +77,6 @@ class ClaudeProcess:
         self.env_vars = env_vars or {}
         self.mcp_config = mcp_config
         self.system_prompt = system_prompt  # Store system prompt for all executions
-
-        # Autonomous mode settings
-        self.autonomous = autonomous if autonomous is not None else True
-        self.autonomous_max_iterations = autonomous_max_iterations or 100
 
         # Role settings for hierarchical management
         self.role = role or "worker"

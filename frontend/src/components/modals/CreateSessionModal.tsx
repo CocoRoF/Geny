@@ -36,8 +36,7 @@ export default function CreateSessionModal({ onClose }: Props) {
     model: '',
     max_turns: 25,
     timeout: 300,
-    autonomous: false,
-    autonomous_max_iterations: 10,
+    max_iterations: 10,
     manager_id: '',
     system_prompt: '',
   });
@@ -84,19 +83,18 @@ export default function CreateSessionModal({ onClose }: Props) {
     setError('');
     try {
       const payload: CreateAgentRequest = { ...formState };
-      // Map workflow selection
+      // Map workflow selection to graph_name / workflow_id
       if (selectedWorkflow === '__default') {
-        // Simple/default → autonomous off
-        payload.autonomous = false;
         payload.workflow_id = undefined;
+        payload.graph_name = 'Simple Agent';
       } else if (selectedWorkflow === '__autonomous') {
-        // Autonomous built-in
-        payload.autonomous = true;
         payload.workflow_id = undefined;
+        payload.graph_name = 'Autonomous Difficulty-Based';
       } else {
         // Custom workflow
+        const wf = availableWorkflows.find(w => w.id === selectedWorkflow);
         payload.workflow_id = selectedWorkflow;
-        payload.autonomous = true; // custom workflows run in autonomous mode
+        payload.graph_name = wf?.name || selectedWorkflow;
       }
       await createSession(payload);
       onClose();
@@ -217,12 +215,12 @@ export default function CreateSessionModal({ onClose }: Props) {
             </small>
           </div>
 
-          {/* Max Iterations (for autonomous / custom workflows) */}
+          {/* Max Iterations (for non-default workflows) */}
           {selectedWorkflow !== '__default' && (
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">{t('createSession.maxIterations')}</label>
-                <NumberStepper value={formState.autonomous_max_iterations ?? 10} onChange={v => setFormState(f => ({ ...f, autonomous_max_iterations: v }))} min={1} max={500} step={5} />
+                <NumberStepper value={formState.max_iterations ?? 10} onChange={v => setFormState(f => ({ ...f, max_iterations: v }))} min={1} max={500} step={5} />
               </div>
             </div>
           )}

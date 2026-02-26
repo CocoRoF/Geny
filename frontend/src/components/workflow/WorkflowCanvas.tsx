@@ -10,6 +10,7 @@ import {
   useReactFlow,
   type Edge,
   type Node,
+  type NodeChange,
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -45,6 +46,21 @@ export default function WorkflowCanvas({ readOnly = false }: { readOnly?: boolea
     // Only trigger on workflow identity change, not node edits
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWorkflow?.id, fitView]);
+
+  // ── readOnly-safe node change handler ──
+  // In readOnly mode we still need to process:
+  //   - 'select'     → so clicked nodes get visually highlighted
+  //   - 'dimensions' → so ReactFlow knows each node's measured width/height
+  //                     (MiniMap relies on this to render nodes)
+  const handleNodesChangeReadOnly = useCallback(
+    (changes: NodeChange[]) => {
+      const allowed = changes.filter(c => c.type === 'select' || c.type === 'dimensions');
+      if (allowed.length > 0) {
+        onNodesChange(allowed);
+      }
+    },
+    [onNodesChange],
+  );
 
   // ── Selection tracking ──
   const handleSelectionChange = useCallback(
@@ -136,7 +152,7 @@ export default function WorkflowCanvas({ readOnly = false }: { readOnly?: boolea
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={readOnly ? undefined : onNodesChange}
+        onNodesChange={readOnly ? handleNodesChangeReadOnly : onNodesChange}
         onEdgesChange={readOnly ? undefined : onEdgesChange}
         onConnect={readOnly ? undefined : onConnect}
         onInit={handleInit}
@@ -168,13 +184,17 @@ export default function WorkflowCanvas({ readOnly = false }: { readOnly?: boolea
           className="!bg-[var(--bg-secondary)] !border-[var(--border-color)] !shadow-lg [&>button]:!bg-[var(--bg-secondary)] [&>button]:!border-[var(--border-color)] [&>button]:!fill-[var(--text-secondary)] [&>button:hover]:!bg-[var(--bg-tertiary)]"
         />
         <MiniMap
-          nodeStrokeWidth={3}
+          nodeStrokeWidth={2}
+          nodeStrokeColor="#555"
           nodeColor={(n) => {
             const d = n.data as WorkflowNodeData;
             return d.color || '#6366f1';
           }}
-          maskColor="rgba(0,0,0,0.65)"
-          className="!bg-[var(--bg-secondary)] !border-[var(--border-color)]"
+          maskColor="rgba(0,0,0,0.55)"
+          pannable
+          zoomable
+          style={{ width: 180, height: 130 }}
+          className="!bg-[#1a1a1e] !border-[var(--border-color)] !rounded-lg"
         />
       </ReactFlow>
 

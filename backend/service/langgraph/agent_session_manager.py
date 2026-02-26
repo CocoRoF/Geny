@@ -181,7 +181,6 @@ class AgentSessionManager(SessionManager):
             session_id=None,  # Session ID not yet created at this point
             tools=tools,
             mcp_servers=mcp_servers,
-            autonomous=request.autonomous if request.autonomous is not None else True,
             mode=mode,
             context_files=context_files if context_files else None,
             extra_system_prompt=request.system_prompt,
@@ -242,6 +241,32 @@ class AgentSessionManager(SessionManager):
         system_prompt = self._build_system_prompt(request)
         logger.info(f"  📋 System prompt built via PromptBuilder ({len(system_prompt)} chars)")
 
+        # Resolve graph_name and workflow_id
+        graph_name = getattr(request, 'graph_name', None)
+        workflow_id = getattr(request, 'workflow_id', None)
+
+        if workflow_id and not graph_name:
+            # Custom workflow → resolve name from store
+            try:
+                from service.workflow.workflow_store import get_workflow_store
+                wf_store = get_workflow_store()
+                wf_def = wf_store.load(workflow_id)
+                if wf_def:
+                    graph_name = wf_def.name
+            except Exception:
+                pass
+
+        # Map built-in graph_name choices to template workflow_ids
+        if not workflow_id:
+            if graph_name and 'autonomous' in graph_name.lower():
+                workflow_id = "template-autonomous"
+            else:
+                workflow_id = "template-simple"
+                if not graph_name:
+                    graph_name = "Simple Agent"
+
+        logger.info(f"  workflow_id: {workflow_id}, graph_name: {graph_name}")
+
         # AgentSession 생성
         agent = await AgentSession.create(
             working_dir=request.working_dir,
@@ -253,12 +278,12 @@ class AgentSessionManager(SessionManager):
             mcp_config=merged_mcp_config,
             max_turns=request.max_turns or 100,
             timeout=request.timeout or 1800.0,
-            autonomous=request.autonomous if request.autonomous is not None else True,
-            autonomous_max_iterations=request.autonomous_max_iterations or 100,
+            max_iterations=request.max_iterations or 100,
             role=request.role or SessionRole.WORKER,
             manager_id=request.manager_id,
             enable_checkpointing=enable_checkpointing,
-            workflow_id=getattr(request, 'workflow_id', None),
+            workflow_id=workflow_id,
+            graph_name=graph_name,
         )
 
         session_id = agent.session_id

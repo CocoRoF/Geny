@@ -32,8 +32,6 @@ import type {
   CreateAgentRequest,
   ExecuteRequest,
   ExecuteResponse,
-  AutonomousExecuteRequest,
-  AutonomousExecuteResponse,
   GraphStructure,
   ManagerDashboard,
   StorageListResponse,
@@ -79,16 +77,9 @@ export const agentApi = {
       body: JSON.stringify(data),
     }),
 
-  /** POST /api/agents/{id}/execute/autonomous — execute autonomous */
-  executeAutonomous: (id: string, data: AutonomousExecuteRequest) =>
-    apiCall<AutonomousExecuteResponse>(`/api/agents/${id}/execute/autonomous`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
-  /** POST /api/agents/{id}/execute/autonomous/stop — stop autonomous */
-  stopAutonomous: (id: string) =>
-    apiCall<{ success: boolean }>(`/api/agents/${id}/execute/autonomous/stop`, {
+  /** POST /api/agents/{id}/stop — stop execution */
+  stop: (id: string) =>
+    apiCall<{ success: boolean }>(`/api/agents/${id}/stop`, {
       method: 'POST',
     }),
 
@@ -97,6 +88,10 @@ export const agentApi = {
 
   /** GET /api/agents/{id}/graph — graph structure */
   getGraph: (id: string) => apiCall<GraphStructure>(`/api/agents/${id}/graph`),
+
+  /** GET /api/agents/{id}/workflow — workflow definition for the session */
+  getWorkflow: (id: string) =>
+    apiCall<import('@/types/workflow').WorkflowDefinition>(`/api/agents/${id}/workflow`),
 
   /** GET /api/agents/{id}/storage — list storage files */
   listStorage: (id: string) => apiCall<StorageListResponse>(`/api/agents/${id}/storage`),

@@ -4,10 +4,16 @@ Wraps a CLI session (ClaudeProcess) inside a LangGraph CompiledStateGraph
 to provide state-driven execution with resilience (context guard, model
 fallback, completion detection) and session memory (long-term / short-term).
 
+Every session is linked to a WorkflowDefinition (either a template or a
+user-created workflow). The WorkflowExecutor compiles it into a
+CompiledStateGraph. There is ONE graph, ONE execution path — no branching
+between "simple" and "autonomous".
+
 Session creation flow:
     1. Create CLI session (ClaudeProcess via ClaudeCLIChatModel)
-    2. Build CompiledStateGraph (AgentSession)
-    3. Initialize SessionMemoryManager for the session storage path
+    2. Load WorkflowDefinition (from workflow_id or default template)
+    3. Compile via WorkflowExecutor → CompiledStateGraph
+    4. Initialize SessionMemoryManager for the session storage path
 
 Usage::
 
@@ -17,6 +23,7 @@ Usage::
         working_dir="/path/to/project",
         model_name="claude-sonnet-4-20250514",
         session_name="my-agent",
+        workflow_id="template-simple",
     )
     result = await agent.invoke("Hello, what can you help me with?")
     async for event in agent.astream("Build a web app"):
@@ -31,30 +38,14 @@ import uuid
 from datetime import datetime
 from enum import Enum
 from typing import (
-    Annotated,
     Any,
     AsyncIterator,
-    Callable,
     Dict,
     List,
-    Literal,
     Optional,
-    Sequence,
-    TypedDict,
-    Union,
 )
 
-from langchain_core.messages import (
-    AIMessage,
-    BaseMessage,
-    HumanMessage,
-    SystemMessage,
-    ToolMessage,
-)
-from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.checkpoint.memory import MemorySaver
-from pydantic import BaseModel, Field, PrivateAttr
 
 from service.langgraph.checkpointer import create_checkpointer
 
@@ -67,32 +58,14 @@ from service.claude_manager.models import (
 from service.claude_manager.process_manager import ClaudeProcess
 from service.langgraph.claude_cli_model import ClaudeCLIChatModel
 from service.langgraph.state import (
-    AgentState,
-    CompletionSignal,
-    make_initial_agent_state,
+    AutonomousState,
     make_initial_autonomous_state,
 )
-from service.langgraph.resilience_nodes import (
-    completion_detect_node,
-    detect_completion_signal,
-    make_context_guard_node,
-)
-from service.langgraph.session_freshness import (
-    SessionFreshness,
-    FreshnessConfig,
-)
+from service.langgraph.session_freshness import SessionFreshness
 from service.logging.session_logger import get_session_logger, SessionLogger
-
-# Lazy import to avoid circular dependency
-_autonomous_graph_module = None
-
-def _get_autonomous_graph_class():
-    """Lazy import of AutonomousGraph to avoid circular imports."""
-    global _autonomous_graph_module
-    if _autonomous_graph_module is None:
-        from service.langgraph import autonomous_graph as ag
-        _autonomous_graph_module = ag
-    return _autonomous_graph_module.AutonomousGraph
+from service.workflow.workflow_model import WorkflowDefinition
+from service.workflow.workflow_executor import WorkflowExecutor
+from service.workflow.nodes.base import ExecutionContext
 
 logger = getLogger(__name__)
 
@@ -127,12 +100,12 @@ class AgentSession:
         system_prompt: Optional[str] = None,
         env_vars: Optional[Dict[str, str]] = None,
         mcp_config: Optional[MCPConfig] = None,
-        autonomous: bool = True,
-        autonomous_max_iterations: int = 100,
+        max_iterations: int = 100,
         role: SessionRole = SessionRole.WORKER,
         manager_id: Optional[str] = None,
         enable_checkpointing: bool = False,
         workflow_id: Optional[str] = None,
+        graph_name: Optional[str] = None,
     ):
         """Initialize AgentSession.
 
@@ -146,11 +119,12 @@ class AgentSession:
             system_prompt: System prompt override.
             env_vars: Extra environment variables.
             mcp_config: MCP server configuration.
-            autonomous: Whether to use autonomous (difficulty-based) execution.
-            autonomous_max_iterations: Max graph iterations for autonomous mode.
+            max_iterations: Max graph iterations.
             role: Session role (MANAGER / WORKER).
             manager_id: Parent manager session ID (for workers).
             enable_checkpointing: Enable LangGraph MemorySaver checkpointing.
+            workflow_id: Optional workflow ID (used to load WorkflowDefinition).
+            graph_name: Human-readable graph/workflow name.
         """
         # Session identity
         self._session_id = session_id or str(uuid.uuid4())
@@ -165,8 +139,7 @@ class AgentSession:
         self._system_prompt = system_prompt
         self._env_vars = env_vars or {}
         self._mcp_config = mcp_config
-        self._autonomous = autonomous
-        self._autonomous_max_iterations = autonomous_max_iterations
+        self._max_iterations = max_iterations
 
         # Role
         self._role = role
@@ -174,6 +147,8 @@ class AgentSession:
 
         # Workflow / Graph
         self._workflow_id = workflow_id
+        self._graph_name = graph_name
+        self._workflow: Optional[WorkflowDefinition] = None
 
         # Internal components
         self._model: Optional[ClaudeCLIChatModel] = None
@@ -190,9 +165,6 @@ class AgentSession:
         self._current_thread_id: str = "default"
         self._current_iteration: int = 0
         self._execution_start_time: Optional[datetime] = None
-
-        # Autonomous graph (used when autonomous=True)
-        self._autonomous_graph: Optional[CompiledStateGraph] = None
 
         # Session freshness evaluator
         self._freshness = SessionFreshness()
@@ -252,12 +224,20 @@ class AgentSession:
         return agent
 
     @classmethod
-    def from_process(cls, process: ClaudeProcess, enable_checkpointing: bool = False) -> "AgentSession":
+    def from_process(
+        cls,
+        process: ClaudeProcess,
+        enable_checkpointing: bool = False,
+        workflow_id: Optional[str] = None,
+        graph_name: Optional[str] = None,
+    ) -> "AgentSession":
         """Create AgentSession from an existing ClaudeProcess.
 
         Args:
             process: Initialized ClaudeProcess instance.
             enable_checkpointing: Enable LangGraph checkpointing.
+            workflow_id: Optional workflow ID to link.
+            graph_name: Human-readable graph name.
 
         Returns:
             AgentSession instance.
@@ -272,11 +252,11 @@ class AgentSession:
             system_prompt=process.system_prompt,
             env_vars=process.env_vars or {},
             mcp_config=process.mcp_config,
-            autonomous=process.autonomous,
-            autonomous_max_iterations=process.autonomous_max_iterations,
             role=SessionRole(process.role) if process.role else SessionRole.WORKER,
             manager_id=process.manager_id,
             enable_checkpointing=enable_checkpointing,
+            workflow_id=workflow_id,
+            graph_name=graph_name,
         )
 
         # Wire model, build graph, initialize memory
@@ -290,12 +270,20 @@ class AgentSession:
         return agent
 
     @classmethod
-    def from_model(cls, model: ClaudeCLIChatModel, enable_checkpointing: bool = False) -> "AgentSession":
+    def from_model(
+        cls,
+        model: ClaudeCLIChatModel,
+        enable_checkpointing: bool = False,
+        workflow_id: Optional[str] = None,
+        graph_name: Optional[str] = None,
+    ) -> "AgentSession":
         """Create AgentSession from an existing ClaudeCLIChatModel.
 
         Args:
             model: Initialized ClaudeCLIChatModel instance.
             enable_checkpointing: Enable LangGraph checkpointing.
+            workflow_id: Optional workflow ID to link.
+            graph_name: Human-readable graph name.
 
         Returns:
             AgentSession instance.
@@ -313,8 +301,9 @@ class AgentSession:
             system_prompt=model.system_prompt,
             env_vars=model.env_vars,
             mcp_config=model.mcp_config,
-            autonomous=model.autonomous,
             enable_checkpointing=enable_checkpointing,
+            workflow_id=workflow_id,
+            graph_name=graph_name,
         )
 
         agent._model = model
@@ -371,11 +360,21 @@ class AgentSession:
 
     @property
     def autonomous(self) -> bool:
-        return self._autonomous
+        """Whether this session uses an autonomous-type graph (derived from workflow)."""
+        if self._workflow:
+            return 'autonomous' in (self._workflow.name or '').lower()
+        if self._graph_name:
+            return 'autonomous' in self._graph_name.lower()
+        return False
 
     @property
-    def autonomous_max_iterations(self) -> int:
-        return self._autonomous_max_iterations
+    def workflow(self) -> Optional[WorkflowDefinition]:
+        """The linked WorkflowDefinition for this session."""
+        return self._workflow
+
+    @property
+    def max_iterations(self) -> int:
+        return self._max_iterations
 
     @property
     def role(self) -> SessionRole:
@@ -506,7 +505,6 @@ class AgentSession:
                 system_prompt=self._system_prompt,
                 env_vars=self._env_vars,
                 mcp_config=self._mcp_config,
-                autonomous=self._autonomous,
             )
 
             # 2. Initialize model (spawns ClaudeProcess)
@@ -517,7 +515,7 @@ class AgentSession:
                 logger.error(f"[{self._session_id}] Failed to initialize model: {self._error_message}")
                 return False
 
-            # 3. Initialize memory manager (before graph, so autonomous graph can use it)
+            # 3. Initialize memory manager (before graph, so graph can use it)
             self._init_memory()
 
             # 4. Build StateGraph
@@ -535,11 +533,11 @@ class AgentSession:
             return False
 
     def _build_graph(self):
-        """Build the LangGraph StateGraph.
+        """Build the LangGraph StateGraph from the linked WorkflowDefinition.
 
-        If autonomous mode: uses difficulty-based AutonomousGraph.
-        Otherwise: builds a simple agent -> process_output loop with
-        context guard and completion detection nodes.
+        Loads the WorkflowDefinition (from workflow_id or default template),
+        creates an ExecutionContext, and compiles via WorkflowExecutor.
+        All graph types go through this single path.
         """
         # Checkpointer setup (persistent when storage_path is available)
         if self._enable_checkpointing:
@@ -549,294 +547,91 @@ class AgentSession:
                 persistent=True,
             )
 
-        # Autonomous mode: AutonomousGraph
-        if self._autonomous:
-            self._build_autonomous_graph()
-        else:
-            self._build_simple_graph()
+        # Load WorkflowDefinition
+        self._workflow = self._load_workflow_definition()
+        if not self._workflow:
+            raise RuntimeError(
+                f"Failed to load WorkflowDefinition for session {self._session_id} "
+                f"(workflow_id={self._workflow_id}, graph_name={self._graph_name})"
+            )
 
-        logger.debug(f"[{self._session_id}] StateGraph built (autonomous={self._autonomous})")
+        # Update graph_name from the workflow if not explicitly set
+        if not self._graph_name:
+            self._graph_name = self._workflow.name
 
-    def _build_autonomous_graph(self):
-        """Build difficulty-based AutonomousGraph with full resilience.
-
-        Passes memory_manager and max_iterations so the autonomous graph
-        can use memory injection and enforce global iteration caps.
-
-        Routes:
-            - Easy: direct answer
-            - Medium: answer + review loop
-            - Hard: TODO planning -> execute -> review -> final
-        """
-        AutonomousGraph = _get_autonomous_graph_class()
-
-        autonomous_graph_builder = AutonomousGraph(
+        # Create ExecutionContext for the WorkflowExecutor
+        context = ExecutionContext(
             model=self._model,
             session_id=self._session_id,
-            enable_checkpointing=self._enable_checkpointing,
-            max_review_retries=3,
-            storage_path=self.storage_path if hasattr(self, 'storage_path') else None,
             memory_manager=self._memory_manager,
-            max_iterations=self._autonomous_max_iterations,
+            session_logger=self._get_logger(),
+            context_guard=None,  # Context guard nodes are part of the workflow
+            max_retries=2,
             model_name=self._model_name,
         )
 
-        self._autonomous_graph = autonomous_graph_builder.build()
+        # Compile via WorkflowExecutor
+        executor = WorkflowExecutor(self._workflow, context)
+        self._graph = executor.compile()
 
-        # Also build the simple graph for backward compatibility
-        self._build_simple_graph()
-
-        logger.info(f"[{self._session_id}] AutonomousGraph built for autonomous execution")
-
-    def _build_simple_graph(self):
-        """Build the simple (non-autonomous) state graph.
-
-        Graph topology::
-
-            START -> context_guard -> agent -> process_output
-                         ^                        |
-                         |--- continue -----------+
-                                                  |
-                                           end -> END
-
-        Nodes:
-            context_guard  — check context budget, auto-compact if needed
-            agent          — invoke Claude CLI, record transcript
-            process_output — increment iteration, detect completion signal
-        """
-        graph_builder = StateGraph(AgentState)
-
-        # -- Register nodes --
-        # Context guard (factory creates a closure with model-specific limits)
-        graph_builder.add_node(
-            "context_guard",
-            make_context_guard_node(model=self._model_name),
-        )
-        graph_builder.add_node("agent", self._agent_node)
-        graph_builder.add_node("process_output", self._process_output_node)
-
-        # -- Edges --
-        graph_builder.add_edge(START, "context_guard")
-        graph_builder.add_edge("context_guard", "agent")
-        graph_builder.add_edge("agent", "process_output")
-        graph_builder.add_conditional_edges(
-            "process_output",
-            self._should_continue,
-            {
-                "continue": "context_guard",
-                "end": END,
-            },
+        logger.info(
+            f"[{self._session_id}] Graph compiled from workflow "
+            f"'{self._workflow.name}' ({self._workflow.id})"
         )
 
-        # Compile
-        if self._checkpointer:
-            self._graph = graph_builder.compile(checkpointer=self._checkpointer)
-        else:
-            self._graph = graph_builder.compile()
+    def _load_workflow_definition(self) -> Optional[WorkflowDefinition]:
+        """Load the WorkflowDefinition for this session.
 
-    async def _agent_node(self, state: AgentState) -> Dict[str, Any]:
-        """Agent node: invoke Claude CLI and update state.
-
-        Reads messages from state, calls the model, writes the response
-        back. Also records the turn to short-term memory if available.
+        Resolution order:
+            1. workflow_id → load from WorkflowStore
+            2. graph_name contains 'autonomous' → template-autonomous
+            3. Fallback → template-simple
         """
-        import time
-        start_time = time.time()
-        iteration = state.get("iteration", 0)
+        from service.workflow.workflow_store import get_workflow_store
 
-        session_logger = self._get_logger()
-        if session_logger:
-            session_logger.log_graph_node_enter(
-                node_name="agent",
-                iteration=iteration,
-                state_summary=self._get_state_summary(state),
-            )
+        store = get_workflow_store()
 
-        try:
-            messages = state.get("messages", [])
-            if not messages:
-                error_result = {
-                    "error": "No messages in state",
-                    "is_complete": True,
-                }
-                if session_logger:
-                    session_logger.log_graph_error(
-                        error_message="No messages in state",
-                        node_name="agent",
-                        iteration=iteration,
-                    )
-                return error_result
-
-            # Invoke Claude CLI
-            response = await self._model.ainvoke(messages)
-            duration_ms = int((time.time() - start_time) * 1000)
-
-            output_content = response.content if hasattr(response, "content") else str(response)
-
-            # Record turn to short-term memory
-            if self._memory_manager:
-                try:
-                    self._memory_manager.record_message("assistant", output_content)
-                    # Record user input on first iteration
-                    if iteration == 0:
-                        for msg in messages:
-                            if hasattr(msg, "type") and msg.type == "human":
-                                self._memory_manager.record_message("user", msg.content)
-                                break
-                except Exception:
-                    logger.debug("Failed to record transcript — non-critical", exc_info=True)
-
-            if session_logger:
-                session_logger.log_graph_node_exit(
-                    node_name="agent",
-                    iteration=iteration,
-                    output_preview=output_content,
-                    duration_ms=duration_ms,
-                    state_changes={"messages_added": 1, "last_output_updated": True},
+        # 1. Try explicit workflow_id
+        if self._workflow_id:
+            wf = store.load(self._workflow_id)
+            if wf:
+                logger.info(
+                    f"[{self._session_id}] Loaded workflow '{wf.name}' "
+                    f"from workflow_id={self._workflow_id}"
                 )
-
-            return {
-                "messages": [response],
-                "last_output": output_content,
-                "current_step": "agent_responded",
-                "error": None,
-            }
-
-        except Exception as e:
-            duration_ms = int((time.time() - start_time) * 1000)
-            logger.exception(f"[{self._session_id}] Error in agent node: {e}")
-
-            if session_logger:
-                session_logger.log_graph_error(
-                    error_message=str(e),
-                    node_name="agent",
-                    iteration=iteration,
-                    error_type=type(e).__name__,
-                )
-
-            return {
-                "error": str(e),
-                "is_complete": True,
-            }
-
-    async def _process_output_node(self, state: AgentState) -> Dict[str, Any]:
-        """Process output node: increment iteration & detect completion.
-
-        Reads ``last_output`` from state, runs structured signal detection,
-        and writes ``iteration``, ``completion_signal``, ``completion_detail``
-        back to state. The edge function then reads these to decide routing.
-        """
-        iteration = state.get("iteration", 0) + 1
-        max_iterations = state.get("max_iterations", self._autonomous_max_iterations)
-
-        # Track instance-level iteration counter
-        self._current_iteration = iteration
-
-        session_logger = self._get_logger()
-        if session_logger:
-            session_logger.log_graph_node_enter(
-                node_name="process_output",
-                iteration=iteration,
-                state_summary=self._get_state_summary(state),
-            )
-            session_logger.log_graph_state_update(
-                update_type="iteration_increment",
-                changes={"iteration": iteration, "max_iterations": max_iterations},
-                iteration=iteration,
+                return wf
+            logger.warning(
+                f"[{self._session_id}] workflow_id={self._workflow_id} not found "
+                f"in store, falling back to template"
             )
 
-        # Detect structured completion signal from last output
-        last_output = state.get("last_output", "")
-        signal, detail = detect_completion_signal(last_output)
-
-        updates: Dict[str, Any] = {
-            "iteration": iteration,
-            "current_step": "output_processed",
-            "completion_signal": signal.value,
-            "completion_detail": detail,
-        }
-
-        # Mark is_complete if signal says task is done/blocked/error
-        if signal in (CompletionSignal.COMPLETE, CompletionSignal.BLOCKED, CompletionSignal.ERROR):
-            updates["is_complete"] = True
-
-        return updates
-
-    def _should_continue(self, state: AgentState) -> Literal["continue", "end"]:
-        """Conditional edge: decide whether to loop or stop.
-
-        Reads state fields written by process_output_node:
-            - is_complete, error          → immediate stop
-            - completion_signal           → structured stop / continue
-            - iteration / max_iterations  → iteration cap
-
-        Returns:
-            "continue" to loop back to context_guard, "end" to finish.
-        """
-        iteration = state.get("iteration", 0)
-        max_iterations = state.get("max_iterations", self._autonomous_max_iterations)
-        session_logger = self._get_logger()
-
-        decision = "continue"
-        reason = None
-
-        if state.get("is_complete", False):
-            decision = "end"
-            reason = "is_complete flag set"
-        elif state.get("error"):
-            decision = "end"
-            reason = f"error: {str(state.get('error'))[:50]}"
-        elif not self._autonomous or max_iterations <= 1:
-            # Single execution mode (no looping)
-            decision = "end"
-            reason = "single execution mode"
-        elif iteration >= max_iterations:
-            decision = "end"
-            reason = f"max_iterations reached ({iteration}/{max_iterations})"
+        # 2. Infer from graph_name
+        if self._graph_name and 'autonomous' in self._graph_name.lower():
+            template_id = "template-autonomous"
         else:
-            # Read the structured completion signal from state
-            raw_signal = state.get("completion_signal")
-            if raw_signal:
-                try:
-                    signal = CompletionSignal(raw_signal)
-                except ValueError:
-                    signal = CompletionSignal.NONE
-            else:
-                signal = CompletionSignal.NONE
+            template_id = "template-simple"
 
-            if signal == CompletionSignal.COMPLETE:
-                decision = "end"
-                reason = "[TASK_COMPLETE] signal"
-            elif signal == CompletionSignal.BLOCKED:
-                decision = "end"
-                reason = f"[BLOCKED] {state.get('completion_detail', '')}"
-            elif signal == CompletionSignal.ERROR:
-                decision = "end"
-                reason = f"[ERROR] {state.get('completion_detail', '')}"
-            # CONTINUE / NONE → keep going
-
-        if session_logger:
-            session_logger.log_graph_edge_decision(
-                from_node="process_output",
-                decision=decision,
-                reason=reason,
-                iteration=iteration,
+        wf = store.load(template_id)
+        if wf:
+            logger.info(
+                f"[{self._session_id}] Using template '{wf.name}' ({template_id})"
             )
+            return wf
 
-        return decision
-
-    def _is_task_complete(self, output: str) -> bool:
-        """Check whether the output indicates task completion.
-
-        Thin wrapper around the centralized ``detect_completion_signal``
-        from resilience_nodes.
-        """
-        signal, _ = detect_completion_signal(output)
-        return signal in (
-            CompletionSignal.COMPLETE,
-            CompletionSignal.BLOCKED,
-            CompletionSignal.ERROR,
+        # 3. If templates are not in store, generate them on the fly
+        logger.warning(
+            f"[{self._session_id}] Template {template_id} not found in store, "
+            f"generating from factory"
         )
+        from service.workflow.templates import (
+            create_autonomous_template,
+            create_simple_template,
+        )
+
+        if template_id == "template-autonomous":
+            return create_autonomous_template()
+        else:
+            return create_simple_template()
 
     # ========================================================================
     # Execution Methods
@@ -849,10 +644,10 @@ class AgentSession:
         max_iterations: Optional[int] = None,
         **kwargs,
     ) -> str:
-        """Synchronous-style execution (returns final result).
+        """Execute the linked workflow graph and return the final result.
 
-        In autonomous mode uses the difficulty-based AutonomousGraph.
-        Otherwise runs the simple context_guard -> agent -> process_output loop.
+        All sessions use the same path: create initial AutonomousState,
+        invoke the compiled graph, extract the result.
 
         Args:
             input_text: User input text.
@@ -863,7 +658,6 @@ class AgentSession:
         Returns:
             Agent response text.
         """
-        import time
         start_time = time.time()
 
         if not self._initialized or not self._graph:
@@ -876,7 +670,7 @@ class AgentSession:
         self._current_iteration = 0
         self._execution_start_time = datetime.now()
         thread_id = thread_id or self._current_thread_id
-        effective_max_iterations = max_iterations or self._autonomous_max_iterations
+        effective_max_iterations = max_iterations or self._max_iterations
 
         session_logger = self._get_logger()
 
@@ -886,38 +680,14 @@ class AgentSession:
                 input_text=input_text,
                 thread_id=thread_id,
                 max_iterations=effective_max_iterations,
-                execution_mode="invoke_autonomous" if self._autonomous else "invoke",
+                execution_mode="invoke",
             )
 
         try:
             config = {"configurable": {"thread_id": thread_id}}
 
-            # Autonomous mode: difficulty-based AutonomousGraph
-            if self._autonomous and self._autonomous_graph:
-                result = await self._invoke_autonomous(input_text, config, **kwargs)
-                duration_ms = int((time.time() - start_time) * 1000)
-
-                final_output = result.get("final_answer", "") or result.get("answer", "")
-                has_error = bool(result.get("error"))
-
-                # Log autonomous execution completion
-                if session_logger:
-                    session_logger.log_graph_execution_complete(
-                        success=not has_error,
-                        total_iterations=result.get("metadata", {}).get("completed_todos", 0),
-                        final_output=final_output[:500] if final_output else None,
-                        total_duration_ms=duration_ms,
-                        stop_reason="completed" if not has_error else result.get("error"),
-                    )
-
-                if has_error:
-                    self._error_message = result["error"]
-                    return f"Error: {result['error']}"
-
-                return final_output
-
-            # Non-autonomous mode: simple graph
-            initial_state = make_initial_agent_state(
+            # Unified initial state — all workflows use AutonomousState
+            initial_state = make_initial_autonomous_state(
                 input_text,
                 max_iterations=effective_max_iterations,
                 **kwargs,
@@ -930,12 +700,17 @@ class AgentSession:
                 except Exception:
                     logger.debug("Failed to record user message — non-critical", exc_info=True)
 
+            # Execute the compiled graph
             result = await self._graph.ainvoke(initial_state, config)
             duration_ms = int((time.time() - start_time) * 1000)
             self._status = SessionStatus.RUNNING
 
-            # Extract results from final state
-            final_output = result.get("last_output", "")
+            # Extract results — try various output fields
+            final_output = (
+                result.get("final_answer", "")
+                or result.get("answer", "")
+                or result.get("last_output", "")
+            )
             has_error = bool(result.get("error"))
             total_iterations = result.get("iteration", 0)
 
@@ -944,9 +719,9 @@ class AgentSession:
                 session_logger.log_graph_execution_complete(
                     success=not has_error,
                     total_iterations=total_iterations,
-                    final_output=final_output,
+                    final_output=final_output[:500] if final_output else None,
                     total_duration_ms=duration_ms,
-                    stop_reason="completed" if not has_error else result.get("error")
+                    stop_reason="completed" if not has_error else result.get("error"),
                 )
 
             if has_error:
@@ -973,69 +748,6 @@ class AgentSession:
 
             raise
 
-    async def _invoke_autonomous(
-        self,
-        input_text: str,
-        config: Dict[str, Any],
-        **kwargs,
-    ) -> Dict[str, Any]:
-        """Run the autonomous (difficulty-based) graph.
-
-        Args:
-            input_text: User input.
-            config: LangGraph execution config.
-            **kwargs: Extra metadata.
-
-        Returns:
-            Final state dict with answer/final_answer.
-        """
-        if not self._autonomous_graph:
-            raise RuntimeError("AutonomousGraph not built")
-
-        # Create initial state using centralized helper
-        initial_state = make_initial_autonomous_state(
-            input_text,
-            max_iterations=self._autonomous_max_iterations,
-            **kwargs,
-        )
-
-        # Execute graph
-        result = await self._autonomous_graph.ainvoke(initial_state, config)
-
-        self._status = SessionStatus.RUNNING
-
-        return result
-
-    async def _astream_autonomous(
-        self,
-        input_text: str,
-        config: Dict[str, Any],
-        **kwargs,
-    ) -> AsyncIterator[Dict[str, Any]]:
-        """Stream the autonomous (difficulty-based) graph execution.
-
-        Args:
-            input_text: User input.
-            config: LangGraph execution config.
-            **kwargs: Extra metadata.
-
-        Yields:
-            Per-node execution results.
-        """
-        if not self._autonomous_graph:
-            raise RuntimeError("AutonomousGraph not built")
-
-        # Create initial state using centralized helper
-        initial_state = make_initial_autonomous_state(
-            input_text,
-            max_iterations=self._autonomous_max_iterations,
-            **kwargs,
-        )
-
-        # Stream graph execution
-        async for event in self._autonomous_graph.astream(initial_state, config):
-            yield event
-
     async def astream(
         self,
         input_text: str,
@@ -1043,9 +755,10 @@ class AgentSession:
         max_iterations: Optional[int] = None,
         **kwargs,
     ) -> AsyncIterator[Dict[str, Any]]:
-        """Streaming execution.
+        """Stream the linked workflow graph execution.
 
-        In autonomous mode uses the difficulty-based AutonomousGraph.
+        All sessions use the same path: create initial AutonomousState,
+        stream the compiled graph, yield per-node events.
 
         Args:
             input_text: User input text.
@@ -1069,7 +782,7 @@ class AgentSession:
         start_time = time.time()
         self._current_iteration = 0
         self._execution_start_time = start_time
-        effective_max_iterations = max_iterations or self._autonomous_max_iterations
+        effective_max_iterations = max_iterations or self._max_iterations
         event_count = 0
         last_event = None
 
@@ -1079,65 +792,67 @@ class AgentSession:
                 input_text=input_text,
                 thread_id=thread_id,
                 max_iterations=effective_max_iterations,
-                execution_mode="astream_autonomous" if self._autonomous else "astream",
+                execution_mode="astream",
             )
 
         try:
             config = {"configurable": {"thread_id": thread_id}}
 
-            # Autonomous mode: AutonomousGraph
-            if self._autonomous and self._autonomous_graph:
-                async for event in self._astream_autonomous(input_text, config, **kwargs):
-                    event_count += 1
-                    last_event = event
+            # Unified initial state — all workflows use AutonomousState
+            initial_state = make_initial_autonomous_state(
+                input_text,
+                max_iterations=effective_max_iterations,
+                **kwargs,
+            )
 
-                    # Log stream event
-                    if session_logger:
-                        event_keys = list(event.keys()) if isinstance(event, dict) else []
+            # Record user input to short-term memory
+            if self._memory_manager:
+                try:
+                    self._memory_manager.record_message("user", input_text)
+                except Exception:
+                    logger.debug("Failed to record user message — non-critical", exc_info=True)
+
+            # Stream the compiled graph
+            async for event in self._graph.astream(initial_state, config):
+                event_count += 1
+                last_event = event
+
+                # Parse per-node event info from the streamed dict.
+                # LangGraph astream yields dicts like {node_id: state_update}.
+                if session_logger and isinstance(event, dict):
+                    node_names = [k for k in event.keys() if k != "__end__"]
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+
+                    if node_names:
+                        for node_name in node_names:
+                            node_result = event[node_name]
+                            # Build concise preview of what this node produced
+                            preview_parts = []
+                            if isinstance(node_result, dict):
+                                changed = [k for k, v in node_result.items() if v is not None]
+                                if changed:
+                                    preview_parts.append(f"updated: {', '.join(changed[:5])}")
+                            session_logger.log_graph_event(
+                                event_type="node_output",
+                                message=f"NODE OUTPUT: {node_name} [{elapsed_ms}ms]"
+                                + (f" ({'; '.join(preview_parts)})" if preview_parts else ""),
+                                node_name=node_name,
+                                data={
+                                    "event_number": event_count,
+                                    "elapsed_ms": elapsed_ms,
+                                },
+                            )
+                    elif "__end__" in event:
                         session_logger.log_graph_event(
-                            event_type="stream_event",
-                            message=f"AUTONOMOUS_STREAM event_{event_count}",
+                            event_type="graph_end",
+                            message=f"GRAPH END [{elapsed_ms}ms]",
                             data={
                                 "event_number": event_count,
-                                "event_keys": event_keys,
-                                "elapsed_ms": int((time.time() - start_time) * 1000),
+                                "elapsed_ms": elapsed_ms,
                             },
                         )
 
-                    yield event
-            else:
-                # Non-autonomous mode: simple graph
-                initial_state = make_initial_agent_state(
-                    input_text,
-                    max_iterations=effective_max_iterations,
-                    **kwargs,
-                )
-
-                # Record user input to short-term memory
-                if self._memory_manager:
-                    try:
-                        self._memory_manager.record_message("user", input_text)
-                    except Exception:
-                        logger.debug("Failed to record user message — non-critical", exc_info=True)
-
-                async for event in self._graph.astream(initial_state, config):
-                    event_count += 1
-                    last_event = event
-
-                    # Log stream event
-                    if session_logger:
-                        event_keys = list(event.keys()) if isinstance(event, dict) else []
-                        session_logger.log_graph_event(
-                            event_type="stream_event",
-                            message=f"STREAM event_{event_count}",
-                            data={
-                                "event_number": event_count,
-                                "event_keys": event_keys,
-                                "elapsed_ms": int((time.time() - start_time) * 1000),
-                            },
-                        )
-
-                    yield event
+                yield event
 
             self._status = SessionStatus.RUNNING
 
@@ -1256,6 +971,7 @@ class AgentSession:
             self._model = None
 
         self._graph = None
+        self._workflow = None
         self._checkpointer = None
         self._initialized = False
         self._status = SessionStatus.STOPPED
@@ -1296,21 +1012,21 @@ class AgentSession:
             model=self._model_name,
             max_turns=self._max_turns,
             timeout=self._timeout,
-            autonomous=self._autonomous,
-            autonomous_max_iterations=self._autonomous_max_iterations,
+            max_iterations=self._max_iterations,
             storage_path=self.storage_path,
             pod_name=pod_name,
             pod_ip=pod_ip,
             role=self._role,
             manager_id=self._manager_id,
             workflow_id=self._workflow_id,
+            graph_name=self._graph_name,
         )
 
     # ========================================================================
     # Utility Methods
     # ========================================================================
 
-    def get_state(self, thread_id: Optional[str] = None) -> Optional[AgentState]:
+    def get_state(self, thread_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Get current graph state (requires checkpointing).
 
         Args:
@@ -1350,52 +1066,32 @@ class AgentSession:
             logger.warning(f"[{self._session_id}] Could not get history: {e}")
             return []
 
-    def visualize(self, autonomous: bool = True) -> Optional[bytes]:
-        """Render the graph as a PNG image.
-
-        Args:
-            autonomous: If True, visualize AutonomousGraph; else simple graph.
+    def visualize(self) -> Optional[bytes]:
+        """Render the compiled graph as a PNG image.
 
         Returns:
             PNG image bytes or None.
         """
-        graph_to_visualize = None
-
-        if autonomous and self._autonomous_graph:
-            graph_to_visualize = self._autonomous_graph
-        elif self._graph:
-            graph_to_visualize = self._graph
-
-        if not graph_to_visualize:
+        if not self._graph:
             return None
 
         try:
-            return graph_to_visualize.get_graph().draw_mermaid_png()
+            return self._graph.get_graph().draw_mermaid_png()
         except Exception as e:
             logger.warning(f"[{self._session_id}] Could not visualize graph: {e}")
             return None
 
-    def get_mermaid_diagram(self, autonomous: bool = True) -> Optional[str]:
-        """Return a Mermaid diagram string for the graph.
-
-        Args:
-            autonomous: If True, render AutonomousGraph; else simple graph.
+    def get_mermaid_diagram(self) -> Optional[str]:
+        """Return a Mermaid diagram string for the compiled graph.
 
         Returns:
             Mermaid diagram string or None.
         """
-        graph_to_visualize = None
-
-        if autonomous and self._autonomous_graph:
-            graph_to_visualize = self._autonomous_graph
-        elif self._graph:
-            graph_to_visualize = self._graph
-
-        if not graph_to_visualize:
+        if not self._graph:
             return None
 
         try:
-            return graph_to_visualize.get_graph().draw_mermaid()
+            return self._graph.get_graph().draw_mermaid()
         except Exception as e:
             logger.warning(f"[{self._session_id}] Could not generate mermaid diagram: {e}")
             return None

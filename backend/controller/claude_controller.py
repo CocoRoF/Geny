@@ -27,8 +27,6 @@ from service.claude_manager.models import (
     StorageFile,
     StorageListResponse,
     StorageFileContent,
-    AutonomousExecuteRequest,
-    AutonomousExecuteResponse,
     ManagerEvent,
     ManagerEventType,
     DelegateTaskRequest,

@@ -9,8 +9,9 @@ to the node-edge topology.
 from __future__ import annotations
 
 import asyncio
+import time
 from logging import getLogger
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -153,6 +154,13 @@ class WorkflowExecutor:
                     routing_fn = self._make_fallback_router(edges, instance_map)
 
                 edge_map = self._build_edge_map(edges, instance_map)
+
+                # Wrap routing function with edge decision logging
+                source_label = source_inst.label or source_inst.node_type
+                routing_fn = self._wrap_routing_function(
+                    routing_fn, source_label, edge_map,
+                )
+
                 graph_builder.add_conditional_edges(
                     source_id, routing_fn, edge_map
                 )
@@ -223,18 +231,140 @@ class WorkflowExecutor:
         """Create a LangGraph-compatible async node function.
 
         Wraps ``BaseNode.execute`` with the instance config and
-        shared execution context.
+        shared execution context.  Adds per-node enter/exit/error
+        logging via the session logger.
         """
         ctx = self._context
         config = dict(instance.config)
+        node_label = instance.label or instance.node_type
+        node_type = instance.node_type
+        node_id = instance.id
+        # Capture static helpers as local references for the closure
+        _state_summary = self._make_state_summary
+        _output_preview = self._make_output_preview
+        _summarize = self._summarize_changes
 
         async def _node_fn(state: AutonomousState) -> Dict[str, Any]:
-            return await base_node.execute(state, ctx, config)
+            session_logger = ctx.session_logger
+            iteration = state.get("iteration", 0)
+
+            # ── Node enter ──
+            if session_logger:
+                state_summary = _state_summary(state)
+                session_logger.log_graph_node_enter(
+                    node_name=node_label,
+                    iteration=iteration,
+                    state_summary=state_summary,
+                )
+
+            start = time.time()
+            try:
+                result = await base_node.execute(state, ctx, config)
+                duration_ms = int((time.time() - start) * 1000)
+
+                # ── Node exit ──
+                if session_logger:
+                    output_preview = _output_preview(result)
+                    state_changes = _summarize(result)
+                    session_logger.log_graph_node_exit(
+                        node_name=node_label,
+                        iteration=iteration,
+                        output_preview=output_preview,
+                        duration_ms=duration_ms,
+                        state_changes=state_changes,
+                    )
+
+                return result
+
+            except Exception as e:
+                duration_ms = int((time.time() - start) * 1000)
+                logger.error(
+                    f"[{ctx.session_id}] Node '{node_label}' ({node_type}) "
+                    f"failed after {duration_ms}ms: {e}"
+                )
+                if session_logger:
+                    session_logger.log_graph_error(
+                        error_message=str(e)[:500],
+                        node_name=node_label,
+                        iteration=iteration,
+                        error_type=type(e).__name__,
+                    )
+                raise
 
         # Give the function a useful name for debugging
-        _node_fn.__name__ = f"node_{instance.id}_{instance.node_type}"
+        _node_fn.__name__ = f"node_{node_id}_{node_type}"
         _node_fn.__qualname__ = _node_fn.__name__
         return _node_fn
+
+    def _wrap_routing_function(
+        self,
+        routing_fn: Callable,
+        source_label: str,
+        edge_map: Dict[str, str],
+    ) -> Callable:
+        """Wrap a routing function to log edge decisions."""
+        ctx = self._context
+
+        def _logged_routing(state: Dict[str, Any]) -> str:
+            decision = routing_fn(state)
+            if ctx.session_logger:
+                # Resolve the target label for logging
+                target = edge_map.get(decision, decision)
+                ctx.session_logger.log_graph_edge_decision(
+                    from_node=source_label,
+                    decision=f"{decision} → {target}",
+                    iteration=state.get("iteration", 0),
+                )
+            return decision
+
+        return _logged_routing
+
+    @staticmethod
+    def _make_state_summary(state: Dict[str, Any]) -> Dict[str, Any]:
+        """Build a compact state summary for enter-logging."""
+        return {
+            "messages_count": len(state.get("messages", [])),
+            "iteration": state.get("iteration", 0),
+            "is_complete": state.get("is_complete", False),
+            "has_error": bool(state.get("error")),
+            "difficulty": state.get("difficulty"),
+            "completion_signal": state.get("completion_signal"),
+        }
+
+    @staticmethod
+    def _make_output_preview(result: Dict[str, Any]) -> Optional[str]:
+        """Extract a short preview string from a node's output."""
+        if not result:
+            return None
+        # Try common output fields
+        for key in ("answer", "final_answer", "last_output", "direct_answer"):
+            val = result.get(key)
+            if val and isinstance(val, str):
+                return val[:200]
+        # Fallback: list the keys that were updated
+        changed_keys = [k for k in result if result[k] is not None]
+        if changed_keys:
+            return f"Updated: {', '.join(changed_keys)}"
+        return None
+
+    @staticmethod
+    def _summarize_changes(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Produce a minimal summary of state changes from a node result."""
+        if not result:
+            return None
+        summary: Dict[str, Any] = {}
+        for key, value in result.items():
+            if value is None:
+                continue
+            if isinstance(value, str):
+                summary[key] = f"{len(value)} chars" if len(value) > 50 else value
+            elif isinstance(value, list):
+                summary[key] = f"{len(value)} items"
+            elif isinstance(value, dict):
+                summary[key] = f"{{...}} ({len(value)} keys)"
+            else:
+                summary[key] = value
+        return summary if summary else None
 
     def _resolve_target(
         self,

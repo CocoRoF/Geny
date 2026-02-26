@@ -14,37 +14,24 @@ export default function CommandTab() {
 
   const [skipPermissions, setSkipPermissions] = useState(true);
 
-  const handleExecute = useCallback(async (autonomous: boolean) => {
+  const handleExecute = useCallback(async () => {
     if (!selectedSessionId || !sessionData?.input?.trim()) return;
     setIsExecuting(true);
     updateSessionData(selectedSessionId, { status: 'running', statusText: t('commandTab.statusExecuting'), output: '' });
 
     try {
-      if (autonomous) {
-        const res = await agentApi.executeAutonomous(selectedSessionId, {
-          prompt: sessionData.input,
-          skip_permissions: skipPermissions,
-        });
-        updateSessionData(selectedSessionId, {
-          output: res.final_output || res.error || t('common.noOutput'),
-          status: res.success ? 'success' : 'error',
-          statusText: res.success
-            ? `✅ ${t('commandTab.statusComplete')} (${res.total_iterations} ${t('commandTab.iterations')}, ${(res.total_duration_ms / 1000).toFixed(1)}s)`
-            : `❌ ${res.error || t('commandTab.statusFailed')}`,
-        });
-      } else {
-        const res = await agentApi.execute(selectedSessionId, {
-          prompt: sessionData.input,
-          skip_permissions: skipPermissions,
-        });
-        updateSessionData(selectedSessionId, {
-          output: res.output || res.error || t('common.noOutput'),
-          status: res.success ? 'success' : 'error',
-          statusText: res.success
-            ? `✅ ${t('commandTab.statusSuccess')}${res.duration_ms ? ` (${(res.duration_ms / 1000).toFixed(1)}s)` : ''}`
-            : `❌ ${res.error || t('commandTab.statusFailed')}`,
-        });
-      }
+      // The session's graph determines the execution path automatically
+      const res = await agentApi.execute(selectedSessionId, {
+        prompt: sessionData.input,
+        skip_permissions: skipPermissions,
+      });
+      updateSessionData(selectedSessionId, {
+        output: res.output || res.error || t('common.noOutput'),
+        status: res.success ? 'success' : 'error',
+        statusText: res.success
+          ? `✅ ${t('commandTab.statusSuccess')}${res.duration_ms ? ` (${(res.duration_ms / 1000).toFixed(1)}s)` : ''}`
+          : `❌ ${res.error || t('commandTab.statusFailed')}`,
+      });
     } catch (e: unknown) {
       updateSessionData(selectedSessionId, {
         output: e instanceof Error ? e.message : t('commandTab.requestFailed'),
@@ -59,7 +46,7 @@ export default function CommandTab() {
   const handleStop = useCallback(async () => {
     if (!selectedSessionId) return;
     try {
-      await agentApi.stopAutonomous(selectedSessionId);
+      await agentApi.stop(selectedSessionId);
       updateSessionData(selectedSessionId, { statusText: `⏹ ${t('commandTab.statusStopped')}` });
     } catch { /* ignore */ }
   }, [selectedSessionId, updateSessionData]);
@@ -96,13 +83,9 @@ export default function CommandTab() {
           </span>
           <span
             className="inline-flex items-center px-2.5 py-1 rounded-full text-[0.75rem] font-medium ml-1"
-            style={
-              session.autonomous
-                ? { background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(99, 102, 241, 0.2) 100%)', color: '#a78bfa', border: '1px solid rgba(139, 92, 246, 0.3)' }
-                : { background: 'rgba(100, 116, 139, 0.2)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }
-            }
+            style={{ background: 'rgba(100, 116, 139, 0.2)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
           >
-            {session.autonomous ? t('commandTab.autonomous') : t('commandTab.single')}
+            {session.graph_name || t('commandTab.single')}
           </span>
         </h4>
         <div className="flex gap-4 flex-wrap text-[0.8125rem] text-[var(--text-muted)]">
@@ -119,7 +102,7 @@ export default function CommandTab() {
           placeholder={t('commandTab.placeholder')}
           value={sessionData?.input || ''}
           onChange={e => updateSessionData(selectedSessionId, { input: e.target.value })}
-          onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleExecute(false); }}
+          onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleExecute(); }}
         />
         <div className="flex items-center gap-6 flex-wrap">
           <label className="flex items-center gap-2 text-[0.8125rem] text-[var(--text-secondary)] cursor-pointer">
@@ -131,20 +114,10 @@ export default function CommandTab() {
           <button
             className="py-2 px-4 bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border-none disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isExecuting || !sessionData?.input?.trim()}
-            onClick={() => handleExecute(false)}
+            onClick={() => handleExecute()}
           >
             {isExecuting ? t('commandTab.executingBtn') : t('commandTab.executeBtn')}
           </button>
-          {session.autonomous && (
-            <button
-              className="py-2 px-4 text-white text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border-none disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}
-              disabled={isExecuting || !sessionData?.input?.trim()}
-              onClick={() => handleExecute(true)}
-            >
-              {t('commandTab.autonomousBtn')}
-            </button>
-          )}
           {isExecuting && (
             <button
               className="py-2 px-4 bg-[var(--danger-color)] hover:brightness-110 text-white text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border-none"

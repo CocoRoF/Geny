@@ -637,7 +637,6 @@ def build_agent_prompt(
     session_id: Optional[str] = None,
     tools: Optional[List[str]] = None,
     mcp_servers: Optional[List[str]] = None,
-    autonomous: bool = True,
     mode: PromptMode = PromptMode.FULL,
     context_files: Optional[Dict[str, str]] = None,
     extra_system_prompt: Optional[str] = None,
@@ -657,7 +656,6 @@ def build_agent_prompt(
         session_id: Session identifier.
         tools: List of available tool names.
         mcp_servers: List of MCP server names.
-        autonomous: Whether autonomous mode is on.
         mode: Prompt detail level.
         context_files: Bootstrap file dict ``{filename: content}``.
         extra_system_prompt: Additional system prompt appended at end.
@@ -692,10 +690,9 @@ def build_agent_prompt(
         builder.add_section(SectionLibrary.datetime_info())
         builder.add_section(SectionLibrary.context_efficiency())
 
-        # Execution protocol (when autonomous)
-        if autonomous:
-            builder.add_section(ExecutionProtocol.autonomous_execution())
-            builder.add_section(ErrorRecoveryProtocol.self_recovery())
+        # Execution protocol (always included in FULL mode)
+        builder.add_section(ExecutionProtocol.autonomous_execution())
+        builder.add_section(ErrorRecoveryProtocol.self_recovery())
 
         # Completion protocol (always in FULL mode)
         builder.add_section(CompletionProtocol.completion_signals())

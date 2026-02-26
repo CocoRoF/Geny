@@ -154,21 +154,17 @@ class CreateSessionRequest(BaseModel):
     )
     max_turns: Optional[int] = Field(
         default=100,
-        description="Maximum conversation turns (need sufficient turns for autonomous mode)"
+        description="Maximum conversation turns per invocation"
     )
     timeout: Optional[float] = Field(
         default=1800.0,
         description="Default execution timeout per iteration (seconds)"
     )
 
-    # Autonomous mode settings
-    autonomous: Optional[bool] = Field(
-        default=True,
-        description="Autonomous mode - Claude performs tasks without asking questions"
-    )
-    autonomous_max_iterations: Optional[int] = Field(
+    # Graph execution settings
+    max_iterations: Optional[int] = Field(
         default=100,
-        description="Maximum iterations for autonomous self-managing loop (prevents infinite loops)"
+        description="Maximum graph iterations (prevents infinite loops)"
     )
     system_prompt: Optional[str] = Field(
         default=None,
@@ -182,7 +178,11 @@ class CreateSessionRequest(BaseModel):
     # Workflow / Graph settings
     workflow_id: Optional[str] = Field(
         default=None,
-        description="Workflow (graph) ID to use for this session. None uses built-in default/autonomous graph."
+        description="Workflow (graph) ID to use for this session."
+    )
+    graph_name: Optional[str] = Field(
+        default=None,
+        description="Human-readable name of the graph/workflow used by this session."
     )
 
     # MCP server settings
@@ -227,13 +227,9 @@ class SessionInfo(BaseModel):
         default=1800.0,
         description="Execution timeout per iteration (seconds)"
     )
-    autonomous: Optional[bool] = Field(
-        default=True,
-        description="Autonomous mode enabled"
-    )
-    autonomous_max_iterations: Optional[int] = Field(
+    max_iterations: Optional[int] = Field(
         default=100,
-        description="Maximum autonomous iterations"
+        description="Maximum graph iterations"
     )
 
     # Session storage path
@@ -267,6 +263,10 @@ class SessionInfo(BaseModel):
         default=None,
         description="Workflow (graph) ID used by this session"
     )
+    graph_name: Optional[str] = Field(
+        default=None,
+        description="Human-readable name of the graph/workflow used by this session"
+    )
 
 
 class ExecuteRequest(BaseModel):
@@ -274,7 +274,7 @@ class ExecuteRequest(BaseModel):
     Claude execution request.
 
     Sends a prompt to Claude and executes it in the session.
-    When autonomous mode is enabled, Claude independently completes tasks.
+    The session's graph drives the execution flow.
     """
     prompt: str = Field(
         ...,
@@ -286,7 +286,7 @@ class ExecuteRequest(BaseModel):
     )
     skip_permissions: Optional[bool] = Field(
         default=True,
-        description="Skip permission prompts (required for autonomous mode)"
+        description="Skip permission prompts"
     )
     system_prompt: Optional[str] = Field(
         default=None,
@@ -346,22 +346,22 @@ class ExecuteResponse(BaseModel):
         default=None,
         description="Hint about next step (extracted from [CONTINUE: ...] pattern)"
     )
-    # Autonomous mode fields
+    # Execution tracking fields
     is_task_complete: bool = Field(
         default=False,
         description="Whether the task is complete (detected from [TASK_COMPLETE] pattern)"
     )
     iteration_count: Optional[int] = Field(
         default=None,
-        description="Current iteration count in autonomous mode"
+        description="Current iteration count"
     )
     total_iterations: Optional[int] = Field(
         default=None,
-        description="Total iterations completed in autonomous execution"
+        description="Total iterations completed"
     )
     original_request: Optional[str] = Field(
         default=None,
-        description="Original user request (for autonomous mode tracking)"
+        description="Original user request (for tracking)"
     )
 
 
@@ -389,82 +389,6 @@ class StorageFileContent(BaseModel):
     size: int
     encoding: str = "utf-8"
 
-
-class AutonomousExecuteRequest(BaseModel):
-    """
-    Autonomous execution request.
-
-    Starts a self-managing autonomous execution loop.
-    Claude will continue working on the task until it's complete,
-    periodically reminding itself of the original request.
-    """
-    prompt: str = Field(
-        ...,
-        description="Initial user request to complete autonomously"
-    )
-    timeout_per_iteration: Optional[float] = Field(
-        default=None,
-        description="Timeout for each iteration (seconds) - None uses session default (1800s)"
-    )
-    max_iterations: Optional[int] = Field(
-        default=None,
-        description="Maximum number of self-managing iterations - None uses session default (100)"
-    )
-    skip_permissions: Optional[bool] = Field(
-        default=True,
-        description="Skip permission prompts (required for autonomous mode)"
-    )
-    system_prompt: Optional[str] = Field(
-        default=None,
-        description="Additional system prompt for this execution"
-    )
-    max_turns: Optional[int] = Field(
-        default=None,
-        description="Maximum turns per iteration (None uses session setting)"
-    )
-
-
-class AutonomousExecuteResponse(BaseModel):
-    """
-    Autonomous execution response.
-
-    Contains the final result after all autonomous iterations complete.
-    """
-    success: bool
-    session_id: str
-    is_complete: bool = Field(
-        description="Whether the task was completed successfully"
-    )
-    total_iterations: int = Field(
-        description="Total number of iterations executed"
-    )
-    original_request: str = Field(
-        description="The original user request"
-    )
-    final_output: Optional[str] = Field(
-        default=None,
-        description="Output from the final iteration"
-    )
-    all_outputs: Optional[List[str]] = Field(
-        default=None,
-        description="Outputs from all iterations (if requested)"
-    )
-    error: Optional[str] = Field(
-        default=None,
-        description="Error message if execution failed"
-    )
-    total_duration_ms: Optional[int] = Field(
-        default=None,
-        description="Total execution time across all iterations (milliseconds)"
-    )
-    total_cost_usd: Optional[float] = Field(
-        default=None,
-        description="Total API cost across all iterations (USD)"
-    )
-    stop_reason: str = Field(
-        default="unknown",
-        description="Reason for stopping: 'complete', 'max_iterations', 'error', 'user_stop'"
-    )
 
 # =============================================================================
 # Manager/Worker Hierarchical Management Models

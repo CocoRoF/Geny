@@ -19,8 +19,6 @@ from service.claude_manager.models import (
     SessionRole,
     ExecuteRequest,
     ExecuteResponse,
-    AutonomousExecuteRequest,
-    AutonomousExecuteResponse,
     DelegateTaskRequest,
     DelegateTaskResponse,
     StorageFile,
@@ -80,7 +78,7 @@ class AgentInvokeRequest(BaseModel):
     )
     max_iterations: Optional[int] = Field(
         default=None,
-        description="Maximum iterations for autonomous execution"
+        description="Maximum graph iterations"
     )
 
 
@@ -288,10 +286,11 @@ async def restore_session(
             model=params.get("model"),
             max_turns=params.get("max_turns", 100),
             timeout=params.get("timeout", 1800),
-            autonomous=params.get("autonomous", True),
-            autonomous_max_iterations=params.get("autonomous_max_iterations", 100),
+            max_iterations=params.get("max_iterations", params.get("autonomous_max_iterations", 100)),
             role=SessionRole(params["role"]) if params.get("role") else SessionRole.WORKER,
             manager_id=params.get("manager_id"),
+            graph_name=params.get("graph_name"),
+            workflow_id=params.get("workflow_id"),
         )
 
         # Reuse the SAME session_id → preserves storage_path
@@ -392,11 +391,13 @@ async def execute_agent_prompt(
     request: ExecuteRequest = ...
 ):
     """
-    Execute prompt with AgentSession (기존 방식 호환).
+    Execute prompt with AgentSession via the compiled StateGraph.
 
-    기존 claude_controller의 execute와 동일한 인터페이스를 제공합니다.
-    내부적으로 ClaudeProcess.execute()를 직접 호출합니다.
+    The session's graph type determines the execution flow automatically.
     """
+    import time
+    start_time = time.time()
+
     agent = agent_manager.get_agent(session_id)
     if not agent:
         raise HTTPException(status_code=404, detail=f"AgentSession not found: {session_id}")
@@ -420,39 +421,41 @@ async def execute_agent_prompt(
                 max_turns=request.max_turns,
             )
 
-        # 기존 방식으로 실행 (ClaudeProcess.execute 호출)
-        result = await agent.execute(
-            prompt=request.prompt,
-            timeout=request.timeout or agent.timeout,
-            skip_permissions=request.skip_permissions,
+        # Execute through the compiled StateGraph (invoke)
+        # Routes to the appropriate graph based on graph_name
+        result_text = await agent.invoke(
+            input_text=request.prompt,
         )
+
+        duration_ms = int((time.time() - start_time) * 1000)
 
         # 응답 로깅
         if session_logger:
             session_logger.log_response(
-                success=result.get("success", False),
-                output=result.get("output"),
-                error=result.get("error"),
-                duration_ms=result.get("duration_ms"),
-                cost_usd=result.get("cost_usd"),
+                success=True,
+                output=result_text,
+                error=None,
+                duration_ms=duration_ms,
             )
 
         return ExecuteResponse(
-            success=result.get("success", False),
+            success=True,
             session_id=session_id,
-            output=result.get("output"),
-            error=result.get("error"),
-            cost_usd=result.get("cost_usd"),
-            duration_ms=result.get("duration_ms"),
+            output=result_text,
+            error=None,
+            cost_usd=None,
+            duration_ms=duration_ms,
         )
 
     except Exception as e:
+        duration_ms = int((time.time() - start_time) * 1000)
         logger.error(f"❌ Agent execute failed: {e}", exc_info=True)
 
         if session_logger:
             session_logger.log_response(
                 success=False,
                 error=str(e),
+                duration_ms=duration_ms,
             )
 
         raise HTTPException(status_code=500, detail=str(e))
@@ -583,191 +586,28 @@ async def get_agent_workers(
 
 
 # ============================================================================
-# Autonomous Execution API (NEW: 난이도 기반 AutonomousGraph 사용)
+# Stop Execution API
 # ============================================================================
 
 
-@router.post("/{session_id}/execute/autonomous")
-async def execute_autonomous(
-    session_id: str = Path(..., description="Session ID"),
-    request: AutonomousExecuteRequest = ...
-):
-    """
-    Execute a task autonomously using the new difficulty-based AutonomousGraph.
-
-    난이도 기반 자율 실행:
-    - EASY: 바로 답변
-    - MEDIUM: 답변 + 검토
-    - HARD: TODO 생성 → 개별 실행 → 검토 → 최종 답변
-    """
-    import time
-    start_time = time.time()
-
-    agent = agent_manager.get_agent(session_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail=f"AgentSession not found: {session_id}")
-
-    if not agent.is_initialized:
-        raise HTTPException(
-            status_code=400,
-            detail="AgentSession is not initialized"
-        )
-
-    session_logger = get_session_logger(session_id, create_if_missing=False)
-    all_outputs = []
-    node_count = 0
-
-    try:
-        if session_logger:
-            session_logger.log_command(
-                prompt=f"[AUTONOMOUS] {request.prompt}",
-                timeout=request.timeout_per_iteration,
-                system_prompt=request.system_prompt,
-                max_turns=request.max_turns
-            )
-
-        logger.info(f"[{session_id}] 🚀 Starting autonomous execution with AutonomousGraph...")
-
-        # 스트리밍으로 실행하여 각 노드 이벤트를 로깅
-        final_result = None
-        async for event in agent.astream(
-            input_text=request.prompt,
-            max_iterations=request.max_iterations or agent.autonomous_max_iterations,
-        ):
-            node_count += 1
-
-            # 이벤트에서 노드 정보 추출 및 로깅
-            if isinstance(event, dict):
-                for node_name, node_result in event.items():
-                    if node_name.startswith("__"):
-                        continue
-
-                    # 노드 결과에서 출력 추출
-                    if isinstance(node_result, dict):
-                        output = (
-                            node_result.get("final_answer") or
-                            node_result.get("answer") or
-                            node_result.get("last_output") or
-                            node_result.get("review_feedback")
-                        )
-                        if output:
-                            all_outputs.append(f"[{node_name}] {output[:500]}")
-
-                        # 최종 결과 저장
-                        if node_result.get("is_complete") or node_result.get("final_answer"):
-                            final_result = node_result
-
-                    logger.debug(f"[{session_id}] Node: {node_name}")
-
-        # 최종 결과 추출
-        duration_ms = int((time.time() - start_time) * 1000)
-
-        if final_result:
-            final_output = (
-                final_result.get("final_answer") or
-                final_result.get("answer") or
-                final_result.get("last_output") or
-                ""
-            )
-            is_complete = final_result.get("is_complete", True)
-            error = final_result.get("error")
-            difficulty = final_result.get("difficulty")
-            stop_reason = f"completed ({difficulty})" if not error else error
-        else:
-            final_output = all_outputs[-1] if all_outputs else "No output"
-            is_complete = True
-            error = None
-            stop_reason = "completed"
-
-        success = error is None
-
-        if session_logger:
-            session_logger.log_response(
-                success=success,
-                output=f"[Autonomous: {node_count} nodes] {final_output[:500] if final_output else 'No output'}",
-                error=error,
-                duration_ms=duration_ms
-            )
-
-        logger.info(f"[{session_id}] ✅ Autonomous execution completed: {stop_reason}")
-
-        return AutonomousExecuteResponse(
-            success=success,
-            session_id=session_id,
-            is_complete=is_complete,
-            total_iterations=node_count,
-            original_request=request.prompt,
-            final_output=final_output,
-            all_outputs=all_outputs if all_outputs else None,
-            error=error,
-            total_duration_ms=duration_ms,
-            stop_reason=stop_reason
-        )
-
-    except Exception as e:
-        duration_ms = int((time.time() - start_time) * 1000)
-        logger.error(f"❌ Autonomous execution failed: {e}", exc_info=True)
-        if session_logger:
-            session_logger.error(f"Autonomous execution failed: {str(e)}")
-
-        return AutonomousExecuteResponse(
-            success=False,
-            session_id=session_id,
-            is_complete=False,
-            total_iterations=node_count,
-            original_request=request.prompt,
-            final_output=all_outputs[-1] if all_outputs else None,
-            all_outputs=all_outputs if all_outputs else None,
-            error=str(e),
-            total_duration_ms=duration_ms,
-            stop_reason=f"error: {type(e).__name__}"
-        )
-
-
-@router.post("/{session_id}/execute/autonomous/stop")
-async def stop_autonomous_execution(
+@router.post("/{session_id}/stop")
+async def stop_execution(
     session_id: str = Path(..., description="Session ID")
 ):
     """
-    Stop the autonomous execution loop.
+    Stop the current execution for a session.
 
-    Note: 새로운 AutonomousGraph는 동기 실행이므로 중간 중단이 제한적입니다.
-    실행 중인 요청을 취소하려면 HTTP 요청 자체를 취소하세요.
+    Graph execution is synchronous — cancel the HTTP request to stop.
+    This endpoint marks the intent to stop.
     """
     agent = agent_manager.get_agent(session_id)
     if not agent:
         raise HTTPException(status_code=404, detail=f"AgentSession not found: {session_id}")
 
-    # AutonomousGraph는 동기 실행이므로 중단 불가능
-    logger.info(f"[{session_id}] ℹ️ AutonomousGraph uses synchronous execution - cancel HTTP request to stop")
+    logger.info(f"[{session_id}] Stop requested — graph execution is synchronous, cancel the HTTP request")
     return {
         "success": True,
-        "message": "AutonomousGraph executes synchronously. Cancel the HTTP request to stop execution.",
-        "graph_type": "autonomous_graph" if agent.autonomous else "simple"
-    }
-
-
-@router.get("/{session_id}/execute/autonomous/status")
-async def get_autonomous_status(
-    session_id: str = Path(..., description="Session ID")
-):
-    """
-    Get the current autonomous execution status.
-
-    AutonomousGraph는 동기 실행이므로 실행 중일 때는
-    HTTP 요청이 블로킹되어 이 엔드포인트에 접근할 수 없습니다.
-    """
-    agent = agent_manager.get_agent(session_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail=f"AgentSession not found: {session_id}")
-
-    return {
-        "session_id": session_id,
-        "is_running": False,  # 동기 실행이므로 이 엔드포인트 호출 시점에는 실행 중이 아님
-        "max_iterations": agent.autonomous_max_iterations,
-        "graph_type": "autonomous_graph" if agent.autonomous else "simple",
-        "mode": "difficulty_based",  # 난이도 기반 그래프
-        "paths": ["easy (direct_answer)", "medium (answer + review)", "hard (todos + review + final)"]
+        "message": "Graph executes synchronously. Cancel the HTTP request to stop execution.",
     }
 
 
@@ -889,10 +729,9 @@ async def delegate_task(
         worker_process.current_task = request.prompt[:100]
         worker_process.last_activity = datetime.now()
 
-        # 새로운 AutonomousGraph 기반 실행 (autonomous/non-autonomous 모두 지원)
+        # Execute through the worker's graph
         output = await worker.invoke(
             input_text=request.prompt,
-            max_iterations=worker.autonomous_max_iterations if worker.autonomous else 1,
         )
         success = bool(output and not output.startswith("Error:"))
 
@@ -1055,388 +894,75 @@ class GraphStructure(BaseModel):
     edges: list[GraphEdgeInfo] = []
 
 
-def _build_simple_graph_structure(session_id: str, session_name: str) -> GraphStructure:
-    """Build the simple (non-autonomous) graph structure for visualization."""
-    nodes = [
-        GraphNodeInfo(
-            id="__start__", label="START", type="start",
-            description="Entry point of the graph.",
-        ),
-        GraphNodeInfo(
-            id="context_guard", label="Context Guard", type="node",
-            description=(
-                "Checks the context window budget. "
-                "If token count exceeds the warn/block threshold, "
-                "auto-compacts messages to stay within limits."
-            ),
-            metadata={
-                "warn_ratio": 0.75,
-                "block_ratio": 0.90,
-                "auto_compact_keep": 20,
-            },
-        ),
-        GraphNodeInfo(
-            id="agent", label="Agent", type="node",
-            description=(
-                "Core agent node — invokes the Claude CLI model with the "
-                "current message history, records the response to state, "
-                "and updates short-term memory."
-            ),
-        ),
-        GraphNodeInfo(
-            id="process_output", label="Process Output", type="node",
-            description=(
-                "Increments the iteration counter and inspects the last "
-                "response for a completion signal (e.g. TASK_COMPLETE). "
-                "Decides whether to continue or end."
-            ),
-            metadata={
-                "signals": ["TASK_COMPLETE", "DONE", "FINISHED"],
-            },
-        ),
-        GraphNodeInfo(
-            id="__end__", label="END", type="end",
-            description="Terminal state — execution is complete.",
-        ),
-    ]
-    edges = [
-        GraphEdgeInfo(source="__start__", target="context_guard", label=""),
-        GraphEdgeInfo(source="context_guard", target="agent", label=""),
-        GraphEdgeInfo(source="agent", target="process_output", label=""),
-        GraphEdgeInfo(
-            source="process_output", target="context_guard",
-            label="continue", type="conditional",
-            condition_map={"continue": "context_guard", "end": "__end__"},
-        ),
-        GraphEdgeInfo(
-            source="process_output", target="__end__",
-            label="end", type="conditional",
-            condition_map={"continue": "context_guard", "end": "__end__"},
-        ),
-    ]
-    return GraphStructure(
-        session_id=session_id,
-        session_name=session_name,
-        graph_type="simple",
-        nodes=nodes,
-        edges=edges,
-    )
+def _build_graph_structure_from_workflow(
+    session_id: str,
+    session_name: str,
+    workflow: "WorkflowDefinition",
+) -> GraphStructure:
+    """Build a GraphStructure from a WorkflowDefinition for visualization.
 
-
-def _build_autonomous_graph_structure(session_id: str, session_name: str) -> GraphStructure:
-    """Build the enhanced autonomous graph structure for visualization.
-
-    Reflects the full 28-node resilience-enhanced topology with
-    memory_inject, context guards, post-model processors, and iteration gates.
+    Converts the workflow's nodes and edges into the GraphStructure format
+    used by the frontend graph viewer.
     """
-    from service.prompt.sections import AutonomousPrompts
+    nodes = []
+    edges = []
 
-    nodes = [
-        GraphNodeInfo(
-            id="__start__", label="START", type="start",
-            description="Entry point of the autonomous graph.",
-        ),
-        # -- Common entry --
-        GraphNodeInfo(
-            id="memory_inject", label="Memory Inject", type="resilience",
-            description=(
-                "Loads relevant long-term and short-term memory into state. "
-                "Records user input to transcript."
-            ),
-            metadata={"concern": "memory"},
-        ),
-        GraphNodeInfo(
-            id="guard_classify", label="Guard: Classify", type="resilience",
-            description="Checks context budget before difficulty classification.",
-            metadata={"concern": "context_guard"},
-        ),
-        GraphNodeInfo(
-            id="classify_difficulty", label="Classify Difficulty", type="node",
-            description=(
-                "Analyzes the input task and classifies it as easy, medium, or hard. "
-                "Routes to the appropriate execution path."
-            ),
-            prompt_template=AutonomousPrompts.classify_difficulty(),
-            metadata={"outputs": ["easy", "medium", "hard"]},
-        ),
-        GraphNodeInfo(
-            id="post_classify", label="Post: Classify", type="resilience",
-            description="Increments iteration counter and records transcript after classification.",
-            metadata={"concern": "post_model"},
-        ),
-        # -- Easy path --
-        GraphNodeInfo(
-            id="guard_direct", label="Guard: Direct", type="resilience",
-            description="Checks context budget before direct answer.",
-            metadata={"concern": "context_guard", "path": "easy"},
-        ),
-        GraphNodeInfo(
-            id="direct_answer", label="Direct Answer", type="node",
-            description=(
-                "Handles easy tasks — provides a direct answer in a single "
-                "model call without review or planning."
-            ),
-            metadata={"path": "easy"},
-        ),
-        GraphNodeInfo(
-            id="post_direct", label="Post: Direct", type="resilience",
-            description="Completion signal detection and transcript recording for direct answer.",
-            metadata={"concern": "post_model", "path": "easy"},
-        ),
-        # -- Medium path --
-        GraphNodeInfo(
-            id="guard_answer", label="Guard: Answer", type="resilience",
-            description="Checks context budget before answer generation.",
-            metadata={"concern": "context_guard", "path": "medium"},
-        ),
-        GraphNodeInfo(
-            id="answer", label="Answer", type="node",
-            description=(
-                "Generates an answer for medium-complexity tasks. "
-                "Incorporates review feedback on retries."
-            ),
-            metadata={"path": "medium"},
-        ),
-        GraphNodeInfo(
-            id="post_answer", label="Post: Answer", type="resilience",
-            description="Iteration increment and transcript recording after answer generation.",
-            metadata={"concern": "post_model", "path": "medium"},
-        ),
-        GraphNodeInfo(
-            id="guard_review", label="Guard: Review", type="resilience",
-            description="Checks context budget before quality review.",
-            metadata={"concern": "context_guard", "path": "medium"},
-        ),
-        GraphNodeInfo(
-            id="review", label="Review", type="node",
-            description=(
-                "Quality reviewer — evaluates the answer for accuracy and "
-                "completeness. Produces VERDICT: approved or rejected."
-            ),
-            prompt_template=AutonomousPrompts.review(),
-            metadata={"path": "medium", "max_retries": 3},
-        ),
-        GraphNodeInfo(
-            id="post_review", label="Post: Review", type="resilience",
-            description="Completion signal detection and transcript recording after review.",
-            metadata={"concern": "post_model", "path": "medium"},
-        ),
-        GraphNodeInfo(
-            id="iter_gate_medium", label="Gate: Medium", type="resilience",
-            description=(
-                "Iteration gate for medium retry loop. Checks global iteration limit, "
-                "context budget, and completion signals before allowing retry."
-            ),
-            metadata={"concern": "iteration_gate", "path": "medium"},
-        ),
-        # -- Hard path --
-        GraphNodeInfo(
-            id="guard_create_todos", label="Guard: Todos", type="resilience",
-            description="Checks context budget before TODO creation.",
-            metadata={"concern": "context_guard", "path": "hard"},
-        ),
-        GraphNodeInfo(
-            id="create_todos", label="Create TODOs", type="node",
-            description=(
-                "Task planner — decomposes a complex task into a structured "
-                "JSON list of TODO items. Capped at 20 items."
-            ),
-            prompt_template=AutonomousPrompts.create_todos(),
-            metadata={"path": "hard", "max_todos": 20},
-        ),
-        GraphNodeInfo(
-            id="post_create_todos", label="Post: Todos", type="resilience",
-            description="Iteration increment and transcript recording after TODO creation.",
-            metadata={"concern": "post_model", "path": "hard"},
-        ),
-        GraphNodeInfo(
-            id="guard_execute", label="Guard: Execute", type="resilience",
-            description="Checks context budget before TODO execution.",
-            metadata={"concern": "context_guard", "path": "hard"},
-        ),
-        GraphNodeInfo(
-            id="execute_todo", label="Execute TODO", type="node",
-            description=(
-                "Executes a single TODO item from the plan. Uses budget-aware "
-                "compaction for previous results."
-            ),
-            prompt_template=AutonomousPrompts.execute_todo(),
-            metadata={"path": "hard"},
-        ),
-        GraphNodeInfo(
-            id="post_execute", label="Post: Execute", type="resilience",
-            description="Completion signal detection and transcript recording after TODO execution.",
-            metadata={"concern": "post_model", "path": "hard"},
-        ),
-        GraphNodeInfo(
-            id="check_progress", label="Check Progress", type="node",
-            description=(
-                "Checks TODO completion progress — completed, failed, remaining counts."
-            ),
-            metadata={"path": "hard", "outputs": ["continue", "complete"]},
-        ),
-        GraphNodeInfo(
-            id="iter_gate_hard", label="Gate: Hard", type="resilience",
-            description=(
-                "Iteration gate for hard TODO loop. Checks global iteration limit, "
-                "context budget, and completion signals before next TODO."
-            ),
-            metadata={"concern": "iteration_gate", "path": "hard"},
-        ),
-        GraphNodeInfo(
-            id="guard_final_review", label="Guard: Final Review", type="resilience",
-            description="Checks context budget before final review.",
-            metadata={"concern": "context_guard", "path": "hard"},
-        ),
-        GraphNodeInfo(
-            id="final_review", label="Final Review", type="node",
-            description=(
-                "Conducts a comprehensive review of all completed TODO items "
-                "with budget-aware result compaction."
-            ),
-            prompt_template=AutonomousPrompts.final_review(),
-            metadata={"path": "hard"},
-        ),
-        GraphNodeInfo(
-            id="post_final_review", label="Post: Final Review", type="resilience",
-            description="Completion signal detection and transcript recording after final review.",
-            metadata={"concern": "post_model", "path": "hard"},
-        ),
-        GraphNodeInfo(
-            id="guard_final_answer", label="Guard: Final Answer", type="resilience",
-            description="Checks context budget before final answer synthesis.",
-            metadata={"concern": "context_guard", "path": "hard"},
-        ),
-        GraphNodeInfo(
-            id="final_answer", label="Final Answer", type="node",
-            description=(
-                "Synthesizes all completed work and review feedback into "
-                "a final, polished, comprehensive answer."
-            ),
-            prompt_template=AutonomousPrompts.final_answer(),
-            metadata={"path": "hard"},
-        ),
-        GraphNodeInfo(
-            id="post_final_answer", label="Post: Final Answer", type="resilience",
-            description="Completion signal detection and transcript recording for final answer.",
-            metadata={"concern": "post_model", "path": "hard"},
-        ),
-        GraphNodeInfo(
-            id="__end__", label="END", type="end",
-            description="Terminal state — autonomous execution is complete.",
-        ),
-    ]
+    for node in workflow.nodes:
+        node_type = "node"
+        if node.node_type == "start":
+            node_type = "start"
+        elif node.node_type == "end":
+            node_type = "end"
+        elif node.node_type in ("context_guard", "post_model", "iteration_gate", "memory_inject"):
+            node_type = "resilience"
 
-    edges = [
-        # -- Common entry --
-        GraphEdgeInfo(source="__start__", target="memory_inject", label=""),
-        GraphEdgeInfo(source="memory_inject", target="guard_classify", label=""),
-        GraphEdgeInfo(source="guard_classify", target="classify_difficulty", label=""),
-        GraphEdgeInfo(source="classify_difficulty", target="post_classify", label=""),
+        nodes.append(GraphNodeInfo(
+            id=node.id,
+            label=node.label,
+            type=node_type,
+            description=f"{node.node_type} node",
+            metadata=dict(node.config) if node.config else {},
+        ))
 
-        # post_classify → route by difficulty
-        GraphEdgeInfo(
-            source="post_classify", target="guard_direct",
-            label="easy", type="conditional",
-            condition_map={"easy": "guard_direct", "medium": "guard_answer", "hard": "guard_create_todos", "end": "__end__"},
-        ),
-        GraphEdgeInfo(
-            source="post_classify", target="guard_answer",
-            label="medium", type="conditional",
-            condition_map={"easy": "guard_direct", "medium": "guard_answer", "hard": "guard_create_todos", "end": "__end__"},
-        ),
-        GraphEdgeInfo(
-            source="post_classify", target="guard_create_todos",
-            label="hard", type="conditional",
-            condition_map={"easy": "guard_direct", "medium": "guard_answer", "hard": "guard_create_todos", "end": "__end__"},
-        ),
-        GraphEdgeInfo(
-            source="post_classify", target="__end__",
-            label="end", type="conditional",
-            condition_map={"easy": "guard_direct", "medium": "guard_answer", "hard": "guard_create_todos", "end": "__end__"},
-        ),
+    # Group edges by source to detect conditional routing
+    from collections import defaultdict
+    edges_by_source = defaultdict(list)
+    for edge in workflow.edges:
+        edges_by_source[edge.source].append(edge)
 
-        # -- Easy path --
-        GraphEdgeInfo(source="guard_direct", target="direct_answer", label=""),
-        GraphEdgeInfo(source="direct_answer", target="post_direct", label=""),
-        GraphEdgeInfo(source="post_direct", target="__end__", label=""),
+    for source_id, source_edges in edges_by_source.items():
+        targets = {e.target for e in source_edges}
+        is_conditional = len(targets) > 1
 
-        # -- Medium path --
-        GraphEdgeInfo(source="guard_answer", target="answer", label=""),
-        GraphEdgeInfo(source="answer", target="post_answer", label=""),
-        GraphEdgeInfo(source="post_answer", target="guard_review", label=""),
-        GraphEdgeInfo(source="guard_review", target="review", label=""),
-        GraphEdgeInfo(source="review", target="post_review", label=""),
+        if is_conditional:
+            # Build condition map for conditional edges
+            condition_map = {}
+            for e in source_edges:
+                port = e.source_port or "default"
+                condition_map[port] = e.target
 
-        # post_review → route after review
-        GraphEdgeInfo(
-            source="post_review", target="__end__",
-            label="approved", type="conditional",
-            condition_map={"approved": "__end__", "retry": "iter_gate_medium", "end": "__end__"},
-        ),
-        GraphEdgeInfo(
-            source="post_review", target="iter_gate_medium",
-            label="retry", type="conditional",
-            condition_map={"approved": "__end__", "retry": "iter_gate_medium", "end": "__end__"},
-        ),
-
-        # iter_gate_medium → route
-        GraphEdgeInfo(
-            source="iter_gate_medium", target="guard_answer",
-            label="continue", type="conditional",
-            condition_map={"continue": "guard_answer", "stop": "__end__"},
-        ),
-        GraphEdgeInfo(
-            source="iter_gate_medium", target="__end__",
-            label="stop", type="conditional",
-            condition_map={"continue": "guard_answer", "stop": "__end__"},
-        ),
-
-        # -- Hard path --
-        GraphEdgeInfo(source="guard_create_todos", target="create_todos", label=""),
-        GraphEdgeInfo(source="create_todos", target="post_create_todos", label=""),
-        GraphEdgeInfo(source="post_create_todos", target="guard_execute", label=""),
-        GraphEdgeInfo(source="guard_execute", target="execute_todo", label=""),
-        GraphEdgeInfo(source="execute_todo", target="post_execute", label=""),
-        GraphEdgeInfo(source="post_execute", target="check_progress", label=""),
-
-        # check_progress → route after progress
-        GraphEdgeInfo(
-            source="check_progress", target="iter_gate_hard",
-            label="continue", type="conditional",
-            condition_map={"continue": "iter_gate_hard", "complete": "guard_final_review"},
-        ),
-        GraphEdgeInfo(
-            source="check_progress", target="guard_final_review",
-            label="complete", type="conditional",
-            condition_map={"continue": "iter_gate_hard", "complete": "guard_final_review"},
-        ),
-
-        # iter_gate_hard → route
-        GraphEdgeInfo(
-            source="iter_gate_hard", target="guard_execute",
-            label="continue", type="conditional",
-            condition_map={"continue": "guard_execute", "stop": "guard_final_review"},
-        ),
-        GraphEdgeInfo(
-            source="iter_gate_hard", target="guard_final_review",
-            label="stop", type="conditional",
-            condition_map={"continue": "guard_execute", "stop": "guard_final_review"},
-        ),
-
-        # Final review/answer chain
-        GraphEdgeInfo(source="guard_final_review", target="final_review", label=""),
-        GraphEdgeInfo(source="final_review", target="post_final_review", label=""),
-        GraphEdgeInfo(source="post_final_review", target="guard_final_answer", label=""),
-        GraphEdgeInfo(source="guard_final_answer", target="final_answer", label=""),
-        GraphEdgeInfo(source="final_answer", target="post_final_answer", label=""),
-        GraphEdgeInfo(source="post_final_answer", target="__end__", label=""),
-    ]
+            for e in source_edges:
+                port = e.source_port or "default"
+                edges.append(GraphEdgeInfo(
+                    source=e.source,
+                    target=e.target,
+                    label=e.label or port,
+                    type="conditional",
+                    condition_map=condition_map,
+                ))
+        else:
+            for e in source_edges:
+                edges.append(GraphEdgeInfo(
+                    source=e.source,
+                    target=e.target,
+                    label=e.label or "",
+                    type="edge",
+                ))
 
     return GraphStructure(
         session_id=session_id,
         session_name=session_name,
-        graph_type="autonomous",
+        graph_type=workflow.template_name or "custom",
         nodes=nodes,
         edges=edges,
     )
@@ -1449,26 +975,78 @@ async def get_session_graph(
     """
     Get the LangGraph graph structure for a session.
 
-    Returns all nodes, edges, conditional edges, prompt templates,
-    and metadata for complete graph visualization.
+    Returns all nodes, edges, conditional edges, and metadata
+    for complete graph visualization. Uses the session's linked
+    WorkflowDefinition instead of hardcoded structures.
     """
+    from service.workflow.workflow_store import get_workflow_store
+
     agent: Optional[AgentSession] = agent_manager.get_agent(session_id)
     if not agent:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
     session_name = agent.session_name or session_id[:8]
-    is_autonomous = agent.autonomous
 
-    if is_autonomous:
-        graph = _build_autonomous_graph_structure(session_id, session_name)
-        # Also include the inner simple graph as metadata
-        simple = _build_simple_graph_structure(session_id, session_name)
-        graph.nodes[0].metadata["inner_graph"] = {
-            "description": "The inner simple graph runs inside each autonomous node that invokes the model.",
-            "nodes": [n.model_dump() for n in simple.nodes],
-            "edges": [e.model_dump() for e in simple.edges],
-        }
-    else:
-        graph = _build_simple_graph_structure(session_id, session_name)
+    # Use the linked workflow from the agent session
+    workflow = agent.workflow
+    if not workflow:
+        # Fallback: try to load from workflow_id or template
+        store = get_workflow_store()
+        workflow_id = getattr(agent, '_workflow_id', None)
+        if workflow_id:
+            workflow = store.load(workflow_id)
+        if not workflow:
+            template_id = "template-autonomous" if agent.autonomous else "template-simple"
+            workflow = store.load(template_id)
+        if not workflow:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No workflow definition found for session {session_id}",
+            )
 
-    return graph
+    return _build_graph_structure_from_workflow(session_id, session_name, workflow)
+
+
+@router.get("/{session_id}/workflow")
+async def get_session_workflow(
+    session_id: str = Path(..., description="Session ID"),
+):
+    """
+    Get the workflow definition associated with a session.
+
+    Returns the raw WorkflowDefinition (nodes, edges, positions)
+    so the frontend can render it with the same ReactFlow-based
+    editor used in the Workflow tab.
+
+    Uses the session's linked WorkflowDefinition directly,
+    falling back to store lookup if needed.
+    """
+    from service.workflow.workflow_store import get_workflow_store
+
+    agent: Optional[AgentSession] = agent_manager.get_agent(session_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    # 1. Use the linked workflow from the agent session
+    if agent.workflow:
+        return agent.workflow.model_dump()
+
+    # 2. Fallback: try workflow_id from store
+    store = get_workflow_store()
+    workflow_id = getattr(agent, '_workflow_id', None)
+    if workflow_id:
+        wf = store.load(workflow_id)
+        if wf:
+            return wf.model_dump()
+
+    # 3. Fall back to built-in template based on graph_name
+    template_id = "template-autonomous" if agent.autonomous else "template-simple"
+    wf = store.load(template_id)
+    if wf:
+        return wf.model_dump()
+
+    # 4. If nothing found, error
+    raise HTTPException(
+        status_code=404,
+        detail=f"No workflow definition found for session {session_id}",
+    )

@@ -125,10 +125,6 @@ class ClaudeCLIChatModel(BaseChatModel):
         default=None,
         description="MCP configuration for tool servers"
     )
-    autonomous: bool = Field(
-        default=True,
-        description="Enable autonomous mode (skip permission prompts)"
-    )
 
     # === Private Attributes ===
     _process: Optional[ClaudeProcess] = PrivateAttr(default=None)
@@ -160,7 +156,6 @@ class ClaudeCLIChatModel(BaseChatModel):
             system_prompt=process.system_prompt,
             env_vars=process.env_vars or {},
             mcp_config=process.mcp_config,
-            autonomous=process.autonomous,
         )
         model._process = process
         model._initialized = True
@@ -219,7 +214,6 @@ class ClaudeCLIChatModel(BaseChatModel):
             timeout=self.timeout,
             mcp_config=self.mcp_config,
             system_prompt=self.system_prompt,
-            autonomous=self.autonomous,
         )
 
         # 초기화 실행
@@ -447,7 +441,6 @@ class ClaudeCLIChatModel(BaseChatModel):
             system_prompt=self._merge_system_prompt(tools_prompt),
             env_vars=self.env_vars,
             mcp_config=self.mcp_config,
-            autonomous=self.autonomous,
         )
 
         return bound_model
@@ -531,7 +524,6 @@ Only output the JSON object, no additional text."""
             system_prompt=self._merge_system_prompt(schema_prompt),
             env_vars=self.env_vars,
             mcp_config=self.mcp_config,
-            autonomous=self.autonomous,
         )
 
         # 파싱 함수

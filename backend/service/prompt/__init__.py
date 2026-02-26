@@ -12,7 +12,7 @@ Claude Control에 적합한 구조적 프롬프트 빌더를 구현합니다.
         .add_identity("DevWorker", role=SessionRole.WORKER)
         .add_capabilities(tools=["read_file", "write_file"])
         .add_safety_guidelines()
-        .add_execution_protocol(autonomous=True)
+        .add_execution_protocol()
         .add_completion_protocol()
         .add_runtime_line(model="claude-sonnet-4", session_id="abc")
         .build())

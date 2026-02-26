@@ -49,7 +49,9 @@ export default function LogsTab() {
       RESPONSE: { backgroundColor: 'rgba(168, 85, 247, 0.2)',  color: '#a78bfa' },
       ITER:     { backgroundColor: 'rgba(251, 146, 60, 0.2)',  color: '#fb923c' },
       TOOL:     { backgroundColor: 'rgba(34, 211, 238, 0.2)',  color: '#22d3ee' },
+      TOOL_RES: { backgroundColor: 'rgba(6, 182, 212, 0.15)',  color: '#06b6d4' },
       STREAM:   { backgroundColor: 'rgba(148, 163, 184, 0.2)', color: '#94a3b8' },
+      GRAPH:    { backgroundColor: 'rgba(139, 92, 246, 0.2)',  color: '#8b5cf6' },
     };
     return map[lvl] || {};
   };
@@ -81,7 +83,7 @@ export default function LogsTab() {
             value={level} onChange={e => setLevel(e.target.value)}
           >
             <option value="">{t('logsTab.allLevels')}</option>
-            {['INFO', 'ERROR', 'WARNING', 'DEBUG', 'COMMAND', 'RESPONSE', 'ITER', 'TOOL', 'STREAM'].map(l => (
+            {['INFO', 'ERROR', 'WARNING', 'DEBUG', 'COMMAND', 'RESPONSE', 'GRAPH', 'ITER', 'TOOL', 'TOOL_RES', 'STREAM'].map(l => (
               <option key={l} value={l}>{l}</option>
             ))}
           </select>

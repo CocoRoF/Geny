@@ -6,10 +6,9 @@ export interface SessionInfo {
   status: 'running' | 'stopped' | 'error' | 'idle' | string;
   model: string | null;
   role: 'worker' | 'manager';
-  autonomous: boolean;
   max_turns: number | null;
   timeout: number | null;
-  autonomous_max_iterations: number | null;
+  max_iterations: number | null;
   storage_path: string | null;
   created_at: string | null;
   pid: number | null;
@@ -17,6 +16,7 @@ export interface SessionInfo {
   pod_ip: string | null;
   manager_id: string | null;
   workflow_id: string | null;
+  graph_name: string | null;
   is_deleted?: boolean;
   deleted_at?: string | null;
 }
@@ -27,13 +27,13 @@ export interface CreateAgentRequest {
   model?: string;
   max_turns?: number;
   timeout?: number;
-  autonomous?: boolean;
-  autonomous_max_iterations?: number;
+  max_iterations?: number;
   role?: string;
   manager_id?: string;
   system_prompt?: string;
   enable_checkpointing?: boolean;
   workflow_id?: string;
+  graph_name?: string;
 }
 
 export interface ExecuteRequest {
@@ -53,27 +53,7 @@ export interface ExecuteResponse {
   duration_ms?: number;
 }
 
-export interface AutonomousExecuteRequest {
-  prompt: string;
-  max_iterations?: number;
-  timeout_per_iteration?: number;
-  system_prompt?: string;
-  max_turns?: number;
-  skip_permissions?: boolean;
-}
 
-export interface AutonomousExecuteResponse {
-  success: boolean;
-  session_id: string;
-  is_complete: boolean;
-  total_iterations: number;
-  original_request: string;
-  final_output: string;
-  all_outputs?: string[];
-  error?: string;
-  total_duration_ms: number;
-  stop_reason: string;
-}
 
 // ==================== Health Types ====================
 
@@ -215,7 +195,7 @@ export interface GraphEdge {
 export interface GraphStructure {
   session_id: string;
   session_name: string;
-  graph_type: 'simple' | 'autonomous';
+  graph_type: string;
   nodes: GraphNode[];
   edges: GraphEdge[];
 }
