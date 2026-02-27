@@ -48,6 +48,8 @@ const en = {
     restore: 'Restore',
     permanentDelete: 'Permanently delete',
     sessionFallback: 'Session {id}',
+    collapse: 'Collapse sidebar',
+    expand: 'Expand sidebar',
   },
 
   // ─── Common ───

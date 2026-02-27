@@ -48,6 +48,8 @@ const ko: Translations = {
     restore: '복원',
     permanentDelete: '영구 삭제',
     sessionFallback: '세션 {id}',
+    collapse: '사이드바 접기',
+    expand: '사이드바 펼치기',
   },
 
   // ─── Common ───
