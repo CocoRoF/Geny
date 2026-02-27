@@ -300,6 +300,8 @@ const en = {
     selectSessionDesc: 'Choose a session from the list to view its storage',
     title: 'Session Storage',
     refresh: 'Refresh',
+    openFolder: 'Open Folder',
+    openFolderError: 'Failed to open folder',
     empty: 'Storage is empty',
     noFile: 'No file selected',
     loading: 'Loading...',

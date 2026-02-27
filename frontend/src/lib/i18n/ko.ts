@@ -300,6 +300,8 @@ const ko: Translations = {
     selectSessionDesc: '스토리지를 볼 세션을 목록에서 선택하세요',
     title: '세션 스토리지',
     refresh: '새로고침',
+    openFolder: '폴더 열기',
+    openFolderError: '폴더 열기 실패',
     empty: '스토리지가 비어 있습니다',
     noFile: '선택된 파일 없음',
     loading: '로딩 중...',

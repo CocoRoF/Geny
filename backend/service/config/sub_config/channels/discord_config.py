@@ -1,7 +1,7 @@
 """
 Discord Bot Configuration.
 
-Enables Claude Control integration with Discord servers.
+Enables Geny Agent integration with Discord servers.
 Allows users to interact with Claude sessions via Discord messages.
 """
 
@@ -17,7 +17,7 @@ class DiscordConfig(BaseConfig):
     """
     Discord Bot Configuration.
 
-    Enables Claude Control integration with Discord servers.
+    Enables Geny Agent integration with Discord servers.
     Allows users to interact with Claude sessions via Discord messages.
     """
 
@@ -58,7 +58,7 @@ class DiscordConfig(BaseConfig):
 
     @classmethod
     def get_description(cls) -> str:
-        return "Configure Discord bot integration for Claude Control. Allows users to interact with Claude sessions through Discord messages."
+        return "Configure Discord bot integration for Geny Agent. Allows users to interact with Claude sessions through Discord messages."
 
     @classmethod
     def get_category(cls) -> str:

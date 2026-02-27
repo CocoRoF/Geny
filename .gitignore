@@ -200,11 +200,11 @@ cython_debug/
 *api_key.txt
 
 # =============================================================================
-# Claude Control Specific
+# Geny Agent Specific
 # =============================================================================
 
-# Claude session storage (local testing)
-claude_sessions/
+# Session storage (local testing)
+geny_agent_sessions/
 
 # MCP configuration files (may contain secrets)
 mcp/*.json

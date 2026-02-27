@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import Optional, Tuple
 from tools.base import tool
 
-# Get the base URL for Claude Control API
-CLAUDE_CONTROL_URL = os.getenv("CLAUDE_CONTROL_URL", "http://localhost:8000")
+# Get the base URL for Geny Agent API
+GENY_AGENT_URL = os.getenv("GENY_AGENT_URL", "http://localhost:8000")
 
 
 def _get_session_info() -> Tuple[Optional[str], Optional[str]]:
@@ -68,11 +68,11 @@ def list_workers() -> str:
         session_id, role = _get_session_info()
         if role and role != "manager":
             return json.dumps({"error": f"This session is a '{role}', not a manager. Only managers can list workers."})
-        return json.dumps({"error": "Could not find session info. Make sure you're running in a Claude Control session."})
+        return json.dumps({"error": "Could not find session info. Make sure you're running in a Geny Agent session."})
 
     try:
         with httpx.Client(timeout=30.0) as client:
-            response = client.get(f"{CLAUDE_CONTROL_URL}/api/agents/{manager_id}/workers")
+            response = client.get(f"{GENY_AGENT_URL}/api/agents/{manager_id}/workers")
             response.raise_for_status()
             workers = response.json()
 
@@ -124,7 +124,7 @@ def delegate_task(worker_name: str, task: str) -> str:
     try:
         with httpx.Client(timeout=300.0) as client:  # Long timeout for task execution
             # First, find the worker by name
-            workers_response = client.get(f"{CLAUDE_CONTROL_URL}/api/agents/{manager_id}/workers")
+            workers_response = client.get(f"{GENY_AGENT_URL}/api/agents/{manager_id}/workers")
             workers_response.raise_for_status()
             workers = workers_response.json()
 
@@ -151,7 +151,7 @@ def delegate_task(worker_name: str, task: str) -> str:
 
             # Delegate the task
             delegate_response = client.post(
-                f"{CLAUDE_CONTROL_URL}/api/agents/{manager_id}/delegate",
+                f"{GENY_AGENT_URL}/api/agents/{manager_id}/delegate",
                 json={
                     "worker_id": worker_id,
                     "prompt": task
@@ -203,7 +203,7 @@ def get_worker_status(worker_name: str) -> str:
 
     try:
         with httpx.Client(timeout=30.0) as client:
-            workers_response = client.get(f"{CLAUDE_CONTROL_URL}/api/agents/{manager_id}/workers")
+            workers_response = client.get(f"{GENY_AGENT_URL}/api/agents/{manager_id}/workers")
             workers_response.raise_for_status()
             workers = workers_response.json()
 
@@ -253,7 +253,7 @@ def broadcast_task(task: str) -> str:
     try:
         with httpx.Client(timeout=300.0) as client:
             # Get all workers
-            workers_response = client.get(f"{CLAUDE_CONTROL_URL}/api/agents/{manager_id}/workers")
+            workers_response = client.get(f"{GENY_AGENT_URL}/api/agents/{manager_id}/workers")
             workers_response.raise_for_status()
             workers = workers_response.json()
 
@@ -277,7 +277,7 @@ def broadcast_task(task: str) -> str:
 
                 try:
                     delegate_response = client.post(
-                        f"{CLAUDE_CONTROL_URL}/api/agents/{manager_id}/delegate",
+                        f"{GENY_AGENT_URL}/api/agents/{manager_id}/delegate",
                         json={
                             "worker_id": worker_id,
                             "prompt": task
@@ -310,5 +310,5 @@ def broadcast_task(task: str) -> str:
         return json.dumps({"error": f"Failed to broadcast task: {str(e)}"})
 
 
-# MCP 서버 등록을 위한 TOOLS 리스트
+# MCP ?�버 ?�록???�한 TOOLS 리스??
 TOOLS = [list_workers, delegate_task, get_worker_status, broadcast_task]

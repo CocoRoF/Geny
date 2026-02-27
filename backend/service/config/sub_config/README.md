@@ -2,7 +2,7 @@
 
 ## Overview
 
-All configuration classes in Claude Control are organized under the `sub_config/` directory using a **category-based folder structure**. Each folder name directly becomes the **category name** displayed in the Settings UI.
+All configuration classes in Geny Agent are organized under the `sub_config/` directory using a **category-based folder structure**. Each folder name directly becomes the **category name** displayed in the Settings UI.
 
 ## Directory Structure
 

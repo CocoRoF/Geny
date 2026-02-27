@@ -220,10 +220,13 @@ async def get_agent_session(
 @router.delete("/{session_id}")
 async def delete_agent_session(
     session_id: str = Path(..., description="Session ID"),
-    cleanup_storage: bool = Query(True, description="Also delete storage")
+    cleanup_storage: bool = Query(False, description="Also delete storage (default: False to preserve files)")
 ):
     """
     Delete AgentSession (soft-delete — metadata preserved in sessions.json).
+
+    Storage is preserved by default so the session can be restored later.
+    Pass cleanup_storage=true to also remove the storage directory.
     """
     success = await agent_manager.delete_session(session_id, cleanup_storage)
     if not success:
@@ -239,12 +242,31 @@ async def permanent_delete_session(
 ):
     """
     Permanently delete a session from the persistent store.
-    The session record is irrecoverably removed from sessions.json.
+    The session record is irrecoverably removed from sessions.json
+    and its storage directory is deleted from disk.
     """
+    import shutil
+    from pathlib import Path as FilePath
+
     store = get_session_store()
+
+    # Get storage_path before deleting anything
+    record = store.get(session_id)
+    storage_path = record.get("storage_path") if record else None
+
     # Also delete from live agents if still active
     if agent_manager.has_agent(session_id):
         await agent_manager.delete_session(session_id, cleanup_storage=True)
+    elif storage_path:
+        # Agent not live — clean up storage directory from disk
+        sp = FilePath(storage_path)
+        if sp.is_dir():
+            try:
+                shutil.rmtree(sp)
+                logger.info(f"Storage cleaned up: {storage_path}")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup storage {storage_path}: {e}")
+
     removed = store.permanent_delete(session_id)
     if not removed:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found in store")
@@ -667,6 +689,53 @@ async def read_storage_file(
         session_id=session_id,
         **file_content
     )
+
+
+@router.post("/{session_id}/open-folder")
+async def open_storage_folder(
+    session_id: str = Path(..., description="Session ID"),
+    sub_path: str = Query("", description="Optional sub-folder inside storage")
+):
+    """
+    Open the session's storage folder in the OS file explorer.
+
+    Works on Windows (explorer), macOS (open), and Linux (xdg-open).
+    """
+    import os
+    import platform
+    import subprocess
+
+    # Try live agent first, then fall back to stored session info
+    agent = agent_manager.get_agent(session_id)
+    if agent and agent.process:
+        folder = agent.process.storage_path
+    else:
+        # Fallback: look up from session store
+        store = get_session_store()
+        session_data = store.get(session_id)
+        if session_data and session_data.get("storage_path"):
+            folder = session_data["storage_path"]
+        else:
+            raise HTTPException(status_code=404, detail=f"Session not found or no storage path: {session_id}")
+
+    if sub_path:
+        folder = os.path.join(folder, sub_path)
+
+    if not os.path.isdir(folder):
+        raise HTTPException(status_code=404, detail=f"Folder does not exist: {folder}")
+
+    system = platform.system()
+    try:
+        if system == "Windows":
+            os.startfile(folder)
+        elif system == "Darwin":
+            subprocess.Popen(["open", folder])
+        else:
+            subprocess.Popen(["xdg-open", folder])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to open folder: {str(e)}")
+
+    return {"success": True, "path": folder}
 
 
 # ============================================================================

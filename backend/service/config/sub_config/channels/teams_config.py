@@ -1,7 +1,7 @@
 """
 Microsoft Teams Bot Configuration.
 
-Enables Claude Control integration with Microsoft Teams.
+Enables Geny Agent integration with Microsoft Teams.
 Allows users to interact with Claude sessions via Teams messages.
 """
 
@@ -17,7 +17,7 @@ class TeamsConfig(BaseConfig):
     """
     Microsoft Teams Bot Configuration.
 
-    Enables Claude Control integration with Microsoft Teams.
+    Enables Geny Agent integration with Microsoft Teams.
     Allows users to interact with Claude sessions via Teams messages.
     """
 
@@ -64,7 +64,7 @@ class TeamsConfig(BaseConfig):
 
     @classmethod
     def get_description(cls) -> str:
-        return "Configure Microsoft Teams bot integration for Claude Control. Allows users to interact with Claude sessions through Teams messages."
+        return "Configure Microsoft Teams bot integration for Geny Agent. Allows users to interact with Claude sessions through Teams messages."
 
     @classmethod
     def get_category(cls) -> str:

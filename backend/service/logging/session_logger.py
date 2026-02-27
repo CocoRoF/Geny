@@ -1,7 +1,7 @@
 """
 Session Logger
 
-Per-session logging system for Claude Control.
+Per-session logging system for Geny Agent.
 Each session gets its own log file in the logs/ directory.
 """
 import json

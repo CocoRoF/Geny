@@ -5,7 +5,7 @@ Provides a file-based registry of ALL sessions (active + deleted) so that
 session metadata survives server restarts and soft-deleted sessions can be
 restored.
 
-Storage location: claude_control/service/claude_manager/sessions.json
+Storage location: geny_agent/service/claude_manager/sessions.json
 
 Each entry stores the full CreateSessionRequest parameters plus lifecycle
 metadata (created_at, deleted_at, status, last_output, etc.).

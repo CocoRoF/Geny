@@ -1,5 +1,5 @@
 """
-Config management module for Claude Control.
+Config management module for Geny Agent.
 
 This module provides:
 - BaseConfig: Abstract base class for all configurations

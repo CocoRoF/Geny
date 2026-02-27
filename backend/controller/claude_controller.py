@@ -1,5 +1,5 @@
 """
-Claude Control API Controller
+Geny Agent API Controller
 
 REST API endpoints for Claude session management.
 Includes SSE streaming for real-time execution logs.

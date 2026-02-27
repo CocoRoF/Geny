@@ -3,7 +3,7 @@
 
 > 지니가 할게, 넌 가만히 있어.
 
-Autonomous multi-agent system for Claude Code — manage multiple Claude sessions, orchestrate autonomous tasks, and visualize it all in a 3D city playground.
+Autonomous multi-agent system — manage multiple agent sessions, orchestrate autonomous tasks, and visualize it all in a 3D city playground.
 
 ---
 
@@ -252,12 +252,12 @@ Configure in `backend/.env`:
 | `REDIS_HOST` | Redis host | `localhost` |
 | `REDIS_PORT` | Redis port | `6379` |
 | `REDIS_PASSWORD` | Redis password | — |
-| `CLAUDE_STORAGE_ROOT` | Session storage path | OS-dependent* |
+| `GENY_AGENT_STORAGE_ROOT` | Session storage path | OS-dependent* |
 | `ANTHROPIC_API_KEY` | Anthropic API key (**required**) | — |
 | `GITHUB_TOKEN` | GitHub PAT for PR automation | — |
 | `CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS` | Autonomous mode | `true` |
 
-\*Default storage: Windows `%LOCALAPPDATA%\claude_sessions` / macOS & Linux `/tmp/claude_sessions`
+\*Default storage: Windows `%LOCALAPPDATA%\geny_agent_sessions` / macOS & Linux `/tmp/geny_agent_sessions`
 
 For frontend, set `API_URL` in the shell environment to override the backend target (default `http://localhost:8000`).
 
@@ -391,8 +391,8 @@ curl -X POST http://localhost:8000/api/sessions/{session_id}/execute \
 
 Geny works on Windows, macOS, and Linux:
 
-- **Windows**: Uses `%LOCALAPPDATA%\claude_sessions`, auto-detects `.cmd`/`.exe` executables
-- **macOS/Linux**: Uses `/tmp/claude_sessions`, standard executable paths
+- **Windows**: Uses `%LOCALAPPDATA%\geny_agent_sessions`, auto-detects `.cmd`/`.exe` executables
+- **macOS/Linux**: Uses `/tmp/geny_agent_sessions`, standard executable paths
 
 ## License
 

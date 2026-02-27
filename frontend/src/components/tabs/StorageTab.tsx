@@ -5,7 +5,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { agentApi } from '@/lib/api';
 import { twMerge } from 'tailwind-merge';
 import { useI18n } from '@/lib/i18n';
-import { ChevronDown, ChevronRight, FolderOpen, RefreshCw, FileJson, FileText, FileCode, Globe, Palette, ScrollText, Settings, File } from 'lucide-react';
+import { ChevronDown, ChevronRight, FolderOpen, ExternalLink, RefreshCw, FileJson, FileText, FileCode, Globe, Palette, ScrollText, Settings, File } from 'lucide-react';
 import type { StorageFile } from '@/types';
 
 function cn(...classes: (string | boolean | undefined | null)[]) {
@@ -113,6 +113,15 @@ export default function StorageTab() {
     } catch { setFiles([]); }
   }, [selectedSessionId]);
 
+  const handleOpenFolder = async () => {
+    if (!selectedSessionId) return;
+    try {
+      await agentApi.openFolder(selectedSessionId);
+    } catch {
+      alert(t('storageTab.openFolderError'));
+    }
+  };
+
   useEffect(() => {
     fetchFiles();
     setActivePath('');
@@ -152,7 +161,10 @@ export default function StorageTab() {
       {/* Header */}
       <div className="flex justify-between items-center pb-3 border-b border-[var(--border-color)] shrink-0">
         <h3 className="text-[16px] font-semibold text-[var(--text-primary)]">{t('storageTab.title')}</h3>
-        <button className={cn("py-2 px-4 bg-transparent hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border border-[var(--border-color)]", "!py-1.5 !px-3 text-[0.75rem] inline-flex items-center gap-1.5")} onClick={fetchFiles}><RefreshCw size={12} /> {t('common.refresh')}</button>
+        <div className="flex items-center gap-2">
+          <button className={cn("py-2 px-4 bg-transparent hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border border-[var(--border-color)]", "!py-1.5 !px-3 text-[0.75rem] inline-flex items-center gap-1.5")} onClick={handleOpenFolder}><ExternalLink size={12} /> {t('storageTab.openFolder')}</button>
+          <button className={cn("py-2 px-4 bg-transparent hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border border-[var(--border-color)]", "!py-1.5 !px-3 text-[0.75rem] inline-flex items-center gap-1.5")} onClick={fetchFiles}><RefreshCw size={12} /> {t('common.refresh')}</button>
+        </div>
       </div>
 
       {/* Content */}

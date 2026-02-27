@@ -1,5 +1,5 @@
 """
-Data models for Claude Control
+Data models for Geny Agent
 
 Data model definitions for Claude Code session management.
 """

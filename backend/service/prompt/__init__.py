@@ -2,7 +2,7 @@
 Prompt Builder System
 
 OpenClaw의 25+ 섹션 모듈러 프롬프트 설계를 참고하여
-Claude Control에 적합한 구조적 프롬프트 빌더를 구현합니다.
+Geny Agent에 적합한 구조적 프롬프트 빌더를 구현합니다.
 
 사용 예:
     from service.prompt import PromptBuilder, PromptMode

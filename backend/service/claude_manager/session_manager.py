@@ -265,13 +265,13 @@ class SessionManager:
 
         return sessions_info
 
-    async def delete_session(self, session_id: str, cleanup_storage: bool = True) -> bool:
+    async def delete_session(self, session_id: str, cleanup_storage: bool = False) -> bool:
         """
         Delete session and terminate process.
 
         Args:
             session_id: Session ID to delete.
-            cleanup_storage: Whether to also delete storage.
+            cleanup_storage: Whether to also delete storage (default: False to preserve files).
 
         Returns:
             Whether deletion was successful.

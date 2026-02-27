@@ -99,6 +99,12 @@ export const agentApi = {
   /** GET /api/agents/{id}/storage/{path} — read file from storage */
   getStorageFile: (id: string, path: string) =>
     apiCall<StorageFileContent>(`/api/agents/${id}/storage/${encodeURIComponent(path)}`),
+
+  /** POST /api/agents/{id}/open-folder — open storage folder in OS file explorer */
+  openFolder: (id: string, subPath?: string) => {
+    const params = subPath ? `?sub_path=${encodeURIComponent(subPath)}` : '';
+    return apiCall<{ success: boolean; path: string }>(`/api/agents/${id}/open-folder${params}`, { method: 'POST' });
+  },
 };
 
 // ==================== Command API ====================

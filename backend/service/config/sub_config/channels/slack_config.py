@@ -1,7 +1,7 @@
 """
 Slack Bot Configuration.
 
-Enables Claude Control integration with Slack workspaces.
+Enables Geny Agent integration with Slack workspaces.
 Allows users to interact with Claude sessions via Slack messages.
 """
 
@@ -17,7 +17,7 @@ class SlackConfig(BaseConfig):
     """
     Slack Bot Configuration.
 
-    Enables Claude Control integration with Slack workspaces.
+    Enables Geny Agent integration with Slack workspaces.
     Allows users to interact with Claude sessions via Slack messages.
     """
 
@@ -64,7 +64,7 @@ class SlackConfig(BaseConfig):
 
     @classmethod
     def get_description(cls) -> str:
-        return "Configure Slack bot integration for Claude Control. Allows users to interact with Claude sessions through Slack messages and slash commands."
+        return "Configure Slack bot integration for Geny Agent. Allows users to interact with Claude sessions through Slack messages and slash commands."
 
     @classmethod
     def get_category(cls) -> str:

@@ -1,5 +1,5 @@
 """
-Memory subsystem for Claude Control.
+Memory subsystem for Geny Agent.
 
 Provides long-term and short-term memory backed by files inside the
 session's storage directory, inspired by OpenClaw's MEMORY.md +

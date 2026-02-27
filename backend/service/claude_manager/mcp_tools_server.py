@@ -6,7 +6,7 @@ Wraps LangChain's BaseTool as MCP server for use in Claude Code sessions.
 Usage:
     1. Define LangChain tools
     2. Wrap with MCPToolsServer
-    3. Run server or connect to Claude Control session
+    3. Run server or connect to Geny Agent session
 
 Example:
     ```python

@@ -173,7 +173,7 @@ class AgentSessionManager(SessionManager):
 
         # Build prompt
         prompt = build_agent_prompt(
-            agent_name="Claude Control Agent",
+            agent_name="Geny Agent Agent",
             role=role,
             agent_id=None,
             working_dir=request.working_dir,
@@ -365,13 +365,13 @@ class AgentSessionManager(SessionManager):
     # Session Management (Override for AgentSession support)
     # ========================================================================
 
-    async def delete_session(self, session_id: str, cleanup_storage: bool = True) -> bool:
+    async def delete_session(self, session_id: str, cleanup_storage: bool = False) -> bool:
         """
         세션 삭제 (AgentSession 및 기존 방식 모두 지원).
 
         Args:
             session_id: 세션 ID
-            cleanup_storage: 스토리지 정리 여부
+            cleanup_storage: 스토리지 정리 여부 (기본 False — soft-delete 시 보존)
 
         Returns:
             삭제 성공 여부
@@ -386,8 +386,20 @@ class AgentSessionManager(SessionManager):
             if session_logger:
                 session_logger.log_session_event("deleted")
 
-            # AgentSession 정리
+            # AgentSession 정리 (프로세스 중지, 리소스 해제)
             await agent.cleanup()
+
+            # 스토리지 정리 (permanent delete 시에만)
+            if cleanup_storage and agent.storage_path:
+                import shutil
+                from pathlib import Path as FilePath
+                sp = FilePath(agent.storage_path)
+                if sp.is_dir():
+                    try:
+                        shutil.rmtree(sp)
+                        logger.info(f"[{session_id}] Storage cleaned up: {agent.storage_path}")
+                    except Exception as e:
+                        logger.warning(f"[{session_id}] Failed to cleanup storage: {e}")
 
             # 로컬 저장소에서 제거
             del self._local_agents[session_id]

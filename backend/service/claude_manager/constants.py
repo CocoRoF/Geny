@@ -1,5 +1,5 @@
 """
-Claude Control Constants
+Geny Agent Constants
 
 Constants and configuration values used across the Claude manager modules.
 """

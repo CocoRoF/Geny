@@ -2,7 +2,7 @@
 실행/완료/에러 복구 프로토콜
 
 OpenClaw의 시스템 프롬프트 섹션 중
-실행 관련 프로토콜을 Claude Control의 LangGraph 패턴에 맞게 구현합니다.
+실행 관련 프로토콜을 Geny Agent의 LangGraph 패턴에 맞게 구현합니다.
 
 핵심 프로토콜:
 - ExecutionProtocol: 자율 실행 프로토콜 ([CONTINUE] 시그널 등)
@@ -23,7 +23,7 @@ class ExecutionProtocol:
         """자율 실행 프로토콜 섹션.
 
         OpenClaw의 self-manager CPEV 사이클과
-        Claude Control의 [CONTINUE] 시그널을 통합.
+        Geny Agent의 [CONTINUE] 시그널을 통합.
         """
         content = """## Autonomous Execution Protocol
 
@@ -114,7 +114,7 @@ Maintain a mental model of:
 class CompletionProtocol:
     """완료 감지 프로토콜.
 
-    OpenClaw의 구조적 완료 신호와 Claude Control의
+    OpenClaw의 구조적 완료 신호와 Geny Agent의
     [TASK_COMPLETE] 패턴을 통합합니다.
     """
 

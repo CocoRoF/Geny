@@ -24,7 +24,7 @@ IS_LINUX = platform.system() == 'Linux'
 
 def _get_default_storage_root() -> str:
     """Get platform-appropriate default storage root."""
-    env_storage = os.environ.get('CLAUDE_STORAGE_ROOT')
+    env_storage = os.environ.get('GENY_AGENT_STORAGE_ROOT')
     if env_storage:
         return env_storage
 
@@ -32,18 +32,18 @@ def _get_default_storage_root() -> str:
     if IS_WINDOWS:
         # On Windows, use LOCALAPPDATA or TEMP
         base = os.environ.get('LOCALAPPDATA') or tempfile.gettempdir()
-        return str(Path(base) / 'claude_sessions')
+        return str(Path(base) / 'geny_agent_sessions')
     elif IS_MACOS:
         # On macOS, use ~/Library/Application Support or /tmp
-        app_support = Path.home() / 'Library' / 'Application Support' / 'claude_sessions'
+        app_support = Path.home() / 'Library' / 'Application Support' / 'geny_agent_sessions'
         try:
             app_support.mkdir(parents=True, exist_ok=True)
             return str(app_support)
         except (PermissionError, OSError):
-            return '/tmp/claude_sessions'
+            return '/tmp/geny_agent_sessions'
     else:
         # On Linux and other Unix-like systems, use /tmp
-        return '/tmp/claude_sessions'
+        return '/tmp/geny_agent_sessions'
 
 
 DEFAULT_STORAGE_ROOT = _get_default_storage_root()

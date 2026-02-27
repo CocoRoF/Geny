@@ -1,11 +1,11 @@
 """
 KakaoTalk Chatbot Configuration.
 
-Enables Claude Control integration with KakaoTalk via 카카오 i 오픈빌더 (챗봇 관리자센터).
+Enables Geny Agent integration with KakaoTalk via 카카오 i 오픈빌더 (챗봇 관리자센터).
 Users interact with Claude sessions through KakaoTalk channel chatbot messages.
 
 Architecture:
-    KakaoTalk User → 카카오톡 채널 → 챗봇 관리자센터 → Skill(POST) → Claude Control → SkillResponse
+    KakaoTalk User → 카카오톡 채널 → 챗봇 관리자센터 → Skill(POST) → Geny Agent → SkillResponse
 
 References:
     - 챗봇 관리자센터: https://chatbot.kakao.com
@@ -26,7 +26,7 @@ class KakaoConfig(BaseConfig):
     """
     KakaoTalk Chatbot Configuration.
 
-    Enables Claude Control integration with KakaoTalk via 카카오 i 오픈빌더.
+    Enables Geny Agent integration with KakaoTalk via 카카오 i 오픈빌더.
     The chatbot receives user messages as Skill Payload (HTTP POST)
     and returns Claude responses as SkillResponse JSON.
     """
@@ -315,7 +315,7 @@ class KakaoConfig(BaseConfig):
                 description=(
                     "Secret token value for the verification header. "
                     "Set this in 챗봇 관리자센터 > 스킬 > 헤더값 입력 as the header value. "
-                    "Claude Control will reject requests without a matching token."
+                    "Geny Agent will reject requests without a matching token."
                 ),
                 placeholder="your-secret-token-value",
                 group="skill_server",

@@ -1,5 +1,5 @@
 """
-Redis Client for Claude Control
+Redis Client for Geny Agent
 
 Client for managing Claude sessions in Redis
 In multi-pod environments, Redis acts as the source of truth

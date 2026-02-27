@@ -54,17 +54,17 @@ basicConfig(
 logger = getLogger(__name__)
 
 
-def print_claude_control_logo():
-    """Print Claude Control logo"""
+def print_geny_agent_logo():
+    """Print Geny Agent logo"""
     logo = """
-     ██████╗██╗      █████╗ ██╗   ██╗██████╗ ███████╗     ██████╗ ██████╗ ███╗   ██╗████████╗██████╗  ██████╗ ██╗
-    ██╔════╝██║     ██╔══██╗██║   ██║██╔══██╗██╔════╝    ██╔════╝██╔═══██╗████╗  ██║╚══██╔══╝██╔══██╗██╔═══██╗██║
-    ██║     ██║     ███████║██║   ██║██║  ██║█████╗      ██║     ██║   ██║██╔██╗ ██║   ██║   ██████╔╝██║   ██║██║
-    ██║     ██║     ██╔══██║██║   ██║██║  ██║██╔══╝      ██║     ██║   ██║██║╚██╗██║   ██║   ██╔══██╗██║   ██║██║
-    ╚██████╗███████╗██║  ██║╚██████╔╝██████╔╝███████╗    ╚██████╗╚██████╔╝██║ ╚████║   ██║   ██║  ██║╚██████╔╝███████╗
-     ╚═════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚══════╝     ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
+     ██████╗ ███████╗███╗   ██╗██╗   ██╗     █████╗  ██████╗ ███████╗███╗   ██╗████████╗
+    ██╔════╝ ██╔════╝████╗  ██║╚██╗ ██╔╝    ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝
+    ██║  ███╗█████╗  ██╔██╗ ██║ ╚████╔╝     ███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║
+    ██║   ██║██╔══╝  ██║╚██╗██║  ╚██╔╝      ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║
+    ╚██████╔╝███████╗██║ ╚████║   ██║       ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║
+     ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝       ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝
 
-    🤖 Claude Code Multi-Session Management System 🤖
+    GenY Agent - Multi-Session Management System
     """
     logger.info(logo)
 
@@ -119,9 +119,9 @@ def get_app_redis_client(app: FastAPI) -> RedisClient:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle management"""
-    print_claude_control_logo()
-    print_step_banner("START", "CLAUDE CONTROL STARTUP", "Initializing Claude session management system")
-    logger.info("Starting Claude Control")
+    print_geny_agent_logo()
+    print_step_banner("START", "GENY AGENT STARTUP", "Initializing agent session management system")
+    logger.info("Starting Geny Agent")
 
     # Initialize Pod info
     print_step_banner("POD", "POD INFO", "Initializing pod information...")
@@ -176,13 +176,13 @@ async def lifespan(app: FastAPI):
     logger.info(f"   - Workflow templates installed: {templates_installed}")
     logger.info(f"   - Total workflows: {len(workflow_store.list_all())}")
 
-    print_step_banner("READY", "CLAUDE CONTROL READY", "All systems operational! 🎉")
-    logger.info("🎉 Claude Control startup complete! Ready to serve requests.")
+    print_step_banner("READY", "GENY AGENT READY", "All systems operational!")
+    logger.info("Geny Agent startup complete! Ready to serve requests.")
 
     yield
 
-    print_step_banner("SHUTDOWN", "CLAUDE CONTROL SHUTDOWN", "Cleaning up sessions...")
-    logger.info("Shutting down Claude Control")
+    print_step_banner("SHUTDOWN", "GENY AGENT SHUTDOWN", "Cleaning up sessions...")
+    logger.info("Shutting down Geny Agent")
 
     # Shutdown Internal Proxy client
     proxy = get_internal_proxy()
@@ -208,8 +208,8 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI app
 app = FastAPI(
-    title="Claude Control",
-    description="Claude Code Multi-Session Management System",
+    title="Geny Agent",
+    description="Geny Agent - Multi-Session Management System",
     version="1.0.0",
     lifespan=lifespan
 )

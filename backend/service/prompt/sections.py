@@ -2,7 +2,7 @@
 프롬프트 섹션 라이브러리
 
 OpenClaw의 25+ 섹션 설계를 참고하여
-Claude Control에 적합한 15개 핵심 섹션을 정의합니다.
+Geny Agent에 적합한 15개 핵심 섹션을 정의합니다.
 
 각 섹션은 PromptSection 객체로 생성되며,
 PromptBuilder에 등록하여 조건부로 조립됩니다.
@@ -35,7 +35,7 @@ class SectionLibrary:
 
     @staticmethod
     def identity(
-        agent_name: str = "Claude Control Agent",
+        agent_name: str = "Geny Agent Agent",
         role: str = "worker",
         agent_id: Optional[str] = None,
     ) -> PromptSection:
@@ -483,7 +483,7 @@ Always provide actionable information. If blocked, explain what's needed to unbl
         패턴 참고.
         """
         now = datetime.now(timezone.utc)
-        parts = [f"Claude Control v{version}"]
+        parts = [f"Geny Agent v{version}"]
 
         if model:
             parts.append(model)
@@ -629,7 +629,7 @@ class AutonomousPrompts:
 
 
 def build_agent_prompt(
-    agent_name: str = "Claude Control Agent",
+    agent_name: str = "Geny Agent Agent",
     role: str = "worker",
     agent_id: Optional[str] = None,
     working_dir: Optional[str] = None,

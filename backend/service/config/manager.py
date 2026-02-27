@@ -1,5 +1,5 @@
 """
-Configuration Manager for Claude Control.
+Configuration Manager for Geny Agent.
 
 Handles:
 - Loading/saving configs from JSON files

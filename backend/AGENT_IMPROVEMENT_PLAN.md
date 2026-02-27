@@ -1,7 +1,7 @@
-# Claude Control Agent 고도화 마스터 플랜
+# Geny Agent Agent 고도화 마스터 플랜
 
 > **목표**: OpenClaw의 프로덕션급 에이전트 실행 패턴을 참고하여,
-> Claude CLI + LangGraph 기반의 Claude Control을 극한까지 고도화한다.
+> Claude CLI + LangGraph 기반의 Geny Agent을 극한까지 고도화한다.
 
 ---
 
@@ -9,7 +9,7 @@
 
 ### 1.1 핵심 GAP 매트릭스
 
-| 영역 | 현재 Claude Control | OpenClaw 참고 수준 | GAP 심각도 |
+| 영역 | 현재 Geny Agent | OpenClaw 참고 수준 | GAP 심각도 |
 |------|--------------------|--------------------|-----------|
 | **시스템 프롬프트** | 5개 MD 파일 (15~150줄), 인라인 프롬프트 6개 | 25+ 섹션 모듈러 프롬프트, 프롬프트 모드, 훅 오버라이드 | 🔴 Critical |
 | **실행 복원력** | 단일 시도, MemorySaver(휘발성) | 인증 로테이션, 컨텍스트 오버플로 컴팩션(3단계), 모델 폴백 | 🔴 Critical |
@@ -23,9 +23,9 @@
 
 ### 1.2 우리만의 차별점 (유지/강화)
 
-Claude Control은 OpenClaw과는 근본적으로 다른 접근을 취한다:
+Geny Agent은 OpenClaw과는 근본적으로 다른 접근을 취한다:
 
-| 특성 | Claude Control | OpenClaw |
+| 특성 | Geny Agent | OpenClaw |
 |------|---------------|----------|
 | **LLM 호출** | Claude CLI 서브프로세스 | 내장 SDK API |
 | **상태 그래프** | LangGraph StateGraph | 없음 (while 루프) |
@@ -187,7 +187,7 @@ service/prompt/
 └── context_loader.py   # 부트스트랩 파일 로더
 ```
 
-### 3.2 섹션 목록 (OpenClaw 참고 + Claude Control 특화)
+### 3.2 섹션 목록 (OpenClaw 참고 + Geny Agent 특화)
 
 | # | 섹션 | 조건 | 설명 |
 |---|------|------|------|

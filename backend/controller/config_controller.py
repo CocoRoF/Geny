@@ -1,5 +1,5 @@
 """
-Configuration Controller for Claude Control.
+Configuration Controller for Geny Agent.
 
 Provides REST API endpoints for managing configurations:
 - GET /api/config - List all configs
