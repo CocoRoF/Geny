@@ -91,6 +91,27 @@ class CreateTodosOutput(BaseModel):
     """The list of TODO items."""
 
 
+class FinalReviewOutput(BaseModel):
+    """Structured output for the FinalReviewNode.
+
+    Provides a structured quality assessment of all completed work,
+    enabling downstream FinalAnswerNode to incorporate actionable
+    review context rather than unstructured free-form text.
+    """
+
+    overall_quality: str = "good"
+    """Overall quality assessment (excellent / good / needs_improvement / poor)."""
+
+    completed_summary: str
+    """Concise summary of what was accomplished across all items."""
+
+    issues_found: Optional[List[str]] = None
+    """Specific issues or gaps identified in the completed work."""
+
+    recommendations: str = ""
+    """Actionable suggestions for the final answer synthesis."""
+
+
 # ============================================================================
 # JSON extraction strategies (ordered by reliability)
 # ============================================================================
@@ -388,4 +409,161 @@ def _find_list_field(cls: Type[BaseModel]) -> Optional[str]:
         origin = getattr(annotation, "__origin__", None)
         if origin is list:
             return name
+    return None
+
+
+# ============================================================================
+# Frontend schema metadata builder
+# ============================================================================
+
+
+def build_frontend_schema(
+    schema_cls: Type[BaseModel],
+    *,
+    description: Optional[str] = None,
+    dynamic_fields: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """Build a frontend-friendly schema representation for display.
+
+    Args:
+        schema_cls: The Pydantic model class.
+        description: Optional human-readable summary of the schema's purpose.
+        dynamic_fields: Optional mapping of field_name → description of
+            how the field values are determined (e.g. "configured categories").
+
+    Returns:
+        A dict suitable for serialization & frontend rendering:
+        {
+            "name": "ClassifyOutput",
+            "description": "...",
+            "fields": [
+                {"name": "classification", "type": "string", "required": true,
+                 "description": "...", "dynamic_note": "..."},
+                ...
+            ],
+            "example": { ... }
+        }
+    """
+    dynamic_fields = dynamic_fields or {}
+
+    fields_info = []
+    example = {}
+
+    for name, field_info in schema_cls.model_fields.items():
+        annotation = field_info.annotation
+        type_str = _annotation_to_display(annotation)
+        required = field_info.is_required()
+        field_desc = field_info.description or ""
+
+        # Build an example value — guard against PydanticUndefined
+        default_val = field_info.default
+        has_usable_default = (
+            default_val is not None
+            and not isinstance(default_val, type)
+            and str(type(default_val)) != "<class 'pydantic_core.PydanticUndefinedType'>"
+        )
+        try:
+            # Extra guard: PydanticUndefined is not JSON-serializable
+            if has_usable_default:
+                import json as _json
+                _json.dumps(default_val)
+                example_val = default_val
+            else:
+                example_val = _example_for_type(annotation, name)
+        except (TypeError, ValueError):
+            example_val = _example_for_type(annotation, name)
+
+        entry: Dict[str, Any] = {
+            "name": name,
+            "type": type_str,
+            "required": required,
+            "description": field_desc,
+        }
+        if name in dynamic_fields:
+            entry["dynamic_note"] = dynamic_fields[name]
+        if example_val is not None:
+            example[name] = example_val
+
+        fields_info.append(entry)
+
+    result: Dict[str, Any] = {
+        "name": schema_cls.__name__,
+        "description": description or schema_cls.__doc__ or "",
+        "fields": fields_info,
+    }
+    if example:
+        result["example"] = example
+
+    return result
+
+
+def _annotation_to_display(annotation: Any) -> str:
+    """Convert a Python type annotation to a display string."""
+    origin = getattr(annotation, "__origin__", None)
+
+    if origin is list:
+        args = getattr(annotation, "__args__", ())
+        inner = _annotation_to_display(args[0]) if args else "any"
+        return f"List[{inner}]"
+
+    if origin is type(None):
+        return "null"
+
+    # Optional[X] is Union[X, None]
+    import typing
+    if origin is typing.Union:
+        args = getattr(annotation, "__args__", ())
+        non_none = [a for a in args if a is not type(None)]
+        if len(non_none) == 1:
+            return f"Optional[{_annotation_to_display(non_none[0])}]"
+        return " | ".join(_annotation_to_display(a) for a in args)
+
+    if annotation is str:
+        return "string"
+    if annotation is int:
+        return "integer"
+    if annotation is float:
+        return "number"
+    if annotation is bool:
+        return "boolean"
+
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        return annotation.__name__
+
+    return getattr(annotation, "__name__", str(annotation))
+
+
+def _example_for_type(annotation: Any, field_name: str) -> Any:
+    """Generate a reasonable example value for a type."""
+    origin = getattr(annotation, "__origin__", None)
+
+    if annotation is str:
+        return f"<{field_name}>"
+    if annotation is int:
+        return 1
+    if annotation is float:
+        return 0.0
+    if annotation is bool:
+        return True
+
+    if origin is list:
+        args = getattr(annotation, "__args__", ())
+        if args and isinstance(args[0], type) and issubclass(args[0], BaseModel):
+            # Nested model — build a nested example
+            nested = {}
+            for n, fi in args[0].model_fields.items():
+                val = _example_for_type(fi.annotation, n)
+                if val is not None:
+                    nested[n] = val
+            return [nested]
+        return []
+
+    # Optional types
+    import typing
+    if origin is typing.Union:
+        args = getattr(annotation, "__args__", ())
+        non_none = [a for a in args if a is not type(None)]
+        if non_none:
+            return _example_for_type(non_none[0], field_name)
+
     return None

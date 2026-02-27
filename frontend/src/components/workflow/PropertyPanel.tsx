@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useWorkflowStore, type WorkflowNodeData } from '@/store/useWorkflowStore';
 import { useI18n } from '@/lib/i18n';
-import type { WfNodeParameter, WfNodeTypeDef, WfNodeI18n } from '@/types/workflow';
+import type { WfNodeParameter, WfNodeTypeDef, WfNodeI18n, WfStructuredOutputSchema } from '@/types/workflow';
 import NodeHelpModal from './NodeHelpModal';
 
 // ========== i18n Helper ==========
@@ -242,6 +242,132 @@ function ParameterField({ param, value, onChange }: {
   }
 }
 
+// ========== Structured Output Schema Preview ==========
+
+function StructuredOutputPreview({ schema, color }: {
+  schema: WfStructuredOutputSchema;
+  color?: string;
+}) {
+  const { t } = useI18n();
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="rounded-lg border border-[rgba(99,102,241,0.25)] bg-[rgba(99,102,241,0.04)] overflow-hidden">
+      {/* Header — always visible */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="
+          w-full flex items-center gap-2 px-2.5 py-2
+          text-left hover:bg-[rgba(99,102,241,0.08)]
+          transition-colors duration-150
+        "
+      >
+        <span className="text-[13px]">📐</span>
+        <div className="flex-1 min-w-0">
+          <div className="text-[10px] font-bold text-[var(--primary-color)] uppercase tracking-wider">
+            {t('propertyPanel.structuredOutput')}
+          </div>
+          <div className="text-[9px] text-[var(--text-muted)] truncate mt-0.5">
+            {schema.name}
+          </div>
+        </div>
+        <svg
+          className={`w-3 h-3 text-[var(--text-muted)] transition-transform duration-200 shrink-0 ${expanded ? 'rotate-180' : ''}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {/* Expandable detail */}
+      {expanded && (
+        <div className="px-2.5 pb-2.5 space-y-2 border-t border-[rgba(99,102,241,0.15)]">
+          {/* Description */}
+          {schema.description && (
+            <div className="text-[10px] text-[var(--text-muted)] pt-2 leading-relaxed">
+              {schema.description}
+            </div>
+          )}
+
+          {/* Fields table */}
+          <div className="space-y-1">
+            <div className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+              {t('propertyPanel.schemaFields')}
+            </div>
+            {schema.fields.map(field => (
+              <div
+                key={field.name}
+                className="
+                  flex flex-col gap-0.5 px-2 py-1.5 rounded-md
+                  bg-[var(--bg-primary)] border border-[var(--border-color)]
+                "
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-mono font-semibold text-[#c3e88d]">
+                    {field.name}
+                  </span>
+                  <span className="text-[9px] font-mono text-[var(--text-muted)]">
+                    {field.type}
+                  </span>
+                  {field.required && (
+                    <span className="text-[8px] px-1 py-0 rounded bg-[rgba(239,68,68,0.15)] text-[var(--danger-color)] font-bold">
+                      {t('propertyPanel.required')}
+                    </span>
+                  )}
+                </div>
+                {field.dynamic_note && (
+                  <div className="text-[9px] text-[var(--primary-color)] leading-snug flex items-start gap-1">
+                    <span className="shrink-0 mt-px">⚡</span>
+                    <span>{field.dynamic_note}</span>
+                  </div>
+                )}
+                {field.description && (
+                  <div className="text-[9px] text-[var(--text-muted)] leading-snug">
+                    {field.description}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Example JSON */}
+          {schema.example && (
+            <div className="space-y-1">
+              <div className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                {t('propertyPanel.schemaExample')}
+              </div>
+              <pre className="
+                px-2.5 py-2 text-[10px] leading-relaxed
+                bg-[#0d0d0f] border border-[var(--border-color)]
+                rounded-md font-mono text-[#a5d6ff] overflow-x-auto
+                max-h-[120px] overflow-y-auto
+              ">
+                {JSON.stringify(schema.example, null, 2)}
+              </pre>
+            </div>
+          )}
+
+          {/* Validation badge */}
+          <div className="flex items-center gap-1.5 pt-0.5">
+            <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(16,185,129,0.1)] text-[#10b981] border border-[rgba(16,185,129,0.2)]">
+              <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              {t('propertyPanel.pydanticValidated')}
+            </span>
+            <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(99,102,241,0.1)] text-[var(--primary-color)] border border-[rgba(99,102,241,0.2)]">
+              <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {t('propertyPanel.autoRetry')}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ========== Main Property Panel ==========
 
 export default function PropertyPanel({ readOnly = false }: { readOnly?: boolean }) {
@@ -438,6 +564,14 @@ export default function PropertyPanel({ readOnly = false }: { readOnly?: boolean
             </div>
           </div>
         ))}
+
+        {/* Structured Output Schema — shown for nodes that use validated LLM output */}
+        {typeDef?.structured_output_schema && (
+          <StructuredOutputPreview
+            schema={typeDef.structured_output_schema}
+            color={data.color}
+          />
+        )}
 
         {/* Output ports info — with i18n labels */}
         {data.isConditional && data.outputPorts && (

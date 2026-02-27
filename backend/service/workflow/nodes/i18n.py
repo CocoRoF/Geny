@@ -230,10 +230,11 @@ CLASSIFY_I18N = {
                 )),
                 ("How Classification Works", (
                     "1. The configured prompt is sent to the model (with `{input}` substitution).\n"
-                    "2. The model's response is scanned for category keywords (case-insensitive).\n"
-                    "3. The first matching category determines the output port.\n"
-                    "4. If no keyword matches, the **Default Category** is used.\n"
-                    "5. On error, execution routes to the **end** port.\n\n"
+                    "2. A **JSON schema constraint** is automatically injected, requiring the model to respond with a structured ``ClassifyOutput`` object.\n"
+                    "3. The response is parsed as JSON and validated against the Pydantic schema.\n"
+                    "4. The ``classification`` field is coerced to match one of the configured categories (case-insensitive).\n"
+                    "5. If JSON parsing fails, a **correction prompt** is sent automatically for one retry.\n"
+                    "6. On error, execution routes to the **end** port.\n\n"
                     "The classification result is stored in the configured state field "
                     "(default: `difficulty`)."
                 )),
@@ -299,10 +300,11 @@ CLASSIFY_I18N = {
                 )),
                 ("분류 작동 방식", (
                     "1. 구성된 프롬프트가 모델에 전송됩니다 (`{input}` 치환 포함).\n"
-                    "2. 모델 응답에서 카테고리 키워드를 검색합니다 (대소문자 구분 없음).\n"
-                    "3. 첫 번째 일치하는 카테고리가 출력 포트를 결정합니다.\n"
-                    "4. 키워드가 일치하지 않으면 **기본 카테고리**가 사용됩니다.\n"
-                    "5. 오류 발생 시 **종료** 포트로 라우팅됩니다.\n\n"
+                    "2. **JSON 스키마 제약**이 자동으로 주입되어, 모델이 ``ClassifyOutput`` 구조체로 응답하도록 요구합니다.\n"
+                    "3. 응답이 JSON으로 파싱되고 Pydantic 스키마로 검증됩니다.\n"
+                    "4. ``classification`` 필드가 구성된 카테고리와 일치하도록 변환됩니다 (대소문자 무관).\n"
+                    "5. JSON 파싱 실패 시 **수정 프롬프트**가 자동으로 전송되어 1회 재시도합니다.\n"
+                    "6. 오류 발생 시 **종료** 포트로 라우팅됩니다.\n\n"
                     "분류 결과는 구성된 상태 필드(기본값: `difficulty`)에 저장됩니다."
                 )),
                 ("커스터마이즈", (
@@ -634,8 +636,9 @@ REVIEW_I18N = {
                     "The **Verdicts** parameter accepts a JSON list of verdict names:\n\n"
                     '- Default: ``["approved", "retry"]``\n'
                     '- Custom: ``["pass", "minor_fix", "major_rewrite"]``\n\n'
-                    "Each verdict becomes an output port. The LLM's ``VERDICT:`` line "
-                    "is matched against these keywords. If no match, the **Default Verdict** is used."
+                    "Each verdict becomes an output port. The structured output ensures the LLM's "
+                    "``verdict`` field exactly matches one of the configured values. "
+                    "If no match after coercion, the **Default Verdict** is used."
                 )),
                 ("Review Format", (
                     "The model is required to respond with a **structured JSON output** "
@@ -734,15 +737,15 @@ REVIEW_I18N = {
                     "**판정 목록** 파라미터는 판정 이름의 JSON 목록을 받습니다:\n\n"
                     '- 기본값: ``["approved", "retry"]``\n'
                     '- 커스텀: ``["pass", "minor_fix", "major_rewrite"]``\n\n'
-                    "각 판정이 출력 포트가 됩니다. LLM의 ``VERDICT:`` 줄이 "
-                    "이 키워드와 매칭됩니다. 일치하지 않으면 **기본 판정**이 사용됩니다."
+                    "각 판정이 출력 포트가 됩니다. 구조화된 출력을 통해 LLM의 "
+                    "``verdict`` 필드가 구성된 값 중 하나와 정확히 일치하도록 보장합니다. "
+                    "일치하지 않으면 **기본 판정**이 사용됩니다."
                 )),
                 ("리뷰 형식", (
-                    "모델은 구조화된 형식으로 응답해야 합니다:\n\n"
-                    "```\nVERDICT: approved\nFEEDBACK: <개선 제안>\n```\n\n"
-                    "노드는 이를 파싱하여 라우팅을 결정합니다. "
-                    "형식이 감지되지 않으면 전체 응답이 피드백으로 처리되고 "
-                    "전체 텍스트에서 키워드 매칭이 시도됩니다."
+                    "모델은 ``verdict``와 ``feedback`` 필드를 포함하는 **구조화된 JSON 출력**으로 응답해야 합니다:\n\n"
+                    '```json\n{"verdict": "approved", "feedback": "좋은 답변."}\n```\n\n'
+                    "노드는 Pydantic 스키마 검증을 사용하여 출력 형식을 강제합니다. "
+                    "초기 응답이 검증에 실패하면 자동 수정 재시도가 시도됩니다."
                 )),
                 ("최대 재시도", (
                     "**최대 리뷰 재시도** 파라미터는 무한 리뷰 루프를 방지합니다. "
@@ -1648,9 +1651,12 @@ CREATE_TODOS_I18N = {
                     "The items are then executed sequentially by Execute TODO nodes."
                 )),
                 ("TODO Format", (
-                    "The model is expected to produce a JSON array:\n\n"
-                    "```json\n[\n  {\"id\": 1, \"title\": \"Step 1\", \"description\": \"Do X\"},\n  {\"id\": 2, \"title\": \"Step 2\", \"description\": \"Do Y\"}\n]\n```\n\n"
-                    "The node handles JSON in plain text or wrapped in markdown code blocks."
+                    "The model is required to produce a **structured JSON output** "
+                    "validated by a Pydantic schema:\n\n"
+                    '```json\n{"todos": [{"id": 1, "title": "Step 1", "description": "Do X"}, '
+                    '{"id": 2, "title": "Step 2", "description": "Do Y"}]}\n```\n\n'
+                    "The node also handles bare JSON arrays (auto-wrapped into the schema). "
+                    "If the initial response fails validation, an automatic correction retry is attempted."
                 )),
                 ("Max TODO Items", (
                     "The **Max TODO Items** parameter caps the list to prevent runaway execution.\n\n"
@@ -1849,7 +1855,7 @@ EXECUTE_TODO_I18N = {
 FINAL_REVIEW_I18N = {
     "en": NodeI18n(
         label="Final Review",
-        description="Comprehensive review of all completed list item results. Presents all items to the LLM with budget-aware character truncation. Stores the review output for final answer synthesis.",
+        description="Comprehensive review of all completed list item results using Pydantic-validated structured output. Evaluates overall quality, summarizes accomplishments, identifies issues, and provides actionable recommendations for final answer synthesis.",
         parameters={
             "prompt_template": {
                 "label": "Prompt Template",
@@ -1861,7 +1867,11 @@ FINAL_REVIEW_I18N = {
             },
             "output_field": {
                 "label": "Output State Field",
-                "description": "State field to store the review output.",
+                "description": "State field to store the formatted review output.",
+            },
+            "quality_levels": {
+                "label": "Quality Levels (JSON)",
+                "description": "Allowed values for the overall_quality assessment in the structured output.",
             },
             "max_item_chars": {
                 "label": "Max Chars per Item",
@@ -1876,33 +1886,47 @@ FINAL_REVIEW_I18N = {
         groups={"prompt": "Prompt", "state_fields": "State Fields", "output": "Output", "behavior": "Behavior"},
         help=_help(
             "Final Review Node",
-            "Performs a comprehensive review of all completed TODO items before synthesis.",
+            "Performs a comprehensive Pydantic-validated review of all completed TODO items before synthesis.",
             [
                 ("Overview", (
                     "The Final Review node is part of the **hard path** completion sequence. "
-                    "It reviews all TODO results together, providing an overall assessment "
-                    "and feedback before the final answer is synthesised.\n\n"
-                    "This ensures the final answer considers the quality and completeness "
-                    "of all individual TODO results."
+                    "It reviews all TODO results together using **structured output** — the LLM "
+                    "must return a JSON object matching the `FinalReviewOutput` schema.\n\n"
+                    "The structured output includes overall quality, completion summary, "
+                    "issues found, and recommendations. This ensures the final answer "
+                    "considers the quality and completeness of all individual results."
                 )),
-                ("Review Content", (
-                    "The prompt includes:\n"
-                    "- `{input}` — the original user request\n"
-                    "- `{todo_results}` — all TODO results with their status\n\n"
-                    "If the context budget is strained, individual results are truncated."
+                ("Structured Output Format", (
+                    "The LLM response is validated against this schema:\n"
+                    "- `overall_quality` — one of the configured quality levels "
+                    "(default: excellent / good / needs_improvement / poor)\n"
+                    "- `completed_summary` — description of what was accomplished\n"
+                    "- `issues_found` — list of specific issues identified (optional)\n"
+                    "- `recommendations` — suggestions for the final answer\n\n"
+                    "If JSON parsing fails, a correction prompt is sent automatically."
+                )),
+                ("Quality Levels", (
+                    "The `quality_levels` parameter controls which values are accepted "
+                    "for `overall_quality`. The LLM's response is coerced to the nearest "
+                    "match if it doesn't exactly match.\n\n"
+                    "Customize for different review criteria:\n"
+                    "- Production: `[\"pass\", \"fail\"]`\n"
+                    "- Detailed: `[\"excellent\", \"good\", \"acceptable\", \"poor\"]`\n"
+                    "- Default: `[\"excellent\", \"good\", \"needs_improvement\", \"poor\"]`"
                 )),
                 ("Usage Tips", (
                     "1. Place after Check Progress routes to 'Complete'.\n"
                     "2. Follow with Final Answer for synthesis.\n"
-                    "3. The review feedback is stored in `review_feedback` state field.\n"
-                    "4. This is different from the Review node — it reviews ALL results, not one answer."
+                    "3. The formatted review is stored in `review_feedback` state field.\n"
+                    "4. Quality metadata is written to `metadata.review_quality`.\n"
+                    "5. This is different from the Review node — it reviews ALL results, not one answer."
                 )),
             ],
         ),
     ),
     "ko": NodeI18n(
         label="최종 리뷰",
-        description="완료된 모든 목록 항목 결과의 종합 리뷰. 예산 인식 문자 절단과 함께 모든 항목을 LLM에 제시합니다. 최종 답변 합성을 위해 리뷰 출력을 저장합니다.",
+        description="Pydantic 검증된 구조화된 출력을 사용하여 완료된 모든 목록 항목 결과의 종합 리뷰. 전체적인 품질을 평가하고 성과를 요약하며 문제를 식별하고 최종 답변 합성을 위한 실행 가능한 권장 사항을 제공합니다.",
         parameters={
             "prompt_template": {
                 "label": "프롬프트 템플릿",
@@ -1914,7 +1938,11 @@ FINAL_REVIEW_I18N = {
             },
             "output_field": {
                 "label": "출력 상태 필드",
-                "description": "리뷰 출력을 저장할 상태 필드입니다.",
+                "description": "포맷된 리뷰 출력을 저장할 상태 필드입니다.",
+            },
+            "quality_levels": {
+                "label": "품질 수준 (JSON)",
+                "description": "구조화된 출력에서 overall_quality 평가에 허용되는 값입니다.",
             },
             "max_item_chars": {
                 "label": "항목당 최대 문자 수",
@@ -1929,26 +1957,39 @@ FINAL_REVIEW_I18N = {
         groups={"prompt": "프롬프트", "state_fields": "상태 필드", "output": "출력", "behavior": "동작"},
         help=_help(
             "최종 리뷰 노드",
-            "합성 전에 완료된 모든 TODO 항목에 대한 종합 리뷰를 수행합니다.",
+            "합성 전에 완료된 모든 TODO 항목에 대한 Pydantic 검증된 종합 리뷰를 수행합니다.",
             [
                 ("개요", (
                     "최종 리뷰 노드는 **어려움 경로** 완료 시퀀스의 일부입니다. "
-                    "모든 TODO 결과를 함께 리뷰하여 최종 답변이 합성되기 전에 "
-                    "전반적인 평가와 피드백을 제공합니다.\n\n"
-                    "이를 통해 최종 답변이 모든 개별 TODO 결과의 "
+                    "**구조화된 출력**을 사용하여 모든 TODO 결과를 함께 리뷰합니다 — "
+                    "LLM은 `FinalReviewOutput` 스키마에 맞는 JSON 객체를 반환해야 합니다.\n\n"
+                    "구조화된 출력에는 전체 품질, 완료 요약, 발견된 문제, "
+                    "권장 사항이 포함됩니다. 이를 통해 최종 답변이 모든 개별 결과의 "
                     "품질과 완전성을 고려하도록 보장합니다."
                 )),
-                ("리뷰 내용", (
-                    "프롬프트에 포함되는 정보:\n"
-                    "- `{input}` — 원본 사용자 요청\n"
-                    "- `{todo_results}` — 상태와 함께 모든 TODO 결과\n\n"
-                    "컨텍스트 예산이 부족하면 개별 결과가 잘립니다."
+                ("구조화된 출력 형식", (
+                    "LLM 응답은 다음 스키마에 대해 검증됩니다:\n"
+                    "- `overall_quality` — 구성된 품질 수준 중 하나 "
+                    "(기본: excellent / good / needs_improvement / poor)\n"
+                    "- `completed_summary` — 달성된 내용에 대한 설명\n"
+                    "- `issues_found` — 식별된 특정 문제 목록 (선택 사항)\n"
+                    "- `recommendations` — 최종 답변을 위한 제안\n\n"
+                    "JSON 파싱이 실패하면 교정 프롬프트가 자동으로 전송됩니다."
+                )),
+                ("품질 수준", (
+                    "`quality_levels` 매개변수는 `overall_quality`에 허용되는 값을 제어합니다. "
+                    "LLM의 응답이 정확히 일치하지 않으면 가장 가까운 값으로 강제 변환됩니다.\n\n"
+                    "다양한 리뷰 기준에 맞게 사용자화:\n"
+                    "- 프로덕션: `[\"pass\", \"fail\"]`\n"
+                    "- 상세: `[\"excellent\", \"good\", \"acceptable\", \"poor\"]`\n"
+                    "- 기본: `[\"excellent\", \"good\", \"needs_improvement\", \"poor\"]`"
                 )),
                 ("사용 팁", (
                     "1. 진행 확인이 '완료'로 라우팅된 후에 배치하세요.\n"
                     "2. 합성을 위해 최종 답변 노드를 뒤에 배치하세요.\n"
-                    "3. 리뷰 피드백은 `review_feedback` 상태 필드에 저장됩니다.\n"
-                    "4. 리뷰 노드와 다릅니다 — 하나의 답변이 아닌 모든 결과를 리뷰합니다."
+                    "3. 포맷된 리뷰는 `review_feedback` 상태 필드에 저장됩니다.\n"
+                    "4. 품질 메타데이터가 `metadata.review_quality`에 기록됩니다.\n"
+                    "5. 리뷰 노드와 다릅니다 — 하나의 답변이 아닌 모든 결과를 리뷰합니다."
                 )),
             ],
         ),

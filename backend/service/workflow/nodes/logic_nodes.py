@@ -282,6 +282,15 @@ class IterationGateNode(BaseNode):
         if stop_reason:
             logger.warning(f"[{context.session_id}] iteration_gate: STOP — {stop_reason}")
             updates["is_complete"] = True
+            updates["gate_stop_reason"] = stop_reason
+            updates["metadata"] = {
+                **state.get("metadata", {}),
+                "gate_stop_reason": stop_reason,
+                "stopped_at_iteration": iteration,
+            }
+        else:
+            # Clear any previous stop reason when continuing
+            updates["gate_stop_reason"] = None
 
         return updates
 
@@ -372,9 +381,13 @@ class CheckProgressNode(BaseNode):
         completed = sum(1 for t in items if t.get("status") == completed_status)
         failed = sum(1 for t in items if t.get("status") == failed_status)
 
+        total = len(items)
+        progress_ratio = current_index / total if total > 0 else 0.0
+
         logger.info(
             f"[{context.session_id}] check_progress: "
-            f"{completed} done, {failed} failed, {current_index}/{len(items)}"
+            f"{completed} done, {failed} failed, "
+            f"{current_index}/{total} ({progress_ratio:.0%})"
         )
 
         return {
@@ -383,7 +396,8 @@ class CheckProgressNode(BaseNode):
                 **state.get("metadata", {}),
                 "completed_items": completed,
                 "failed_items": failed,
-                "total_items": len(items),
+                "total_items": total,
+                "progress_ratio": round(progress_ratio, 3),
             },
         }
 

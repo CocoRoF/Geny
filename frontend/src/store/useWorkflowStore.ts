@@ -36,6 +36,7 @@ export interface WorkflowNodeData {
   isConditional: boolean;
   config: Record<string, unknown>;
   outputPorts: Array<{ id: string; label: string }>;
+  hasStructuredOutput?: boolean;
   [key: string]: unknown;
 }
 
@@ -228,6 +229,7 @@ function wfNodeToReactFlow(
       isConditional: typeDef?.is_conditional || false,
       config: inst.config,
       outputPorts: dynamicPorts || staticPorts,
+      hasStructuredOutput: !!typeDef?.structured_output_schema,
     },
   };
 }
@@ -347,6 +349,7 @@ export const useWorkflowStore = create<WorkflowEditorState>((set, get) => ({
         isConditional: nodeType.is_conditional,
         config: defaultConfig,
         outputPorts: dynamicPorts || nodeType.output_ports,
+        hasStructuredOutput: !!nodeType.structured_output_schema,
       },
     };
 

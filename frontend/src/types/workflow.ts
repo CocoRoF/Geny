@@ -45,6 +45,23 @@ export interface WfNodeI18n {
   help?: WfNodeHelp;
 }
 
+/** A single field in a structured output schema. */
+export interface WfStructuredOutputField {
+  name: string;
+  type: string;
+  required: boolean;
+  description?: string;
+  dynamic_note?: string;
+}
+
+/** Structured output schema metadata for frontend display. */
+export interface WfStructuredOutputSchema {
+  name: string;
+  description: string;
+  fields: WfStructuredOutputField[];
+  example?: Record<string, unknown>;
+}
+
 /** A registered node type definition (from the backend catalog). */
 export interface WfNodeTypeDef {
   node_type: string;
@@ -56,6 +73,8 @@ export interface WfNodeTypeDef {
   is_conditional: boolean;
   parameters: WfNodeParameter[];
   output_ports: WfOutputPort[];
+  /** Structured output schema — present when node uses Pydantic-validated LLM output. */
+  structured_output_schema?: WfStructuredOutputSchema;
   /** i18n translations keyed by locale (e.g. 'ko', 'en') */
   i18n?: Record<string, WfNodeI18n>;
 }

@@ -313,6 +313,17 @@ class ClassifyNode(BaseNode):
     color = "#3b82f6"
     i18n = CLASSIFY_I18N
 
+    from service.workflow.nodes.structured_output import (
+        ClassifyOutput, build_frontend_schema,
+    )
+    structured_output_schema = build_frontend_schema(
+        ClassifyOutput,
+        description="LLM classification result with validated category routing.",
+        dynamic_fields={
+            "classification": "Must be one of the configured Categories (e.g. easy, medium, hard)",
+        },
+    )
+
     parameters = [
         NodeParameter(
             name="prompt_template",
@@ -718,10 +729,11 @@ class ReviewNode(BaseNode):
     port is always present for error / early-termination.
 
     The model is given the original question and the generated
-    answer, then its response is parsed for a structured
-    ``VERDICT: <name>`` line.  The matched verdict determines the
-    output port.  After a configurable *max_retries* the first
-    verdict in the list is force-selected (typically *approved*).
+    answer, then its response is parsed as structured JSON using
+    ``resilient_structured_invoke`` with a ``ReviewOutput`` Pydantic
+    schema.  The validated ``verdict`` field determines the output
+    port.  After a configurable *max_retries* the first verdict in
+    the list is force-selected (typically *approved*).
 
     Generalisation design mirrors ``ClassifyNode``:
 
@@ -729,6 +741,7 @@ class ReviewNode(BaseNode):
     * ``get_dynamic_output_ports()`` computes ports from config
     * ``get_routing_function()`` reads configurable ``output_field``
     * ``default_verdict`` fallback when no keyword matches
+    * Pydantic validation + coercion ensures exact verdict matching
     """
 
     node_type = "review"
@@ -736,7 +749,7 @@ class ReviewNode(BaseNode):
     description = (
         "Self-routing quality gate that reviews a generated answer via LLM "
         "and routes to a configurable set of verdict ports. "
-        "Parses structured VERDICT/FEEDBACK lines from the model response. "
+        "Uses structured JSON output for reliable verdict + feedback parsing. "
         "Each configured verdict becomes an output port. "
         "Forces the first verdict after max retries to prevent infinite loops."
     )
@@ -744,6 +757,17 @@ class ReviewNode(BaseNode):
     icon = "📋"
     color = "#f59e0b"
     i18n = REVIEW_I18N
+
+    from service.workflow.nodes.structured_output import (
+        ReviewOutput, build_frontend_schema as _build_schema,
+    )
+    structured_output_schema = _build_schema(
+        ReviewOutput,
+        description="LLM review result with validated verdict and feedback.",
+        dynamic_fields={
+            "verdict": "Must be one of the configured Verdicts (e.g. approved, retry)",
+        },
+    )
 
     parameters = [
         NodeParameter(

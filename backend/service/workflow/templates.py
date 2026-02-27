@@ -43,17 +43,9 @@ def create_autonomous_template() -> WorkflowDefinition:
                 iter_gate_hard → [continue→guard_execute | stop→guard_final_review]
                 → final_review → post_final_review
                 → guard_final_answer → final_answer → post_final_answer → END
-    """
 
-    # Layout constants
-    col_w = 260
-    step_h = 140
-    branch_gap = 220
-    col_easy_x = 40
-    col_medium_x = 40 + col_w
-    col_hard_x = 40 + col_w * 2
-    top_center_x = col_medium_x
-    padding = 40
+    Node positions are hand-tuned for optimal readability in the visual editor.
+    """
 
     nodes: List[WorkflowNodeInstance] = []
     edges: List[WorkflowEdge] = []
@@ -69,56 +61,36 @@ def create_autonomous_template() -> WorkflowDefinition:
             source=src, target=tgt, source_port=port, label=lbl,
         ))
 
-    y = padding
+    # ── START & Common Entry ──
+    _add("start",         "start",      "Start",             288, 160)
+    _add("memory_inject", "mem_inject", "Memory Inject",     288, 256)
+    _add("context_guard", "guard_cls",  "Guard (Classify)",  288, 368,
+         {"position_label": "classify"})
+    _add("classify",      "classify",   "Classify",          288, 480)
 
-    # ── START ──
-    _add("start", "start", "Start", top_center_x, y)
-    y += step_h
-
-    # ── Common entry ──
-    _add("memory_inject", "mem_inject", "Memory Inject", top_center_x, y)
-    y += step_h
-    _add("context_guard", "guard_cls", "Guard (Classify)",
-         top_center_x, y, {"position_label": "classify"})
-    y += step_h
-    _add("classify", "classify", "Classify", top_center_x, y)
-    branch_base = y + branch_gap
-
-    # Edges: common entry chain
     _edge("start", "mem_inject")
     _edge("mem_inject", "guard_cls")
     _edge("guard_cls", "classify")
 
     # ── EASY PATH ──
-    y = branch_base
-    _add("context_guard", "guard_dir", "Guard (Direct)",
-         col_easy_x, y, {"position_label": "direct"})
-    y += step_h
-    _add("direct_answer", "dir_ans", "Direct Answer", col_easy_x, y)
-    y += step_h
-    _add("post_model", "post_dir", "Post Direct", col_easy_x, y)
-    y += step_h
+    _add("context_guard", "guard_dir", "Guard (Direct)",  32, 688,
+         {"position_label": "direct"})
+    _add("direct_answer", "dir_ans",   "Direct Answer",   32, 800)
+    _add("post_model",    "post_dir",  "Post Direct",     32, 928)
 
     _edge("guard_dir", "dir_ans")
     _edge("dir_ans", "post_dir")
 
     # ── MEDIUM PATH ──
-    y = branch_base
-    _add("context_guard", "guard_ans", "Guard (Answer)",
-         col_medium_x, y, {"position_label": "answer"})
-    y += step_h
-    _add("answer", "answer", "Answer", col_medium_x, y)
-    y += step_h
-    _add("post_model", "post_ans", "Post Answer",
-         col_medium_x, y, {"detect_completion": False})
-    y += step_h
-    _add("context_guard", "guard_rev", "Guard (Review)",
-         col_medium_x, y, {"position_label": "review"})
-    y += step_h
-    _add("review", "review", "Review", col_medium_x, y)
-    y += step_h
-    _add("iteration_gate", "gate_med", "Iter Gate (Medium)", col_medium_x, y)
-    y += step_h
+    _add("context_guard", "guard_ans", "Guard (Answer)",       304, 688,
+         {"position_label": "answer"})
+    _add("answer",        "answer",    "Answer",               304, 784)
+    _add("post_model",    "post_ans",  "Post Answer",          304, 880,
+         {"detect_completion": False})
+    _add("context_guard", "guard_rev", "Guard (Review)",       304, 976,
+         {"position_label": "review"})
+    _add("review",        "review",    "Review",               304, 1120)
+    _add("iteration_gate","gate_med",  "Iter Gate (Medium)",   304, 1424)
 
     _edge("guard_ans", "answer")
     _edge("answer", "post_ans")
@@ -126,40 +98,25 @@ def create_autonomous_template() -> WorkflowDefinition:
     _edge("guard_rev", "review")
 
     # ── HARD PATH ──
-    y = branch_base
-    _add("context_guard", "guard_todo", "Guard (Todos)",
-         col_hard_x, y, {"position_label": "create_todos"})
-    y += step_h
-    _add("create_todos", "mk_todos", "Create TODOs", col_hard_x, y)
-    y += step_h
-    _add("post_model", "post_todos", "Post Create Todos",
-         col_hard_x, y, {"detect_completion": False})
-    y += step_h
-    _add("context_guard", "guard_exec", "Guard (Execute)",
-         col_hard_x, y, {"position_label": "execute"})
-    y += step_h
-    _add("execute_todo", "exec_todo", "Execute TODO", col_hard_x, y)
-    y += step_h
-    _add("post_model", "post_exec", "Post Execute", col_hard_x, y)
-    y += step_h
-    _add("check_progress", "chk_prog", "Check Progress", col_hard_x, y)
-    y += step_h
-    _add("iteration_gate", "gate_hard", "Iter Gate (Hard)", col_hard_x, y)
-    y += step_h
-    _add("context_guard", "guard_fr", "Guard (Final Review)",
-         col_hard_x, y, {"position_label": "final_review"})
-    y += step_h
-    _add("final_review", "fin_rev", "Final Review", col_hard_x, y)
-    y += step_h
-    _add("post_model", "post_fr", "Post Final Review", col_hard_x, y)
-    y += step_h
-    _add("context_guard", "guard_fa", "Guard (Final Answer)",
-         col_hard_x, y, {"position_label": "final_answer"})
-    y += step_h
-    _add("final_answer", "fin_ans", "Final Answer", col_hard_x, y)
-    y += step_h
-    _add("post_model", "post_fa", "Post Final Answer", col_hard_x, y)
-    y += step_h
+    _add("context_guard", "guard_todo", "Guard (Todos)",        560, 688,
+         {"position_label": "create_todos"})
+    _add("create_todos",  "mk_todos",  "Create TODOs",         880, 688)
+    _add("post_model",    "post_todos", "Post Create Todos",    560, 832,
+         {"detect_completion": False})
+    _add("context_guard", "guard_exec", "Guard (Execute)",      944, 1184,
+         {"position_label": "execute"})
+    _add("execute_todo",  "exec_todo",  "Execute TODO",         560, 960)
+    _add("post_model",    "post_exec",  "Post Execute",         560, 1104)
+    _add("check_progress","chk_prog",   "Check Progress",       560, 1248)
+    _add("iteration_gate","gate_hard",  "Iter Gate (Hard)",     960, 1424)
+    _add("context_guard", "guard_fr",   "Guard (Final Review)", 576, 1504,
+         {"position_label": "final_review"})
+    _add("final_review",  "fin_rev",    "Final Review",         576, 1600)
+    _add("post_model",    "post_fr",    "Post Final Review",    576, 1712)
+    _add("context_guard", "guard_fa",   "Guard (Final Answer)", 576, 1808,
+         {"position_label": "final_answer"})
+    _add("final_answer",  "fin_ans",    "Final Answer",         576, 1904)
+    _add("post_model",    "post_fa",    "Post Final Answer",    576, 2000)
 
     _edge("guard_todo", "mk_todos")
     _edge("mk_todos", "post_todos")
@@ -169,8 +126,7 @@ def create_autonomous_template() -> WorkflowDefinition:
     _edge("post_exec", "chk_prog")
 
     # ── END NODE ──
-    max_y = max(n.position["y"] for n in nodes) + branch_gap
-    _add("end", "end", "End", top_center_x, max_y)
+    _add("end", "end", "End", 64, 2144)
 
     # ── Conditional routing: classify → branches (direct routing) ──
     _edge("classify", "guard_dir", port="easy", lbl="Easy")
@@ -232,29 +188,29 @@ def create_simple_template() -> WorkflowDefinition:
     nodes = [
         WorkflowNodeInstance(
             id="start", node_type="start", label="Start",
-            position={"x": 400, "y": 40},
+            position={"x": 400, "y": 0},
         ),
         WorkflowNodeInstance(
             id="mem", node_type="memory_inject", label="Memory Inject",
-            position={"x": 400, "y": 120},
+            position={"x": 400, "y": 96},
         ),
         WorkflowNodeInstance(
             id="guard", node_type="context_guard", label="Context Guard",
-            position={"x": 400, "y": 200},
+            position={"x": 400, "y": 192},
             config={"position_label": "main"},
         ),
         WorkflowNodeInstance(
             id="llm", node_type="llm_call", label="LLM Call",
-            position={"x": 400, "y": 280},
+            position={"x": 400, "y": 304},
             config={"prompt_template": "{input}", "output_field": "last_output", "set_complete": True},
         ),
         WorkflowNodeInstance(
             id="post", node_type="post_model", label="Post Model",
-            position={"x": 400, "y": 360},
+            position={"x": 400, "y": 416},
         ),
         WorkflowNodeInstance(
             id="end", node_type="end", label="End",
-            position={"x": 400, "y": 440},
+            position={"x": 400, "y": 544},
         ),
     ]
 

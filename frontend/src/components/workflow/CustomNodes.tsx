@@ -100,13 +100,22 @@ export const WorkflowNode = memo(({ data, selected }: NodeProps) => {
       </div>
 
       {/* Category badge */}
-      <div className="px-3 py-1.5 pb-2.5">
+      <div className="px-3 py-1.5 pb-2.5 flex items-center gap-1.5">
         <span
           className="inline-block text-[10px] px-1.5 py-0.5 rounded-[3px] font-medium"
           style={{ background: `${borderColor}20`, color: `${borderColor}cc` }}
         >
           {d.category}
         </span>
+        {d.hasStructuredOutput && (
+          <span
+            className="inline-flex items-center text-[9px] px-1 py-0.5 rounded-[3px] font-medium"
+            style={{ background: 'rgba(139,92,246,0.15)', color: 'rgba(139,92,246,0.85)' }}
+            title="Structured Output"
+          >
+            📐
+          </span>
+        )}
       </div>
 
       {/* Source handle (bottom) */}
@@ -162,6 +171,25 @@ export const ConditionalNode = memo(({ data, selected }: NodeProps) => {
           {d.label}
         </span>
         <span className="ml-auto text-[10px] text-[var(--text-muted)]">◆</span>
+      </div>
+
+      {/* Category badge + structured output indicator */}
+      <div className="px-3 pt-0 pb-1 flex items-center gap-1.5">
+        <span
+          className="inline-block text-[10px] px-1.5 py-0.5 rounded-[3px] font-medium"
+          style={{ background: `${borderColor}20`, color: `${borderColor}cc` }}
+        >
+          {d.category}
+        </span>
+        {d.hasStructuredOutput && (
+          <span
+            className="inline-flex items-center text-[9px] px-1 py-0.5 rounded-[3px] font-medium"
+            style={{ background: 'rgba(139,92,246,0.15)', color: 'rgba(139,92,246,0.85)' }}
+            title="Structured Output"
+          >
+            📐
+          </span>
+        )}
       </div>
 
       {/* Output ports */}

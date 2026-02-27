@@ -424,6 +424,12 @@ const ko: Translations = {
     invalidJson: '유효하지 않은 JSON',
     select: '선택…',
     helpTooltip: '상세 사용 가이드 보기',
+    structuredOutput: '구조화된 출력',
+    schemaFields: '출력 필드',
+    schemaExample: '출력 예시',
+    required: '필수',
+    pydanticValidated: 'Pydantic 검증',
+    autoRetry: '자동 재시도',
   },
 
   // ─── Create Session Modal ───

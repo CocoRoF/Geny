@@ -429,6 +429,9 @@ class BaseNode(ABC):
         OutputPort(id="default", label="Next"),
     ]
 
+    # ── Structured output schema (override in subclasses that use it) ──
+    structured_output_schema: Optional[Dict[str, Any]] = None
+
     # ── i18n translations keyed by locale (override in subclasses) ──
     i18n: Dict[str, NodeI18n] = {}
 
@@ -508,6 +511,9 @@ class BaseNode(ABC):
             "parameters": [p.to_dict() for p in self.parameters],
             "output_ports": [p.to_dict() for p in ports],
         }
+        # Include structured output schema if present
+        if self.structured_output_schema:
+            d["structured_output_schema"] = self.structured_output_schema
         # Include i18n translations for all locales
         if self.i18n:
             d["i18n"] = {

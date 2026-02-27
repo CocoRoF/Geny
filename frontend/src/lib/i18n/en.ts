@@ -424,6 +424,12 @@ const en = {
     invalidJson: 'Invalid JSON',
     select: 'Select…',
     helpTooltip: 'View detailed usage guide',
+    structuredOutput: 'Structured Output',
+    schemaFields: 'Output Fields',
+    schemaExample: 'Example Output',
+    required: 'REQUIRED',
+    pydanticValidated: 'Pydantic Validated',
+    autoRetry: 'Auto Retry',
   },
 
   // ─── Create Session Modal ───

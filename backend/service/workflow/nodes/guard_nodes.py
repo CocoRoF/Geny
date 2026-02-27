@@ -202,7 +202,13 @@ class PostModelNode(BaseNode):
         last_output = state.get(source_field, "") or ""
 
         # 1. Completion signal detection
-        if detect and last_output:
+        #    Always reset completion_signal to prevent stale signals
+        #    from a previous iteration leaking across loop boundaries.
+        if detect and not last_output:
+            # No output → explicitly clear any stale signal
+            updates["completion_signal"] = CompletionSignal.NONE.value
+            updates["completion_detail"] = None
+        elif detect and last_output:
             signal, detail = detect_completion_signal(last_output)
             updates["completion_signal"] = signal.value
             updates["completion_detail"] = detail
