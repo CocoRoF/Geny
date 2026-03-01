@@ -35,6 +35,7 @@ from service.workflow.nodes.base import (
     get_node_registry,
     register_node,
 )
+from service.workflow.workflow_state import NodeStateUsage
 from service.workflow.nodes.i18n import (
     LLM_CALL_I18N,
     CLASSIFY_I18N,
@@ -145,6 +146,12 @@ class LLMCallNode(BaseNode):
     icon = "bot"
     color = "#8b5cf6"
     i18n = LLM_CALL_I18N
+    state_usage = NodeStateUsage(
+        reads=["input", "messages"],
+        writes=["messages", "last_output", "current_step"],
+        config_dynamic_reads={"conditional_field": ""},
+        config_dynamic_writes={"output_field": "last_output"},
+    )
 
     parameters = [
         # ── Prompt ──
@@ -312,6 +319,11 @@ class ClassifyNode(BaseNode):
     icon = "split"
     color = "#3b82f6"
     i18n = CLASSIFY_I18N
+    state_usage = NodeStateUsage(
+        reads=["input"],
+        writes=["current_step", "messages", "last_output"],
+        config_dynamic_writes={"output_field": "difficulty"},
+    )
 
     from service.workflow.nodes.structured_output import (
         ClassifyOutput, build_frontend_schema,
@@ -510,6 +522,10 @@ class DirectAnswerNode(BaseNode):
     icon = "zap"
     color = "#10b981"
     i18n = DIRECT_ANSWER_I18N
+    state_usage = NodeStateUsage(
+        reads=["input", "messages"],
+        writes=["messages", "last_output", "current_step", "answer", "final_answer", "is_complete"],
+    )
 
     parameters = [
         NodeParameter(
@@ -607,6 +623,14 @@ class AnswerNode(BaseNode):
     i18n = ANSWER_I18N
     icon = "message-circle"
     color = "#f59e0b"
+    state_usage = NodeStateUsage(
+        reads=["input", "context_budget"],
+        writes=["messages", "last_output", "current_step", "answer"],
+        config_dynamic_reads={
+            "feedback_field": "review_feedback",
+            "count_field": "review_count",
+        },
+    )
 
     parameters = [
         NodeParameter(
@@ -757,6 +781,19 @@ class ReviewNode(BaseNode):
     icon = "clipboard-check"
     color = "#f59e0b"
     i18n = REVIEW_I18N
+    state_usage = NodeStateUsage(
+        reads=["input", "error", "is_complete", "completion_signal"],
+        writes=["review_feedback", "messages", "last_output", "current_step",
+                "final_answer", "is_complete"],
+        config_dynamic_reads={
+            "answer_field": "answer",
+            "count_field": "review_count",
+        },
+        config_dynamic_writes={
+            "output_field": "review_result",
+            "count_field": "review_count",
+        },
+    )
 
     from service.workflow.nodes.structured_output import (
         ReviewOutput, build_frontend_schema as _build_schema,

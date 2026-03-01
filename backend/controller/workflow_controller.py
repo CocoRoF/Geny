@@ -288,6 +288,10 @@ async def compile_view(workflow_id: str):
     Does NOT actually execute anything — it simulates the compilation
     process and produces Python pseudo-code plus structured metadata
     showing how the workflow becomes a CompiledStateGraph.
+
+    Now includes a ``state`` section with complete state field analysis:
+    which built-in fields exist, which are used/unused by this workflow,
+    per-node read/write mapping, and any custom fields.
     """
     from service.workflow.workflow_inspector import inspect_workflow
 
@@ -302,6 +306,32 @@ async def compile_view(workflow_id: str):
     except Exception as e:
         logger.exception(f"Compile-view failed for {workflow_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Inspection failed: {str(e)}")
+
+
+@router.get("/state/fields")
+async def list_state_fields():
+    """Return all built-in state field definitions.
+
+    Provides developers with a complete catalog of AutonomousState fields,
+    grouped by category, with type info, descriptions, reducer semantics,
+    and default values.
+    """
+    from service.workflow.workflow_state import (
+        get_all_state_fields,
+        get_state_fields_by_category,
+    )
+
+    all_fields = get_all_state_fields()
+    by_category = get_state_fields_by_category()
+
+    return {
+        "fields": [f.to_dict() for f in all_fields],
+        "by_category": {
+            cat: [f.to_dict() for f in fields]
+            for cat, fields in by_category.items()
+        },
+        "total": len(all_fields),
+    }
 
 
 @router.post("/{workflow_id}/execute")

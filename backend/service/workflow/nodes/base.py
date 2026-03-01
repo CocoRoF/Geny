@@ -432,6 +432,11 @@ class BaseNode(ABC):
     # ── Structured output schema (override in subclasses that use it) ──
     structured_output_schema: Optional[Dict[str, Any]] = None
 
+    # ── State usage declaration (override in subclasses) ──
+    # Declares which state fields this node reads and writes.
+    # See service.workflow.workflow_state.NodeStateUsage for details.
+    state_usage: Optional[Any] = None  # NodeStateUsage instance
+
     # ── i18n translations keyed by locale (override in subclasses) ──
     i18n: Dict[str, NodeI18n] = {}
 

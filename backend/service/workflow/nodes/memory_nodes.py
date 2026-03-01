@@ -21,6 +21,7 @@ from service.workflow.nodes.base import (
     NodeParameter,
     register_node,
 )
+from service.workflow.workflow_state import NodeStateUsage
 from service.workflow.nodes.i18n import (
     MEMORY_INJECT_I18N,
     TRANSCRIPT_RECORD_I18N,
@@ -52,6 +53,11 @@ class MemoryInjectNode(BaseNode):
     icon = "brain"
     color = "#ec4899"
     i18n = MEMORY_INJECT_I18N
+    state_usage = NodeStateUsage(
+        reads=[],
+        writes=["memory_refs"],
+        config_dynamic_reads={"search_field": "input"},
+    )
 
     parameters = [
         NodeParameter(
@@ -163,6 +169,11 @@ class TranscriptRecordNode(BaseNode):
     icon = "file-text"
     color = "#ec4899"
     i18n = TRANSCRIPT_RECORD_I18N
+    state_usage = NodeStateUsage(
+        reads=[],
+        writes=[],  # writes to external memory, not state
+        config_dynamic_reads={"source_field": "last_output"},
+    )
 
     parameters = [
         NodeParameter(

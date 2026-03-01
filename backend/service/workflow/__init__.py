@@ -27,6 +27,16 @@ from service.workflow.workflow_model import (
 )
 from service.workflow.workflow_executor import WorkflowExecutor
 from service.workflow.workflow_store import WorkflowStore, get_workflow_store
+from service.workflow.workflow_state import (
+    StateFieldDef,
+    StateFieldCategory,
+    ReducerType,
+    NodeStateUsage,
+    get_all_state_fields,
+    get_state_field,
+    get_state_fields_by_category,
+    analyze_workflow_state,
+)
 
 __all__ = [
     "BaseNode",
@@ -41,4 +51,12 @@ __all__ = [
     "WorkflowExecutor",
     "WorkflowStore",
     "get_workflow_store",
+    "StateFieldDef",
+    "StateFieldCategory",
+    "ReducerType",
+    "NodeStateUsage",
+    "get_all_state_fields",
+    "get_state_field",
+    "get_state_fields_by_category",
+    "analyze_workflow_state",
 ]

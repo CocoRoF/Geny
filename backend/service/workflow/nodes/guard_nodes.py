@@ -26,6 +26,7 @@ from service.workflow.nodes.base import (
     NodeParameter,
     register_node,
 )
+from service.workflow.workflow_state import NodeStateUsage
 from service.workflow.nodes.i18n import (
     CONTEXT_GUARD_I18N,
     POST_MODEL_I18N,
@@ -55,6 +56,11 @@ class ContextGuardNode(BaseNode):
     icon = "shield-check"
     color = "#6b7280"
     i18n = CONTEXT_GUARD_I18N
+    state_usage = NodeStateUsage(
+        reads=["context_budget"],
+        writes=["context_budget"],
+        config_dynamic_reads={"messages_field": "messages"},
+    )
 
     parameters = [
         NodeParameter(
@@ -146,6 +152,15 @@ class PostModelNode(BaseNode):
     icon = "pin"
     color = "#6b7280"
     i18n = POST_MODEL_I18N
+    state_usage = NodeStateUsage(
+        reads=[],
+        writes=["current_step", "completion_signal", "completion_detail", "is_complete"],
+        config_dynamic_reads={
+            "source_field": "last_output",
+            "increment_field": "iteration",
+        },
+        config_dynamic_writes={"increment_field": "iteration"},
+    )
 
     parameters = [
         NodeParameter(

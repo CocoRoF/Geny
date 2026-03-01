@@ -171,10 +171,50 @@ export interface CompileViewEdgeDetail {
   branches?: CompileViewEdgeBranch[];
 }
 
+/** A single state field usage entry from the workflow state analysis. */
+export interface StateFieldUsage {
+  name: string;
+  type: string;
+  description: string;
+  category: string;
+  reducer: string;
+  default: unknown;
+  is_builtin: boolean;
+  read_by: string[];
+  written_by: string[];
+  is_used: boolean;
+}
+
+/** Per-node state read/write summary. */
+export interface NodeStateMapping {
+  node_id: string;
+  node_label: string;
+  node_type: string;
+  reads: string[];
+  writes: string[];
+}
+
+/** Complete state analysis from the compile-view. */
+export interface CompileViewStateAnalysis {
+  fields: StateFieldUsage[];
+  fields_by_category: Record<string, StateFieldUsage[]>;
+  used_fields: StateFieldUsage[];
+  unused_builtin_fields: StateFieldUsage[];
+  custom_fields: StateFieldUsage[];
+  per_node: NodeStateMapping[];
+  summary: {
+    total_builtin: number;
+    used_count: number;
+    unused_count: number;
+    custom_count: number;
+  };
+}
+
 export interface CompileViewResponse {
   code: string;
   nodes: CompileViewNodeDetail[];
   edges: CompileViewEdgeDetail[];
+  state: CompileViewStateAnalysis;
   summary: {
     workflow_name: string;
     workflow_id: string;
@@ -184,6 +224,8 @@ export interface CompileViewResponse {
     simple_edges: number;
     pseudo_nodes: number;
     is_valid: boolean;
+    state_fields_used?: number;
+    state_fields_total?: number;
   };
   validation: {
     valid: boolean;

@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { workflowApi } from '@/lib/workflowApi';
 import { useI18n } from '@/lib/i18n';
 import { NodeIcon } from '@/components/workflow/icons';
-import { Search, X, ArrowRight, AlertTriangle, Diamond, Code2 } from 'lucide-react';
-import type { CompileViewResponse, CompileViewNodeDetail, CompileViewEdgeDetail } from '@/types/workflow';
+import { Search, X, ArrowRight, AlertTriangle, Diamond, Code2, Database } from 'lucide-react';
+import type { CompileViewResponse, CompileViewNodeDetail, CompileViewEdgeDetail, StateFieldUsage, NodeStateMapping } from '@/types/workflow';
 
 interface Props {
   workflowId: string;
@@ -13,14 +13,14 @@ interface Props {
   onClose: () => void;
 }
 
-type TabId = 'code' | 'nodes' | 'edges';
+type TabId = 'code' | 'nodes' | 'edges' | 'state';
 
 export default function CompiledViewModal({ workflowId, workflowName, onClose }: Props) {
   const { t } = useI18n();
   const [data, setData] = useState<CompileViewResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<TabId>('code');
+  const [activeTab, setActiveTab] = useState<TabId>('state');
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -68,6 +68,20 @@ export default function CompiledViewModal({ workflowId, workflowName, onClose }:
     );
   }, [data, searchQuery]);
 
+  const filteredStateFields = useMemo(() => {
+    if (!data?.state?.fields) return [];
+    if (!searchQuery.trim()) return data.state.fields;
+    const q = searchQuery.toLowerCase();
+    return data.state.fields.filter((f: StateFieldUsage) =>
+      f.name.toLowerCase().includes(q) ||
+      f.description?.toLowerCase().includes(q) ||
+      f.category?.toLowerCase().includes(q) ||
+      f.type?.toLowerCase().includes(q) ||
+      f.read_by?.some((n: string) => n.toLowerCase().includes(q)) ||
+      f.written_by?.some((n: string) => n.toLowerCase().includes(q))
+    );
+  }, [data, searchQuery]);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
@@ -88,7 +102,7 @@ export default function CompiledViewModal({ workflowId, workflowName, onClose }:
               <p className="text-[0.6875rem] text-[var(--text-muted)]">
                 {workflowName}
                 {data?.summary && (
-                  <> · {data.summary.total_nodes} {t('compiledView.nodes')} · {data.summary.total_edges} {t('compiledView.edges')}</>
+                  <> · {data.summary.total_nodes} {t('compiledView.nodes')} · {data.summary.total_edges} {t('compiledView.edges')} · {data.summary.state_fields_used ?? 0}/{data.summary.state_fields_total ?? 0} {t('compiledView.stateFields')}</>
                 )}
               </p>
             </div>
@@ -116,7 +130,7 @@ export default function CompiledViewModal({ workflowId, workflowName, onClose }:
         {/* Tabs + Search */}
         <div className="flex items-center gap-2 px-5 pt-3 pb-2 border-b border-[var(--border-color)] shrink-0">
           <div className="flex gap-1">
-            {(['code', 'nodes', 'edges'] as TabId[]).map(tab => (
+            {(['state', 'nodes', 'edges', 'code'] as TabId[]).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -126,9 +140,10 @@ export default function CompiledViewModal({ workflowId, workflowName, onClose }:
                     : 'bg-transparent text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]'
                 }`}
               >
-                {tab === 'code' ? <><Code2 size={11} className="inline -mt-px mr-1" />{t('compiledView.tabCode')}</> :
+                {tab === 'state' ? <><Database size={11} className="inline -mt-px mr-1" />{t('compiledView.tabState')}</> :
                  tab === 'nodes' ? <><Diamond size={11} className="inline -mt-px mr-1" />{t('compiledView.tabNodes')}</> :
-                 <><ArrowRight size={11} className="inline -mt-px mr-1" />{t('compiledView.tabEdges')}</>}
+                 tab === 'edges' ? <><ArrowRight size={11} className="inline -mt-px mr-1" />{t('compiledView.tabEdges')}</> :
+                 <><Code2 size={11} className="inline -mt-px mr-1" />{t('compiledView.tabCode')}</>}
               </button>
             ))}
           </div>
@@ -174,6 +189,13 @@ export default function CompiledViewModal({ workflowId, workflowName, onClose }:
                 />
               )}
               {activeTab === 'edges' && <EdgesView edges={filteredEdges} />}
+              {activeTab === 'state' && data.state && (
+                <StateView
+                  fields={filteredStateFields}
+                  perNode={data.state.per_node ?? []}
+                  summary={data.state.summary}
+                />
+              )}
             </>
           ) : null}
         </div>
@@ -185,6 +207,7 @@ export default function CompiledViewModal({ workflowId, workflowName, onClose }:
             <span>{t('compiledView.summaryEdges', { count: data.summary.total_edges })}</span>
             <span>{t('compiledView.summaryConditional', { count: data.summary.conditional_edges })}</span>
             <span>{t('compiledView.summarySimple', { count: data.summary.simple_edges })}</span>
+            <span>{t('compiledView.summaryState', { used: data.summary.state_fields_used ?? 0, total: data.summary.state_fields_total ?? 0 })}</span>
             {!data.validation.valid && (
               <span className="text-[var(--danger-color)]">
                 {t('compiledView.summaryErrors', { count: data.validation.errors.length })}
@@ -543,6 +566,311 @@ function EdgesView({ edges }: { edges: CompileViewEdgeDetail[] }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+
+// ════════════════════════════════════════════════════════════
+// State Tab — state field analysis with category grouping
+// ════════════════════════════════════════════════════════════
+
+const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  core:     { bg: 'rgba(59,130,246,0.08)',  text: '#60a5fa', border: 'rgba(59,130,246,0.2)'  },
+  task:     { bg: 'rgba(245,158,11,0.08)',  text: '#f59e0b', border: 'rgba(245,158,11,0.2)'  },
+  memory:   { bg: 'rgba(168,85,247,0.08)',  text: '#c084fc', border: 'rgba(168,85,247,0.2)'  },
+  control:  { bg: 'rgba(34,197,94,0.08)',   text: '#4ade80', border: 'rgba(34,197,94,0.2)'   },
+  output:   { bg: 'rgba(236,72,153,0.08)',  text: '#f472b6', border: 'rgba(236,72,153,0.2)'  },
+  metadata: { bg: 'rgba(148,163,184,0.08)', text: '#94a3b8', border: 'rgba(148,163,184,0.2)' },
+};
+
+function getCategoryStyle(category: string) {
+  return CATEGORY_COLORS[category] ?? CATEGORY_COLORS.metadata;
+}
+
+const REDUCER_LABELS: Record<string, string> = {
+  last_wins: 'Last Wins',
+  append: 'Append',
+  merge_by_id: 'Merge by ID',
+  deduplicate: 'Deduplicate',
+};
+
+function StateView({
+  fields,
+  perNode,
+  summary,
+}: {
+  fields: StateFieldUsage[];
+  perNode: NodeStateMapping[];
+  summary?: { total_builtin: number; used_count: number; unused_count: number; custom_count: number };
+}) {
+  const { t } = useI18n();
+  const [viewMode, setViewMode] = useState<'fields' | 'nodes'>('fields');
+  const [usageFilter, setUsageFilter] = useState<'all' | 'used' | 'unused'>('all');
+
+  const toggleUsageFilter = useCallback((filter: 'used' | 'unused') => {
+    setUsageFilter(prev => prev === filter ? 'all' : filter);
+  }, []);
+
+  // Apply usage filter then group by category
+  const visibleFields = useMemo(() => {
+    if (usageFilter === 'all') return fields;
+    return fields.filter(f => usageFilter === 'used' ? f.is_used : !f.is_used);
+  }, [fields, usageFilter]);
+
+  const fieldsByCategory = useMemo(() => {
+    const map = new Map<string, StateFieldUsage[]>();
+    for (const f of visibleFields) {
+      const cat = f.category || 'metadata';
+      if (!map.has(cat)) map.set(cat, []);
+      map.get(cat)!.push(f);
+    }
+    return map;
+  }, [visibleFields]);
+
+  return (
+    <div className="px-5 py-4 space-y-4">
+      {/* Summary bar */}
+      {summary && (
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+            {t('compiledView.stateSummary')}
+          </span>
+          <span className="text-[11px] font-mono py-0.5 px-2 rounded-md bg-[rgba(59,130,246,0.08)] text-[#60a5fa] border border-[rgba(59,130,246,0.2)]">
+            {t('compiledView.stateBuiltIn')}: {summary.total_builtin}
+          </span>
+          <button
+            onClick={() => toggleUsageFilter('used')}
+            className={`text-[11px] font-mono py-0.5 px-2 rounded-md border cursor-pointer transition-all ${
+              usageFilter === 'used'
+                ? 'bg-[rgba(34,197,94,0.2)] text-[#4ade80] border-[rgba(34,197,94,0.5)] ring-1 ring-[rgba(34,197,94,0.3)]'
+                : 'bg-[rgba(34,197,94,0.08)] text-[#4ade80] border-[rgba(34,197,94,0.2)] hover:bg-[rgba(34,197,94,0.14)]'
+            }`}
+          >
+            {t('compiledView.stateUsed')}: {summary.used_count}
+          </button>
+          {summary.unused_count > 0 && (
+            <button
+              onClick={() => toggleUsageFilter('unused')}
+              className={`text-[11px] font-mono py-0.5 px-2 rounded-md border cursor-pointer transition-all ${
+                usageFilter === 'unused'
+                  ? 'bg-[rgba(148,163,184,0.2)] text-[#94a3b8] border-[rgba(148,163,184,0.5)] ring-1 ring-[rgba(148,163,184,0.3)]'
+                  : 'bg-[rgba(148,163,184,0.08)] text-[#94a3b8] border-[rgba(148,163,184,0.2)] hover:bg-[rgba(148,163,184,0.14)]'
+              }`}
+            >
+              {t('compiledView.stateUnused')}: {summary.unused_count}
+            </button>
+          )}
+          {summary.custom_count > 0 && (
+            <span className="text-[11px] font-mono py-0.5 px-2 rounded-md bg-[rgba(236,72,153,0.08)] text-[#f472b6] border border-[rgba(236,72,153,0.2)]">
+              {t('compiledView.stateCustom')}: {summary.custom_count}
+            </span>
+          )}
+          <div className="flex-1" />
+          {/* View mode toggle */}
+          <div className="flex gap-0.5 bg-[var(--bg-primary)] rounded-md border border-[var(--border-color)] p-0.5">
+            <button
+              onClick={() => setViewMode('fields')}
+              className={`px-2 py-0.5 text-[10px] font-medium rounded cursor-pointer border-none transition-colors ${
+                viewMode === 'fields'
+                  ? 'bg-[rgba(59,130,246,0.12)] text-[var(--primary-color)]'
+                  : 'bg-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+              }`}
+            >
+              {t('compiledView.stateByField')}
+            </button>
+            <button
+              onClick={() => setViewMode('nodes')}
+              className={`px-2 py-0.5 text-[10px] font-medium rounded cursor-pointer border-none transition-colors ${
+                viewMode === 'nodes'
+                  ? 'bg-[rgba(59,130,246,0.12)] text-[var(--primary-color)]'
+                  : 'bg-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+              }`}
+            >
+              {t('compiledView.stateByNode')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Fields View ─── */}
+      {viewMode === 'fields' && (
+        <div className="space-y-4">
+          {Array.from(fieldsByCategory.entries()).map(([category, catFields]) => {
+            const style = getCategoryStyle(category);
+            return (
+              <div key={category}>
+                {/* Category header */}
+                <div className="flex items-center gap-2 mb-2">
+                  <span
+                    className="text-[10px] font-semibold uppercase tracking-wide py-0.5 px-2 rounded-md border"
+                    style={{ backgroundColor: style.bg, color: style.text, borderColor: style.border }}
+                  >
+                    {category}
+                  </span>
+                  <span className="text-[10px] text-[var(--text-muted)]">
+                    {catFields.length} {catFields.length === 1 ? 'field' : 'fields'}
+                  </span>
+                </div>
+
+                {/* Field cards */}
+                <div className="space-y-1.5">
+                  {catFields.map(field => (
+                    <StateFieldCard key={field.name} field={field} />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          {fields.length === 0 && (
+            <p className="text-center text-[var(--text-muted)] text-[0.8125rem] py-8">
+              {t('compiledView.stateNoFields')}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ─── Per-Node View ─── */}
+      {viewMode === 'nodes' && (
+        <div className="space-y-2">
+          {perNode.map(node => (
+            <div
+              key={node.node_id}
+              className="border border-[var(--border-color)] rounded-lg bg-[var(--bg-primary)] px-4 py-3"
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[0.8125rem] font-semibold text-[var(--text-primary)]">
+                  {node.node_label}
+                </span>
+                <span className="text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded">
+                  {node.node_type}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {/* Reads */}
+                <div>
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)] block mb-1">
+                    {t('compiledView.stateReads')}
+                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {node.reads.length > 0 ? node.reads.map(r => (
+                      <span key={r} className="text-[10px] font-mono py-0.5 px-1.5 rounded bg-[rgba(59,130,246,0.08)] text-[#60a5fa] border border-[rgba(59,130,246,0.15)]">
+                        {r}
+                      </span>
+                    )) : (
+                      <span className="text-[10px] text-[var(--text-muted)] italic">—</span>
+                    )}
+                  </div>
+                </div>
+                {/* Writes */}
+                <div>
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)] block mb-1">
+                    {t('compiledView.stateWrites')}
+                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {node.writes.length > 0 ? node.writes.map(w => (
+                      <span key={w} className="text-[10px] font-mono py-0.5 px-1.5 rounded bg-[rgba(245,158,11,0.08)] text-[#f59e0b] border border-[rgba(245,158,11,0.15)]">
+                        {w}
+                      </span>
+                    )) : (
+                      <span className="text-[10px] text-[var(--text-muted)] italic">—</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+          {perNode.length === 0 && (
+            <p className="text-center text-[var(--text-muted)] text-[0.8125rem] py-8">
+              {t('compiledView.stateNoNodes')}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+/** Individual state field card with read/write node lists. */
+function StateFieldCard({ field }: { field: StateFieldUsage }) {
+  const { t } = useI18n();
+  const style = getCategoryStyle(field.category);
+  const reducerLabel = REDUCER_LABELS[field.reducer] ?? field.reducer;
+
+  return (
+    <div
+      className={`border rounded-lg px-4 py-2.5 transition-colors ${
+        field.is_used
+          ? 'border-[var(--border-color)] bg-[var(--bg-primary)]'
+          : 'border-[var(--border-color)] bg-[var(--bg-primary)] opacity-50'
+      }`}
+    >
+      {/* Top row: name, type, badges */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[0.8125rem] font-semibold font-mono text-[var(--text-primary)]">
+          {field.name}
+        </span>
+        <span className="text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded">
+          {field.type}
+        </span>
+        <span
+          className="text-[10px] font-semibold py-0.5 px-1.5 rounded-md border uppercase tracking-wide"
+          style={{ backgroundColor: style.bg, color: style.text, borderColor: style.border }}
+        >
+          {field.category}
+        </span>
+        {field.reducer && field.reducer !== 'last_wins' && (
+          <span className="text-[10px] font-mono py-0.5 px-1.5 rounded-md bg-[rgba(168,85,247,0.08)] text-[#c084fc] border border-[rgba(168,85,247,0.2)]">
+            ⟳ {reducerLabel}
+          </span>
+        )}
+        {!field.is_used && (
+          <span className="text-[10px] font-semibold py-0.5 px-1.5 rounded-md bg-[rgba(148,163,184,0.08)] text-[#94a3b8] border border-[rgba(148,163,184,0.2)] uppercase tracking-wide">
+            {t('compiledView.stateUnusedBadge')}
+          </span>
+        )}
+        {!field.is_builtin && (
+          <span className="text-[10px] font-semibold py-0.5 px-1.5 rounded-md bg-[rgba(236,72,153,0.08)] text-[#f472b6] border border-[rgba(236,72,153,0.2)] uppercase tracking-wide">
+            {t('compiledView.stateCustomBadge')}
+          </span>
+        )}
+      </div>
+
+      {/* Description */}
+      <p className="text-[0.6875rem] text-[var(--text-secondary)] mt-1 leading-relaxed">
+        {field.description}
+      </p>
+
+      {/* Read/Write nodes */}
+      {(field.read_by.length > 0 || field.written_by.length > 0) && (
+        <div className="flex gap-4 mt-2">
+          {field.read_by.length > 0 && (
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide mr-0.5">
+                {t('compiledView.stateReadBy')}
+              </span>
+              {field.read_by.map(n => (
+                <span key={n} className="text-[10px] font-mono py-0.5 px-1.5 rounded bg-[rgba(59,130,246,0.06)] text-[#60a5fa] border border-[rgba(59,130,246,0.12)]">
+                  {n}
+                </span>
+              ))}
+            </div>
+          )}
+          {field.written_by.length > 0 && (
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide mr-0.5">
+                {t('compiledView.stateWrittenBy')}
+              </span>
+              {field.written_by.map(n => (
+                <span key={n} className="text-[10px] font-mono py-0.5 px-1.5 rounded bg-[rgba(245,158,11,0.06)] text-[#f59e0b] border border-[rgba(245,158,11,0.12)]">
+                  {n}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

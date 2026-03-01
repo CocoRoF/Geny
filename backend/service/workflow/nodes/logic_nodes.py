@@ -28,6 +28,7 @@ from service.workflow.nodes.base import (
     OutputPort,
     register_node,
 )
+from service.workflow.workflow_state import NodeStateUsage
 from service.workflow.nodes.i18n import (
     CONDITIONAL_ROUTER_I18N,
     ITERATION_GATE_I18N,
@@ -60,6 +61,11 @@ class ConditionalRouterNode(BaseNode):
     icon = "git-branch"
     color = "#6366f1"
     i18n = CONDITIONAL_ROUTER_I18N
+    state_usage = NodeStateUsage(
+        reads=[],
+        writes=["current_step"],
+        config_dynamic_reads={"routing_field": "difficulty"},
+    )
 
     parameters = [
         NodeParameter(
@@ -181,6 +187,12 @@ class IterationGateNode(BaseNode):
     icon = "fence"
     color = "#6366f1"
     i18n = ITERATION_GATE_I18N
+    state_usage = NodeStateUsage(
+        reads=["iteration", "max_iterations", "is_complete", "error",
+               "completion_signal", "context_budget"],
+        writes=["is_complete", "metadata"],
+        config_dynamic_reads={"custom_stop_field": ""},
+    )
 
     parameters = [
         NodeParameter(
@@ -324,6 +336,14 @@ class CheckProgressNode(BaseNode):
     icon = "bar-chart"
     color = "#6366f1"
     i18n = CHECK_PROGRESS_I18N
+    state_usage = NodeStateUsage(
+        reads=["is_complete", "error", "completion_signal"],
+        writes=["current_step", "metadata"],
+        config_dynamic_reads={
+            "list_field": "todos",
+            "index_field": "current_todo_index",
+        },
+    )
 
     parameters = [
         NodeParameter(
@@ -442,6 +462,10 @@ class StateSetterNode(BaseNode):
     icon = "pen-line"
     color = "#6366f1"
     i18n = STATE_SETTER_I18N
+    state_usage = NodeStateUsage(
+        reads=[],
+        writes=[],  # dynamic from config
+    )
 
     parameters = [
         NodeParameter(

@@ -27,6 +27,11 @@ from service.workflow.nodes.base import (
     OutputPort,
     get_node_registry,
 )
+from service.workflow.workflow_state import (
+    analyze_workflow_state,
+    get_all_state_fields,
+    get_state_fields_by_category,
+)
 from service.workflow.workflow_model import (
     WorkflowDefinition,
     WorkflowEdge,
@@ -87,6 +92,11 @@ def inspect_workflow(
         edges_by_source, instance_map, node_type_map,
     )
 
+    # Build state analysis
+    state_analysis = analyze_workflow_state(
+        workflow.nodes, node_type_map, instance_map,
+    )
+
     # Generate code
     code = _generate_code(
         workflow, instance_map, node_type_map, edges_by_source,
@@ -105,6 +115,7 @@ def inspect_workflow(
         "code": code,
         "nodes": node_details,
         "edges": edge_details,
+        "state": state_analysis.to_dict(),
         "summary": {
             "workflow_name": workflow.name,
             "workflow_id": workflow.id,
@@ -114,6 +125,8 @@ def inspect_workflow(
             "simple_edges": simple_count,
             "pseudo_nodes": len(workflow.nodes) - len(real_nodes),
             "is_valid": len(errors) == 0,
+            "state_fields_used": state_analysis.to_dict()["summary"]["used_count"],
+            "state_fields_total": state_analysis.to_dict()["summary"]["total_builtin"],
         },
         "validation": {
             "valid": len(errors) == 0,
@@ -464,9 +477,11 @@ def _generate_code(
         input_fields = _get_input_fields(base, inst.config)
         output_fields = _get_output_fields(base, inst.config)
         if input_fields:
-            lines.append(f"#     # Reads:  {', '.join(f'state[\"{f}\"]' for f in input_fields)}")
+            reads_str = ', '.join(f'state["{f}"]' for f in input_fields)
+            lines.append(f"#     # Reads:  {reads_str}")
         if output_fields:
-            lines.append(f"#     # Writes: {', '.join(f'state[\"{f}\"]' for f in output_fields)}")
+            writes_str = ', '.join(f'state["{f}"]' for f in output_fields)
+            lines.append(f"#     # Writes: {writes_str}")
 
         lines.append(f"#     result = await {base.node_type}_node.execute(state, ctx, config)")
         lines.append(f"#     return result")
@@ -682,6 +697,12 @@ def _get_important_config_keys(base: BaseNode) -> List[str]:
 
 def _get_input_fields(base: BaseNode, config: Dict[str, Any]) -> List[str]:
     """Infer which state fields a node reads."""
+    # Use explicit state_usage if available
+    from service.workflow.workflow_state import NodeStateUsage
+    state_usage = getattr(base, "state_usage", None)
+    if state_usage and isinstance(state_usage, NodeStateUsage):
+        return state_usage.resolve_reads(config)
+
     ntype = base.node_type
     fields: List[str] = []
 
@@ -719,6 +740,12 @@ def _get_input_fields(base: BaseNode, config: Dict[str, Any]) -> List[str]:
 
 def _get_output_fields(base: BaseNode, config: Dict[str, Any]) -> List[str]:
     """Infer which state fields a node writes."""
+    # Use explicit state_usage if available
+    from service.workflow.workflow_state import NodeStateUsage
+    state_usage = getattr(base, "state_usage", None)
+    if state_usage and isinstance(state_usage, NodeStateUsage):
+        return state_usage.resolve_writes(config)
+
     ntype = base.node_type
     fields: List[str] = []
 

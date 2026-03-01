@@ -33,6 +33,7 @@ from service.workflow.nodes.base import (
     OutputPort,
     register_node,
 )
+from service.workflow.workflow_state import NodeStateUsage
 from service.workflow.nodes.i18n import (
     CREATE_TODOS_I18N,
     EXECUTE_TODO_I18N,
@@ -96,6 +97,14 @@ class CreateTodosNode(BaseNode):
     icon = "list-todo"
     color = "#ef4444"
     i18n = CREATE_TODOS_I18N
+    state_usage = NodeStateUsage(
+        reads=["input"],
+        writes=["messages", "last_output", "current_step"],
+        config_dynamic_writes={
+            "output_list_field": "todos",
+            "output_index_field": "current_todo_index",
+        },
+    )
 
     from service.workflow.nodes.structured_output import (
         CreateTodosOutput, build_frontend_schema as _build_schema,
@@ -237,6 +246,18 @@ class ExecuteTodoNode(BaseNode):
     icon = "hammer"
     color = "#ef4444"
     i18n = EXECUTE_TODO_I18N
+    state_usage = NodeStateUsage(
+        reads=["input", "context_budget"],
+        writes=["messages", "last_output", "current_step"],
+        config_dynamic_reads={
+            "list_field": "todos",
+            "index_field": "current_todo_index",
+        },
+        config_dynamic_writes={
+            "list_field": "todos",
+            "index_field": "current_todo_index",
+        },
+    )
 
     parameters = [
         NodeParameter(
@@ -395,6 +416,12 @@ class FinalReviewNode(BaseNode):
     icon = "badge-check"
     color = "#ef4444"
     i18n = FINAL_REVIEW_I18N
+    state_usage = NodeStateUsage(
+        reads=["input", "context_budget"],
+        writes=["messages", "last_output", "current_step", "metadata"],
+        config_dynamic_reads={"list_field": "todos"},
+        config_dynamic_writes={"output_field": "review_feedback"},
+    )
 
     from service.workflow.nodes.structured_output import (
         FinalReviewOutput, build_frontend_schema as _build_schema,
@@ -588,6 +615,15 @@ class FinalAnswerNode(BaseNode):
     icon = "target"
     color = "#ef4444"
     i18n = FINAL_ANSWER_I18N
+    state_usage = NodeStateUsage(
+        reads=["input", "context_budget"],
+        writes=["messages", "last_output", "current_step", "is_complete"],
+        config_dynamic_reads={
+            "list_field": "todos",
+            "feedback_field": "review_feedback",
+        },
+        config_dynamic_writes={"output_field": "final_answer"},
+    )
 
     parameters = [
         NodeParameter(
