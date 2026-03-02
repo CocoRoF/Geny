@@ -225,13 +225,60 @@ class AgentSessionManager(SessionManager):
         logger.info(f"  model: {request.model}")
         logger.info(f"  role: {request.role.value if request.role else 'worker'}")
 
+        # ── Tool Preset resolution ──
+        # If a tool_preset_id is specified, load the preset and use its
+        # server/tool lists to construct a filtered MCP config.
+        tool_preset_id = getattr(request, 'tool_preset_id', None)
+        tool_preset_name = None
+        preset_server_filter = None  # None = no preset filtering
+        preset_tool_filter = None
+
+        if tool_preset_id:
+            from service.tool_policy.tool_preset_store import get_tool_preset_store
+            preset_store = get_tool_preset_store()
+            preset = preset_store.load(tool_preset_id)
+            if preset:
+                tool_preset_name = preset.name
+                # "*" means allow-all (no restriction)
+                if preset.allowed_servers and preset.allowed_servers != ["*"]:
+                    preset_server_filter = set(preset.allowed_servers)
+                if preset.allowed_tools and preset.allowed_tools != ["*"]:
+                    preset_tool_filter = preset.allowed_tools
+                logger.info(
+                    f"  tool_preset: {preset.name} ({tool_preset_id}) "
+                    f"servers={preset.allowed_servers}, tools={preset.allowed_tools}"
+                )
+            else:
+                logger.warning(f"  tool_preset_id={tool_preset_id} not found, ignoring")
+
         # Merge MCP configs and apply tool policy
         role = request.role.value if request.role else "worker"
+
+        # If a tool preset specifies an explicit tool list, use it as override
+        explicit_tools = request.allowed_tools
+        if preset_tool_filter is not None:
+            explicit_tools = preset_tool_filter
+
         policy = ToolPolicyEngine.for_role(
             role=role,
-            explicit_tools=request.allowed_tools,
+            explicit_tools=explicit_tools,
         )
         merged_mcp_config = merge_mcp_configs(self._global_mcp_config, request.mcp_config)
+
+        # Apply tool preset server filtering BEFORE policy filtering
+        if preset_server_filter is not None and merged_mcp_config and merged_mcp_config.servers:
+            from copy import deepcopy
+            filtered_servers = {}
+            for name, cfg in merged_mcp_config.servers.items():
+                if name in preset_server_filter:
+                    filtered_servers[name] = deepcopy(cfg)
+            if filtered_servers:
+                merged_mcp_config = MCPConfig(servers=filtered_servers)
+            else:
+                merged_mcp_config = None
+            logger.info(f"  preset server filter applied: {list(filtered_servers.keys()) if filtered_servers else '(none)'}")
+
+        # Then apply role-based policy filtering
         merged_mcp_config = policy.filter_mcp_config(merged_mcp_config)
 
         if merged_mcp_config and merged_mcp_config.servers:
@@ -284,6 +331,8 @@ class AgentSessionManager(SessionManager):
             enable_checkpointing=enable_checkpointing,
             workflow_id=workflow_id,
             graph_name=graph_name,
+            tool_preset_id=tool_preset_id,
+            tool_preset_name=tool_preset_name,
         )
 
         session_id = agent.session_id

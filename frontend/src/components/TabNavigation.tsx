@@ -8,7 +8,7 @@ function cn(...classes: (string | boolean | undefined | null)[]) {
   return twMerge(classes.filter(Boolean).join(' '));
 }
 
-const GLOBAL_TAB_IDS = ['main', 'playground', 'workflows', 'settings'] as const;
+const GLOBAL_TAB_IDS = ['main', 'playground', 'workflows', 'tools', 'settings'] as const;
 const SESSION_TAB_DEFS = [
   { id: 'info' },
   { id: 'graph' },

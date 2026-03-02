@@ -17,6 +17,8 @@ export interface SessionInfo {
   manager_id: string | null;
   workflow_id: string | null;
   graph_name: string | null;
+  tool_preset_id: string | null;
+  tool_preset_name: string | null;
   is_deleted?: boolean;
   deleted_at?: string | null;
 }
@@ -34,6 +36,7 @@ export interface CreateAgentRequest {
   enable_checkpointing?: boolean;
   workflow_id?: string;
   graph_name?: string;
+  tool_preset_id?: string;
 }
 
 export interface ExecuteRequest {
@@ -237,4 +240,38 @@ export interface PromptInfo {
 export interface PromptListResponse {
   prompts: PromptInfo[];
   total: number;
+}
+
+// ==================== Tool Preset Types ====================
+
+export interface ToolPreset {
+  id: string;
+  name: string;
+  description: string;
+  allowed_servers: string[];
+  allowed_tools: string[];
+  is_template: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ToolPresetListResponse {
+  presets: ToolPreset[];
+  total: number;
+}
+
+export interface AvailableServerInfo {
+  name: string;
+  type: string;
+  description: string;
+}
+
+export interface AvailableToolInfo {
+  name: string;
+  description: string;
+}
+
+export interface AvailableToolsResponse {
+  servers: AvailableServerInfo[];
+  tools: AvailableToolInfo[];
 }

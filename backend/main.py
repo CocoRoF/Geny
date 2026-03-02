@@ -15,6 +15,7 @@ from controller.command_controller import router as command_router, get_prompts_
 from controller.agent_controller import router as agent_router, agent_manager
 from controller.config_controller import router as config_router
 from controller.workflow_controller import router as workflow_router
+from controller.tool_preset_controller import router as tool_preset_router
 from service.redis.redis_client import RedisClient, get_redis_client
 from service.config import get_config_manager, ConfigManager
 from service.pod.pod_info import init_pod_info, get_pod_info
@@ -165,6 +166,12 @@ async def lifespan(app: FastAPI):
     logger.info(f"   - MCP Servers: {mcp_loader.get_server_count()}")
     logger.info(f"   - Custom Tools: {mcp_loader.get_tool_count()}")
 
+    # Initialize tool preset store (creates built-in templates)
+    print_step_banner("TOOLS", "TOOL PRESETS", "Initializing tool preset store...")
+    from service.tool_policy.tool_preset_store import get_tool_preset_store
+    tool_preset_store = get_tool_preset_store()
+    logger.info(f"   - Tool presets: {len(tool_preset_store.list_all())}")
+
     # Register workflow nodes and install templates
     print_step_banner("WORKFLOW", "WORKFLOW ENGINE", "Registering workflow nodes and templates...")
     from service.workflow.nodes import register_all_nodes
@@ -282,6 +289,7 @@ app.include_router(command_router)
 app.include_router(agent_router)  # LangGraph agent sessions
 app.include_router(config_router)  # Configuration management
 app.include_router(workflow_router)  # Workflow editor
+app.include_router(tool_preset_router)  # Tool preset management
 
 # Mount static files for Web UI Dashboard
 static_dir = Path(__file__).parent / "static"

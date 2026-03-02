@@ -106,6 +106,8 @@ class AgentSession:
         enable_checkpointing: bool = False,
         workflow_id: Optional[str] = None,
         graph_name: Optional[str] = None,
+        tool_preset_id: Optional[str] = None,
+        tool_preset_name: Optional[str] = None,
     ):
         """Initialize AgentSession.
 
@@ -149,6 +151,10 @@ class AgentSession:
         self._workflow_id = workflow_id
         self._graph_name = graph_name
         self._workflow: Optional[WorkflowDefinition] = None
+
+        # Tool Preset
+        self._tool_preset_id = tool_preset_id
+        self._tool_preset_name = tool_preset_name
 
         # Internal components
         self._model: Optional[ClaudeCLIChatModel] = None
@@ -1020,6 +1026,8 @@ class AgentSession:
             manager_id=self._manager_id,
             workflow_id=self._workflow_id,
             graph_name=self._graph_name,
+            tool_preset_id=self._tool_preset_id,
+            tool_preset_name=self._tool_preset_name,
         )
 
     # ========================================================================

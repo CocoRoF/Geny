@@ -4,10 +4,12 @@ import { useState, useEffect } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { agentApi } from '@/lib/api';
 import { workflowApi } from '@/lib/workflowApi';
+import { toolPresetApi } from '@/lib/toolPresetApi';
 import NumberStepper from '@/components/ui/NumberStepper';
-import { X, Circle } from 'lucide-react';
+import InfoTooltip from '@/components/ui/InfoTooltip';
+import { X } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
-import type { CreateAgentRequest, SessionInfo } from '@/types';
+import type { CreateAgentRequest, SessionInfo, ToolPreset } from '@/types';
 import type { WorkflowDefinition } from '@/types/workflow';
 
 const selectArrow: React.CSSProperties = {
@@ -35,9 +37,9 @@ export default function CreateSessionModal({ onClose }: Props) {
     session_name: '',
     role: 'worker',
     model: '',
-    max_turns: 25,
+    max_turns: 200,
     timeout: 300,
-    max_iterations: 10,
+    max_iterations: 30,
     manager_id: '',
     system_prompt: '',
   });
@@ -47,7 +49,10 @@ export default function CreateSessionModal({ onClose }: Props) {
   const [availableManagers, setAvailableManagers] = useState<SessionInfo[]>([]);
   const [availableWorkflows, setAvailableWorkflows] = useState<WorkflowDefinition[]>([]);
   const [templateWorkflows, setTemplateWorkflows] = useState<WorkflowDefinition[]>([]);
-  const [selectedWorkflow, setSelectedWorkflow] = useState('template-simple');
+  const [selectedWorkflow, setSelectedWorkflow] = useState('template-autonomous');
+  const [templatePresets, setTemplatePresets] = useState<ToolPreset[]>([]);
+  const [customPresets, setCustomPresets] = useState<ToolPreset[]>([]);
+  const [selectedToolPreset, setSelectedToolPreset] = useState('preset-full');
 
   useEffect(() => { loadPrompts(); }, [loadPrompts]);
 
@@ -61,6 +66,18 @@ export default function CreateSessionModal({ onClose }: Props) {
       setTemplateWorkflows(tmpls);
       const userWfs = (wfRes.workflows || []).filter(w => !w.is_template);
       setAvailableWorkflows(userWfs);
+    });
+  }, []);
+
+  // Load available tool presets
+  useEffect(() => {
+    toolPresetApi.list().then(res => {
+      const all = res.presets || [];
+      setTemplatePresets(all.filter(p => p.is_template));
+      setCustomPresets(all.filter(p => !p.is_template));
+    }).catch(() => {
+      setTemplatePresets([]);
+      setCustomPresets([]);
     });
   }, []);
 
@@ -92,6 +109,10 @@ export default function CreateSessionModal({ onClose }: Props) {
       const wf = allWfs.find(w => w.id === selectedWorkflow);
       payload.workflow_id = selectedWorkflow;
       payload.graph_name = wf?.name || selectedWorkflow;
+      // Tool preset
+      if (selectedToolPreset) {
+        payload.tool_preset_id = selectedToolPreset;
+      }
       await createSession(payload);
       onClose();
     } catch (e: unknown) {
@@ -175,18 +196,18 @@ export default function CreateSessionModal({ onClose }: Props) {
           {/* Max Turns + Timeout */}
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">{t('createSession.maxTurns')}</label>
-              <NumberStepper value={formState.max_turns ?? 25} onChange={v => setFormState(f => ({ ...f, max_turns: v }))} min={1} max={500} step={5} />
+              <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">{t('createSession.maxTurns')} <InfoTooltip text={t('createSession.maxTurnsHelp')} /></label>
+              <NumberStepper value={formState.max_turns ?? 200} onChange={v => setFormState(f => ({ ...f, max_turns: v }))} min={1} max={500} step={5} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">{t('createSession.timeout')}</label>
+              <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">{t('createSession.timeout')} <InfoTooltip text={t('createSession.timeoutHelp')} /></label>
               <NumberStepper value={formState.timeout ?? 300} onChange={v => setFormState(f => ({ ...f, timeout: v }))} min={10} max={7200} step={30} />
             </div>
           </div>
 
           {/* Graph Workflow */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">{t('createSession.graphWorkflow')}</label>
+            <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">{t('createSession.graphWorkflow')} <InfoTooltip text={t('createSession.graphWorkflowHelp')} /></label>
             <select className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8" style={selectArrow} value={selectedWorkflow} onChange={e => setSelectedWorkflow(e.target.value)}>
               {templateWorkflows.length > 0 && (
                 <optgroup label={t('createSession.officialTemplates')}>
@@ -220,15 +241,43 @@ export default function CreateSessionModal({ onClose }: Props) {
           {selectedWorkflow !== 'template-simple' && (
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">{t('createSession.maxIterations')}</label>
-                <NumberStepper value={formState.max_iterations ?? 10} onChange={v => setFormState(f => ({ ...f, max_iterations: v }))} min={1} max={500} step={5} />
+                <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">{t('createSession.maxIterations')} <InfoTooltip text={t('createSession.maxIterationsHelp')} /></label>
+                <NumberStepper value={formState.max_iterations ?? 30} onChange={v => setFormState(f => ({ ...f, max_iterations: v }))} min={1} max={500} step={5} />
               </div>
             </div>
           )}
 
+          {/* Tool Preset */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">{t('createSession.toolPreset')} <InfoTooltip text={t('createSession.toolPresetTooltip')} /></label>
+            <select className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8" style={selectArrow} value={selectedToolPreset} onChange={e => setSelectedToolPreset(e.target.value)}>
+              {templatePresets.length > 0 && (
+                <optgroup label={t('createSession.officialTemplates')}>
+                  {templatePresets.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </optgroup>
+              )}
+              {customPresets.length > 0 && (
+                <optgroup label={t('createSession.customToolPresets')}>
+                  {customPresets.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+            <small className="text-[0.75rem] text-[var(--text-muted)] mt-0.5">
+              {(() => {
+                const allPresets = [...templatePresets, ...customPresets];
+                const tp = allPresets.find(p => p.id === selectedToolPreset);
+                return tp?.description || t('createSession.toolPresetHelp');
+              })()}
+            </small>
+          </div>
+
           {/* System Prompt */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">{t('createSession.systemPrompt')}</label>
+            <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">{t('createSession.systemPrompt')} <InfoTooltip text={t('createSession.systemPromptHelp')} /></label>
             <textarea className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] resize-y" rows={4} placeholder={t('createSession.systemPromptPlaceholder')}
               value={formState.system_prompt || ''} onChange={e => setFormState(f => ({ ...f, system_prompt: e.target.value }))} />
           </div>

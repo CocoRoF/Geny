@@ -80,6 +80,7 @@ export default function InfoTab() {
     { label: t('info.fields.role'), value: data.role || t('info.worker') },
     { label: t('info.fields.graphName'), value: data.graph_name || '—' },
     { label: t('info.fields.workflowId'), value: data.workflow_id || '—' },
+    { label: t('info.fields.toolPreset'), value: data.tool_preset_name || data.tool_preset_id || '—' },
     { label: t('info.fields.maxTurns'), value: data.max_turns ?? '—' },
     { label: t('info.fields.timeout'), value: data.timeout ? `${data.timeout}s` : '—' },
     { label: t('info.fields.maxIterations'), value: data.max_iterations ?? '—' },

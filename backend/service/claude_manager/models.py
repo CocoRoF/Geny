@@ -185,6 +185,12 @@ class CreateSessionRequest(BaseModel):
         description="Human-readable name of the graph/workflow used by this session."
     )
 
+    # Tool preset settings
+    tool_preset_id: Optional[str] = Field(
+        default=None,
+        description="Tool preset ID — determines which MCP servers and tools are available"
+    )
+
     # MCP server settings
     mcp_config: Optional[MCPConfig] = Field(
         default=None,
@@ -266,6 +272,16 @@ class SessionInfo(BaseModel):
     graph_name: Optional[str] = Field(
         default=None,
         description="Human-readable name of the graph/workflow used by this session"
+    )
+
+    # Tool preset settings
+    tool_preset_id: Optional[str] = Field(
+        default=None,
+        description="Tool preset ID used by this session"
+    )
+    tool_preset_name: Optional[str] = Field(
+        default=None,
+        description="Human-readable name of the tool preset"
     )
 
 
