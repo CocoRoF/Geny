@@ -261,7 +261,7 @@ export default function SettingsTab() {
                         {fields.map(field => {
                           const value = editing.values[field.name] ?? field.default ?? '';
                           const lf = getLocalizedField(field, editing.schema, locale);
-                          return <ConfigFieldInput key={field.name} field={field} value={value} onChange={v => updateField(field.name, v)} localizedLabel={lf.label} localizedDescription={lf.description} localizedPlaceholder={lf.placeholder} />;
+                          return <ConfigFieldInput key={field.name} field={field} value={value} onChange={v => updateField(field.name, v)} allValues={editing.values} allFields={editing.schema.fields} onChangeField={updateField} localizedLabel={lf.label} localizedDescription={lf.description} localizedPlaceholder={lf.placeholder} />;
                         })}
                       </div>
                     </div>
@@ -306,7 +306,7 @@ export default function SettingsTab() {
   );
 }
 
-function ConfigFieldInput({ field, value, onChange, localizedLabel, localizedDescription, localizedPlaceholder }: { field: ConfigField; value: any; onChange: (v: any) => void; localizedLabel?: string; localizedDescription?: string; localizedPlaceholder?: string }) {
+function ConfigFieldInput({ field, value, onChange, allValues, allFields, onChangeField, localizedLabel, localizedDescription, localizedPlaceholder }: { field: ConfigField; value: any; onChange: (v: any) => void; allValues?: Record<string, unknown>; allFields?: ConfigField[]; onChangeField?: (name: string, v: any) => void; localizedLabel?: string; localizedDescription?: string; localizedPlaceholder?: string }) {
   const { t } = useI18n();
   const [showPass, setShowPass] = useState(false);
   const id = `cf-${field.name}`;
@@ -347,12 +347,33 @@ function ConfigFieldInput({ field, value, onChange, localizedLabel, localizedDes
   }
 
   if (effectiveType === 'select') {
+    // Filter options by depends_on parent value
+    const rawOptions = field.options || [];
+    const parentValue = field.depends_on && allValues ? String(allValues[field.depends_on] ?? '') : '';
+    const filteredOptions = field.depends_on && parentValue
+      ? rawOptions.filter(opt => opt.group === parentValue)
+      : rawOptions;
+
+    // Handle parent field change — cascade reset dependent children
+    const handleParentChange = (newValue: string) => {
+      onChange(newValue);
+      // Find child fields that depend on this field and reset them
+      if (allFields && onChangeField) {
+        for (const f of allFields) {
+          if (f.depends_on === field.name) {
+            const childOptions = (f.options || []).filter(opt => opt.group === newValue);
+            onChangeField(f.name, childOptions.length > 0 ? childOptions[0].value : '');
+          }
+        }
+      }
+    };
+
     return (
       <div>
         {labelEl}
-        <select id={id} name={field.name} value={value ?? ''} onChange={e => onChange(e.target.value)} className={inputClasses}>
+        <select id={id} name={field.name} value={value ?? ''} onChange={e => handleParentChange(e.target.value)} className={inputClasses}>
           <option value="">{t('common.selectOption')}</option>
-          {(field.options || []).map((opt: any) => (
+          {filteredOptions.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </select>

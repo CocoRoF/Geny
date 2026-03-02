@@ -47,6 +47,7 @@ class ConfigField:
     pattern: Optional[str] = None  # Regex pattern for validation
     group: str = "general"  # Group name for UI organization
     secure: bool = False  # If True, field is masked with show/hide toggle in UI
+    depends_on: Optional[str] = None  # If set, options are filtered by the value of this sibling field (matched via option["group"])
     apply_change: Optional[Callable[[Any, Any], None]] = field(
         default=None, repr=False
     )  # Callback(old_value, new_value) invoked when this field changes
@@ -337,7 +338,8 @@ class BaseConfig(ABC):
                     "max": f.max_value,
                     "pattern": f.pattern,
                     "group": f.group,
-                    "secure": f.secure
+                    "secure": f.secure,
+                    "depends_on": f.depends_on,
                 }
                 for f in cls.get_fields_metadata()
             ],

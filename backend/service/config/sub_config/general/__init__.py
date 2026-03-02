@@ -7,4 +7,5 @@ This category contains configs for core application settings:
 - Limits: Cost budget, turn limits, bash timeouts
 - Telemetry: Auto-updater, error reporting, telemetry
 - GitHub: GitHub personal access token
+- LTM: Long-term memory vector DB (FAISS) & embedding settings
 """

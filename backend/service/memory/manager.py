@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 
 from service.memory.long_term import LongTermMemory
 from service.memory.short_term import ShortTermMemory
+from service.memory.vector_memory import VectorMemoryManager
 from service.memory.types import (
     MemoryEntry,
     MemorySearchResult,
@@ -81,6 +82,7 @@ class SessionMemoryManager:
 
         self._ltm = LongTermMemory(storage_path)
         self._stm = ShortTermMemory(storage_path)
+        self._vmm = VectorMemoryManager(storage_path)
 
         self._initialized = False
 
@@ -91,6 +93,10 @@ class SessionMemoryManager:
     @property
     def short_term(self) -> ShortTermMemory:
         return self._stm
+
+    @property
+    def vector_memory(self) -> VectorMemoryManager:
+        return self._vmm
 
     @property
     def storage_path(self) -> str:
@@ -106,6 +112,28 @@ class SessionMemoryManager:
         self._stm.ensure_directory()
         self._initialized = True
         logger.info("SessionMemoryManager initialized at %s", self._storage_path)
+
+    async def initialize_vector_memory(self) -> bool:
+        """Initialise the FAISS vector memory layer (async).
+
+        Called separately from :meth:`initialize` because it requires
+        async I/O for config loading and initial indexing.
+
+        Returns:
+            ``True`` if vector memory was enabled and initialised.
+        """
+        try:
+            ok = await self._vmm.initialize()
+            if ok:
+                # Index existing memory files on first load
+                await self._vmm.index_memory_files()
+            return ok
+        except Exception:
+            logger.warning(
+                "initialize_vector_memory failed (non-critical)",
+                exc_info=True,
+            )
+            return False
 
     # ------------------------------------------------------------------
     # Write operations (convenience wrappers)
@@ -186,6 +214,20 @@ class SessionMemoryManager:
                 "record_execution: #%d (%d chars) → long-term memory",
                 execution_number, len(entry),
             )
+
+            # Also index into vector DB (fire-and-forget, non-blocking)
+            if self._vmm.enabled:
+                try:
+                    import asyncio
+                    loop = asyncio.get_event_loop()
+                    date_str = datetime.now(KST).strftime("%Y-%m-%d")
+                    source = f"memory/{date_str}.md"
+                    asyncio.ensure_future(
+                        self._vmm.index_text(entry, source)
+                    )
+                except Exception:
+                    pass  # Vector indexing is best-effort
+
         except Exception:
             logger.warning(
                 "record_execution: failed to write (non-critical)",
@@ -461,6 +503,101 @@ class SessionMemoryManager:
         body = "\n\n".join(parts)
         return f"{header}\n{body}"
 
+    async def build_memory_context_async(
+        self,
+        query: Optional[str] = None,
+        *,
+        include_summary: bool = True,
+        include_recent: int = 0,
+        max_chars: Optional[int] = None,
+    ) -> Optional[str]:
+        """Async version of ``build_memory_context`` with vector search.
+
+        Includes FAISS vector search results when the vector memory
+        layer is enabled, in addition to keyword search and file-based
+        retrieval.
+
+        Args:
+            query: Optional query to search for relevant memories.
+            include_summary: Include session summary if available.
+            include_recent: Number of recent messages to include.
+            max_chars: Character budget.
+
+        Returns:
+            Formatted memory context string, or None.
+        """
+        budget = max_chars or self._max_inject_chars
+        parts: list[str] = []
+        total_chars = 0
+
+        # 1. Session summary
+        if include_summary:
+            summary = self._stm.get_summary()
+            if summary and (total_chars + len(summary)) <= budget:
+                parts.append(f"<session-summary>\n{summary}\n</session-summary>")
+                total_chars += len(summary)
+
+        # 2. Main MEMORY.md
+        main_mem = self._ltm.load_main()
+        if main_mem and (total_chars + main_mem.char_count) <= budget:
+            parts.append(
+                f"<long-term-memory source=\"{main_mem.filename}\">\n"
+                f"{main_mem.content}\n"
+                f"</long-term-memory>"
+            )
+            total_chars += main_mem.char_count
+
+        # 3. Vector semantic search (if enabled)
+        if query and self._vmm.enabled:
+            try:
+                v_results = await self._vmm.search(query)
+                v_context = self._vmm.build_vector_context(
+                    v_results, max_chars=budget - total_chars
+                )
+                if v_context:
+                    parts.append(v_context)
+                    total_chars += len(v_context)
+            except Exception:
+                logger.debug(
+                    "build_memory_context_async: vector search failed",
+                    exc_info=True,
+                )
+
+        # 4. Keyword-based memory recall (complementary)
+        if query:
+            remaining_budget = budget - total_chars
+            if remaining_budget > 200:
+                search_results = self.search(query, max_results=5)
+                for result in search_results:
+                    chunk = (
+                        f"<memory-recall source=\"{result.entry.filename}\" "
+                        f"score=\"{result.score:.2f}\">\n"
+                        f"{result.snippet}\n"
+                        f"</memory-recall>"
+                    )
+                    if (total_chars + len(chunk)) > budget:
+                        break
+                    parts.append(chunk)
+                    total_chars += len(chunk)
+
+        # 5. Recent transcript messages
+        if include_recent > 0:
+            recent = self._stm.get_recent(n=include_recent)
+            for entry in recent:
+                if (total_chars + entry.char_count) > budget:
+                    break
+                parts.append(
+                    f"<recent-message>\n{entry.content}\n</recent-message>"
+                )
+                total_chars += entry.char_count
+
+        if not parts:
+            return None
+
+        header = "## Recalled Memory\n"
+        body = "\n\n".join(parts)
+        return f"{header}\n{body}"
+
     # ------------------------------------------------------------------
     # Memory flush (pre-compaction)
     # ------------------------------------------------------------------
@@ -567,6 +704,10 @@ class SessionMemoryManager:
 
         # Save to dated file
         self._ltm.write_dated(summary_text)
+
+        # Persist vector index
+        if self._vmm.enabled:
+            self._vmm.save()
 
         logger.info(
             "auto_flush: session summary (%d chars, %d messages) → long-term",

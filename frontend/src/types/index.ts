@@ -125,9 +125,10 @@ export interface ConfigField {
   required?: boolean;
   secure?: boolean;
   group?: string;
-  options?: Array<{ value: string; label: string }>;
+  options?: Array<{ value: string; label: string; group?: string }>;
   min?: number;
   max?: number;
+  depends_on?: string;  // Sibling field name whose value filters this field's options (matched via option.group)
 }
 
 export interface ConfigI18nLocale {

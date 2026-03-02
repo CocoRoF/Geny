@@ -117,7 +117,7 @@ class MemoryInjectNode(BaseNode):
             # Note: user input is recorded once by AgentSession.invoke()/astream()
             # before the graph starts — no duplicate recording here.
 
-            # Search for relevant memories
+            # Keyword-based memory search
             results = context.memory_manager.search(
                 input_text[:search_chars], max_results=max_results
             )
@@ -130,6 +130,26 @@ class MemoryInjectNode(BaseNode):
                     "char_count": r.entry.char_count,
                     "injected_at_turn": 0,
                 })
+
+            # Vector semantic search (if enabled)
+            vmm = context.memory_manager.vector_memory
+            if vmm and vmm.enabled:
+                try:
+                    v_results = await vmm.search(
+                        input_text[:search_chars], top_k=max_results,
+                    )
+                    for vr in v_results:
+                        refs.append({
+                            "filename": vr.source_file,
+                            "source": "vector",
+                            "char_count": len(vr.text),
+                            "injected_at_turn": 0,
+                        })
+                except Exception as ve:
+                    logger.debug(
+                        f"[{context.session_id}] memory_inject: "
+                        f"vector search failed: {ve}"
+                    )
 
             if refs:
                 logger.info(

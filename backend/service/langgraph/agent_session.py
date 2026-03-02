@@ -525,6 +525,15 @@ class AgentSession:
             # 3. Initialize memory manager (before graph, so graph can use it)
             self._init_memory()
 
+            # 3b. Initialize vector memory layer (async, non-blocking)
+            if self._memory_manager:
+                try:
+                    await self._memory_manager.initialize_vector_memory()
+                except Exception as ve:
+                    logger.debug(
+                        f"[{self._session_id}] Vector memory init skipped: {ve}"
+                    )
+
             # 4. Build StateGraph
             self._build_graph()
 
