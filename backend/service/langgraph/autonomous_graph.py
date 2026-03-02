@@ -245,94 +245,11 @@ class AutonomousGraph:
     # Resilience Nodes (Approach B — separate graph nodes)
     # ========================================================================
 
-    async def _memory_inject_node(
-        self, state: AutonomousState
-    ) -> Dict[str, Any]:
-        """Load relevant memory context into state before processing.
-
-        Runs once at graph start. Searches SessionMemoryManager for
-        memories relevant to the input, and writes MemoryRef entries
-        to state for traceability. Also records the user input to
-        short-term transcript.
-        """
-        session_logger = self._get_logger()
-
-        if session_logger:
-            session_logger.log_graph_node_enter(
-                node_name="memory_inject",
-                iteration=0,
-                state_summary={
-                    "input_length": len(state.get("input", "")),
-                },
-            )
-
-        if not self._memory_manager:
-            logger.debug(
-                f"[{self._session_id}] memory_inject: "
-                f"no memory manager available"
-            )
-            if session_logger:
-                session_logger.log_graph_node_exit(
-                    node_name="memory_inject",
-                    iteration=0,
-                    output_preview="No memory manager",
-                    duration_ms=0,
-                    state_changes={},
-                )
-            return {}
-
-        try:
-            input_text = state.get("input", "")
-
-            # Note: user input is recorded once by AgentSession.invoke()/astream()
-            # before the graph starts — no duplicate recording here.
-
-            # Search for relevant memories
-            results = self._memory_manager.search(
-                input_text[:500], max_results=5
-            )
-
-            refs: List[MemoryRef] = []
-            for r in results:
-                refs.append({
-                    "filename": r.entry.filename or "unknown",
-                    "source": r.entry.source.value,
-                    "char_count": r.entry.char_count,
-                    "injected_at_turn": 0,
-                })
-
-            if refs:
-                logger.info(
-                    f"[{self._session_id}] memory_inject: "
-                    f"loaded {len(refs)} refs "
-                    f"({sum(r['char_count'] for r in refs)} chars total)"
-                )
-
-            if session_logger:
-                session_logger.log_graph_node_exit(
-                    node_name="memory_inject",
-                    iteration=0,
-                    output_preview=f"Loaded {len(refs)} memory refs",
-                    duration_ms=0,
-                    state_changes={"memory_refs_count": len(refs)},
-                )
-
-            return {"memory_refs": refs} if refs else {}
-
-        except Exception as e:
-            logger.warning(
-                f"[{self._session_id}] memory_inject: "
-                f"failed (non-critical): {e}"
-            )
-            if session_logger:
-                session_logger.log_graph_node_exit(
-                    node_name="memory_inject",
-                    iteration=0,
-                    output_preview=f"Failed: {str(e)[:100]}",
-                    duration_ms=0,
-                    state_changes={},
-                )
-            return {}
+    # NOTE: _memory_inject_node was removed (dead code).
+    # Memory injection is handled exclusively by MemoryInjectNode registered
+    # in service.workflow.nodes.memory_nodes via the WorkflowExecutor path.
+    # The hardcoded node here was never invoked when using workflow-based
+    # session compilation (_build_graph → WorkflowExecutor.compile).
 
     def _make_context_guard_node(self, position: str):
         """Factory for context guard nodes at specific graph positions.
@@ -1611,8 +1528,13 @@ class AutonomousGraph:
         # ========== Register nodes ==========================================
 
         # -- Common entry ---------------------------------------------------
+        # Memory injection is handled by MemoryInjectNode via WorkflowExecutor.
+        # This hardcoded graph path retains a no-op placeholder for compat.
+        async def _noop_memory_inject(state: AutonomousState) -> Dict[str, Any]:
+            return {}
+
         graph_builder.add_node(
-            "memory_inject", self._memory_inject_node
+            "memory_inject", _noop_memory_inject
         )
         graph_builder.add_node(
             "guard_classify",

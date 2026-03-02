@@ -50,6 +50,20 @@ T = TypeVar("T", bound=BaseModel)
 # ============================================================================
 
 
+class MemoryGateOutput(BaseModel):
+    """Structured output for MemoryInjectNode's LLM gate.
+
+    The LLM decides whether the user's input warrants retrieving
+    long-term memory context before proceeding.
+    """
+
+    needs_memory: bool
+    """True if the input benefits from long-term memory retrieval."""
+
+    reasoning: Optional[str] = None
+    """Brief reasoning for the decision."""
+
+
 class ClassifyOutput(BaseModel):
     """Structured output for the ClassifyNode."""
 

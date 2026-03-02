@@ -185,6 +185,9 @@ class AgentState(TypedDict, total=False):
     # -- Memory references --------------------------------------------------
     memory_refs: Annotated[List[MemoryRef], _merge_memory_refs]
 
+    # -- Memory context (formatted text for prompt injection) ---------------
+    memory_context: Annotated[Optional[str], _last_wins]
+
     # -- Legacy metadata (for backward compat) ------------------------------
     metadata: Dict[str, Any]
 
@@ -246,6 +249,9 @@ class AutonomousState(TypedDict, total=False):
     # -- Memory references --------------------------------------------------
     memory_refs: Annotated[List[MemoryRef], _merge_memory_refs]
 
+    # -- Memory context (formatted text for prompt injection) ---------------
+    memory_context: Annotated[Optional[str], _last_wins]
+
     # -- Legacy metadata ----------------------------------------------------
     metadata: Dict[str, Any]
 
@@ -277,6 +283,7 @@ def make_initial_agent_state(
         "context_budget": None,
         "fallback": None,
         "memory_refs": [],
+        "memory_context": None,
         "metadata": extra_metadata,
     }
 
@@ -310,5 +317,6 @@ def make_initial_autonomous_state(
         "context_budget": None,
         "fallback": None,
         "memory_refs": [],
+        "memory_context": None,
         "metadata": extra_metadata,
     }

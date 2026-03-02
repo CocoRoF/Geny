@@ -177,7 +177,7 @@ class SessionMemoryManager:
         """Write knowledge to a topic-specific long-term memory file."""
         self._ltm.write_topic(topic, text)
 
-    def record_execution(
+    async def record_execution(
         self,
         *,
         input_text: str,
@@ -193,6 +193,9 @@ class SessionMemoryManager:
         methodology but designed for long-term memory recall.
 
         Writes to ``memory/YYYY-MM-DD.md`` with structured sections.
+        When the vector memory layer is enabled, the entry is also
+        indexed into FAISS (awaited to prevent race conditions with
+        ``auto_flush`` / ``vmm.save()``).
 
         Args:
             input_text: The user's input prompt.
@@ -215,18 +218,17 @@ class SessionMemoryManager:
                 execution_number, len(entry),
             )
 
-            # Also index into vector DB (fire-and-forget, non-blocking)
+            # Index into vector DB (awaited to avoid race with auto_flush/save)
             if self._vmm.enabled:
                 try:
-                    import asyncio
-                    loop = asyncio.get_event_loop()
                     date_str = datetime.now(KST).strftime("%Y-%m-%d")
                     source = f"memory/{date_str}.md"
-                    asyncio.ensure_future(
-                        self._vmm.index_text(entry, source)
-                    )
+                    await self._vmm.index_text(entry, source)
                 except Exception:
-                    pass  # Vector indexing is best-effort
+                    logger.debug(
+                        "record_execution: vector indexing failed (non-critical)",
+                        exc_info=True,
+                    )
 
         except Exception:
             logger.warning(

@@ -10,6 +10,7 @@
 
 import React, { useCallback, useEffect, useRef } from 'react';
 import type { WfNodeHelp } from '@/types/workflow';
+import { NodeIcon } from './icons';
 
 /* ---------- Lightweight Markdown Renderer ---------- */
 
@@ -190,10 +191,10 @@ export default function NodeHelpModal({ help, icon, color, onClose }: NodeHelpMo
         <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-[var(--border-color)] bg-[var(--bg-primary)]">
           {icon && (
             <span
-              className="flex items-center justify-center w-8 h-8 rounded-lg text-[16px]"
+              className="flex items-center justify-center w-8 h-8 rounded-lg"
               style={{ background: `${color || '#3b82f6'}20` }}
             >
-              {icon}
+              <NodeIcon name={icon} size={16} style={{ color: color || '#3b82f6' }} />
             </span>
           )}
           <div className="flex-1 min-w-0">

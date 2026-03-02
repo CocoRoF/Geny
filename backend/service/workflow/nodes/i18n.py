@@ -39,7 +39,7 @@ def _help(title: str, summary: str, sections: list[tuple[str, str]]) -> NodeHelp
 LLM_CALL_I18N = {
     "en": NodeI18n(
         label="LLM Call",
-        description="Universal LLM invocation node. Sends a configurable prompt template to the model with {field} state variable substitution. Supports conditional prompt switching, multiple output field mappings, and an optional completion flag.",
+        description="Universal LLM invocation node. Sends a configurable prompt template to the model with {field} state variable substitution. Supports conditional prompt switching, multiple output field mappings, and an optional completion flag. Can replicate most specialised model nodes through configuration alone.",
         parameters={
             "prompt_template": {
                 "label": "Prompt Template",
@@ -112,7 +112,7 @@ LLM_CALL_I18N = {
     ),
     "ko": NodeI18n(
         label="LLM 호출",
-        description="범용 LLM 호출 노드. {field} 상태 변수 치환이 가능한 프롬프트 템플릿을 모델에 전송합니다. 조건부 프롬프트 전환, 다중 출력 필드 매핑, 완료 플래그를 지원합니다.",
+        description="범용 LLM 호출 노드. {field} 상태 변수 치환이 가능한 프롬프트 템플릿을 모델에 전송합니다. 조건부 프롬프트 전환, 다중 출력 필드 매핑, 완료 플래그를 지원합니다. 구성만으로 대부분의 특수 모델 노드를 복제할 수 있습니다.",
         parameters={
             "prompt_template": {
                 "label": "프롬프트 템플릿",
@@ -187,7 +187,7 @@ LLM_CALL_I18N = {
 CLASSIFY_I18N = {
     "en": NodeI18n(
         label="Classify",
-        description="General-purpose LLM classification node. Sends a prompt to the model, parses the response into a configured category, and routes execution directly through the matching output port.",
+        description="General-purpose LLM classification node. Sends a prompt to the model, parses the response into a configured category, and routes execution directly through the matching output port. Default categories are easy/medium/hard but fully customizable to any set of labels.",
         parameters={
             "prompt_template": {
                 "label": "Classification Prompt",
@@ -257,7 +257,7 @@ CLASSIFY_I18N = {
     ),
     "ko": NodeI18n(
         label="분류",
-        description="범용 LLM 분류 노드. 모델에 프롬프트를 전송하고, 응답을 구성된 카테고리로 파싱한 후, 해당 출력 포트를 통해 실행을 직접 라우팅합니다.",
+        description="범용 LLM 분류 노드. 모델에 프롬프트를 전송하고, 응답을 구성된 카테고리로 파싱한 후, 해당 출력 포트를 통해 실행을 직접 라우팅합니다. 기본 카테고리는 easy/medium/hard이지만 임의의 레이블 세트로 완전히 커스터마이즈 가능합니다.",
         parameters={
             "prompt_template": {
                 "label": "분류 프롬프트",
@@ -567,7 +567,7 @@ REVIEW_I18N = {
         description=(
             "Self-routing quality gate that reviews a generated answer via LLM "
             "and routes to a configurable set of verdict ports. "
-            "Parses structured VERDICT/FEEDBACK lines from the model response. "
+            "Uses Pydantic-validated structured JSON output for reliable verdict and feedback parsing. "
             "Each configured verdict becomes an output port. "
             "Forces the first verdict after max retries to prevent infinite loops."
         ),
@@ -623,7 +623,7 @@ REVIEW_I18N = {
                 ("Overview", (
                     "The Review node is a **self-routing conditional node** that evaluates the quality of a generated answer. "
                     "It sends the question and answer to the model for assessment, "
-                    "then parses a structured VERDICT/FEEDBACK response.\n\n"
+                    "then parses a structured JSON verdict/feedback response.\n\n"
                     "Like the Classify node, the **Verdicts** parameter uses ``generates_ports``: "
                     "each configured verdict becomes a named output port. "
                     "An additional **End** port is always present for errors.\n\n"
@@ -667,7 +667,7 @@ REVIEW_I18N = {
         label="리뷰",
         description=(
             "LLM을 통해 생성된 답변을 리뷰하고 구성 가능한 판정 포트로 라우팅하는 "
-            "자체 라우팅 품질 게이트입니다. 모델 응답에서 구조화된 VERDICT/FEEDBACK 라인을 파싱합니다. "
+            "자체 라우팅 품질 게이트입니다. Pydantic 검증된 구조화 JSON 출력으로 판정과 피드백을 안정적으로 파싱합니다. "
             "각 구성된 판정은 출력 포트가 됩니다. "
             "무한 루프 방지를 위해 최대 재시도 후 첫 번째 판정을 강제합니다."
         ),
@@ -724,7 +724,7 @@ REVIEW_I18N = {
                 ("개요", (
                     "리뷰 노드는 생성된 답변의 품질을 평가하는 **자체 라우팅 조건부 노드**입니다. "
                     "질문과 답변을 모델에 전송하여 평가하고, "
-                    "구조화된 VERDICT/FEEDBACK 응답을 파싱합니다.\n\n"
+                    "구조화된 JSON 판정/피드백 응답을 파싱합니다.\n\n"
                     "Classify 노드처럼 **판정 목록** 파라미터가 ``generates_ports``를 사용합니다: "
                     "각 구성된 판정이 이름 있는 출력 포트가 됩니다. "
                     "추가로 **종료** 포트가 항상 오류용으로 존재합니다.\n\n"
@@ -1198,106 +1198,142 @@ STATE_SETTER_I18N = {
 MEMORY_INJECT_I18N = {
     "en": NodeI18n(
         label="Memory Inject",
-        description="Loads relevant memories from the session memory manager at workflow start. Searches for memories related to the input and injects MemoryRef entries into state. Optionally records user input to transcript.",
+        description="LLM-gated memory injection. The LLM decides whether the input needs long-term memory context. When activated, performs vector semantic search and keyword search, then injects both memory_refs (metadata) and memory_context (formatted text) into state.",
         parameters={
             "max_results": {
                 "label": "Max Memory Results",
-                "description": "Maximum number of memory chunks to load.",
+                "description": "Maximum number of memory chunks to load per search type.",
             },
             "search_chars": {
                 "label": "Search Input Length",
                 "description": "Character limit of input text used for memory search.",
             },
+            "max_inject_chars": {
+                "label": "Max Inject Characters",
+                "description": "Maximum total characters of memory context to inject into state.",
+            },
+            "enable_llm_gate": {
+                "label": "Enable LLM Gate",
+                "description": "Use the LLM to decide whether memory retrieval is needed. When disabled, memory is always retrieved for non-empty inputs.",
+            },
+            "enable_vector_search": {
+                "label": "Enable Vector Search",
+                "description": "Enable FAISS vector semantic search. When disabled, only keyword search is used.",
+            },
             "search_field": {
                 "label": "Search Source Field",
                 "description": "State field whose value is used as the memory search query.",
-            },
-            "record_input": {
-                "label": "Record Input to Transcript",
-                "description": "Record the search text to the short-term transcript.",
             },
         },
         output_ports={"default": {"label": "Next"}},
         groups={"behavior": "Behavior", "state_fields": "State Fields"},
         help=_help(
             "Memory Inject Node",
-            "Searches the session memory for relevant context and loads it into the graph state.",
+            "LLM-gated memory injection — the model itself decides whether long-term memory retrieval is needed.",
             [
                 ("Overview", (
                     "The Memory Inject node connects the workflow to the session's **long-term and short-term memory**. "
-                    "It searches for memories related to the current input and loads references into state.\n\n"
-                    "This gives downstream model nodes access to relevant prior context, "
-                    "improving the quality and consistency of responses."
+                    "Instead of hardcoded rules, the **LLM itself** decides whether the input warrants "
+                    "memory retrieval via a lightweight structured-output call.\n\n"
+                    "When activated, it loads both structured metadata (`memory_refs`) and formatted context text "
+                    "(`memory_context`) into state. Downstream model nodes can reference `{memory_context}` "
+                    "in their prompt templates for automatic injection."
                 )),
-                ("Memory Search", (
-                    "The node performs a similarity search using the input text:\n\n"
-                    "- **Max Results**: How many memory chunks to retrieve (default: 5)\n"
-                    "- **Search Input Length**: How many characters of the input to use for the search (default: 500)\n\n"
-                    "Results are stored as `memory_refs` in the graph state."
+                ("LLM Gate", (
+                    "The node asks the LLM: *\"Does this input need long-term memory context?\"*\n\n"
+                    "The LLM considers:\n"
+                    "- Whether the input references past work or prior context\n"
+                    "- Whether the task is complex enough to benefit from memory\n"
+                    "- Whether it's a trivial greeting/acknowledgment that needs no context\n\n"
+                    "If the gate fails (e.g., model error), memory is retrieved as a safe default. "
+                    "Disable the gate to always retrieve memory for every input."
                 )),
-                ("Transcript Recording", (
-                    "In addition to memory search, this node also records the user's input "
-                    "to the conversation transcript for future reference."
+                ("Memory Retrieval Pipeline", (
+                    "When the LLM gate approves retrieval, the node runs a multi-stage pipeline:\n\n"
+                    "1. **Session Summary** — Latest short-term memory state\n"
+                    "2. **MEMORY.md** — Persistent long-term notes\n"
+                    "3. **Vector Search** — FAISS semantic similarity search (if enabled)\n"
+                    "4. **Keyword Search** — Traditional keyword-based recall\n\n"
+                    "Results are combined within the character budget (`max_inject_chars`)."
                 )),
                 ("Usage Tips", (
                     "1. Place at the very beginning of the workflow, right after Start.\n"
                     "2. The memory manager must be configured for the session.\n"
-                    "3. If no memories match, the node silently produces no updates.\n"
-                    "4. Increase max_results for tasks that benefit from more context.\n"
-                    "5. Decrease search_chars if you only want to match on the beginning of input."
+                    "3. Use `{memory_context}` in downstream prompt templates to inject the retrieved context.\n"
+                    "4. Increase max_results for tasks that benefit from richer context.\n"
+                    "5. Disable vector search if the embedding model is not configured.\n"
+                    "6. Disable the LLM gate to always retrieve memory (useful for debugging)."
                 )),
             ],
         ),
     ),
     "ko": NodeI18n(
         label="메모리 주입",
-        description="워크플로우 시작 시 세션 메모리 관리자에서 관련 메모리를 로드합니다. 입력과 관련된 메모리를 검색하여 MemoryRef 항목을 상태에 주입합니다. 선택적으로 사용자 입력을 트랜스크립트에 기록합니다.",
+        description="LLM 게이트 기반 메모리 주입. LLM이 직접 입력에 장기 기억 컨텍스트가 필요한지 판단합니다. 활성화 시 벡터 시맨틱 검색과 키워드 검색을 수행하여 memory_refs (메타데이터)와 memory_context (포맷된 텍스트)를 상태에 주입합니다.",
         parameters={
             "max_results": {
                 "label": "최대 메모리 결과",
-                "description": "로드할 최대 메모리 청크 수입니다.",
+                "description": "검색 유형별 로드할 최대 메모리 청크 수입니다.",
             },
             "search_chars": {
                 "label": "검색 입력 길이",
                 "description": "메모리 검색에 사용되는 입력 텍스트의 문자 수 제한입니다.",
             },
+            "max_inject_chars": {
+                "label": "최대 주입 문자 수",
+                "description": "상태에 주입할 메모리 컨텍스트의 최대 총 문자 수입니다.",
+            },
+            "enable_llm_gate": {
+                "label": "LLM 게이트 활성화",
+                "description": "LLM이 메모리 검색 필요 여부를 판단합니다. 비활성화하면 비어 있지 않은 모든 입력에 대해 항상 메모리를 검색합니다.",
+            },
+            "enable_vector_search": {
+                "label": "벡터 검색 활성화",
+                "description": "FAISS 벡터 시맨틱 검색을 활성화합니다. 비활성화하면 키워드 검색만 사용됩니다.",
+            },
             "search_field": {
                 "label": "검색 소스 필드",
                 "description": "메모리 검색 쿼리로 사용되는 상태 필드입니다.",
-            },
-            "record_input": {
-                "label": "입력 트랜스크립트 기록",
-                "description": "검색 텍스트를 단기 트랜스크립트에 기록합니다.",
             },
         },
         output_ports={"default": {"label": "다음"}},
         groups={"behavior": "동작", "state_fields": "상태 필드"},
         help=_help(
             "메모리 주입 노드",
-            "세션 메모리에서 관련 컨텍스트를 검색하여 그래프 상태에 로드합니다.",
+            "LLM 게이트 기반 메모리 주입 — 모델이 직접 장기 기억 검색 필요 여부를 판단합니다.",
             [
                 ("개요", (
                     "메모리 주입 노드는 워크플로우를 세션의 **장기 및 단기 메모리**에 연결합니다. "
-                    "현재 입력과 관련된 메모리를 검색하고 참조를 상태에 로드합니다.\n\n"
-                    "이를 통해 하류 모델 노드가 관련 이전 컨텍스트에 접근할 수 있어 "
-                    "응답의 품질과 일관성이 향상됩니다."
+                    "하드코딩된 규칙 대신, **LLM 자체가** 경량 구조화 출력 호출을 통해 "
+                    "입력에 메모리 검색이 필요한지 판단합니다.\n\n"
+                    "활성화되면 구조화된 메타데이터(`memory_refs`)와 포맷된 컨텍스트 텍스트"
+                    "(`memory_context`)를 상태에 로드합니다. 하류 모델 노드의 프롬프트 템플릿에서 "
+                    "`{memory_context}`를 참조하면 자동으로 주입됩니다."
                 )),
-                ("메모리 검색", (
-                    "노드는 입력 텍스트를 사용하여 유사도 검색을 수행합니다:\n\n"
-                    "- **최대 결과**: 검색할 메모리 청크 수 (기본값: 5)\n"
-                    "- **검색 입력 길이**: 검색에 사용할 입력 문자 수 (기본값: 500)\n\n"
-                    "결과는 그래프 상태에 `memory_refs`로 저장됩니다."
+                ("LLM 게이트", (
+                    "노드가 LLM에게 묻습니다: *\"이 입력에 장기 기억 컨텍스트가 필요한가?\"*\n\n"
+                    "LLM이 고려하는 사항:\n"
+                    "- 입력이 이전 작업이나 과거 컨텍스트를 참조하는지\n"
+                    "- 작업이 메모리 혜택을 받을 만큼 복잡한지\n"
+                    "- 컨텍스트가 필요 없는 간단한 인사/확인인지\n\n"
+                    "게이트 실패 시(예: 모델 오류), 안전을 위해 기본적으로 메모리를 검색합니다. "
+                    "게이트를 비활성화하면 모든 입력에 대해 항상 메모리를 검색합니다."
                 )),
-                ("트랜스크립트 기록", (
-                    "메모리 검색 외에도 이 노드는 향후 참조를 위해 "
-                    "사용자의 입력을 대화 트랜스크립트에 기록합니다."
+                ("메모리 검색 파이프라인", (
+                    "LLM 게이트가 검색을 승인하면 다단계 파이프라인을 실행합니다:\n\n"
+                    "1. **세션 요약** — 최신 단기 메모리 상태\n"
+                    "2. **MEMORY.md** — 영구 장기 메모리 노트\n"
+                    "3. **벡터 검색** — FAISS 시맨틱 유사도 검색 (활성화 시)\n"
+                    "4. **키워드 검색** — 전통적 키워드 기반 검색\n\n"
+                    "결과는 문자 수 예산(`max_inject_chars`) 내에서 결합됩니다."
                 )),
                 ("사용 팁", (
                     "1. 워크플로우의 가장 처음, 시작 노드 바로 뒤에 배치하세요.\n"
                     "2. 세션에 메모리 관리자가 구성되어 있어야 합니다.\n"
-                    "3. 일치하는 메모리가 없으면 노드는 조용히 업데이트를 생성하지 않습니다.\n"
-                    "4. 더 많은 컨텍스트가 필요한 작업에는 max_results를 늘리세요.\n"
-                    "5. 입력의 시작 부분만 매칭하려면 search_chars를 줄이세요."
+                    "3. 하류 프롬프트 템플릿에서 `{memory_context}`를 사용하여 검색된 컨텍스트를 주입하세요.\n"
+                    "4. 더 풍부한 컨텍스트가 필요한 작업에는 max_results를 늘리세요.\n"
+                    "5. 임베딩 모델이 구성되지 않은 경우 벡터 검색을 비활성화하세요.\n"
+                    "6. 디버깅 시 LLM 게이트를 비활성화하여 항상 메모리를 검색하세요."
                 )),
             ],
         ),
@@ -1351,7 +1387,7 @@ TRANSCRIPT_RECORD_I18N = {
     ),
     "ko": NodeI18n(
         label="트랜스크립트 기록",
-        description="구성 가능한 메시지 역할로 상태 필드의 콘텐츠를 단기 메모리 트랜스크립트에 기록합니다. PostModel의 내장 기록이 부족할 때 몥시적 트랜스크립트 제어에 사용합니다.",
+        description="구성 가능한 메시지 역할로 상태 필드의 콘텐츠를 단기 메모리 트랜스크립트에 기록합니다. PostModel의 내장 기록이 부족할 때 명시적 트랜스크립트 제어에 사용합니다.",
         parameters={
             "max_length": {
                 "label": "최대 콘텐츠 길이",
@@ -1618,7 +1654,7 @@ POST_MODEL_I18N = {
 CREATE_TODOS_I18N = {
     "en": NodeI18n(
         label="Create TODOs",
-        description="Breaks a complex task into a structured JSON TODO list via LLM. Parses the response as JSON (handles markdown code blocks), converts to TodoItem format, and caps item count to prevent runaway execution.",
+        description="Breaks a complex task into a structured JSON TODO list via LLM. Uses Pydantic-validated structured output for reliable parsing, converts to TodoItem format, and caps item count to prevent runaway execution.",
         parameters={
             "prompt_template": {
                 "label": "Prompt Template",
@@ -1675,7 +1711,7 @@ CREATE_TODOS_I18N = {
     ),
     "ko": NodeI18n(
         label="TODO 생성",
-        description="LLM을 통해 복잡한 작업을 구조화된 JSON TODO 목록으로 분해합니다. 응답을 JSON으로 파싱하고(markdown 코드 블록 처리), TodoItem 형식으로 변환하며, 수량을 제한합니다.",
+        description="LLM을 통해 복잡한 작업을 구조화된 JSON TODO 목록으로 분해합니다. Pydantic 검증된 구조화 출력으로 안정적으로 파싱하고, TodoItem 형식으로 변환하며, 수량을 제한합니다.",
         parameters={
             "prompt_template": {
                 "label": "프롬프트 템플릿",

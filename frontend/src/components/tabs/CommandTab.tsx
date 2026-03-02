@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { agentApi } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
@@ -13,8 +13,6 @@ export default function CommandTab() {
   const session = sessions.find(s => s.session_id === selectedSessionId);
   const sessionData = selectedSessionId ? getSessionData(selectedSessionId) : null;
 
-  const [skipPermissions, setSkipPermissions] = useState(true);
-
   const handleExecute = useCallback(async () => {
     if (!selectedSessionId || !sessionData?.input?.trim()) return;
     setIsExecuting(true);
@@ -24,7 +22,6 @@ export default function CommandTab() {
       // The session's graph determines the execution path automatically
       const res = await agentApi.execute(selectedSessionId, {
         prompt: sessionData.input,
-        skip_permissions: skipPermissions,
       });
       updateSessionData(selectedSessionId, {
         output: res.output || res.error || t('common.noOutput'),
@@ -42,7 +39,7 @@ export default function CommandTab() {
     } finally {
       setIsExecuting(false);
     }
-  }, [selectedSessionId, sessionData?.input, skipPermissions, setIsExecuting, updateSessionData]);
+  }, [selectedSessionId, sessionData?.input, setIsExecuting, updateSessionData]);
 
   const handleStop = useCallback(async () => {
     if (!selectedSessionId) return;
@@ -105,12 +102,6 @@ export default function CommandTab() {
           onChange={e => updateSessionData(selectedSessionId, { input: e.target.value })}
           onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleExecute(); }}
         />
-        <div className="flex items-center gap-6 flex-wrap">
-          <label className="flex items-center gap-2 text-[0.8125rem] text-[var(--text-secondary)] cursor-pointer">
-            <input type="checkbox" checked={skipPermissions} onChange={e => setSkipPermissions(e.target.checked)} />
-            {t('commandTab.skipPermissions')}
-          </label>
-        </div>
         <div className="flex gap-2.5">
           <button
             className="py-2 px-4 bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border-none disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"

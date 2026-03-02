@@ -744,7 +744,7 @@ class AgentSession:
             self._execution_count += 1
             if self._memory_manager:
                 try:
-                    self._memory_manager.record_execution(
+                    await self._memory_manager.record_execution(
                         input_text=input_text,
                         result_state=result,
                         duration_ms=duration_ms,
@@ -928,7 +928,7 @@ class AgentSession:
                 try:
                     # Ensure input is in accumulated state
                     accumulated_state.setdefault("input", input_text)
-                    self._memory_manager.record_execution(
+                    await self._memory_manager.record_execution(
                         input_text=input_text,
                         result_state=accumulated_state,
                         duration_ms=duration_ms,

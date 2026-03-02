@@ -531,6 +531,7 @@ class AutonomousPrompts:
             "  Examples: \"Build a web application\", \"Debug this complex codebase\", "
             "\"Design a system architecture\"\n\n"
             "IMPORTANT: Respond with ONLY one of these exact words: easy, medium, hard\n\n"
+            "{memory_context}\n\n"
             "Input to classify:\n{input}"
         )
 
@@ -557,6 +558,7 @@ class AutonomousPrompts:
         return (
             "You are a task planner. Break down the following complex task "
             "into smaller, manageable TODO items.\n\n"
+            "{memory_context}\n\n"
             "Task:\n{input}\n\n"
             "Create a list of TODO items that, when completed in order, "
             "will fully accomplish the task.\n"
