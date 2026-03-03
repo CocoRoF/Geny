@@ -692,51 +692,61 @@ async def read_storage_file(
     )
 
 
-@router.post("/{session_id}/open-folder")
-async def open_storage_folder(
+@router.get("/{session_id}/download-folder")
+async def download_storage_folder(
     session_id: str = Path(..., description="Session ID"),
-    sub_path: str = Query("", description="Optional sub-folder inside storage")
 ):
     """
-    Open the session's storage folder in the OS file explorer.
+    Download the session's storage folder as a ZIP archive.
 
-    Works on Windows (explorer), macOS (open), and Linux (xdg-open).
+    Streams the ZIP file directly so the browser triggers a download.
     """
     import os
-    import platform
-    import subprocess
+    import io
+    import zipfile
+    from fastapi.responses import StreamingResponse
 
-    # Try live agent first, then fall back to stored session info
+    # Resolve storage path — live agent first, then session store
     agent = agent_manager.get_agent(session_id)
     if agent and agent.process:
         folder = agent.process.storage_path
     else:
-        # Fallback: look up from session store
         store = get_session_store()
         session_data = store.get(session_id)
         if session_data and session_data.get("storage_path"):
             folder = session_data["storage_path"]
         else:
-            raise HTTPException(status_code=404, detail=f"Session not found or no storage path: {session_id}")
-
-    if sub_path:
-        folder = os.path.join(folder, sub_path)
+            raise HTTPException(
+                status_code=404,
+                detail=f"Session not found or no storage path: {session_id}",
+            )
 
     if not os.path.isdir(folder):
-        raise HTTPException(status_code=404, detail=f"Folder does not exist: {folder}")
+        raise HTTPException(
+            status_code=404, detail=f"Folder does not exist: {folder}"
+        )
 
-    system = platform.system()
-    try:
-        if system == "Windows":
-            os.startfile(folder)
-        elif system == "Darwin":
-            subprocess.Popen(["open", folder])
-        else:
-            subprocess.Popen(["xdg-open", folder])
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to open folder: {str(e)}")
+    # Build ZIP in memory
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for root, _dirs, files in os.walk(folder):
+            for fname in files:
+                abs_path = os.path.join(root, fname)
+                arc_name = os.path.relpath(abs_path, folder)
+                try:
+                    zf.write(abs_path, arc_name)
+                except (PermissionError, OSError):
+                    pass  # skip unreadable files
+    buf.seek(0)
 
-    return {"success": True, "path": folder}
+    zip_filename = f"session-{session_id[:8]}.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{zip_filename}"'
+        },
+    )
 
 
 # ============================================================================

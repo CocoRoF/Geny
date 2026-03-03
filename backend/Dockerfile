@@ -26,11 +26,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 # ── Application source ────────────────────────────────────────────────
 COPY . .
 
+# ── Non-root user ────────────────────────────────────────────────────
+# Claude CLI refuses --dangerously-skip-permissions when running as root.
+# Create a dedicated 'geny' user (UID 1000) so the CLI works inside Docker.
+RUN groupadd -r geny && useradd -r -g geny -m -d /home/geny -s /bin/bash geny
+
 # ── Storage directories ──────────────────────────────────────────────
 # Agent session workspaces — bind-mounted to host for visibility
 RUN mkdir -p /data/geny_agent_sessions && \
     mkdir -p /app/logs && \
-    mkdir -p /app/service/claude_manager/session_data
+    mkdir -p /app/service/claude_manager/session_data && \
+    mkdir -p /home/geny/.claude && \
+    chown -R geny:geny /data /app /home/geny
 
 # ── Environment defaults ─────────────────────────────────────────────
 ENV PYTHONUNBUFFERED=1 \
@@ -40,5 +47,8 @@ ENV PYTHONUNBUFFERED=1 \
     GENY_AGENT_STORAGE_ROOT=/data/geny_agent_sessions
 
 EXPOSE 8000
+
+# Switch to non-root user
+USER geny
 
 CMD ["python", "main.py"]

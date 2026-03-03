@@ -34,13 +34,6 @@ services:
       - APP_HOST=0.0.0.0
       - APP_PORT=8000
       - GENY_AGENT_STORAGE_ROOT=/data/geny_agent_sessions
-    volumes:
-      # ── Agent session storage ──────────────────────────────────────
-      # 세션이 작업하는 워크스페이스 디렉토리. 호스트에서 직접 확인 가능.
-      # Host: ./data/geny_agent_sessions  →  Container: /data/geny_agent_sessions
-      - ./data/geny_agent_sessions:/data/geny_agent_sessions
-
-
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s

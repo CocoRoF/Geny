@@ -100,10 +100,22 @@ export const agentApi = {
   getStorageFile: (id: string, path: string) =>
     apiCall<StorageFileContent>(`/api/agents/${id}/storage/${encodeURIComponent(path)}`),
 
-  /** POST /api/agents/{id}/open-folder — open storage folder in OS file explorer */
-  openFolder: (id: string, subPath?: string) => {
-    const params = subPath ? `?sub_path=${encodeURIComponent(subPath)}` : '';
-    return apiCall<{ success: boolean; path: string }>(`/api/agents/${id}/open-folder${params}`, { method: 'POST' });
+  /** GET /api/agents/{id}/download-folder — download storage as ZIP */
+  downloadFolder: async (id: string) => {
+    const res = await fetch(`/api/agents/${id}/download-folder`);
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(body || `HTTP ${res.status}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `session-${id.slice(0, 8)}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   },
 };
 
