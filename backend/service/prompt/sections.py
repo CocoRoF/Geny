@@ -480,6 +480,25 @@ class AutonomousPrompts:
             "addressing the feedback:\n{input_text}"
         )
 
+    @staticmethod
+    def check_relevance() -> str:
+        """Prompt for the relevance gate in chat/broadcast mode.
+
+        The gate determines whether a broadcast message is relevant
+        to this agent's role and persona. Must be token-efficient.
+        Returns format string with placeholders: agent_name, role, message.
+        """
+        return (
+            "You are {agent_name} (role: {role}).\n"
+            "A group chat message was sent to all agents.\n\n"
+            "Message: {message}\n\n"
+            "Should you respond to this message? Consider:\n"
+            "- Is it directed at you by name or role?\n"
+            "- Is it relevant to your expertise/responsibilities?\n"
+            "- Is it a general question that you should answer?\n\n"
+            "Reply ONLY with: YES or NO"
+        )
+
 
 def build_agent_prompt(
     agent_name: str = "Geny Agent",

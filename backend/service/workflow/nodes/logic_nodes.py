@@ -34,6 +34,7 @@ from service.workflow.nodes.i18n import (
     ITERATION_GATE_I18N,
     CHECK_PROGRESS_I18N,
     STATE_SETTER_I18N,
+    RELEVANCE_GATE_I18N,
 )
 
 logger = getLogger(__name__)
@@ -497,3 +498,121 @@ class StateSetterNode(BaseNode):
         if isinstance(updates, dict):
             return updates
         return {}
+
+
+# ============================================================================
+# Relevance Gate — chat/broadcast message filter
+# ============================================================================
+
+
+@register_node
+class RelevanceGateNode(BaseNode):
+    """Filter broadcast/chat messages by agent role relevance.
+
+    Only activates when ``is_chat_message`` is True in state.
+    For normal (non-chat) messages, passes through immediately.
+
+    When active, performs a lightweight LLM call to decide if the
+    broadcast message is relevant to this agent's role/persona.
+    Routes to "continue" (relevant) or "skip" (not relevant → END).
+    """
+
+    node_type = "relevance_gate"
+    label = "Relevance Gate"
+    description = (
+        "Chat/broadcast relevance filter. Uses a lightweight LLM call to determine "
+        "if a broadcast message is relevant to this agent's role and persona. "
+        "Non-chat messages pass through without any LLM call. "
+        "Irrelevant messages route to 'skip' (→ END), relevant ones to 'continue'."
+    )
+    category = "logic"
+    icon = "filter"
+    color = "#8b5cf6"
+    i18n = RELEVANCE_GATE_I18N
+    state_usage = NodeStateUsage(
+        reads=["is_chat_message", "input", "metadata"],
+        writes=["relevance_skipped", "is_complete", "final_answer", "current_step"],
+    )
+
+    parameters = []
+
+    output_ports = [
+        OutputPort(
+            id="continue",
+            label="Continue",
+            description="Message is relevant — proceed with normal execution",
+        ),
+        OutputPort(
+            id="skip",
+            label="Skip",
+            description="Message is not relevant — skip to END",
+        ),
+    ]
+
+    async def execute(
+        self,
+        state: Dict[str, Any],
+        context: ExecutionContext,
+        config: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        is_chat = state.get("is_chat_message", False)
+
+        # Not a chat/broadcast message — pass through immediately
+        if not is_chat:
+            return {}
+
+        # Chat mode — check relevance via lightweight LLM call
+        from langchain_core.messages import HumanMessage
+        from service.prompt.sections import AutonomousPrompts
+
+        input_text = state.get("input", "")
+        metadata = state.get("metadata", {})
+        agent_name = metadata.get("agent_name", "Agent")
+        agent_role = metadata.get("agent_role", "worker")
+
+        try:
+            prompt = AutonomousPrompts.check_relevance().format(
+                agent_name=agent_name,
+                role=agent_role,
+                message=input_text,
+            )
+            messages = [HumanMessage(content=prompt)]
+
+            response, _ = await context.resilient_invoke(
+                messages, "relevance_gate"
+            )
+            response_text = response.content.strip().lower()
+            is_relevant = "yes" in response_text
+
+            logger.info(
+                f"[{context.session_id}] relevance_gate: "
+                f"message {'relevant' if is_relevant else 'NOT relevant'} "
+                f"(response: {response_text[:50]})"
+            )
+
+            if not is_relevant:
+                return {
+                    "relevance_skipped": True,
+                    "is_complete": True,
+                    "final_answer": "",
+                    "current_step": "relevance_skipped",
+                }
+
+            return {"relevance_skipped": False}
+
+        except Exception as e:
+            logger.warning(
+                f"[{context.session_id}] relevance_gate: "
+                f"error during relevance check: {e}, defaulting to relevant"
+            )
+            # On error, assume relevant (don't block legitimate work)
+            return {"relevance_skipped": False}
+
+    def get_routing_function(
+        self, config: Dict[str, Any],
+    ) -> Optional[Callable[[Dict[str, Any]], str]]:
+        def _route(state: Dict[str, Any]) -> str:
+            if state.get("relevance_skipped") or state.get("is_complete"):
+                return "skip"
+            return "continue"
+        return _route

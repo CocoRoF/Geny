@@ -36,6 +36,7 @@ const ko: Translations = {
     storage: '스토리지',
     logs: '로그',
     sharedFolder: '공유 폴더',
+    chat: '채팅',
   },
 
   // ─── Sidebar ───
@@ -640,6 +641,23 @@ const ko: Translations = {
     totalSize: '전체 크기',
     writeSuccess: '파일이 저장되었습니다',
     writeError: '파일 저장 실패',
+  },
+
+  // ─── Chat Tab ───
+  chatTab: {
+    title: '그룹 채팅',
+    subtitle: '모든 세션에 메시지 전송',
+    activeSessions: '{count}개 활성',
+    emptyTitle: '대화를 시작하세요',
+    emptyDesc: '메시지를 보내면 모든 활성 세션이 자신의 역할과 전문성에 따라 응답 여부를 결정합니다.',
+    inputPlaceholder: '브로드캐스트할 메시지를 입력하세요...',
+    sendHint: '전송',
+    newlineHint: '줄바꿈',
+    noActiveSessions: '활성 세션 없음',
+    broadcasting: '{count}개 세션에 전송 중...',
+    noResponses: '이 메시지에 관련성을 느낀 세션이 없습니다.',
+    broadcastSummary: '{responded}/{total}개 세션 응답 ({duration}초)',
+    broadcastError: '메시지 전송 실패',
   },
 };
 

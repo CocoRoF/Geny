@@ -2160,3 +2160,73 @@ FINAL_ANSWER_I18N = {
         ),
     ),
 }
+
+
+# ====================================================================
+#  RELEVANCE GATE NODE
+# ====================================================================
+
+RELEVANCE_GATE_I18N = {
+    "en": NodeI18n(
+        label="Relevance Gate",
+        description="Chat/broadcast relevance filter. Uses a lightweight LLM call to determine if a broadcast message is relevant to this agent's role and persona. Irrelevant messages skip to END.",
+        parameters={},
+        output_ports={
+            "continue": {"label": "Continue", "description": "Message is relevant — proceed with normal execution"},
+            "skip": {"label": "Skip", "description": "Message is not relevant — skip to END"},
+        },
+        groups={},
+        help=_help(
+            "Relevance Gate Node",
+            "Filters broadcast/chat messages based on agent role relevance.",
+            [
+                ("Overview", (
+                    "The Relevance Gate activates only for **chat/broadcast messages** "
+                    "(when `is_chat_message=True` in state). For normal single-session "
+                    "commands, it passes through without any LLM call.\n\n"
+                    "When active, it performs a lightweight yes/no LLM query to determine "
+                    "if the broadcast message is relevant to this agent's role and expertise."
+                )),
+                ("Routing", (
+                    "- **Continue**: Message is relevant → proceed to difficulty classification\n"
+                    "- **Skip**: Message is not relevant → exit to END with empty output"
+                )),
+                ("Usage Tips", (
+                    "1. Place between Memory Inject and Context Guard (Classify).\n"
+                    "2. Only activates for broadcast messages — transparent for normal execution.\n"
+                    "3. On error, defaults to 'relevant' to avoid blocking legitimate work."
+                )),
+            ],
+        ),
+    ),
+    "ko": NodeI18n(
+        label="관련성 게이트",
+        description="채팅/브로드캐스트 관련성 필터. 경량 LLM 호출로 브로드캐스트 메시지가 이 에이전트의 역할과 전문성에 관련이 있는지 판단합니다.",
+        parameters={},
+        output_ports={
+            "continue": {"label": "계속", "description": "메시지가 관련 있음 — 정상 실행 진행"},
+            "skip": {"label": "건너뛰기", "description": "메시지가 관련 없음 — END로 건너뜀"},
+        },
+        groups={},
+        help=_help(
+            "관련성 게이트 노드",
+            "에이전트 역할 관련성에 따라 브로드캐스트/채팅 메시지를 필터링합니다.",
+            [
+                ("개요", (
+                    "관련성 게이트는 **채팅/브로드캐스트 메시지**에서만 활성화됩니다 "
+                    "(상태에서 `is_chat_message=True`일 때). 일반 단일 세션 "
+                    "명령에서는 LLM 호출 없이 통과합니다."
+                )),
+                ("라우팅", (
+                    "- **계속**: 메시지가 관련 있음 → 난이도 분류로 진행\n"
+                    "- **건너뛰기**: 메시지가 관련 없음 → 빈 출력으로 END 종료"
+                )),
+                ("사용 팁", (
+                    "1. Memory Inject와 Context Guard (Classify) 사이에 배치하세요.\n"
+                    "2. 브로드캐스트 메시지에서만 활성화됩니다.\n"
+                    "3. 오류 시 '관련 있음'으로 기본 설정됩니다."
+                )),
+            ],
+        ),
+    ),
+}

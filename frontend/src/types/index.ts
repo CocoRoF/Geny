@@ -56,6 +56,31 @@ export interface ExecuteResponse {
   duration_ms?: number;
 }
 
+// ==================== Chat Types ====================
+
+export interface ChatBroadcastRequest {
+  message: string;
+  timeout?: number;
+}
+
+export interface ChatSessionResponse {
+  session_id: string;
+  session_name: string | null;
+  role: string | null;
+  responded: boolean;
+  output: string | null;
+  error: string | null;
+  duration_ms: number | null;
+}
+
+export interface ChatBroadcastResponse {
+  success: boolean;
+  message: string;
+  total_sessions: number;
+  responded_count: number;
+  responses: ChatSessionResponse[];
+  total_duration_ms: number;
+}
 
 
 // ==================== Health Types ====================

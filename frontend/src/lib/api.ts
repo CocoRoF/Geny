@@ -36,6 +36,8 @@ import type {
   ManagerDashboard,
   StorageListResponse,
   StorageFileContent,
+  ChatBroadcastRequest,
+  ChatBroadcastResponse,
 } from '@/types';
 
 export const agentApi = {
@@ -291,6 +293,17 @@ export const configApi = {
   /** POST /api/config/import — import configs */
   importAll: (data: Record<string, unknown>) =>
     apiCall<{ success: boolean; message?: string }>('/api/config/import', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+};
+
+// ==================== Chat API ====================
+
+export const chatApi = {
+  /** POST /api/chat/broadcast — broadcast message to all sessions */
+  broadcast: (data: ChatBroadcastRequest) =>
+    apiCall<ChatBroadcastResponse>('/api/chat/broadcast', {
       method: 'POST',
       body: JSON.stringify(data),
     }),

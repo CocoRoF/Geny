@@ -17,6 +17,7 @@ from controller.config_controller import router as config_router
 from controller.workflow_controller import router as workflow_router
 from controller.tool_preset_controller import router as tool_preset_router
 from controller.shared_folder_controller import router as shared_folder_router
+from controller.chat_controller import router as chat_router
 from service.redis.redis_client import RedisClient, get_redis_client
 from service.config import get_config_manager, ConfigManager
 from service.pod.pod_info import init_pod_info, get_pod_info
@@ -321,6 +322,7 @@ app.include_router(config_router)  # Configuration management
 app.include_router(workflow_router)  # Workflow editor
 app.include_router(tool_preset_router)  # Tool preset management
 app.include_router(shared_folder_router)  # Shared folder
+app.include_router(chat_router)  # Chat broadcast
 
 # Mount static files for Web UI Dashboard
 static_dir = Path(__file__).parent / "static"

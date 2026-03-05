@@ -703,6 +703,9 @@ class AgentSession:
             config = {"configurable": {"thread_id": thread_id}}
 
             # Unified initial state — all workflows use AutonomousState
+            # Always include agent identity for relevance gate (chat mode)
+            kwargs.setdefault("agent_name", self._session_name or self._session_id[:8])
+            kwargs.setdefault("agent_role", self._role.value if hasattr(self._role, 'value') else str(self._role))
             initial_state = make_initial_autonomous_state(
                 input_text,
                 max_iterations=effective_max_iterations,
@@ -832,6 +835,9 @@ class AgentSession:
             config = {"configurable": {"thread_id": thread_id}}
 
             # Unified initial state — all workflows use AutonomousState
+            # Always include agent identity for relevance gate (chat mode)
+            kwargs.setdefault("agent_name", self._session_name or self._session_id[:8])
+            kwargs.setdefault("agent_role", self._role.value if hasattr(self._role, 'value') else str(self._role))
             initial_state = make_initial_autonomous_state(
                 input_text,
                 max_iterations=effective_max_iterations,

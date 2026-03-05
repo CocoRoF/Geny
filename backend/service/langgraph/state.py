@@ -252,6 +252,10 @@ class AutonomousState(TypedDict, total=False):
     # -- Memory context (formatted text for prompt injection) ---------------
     memory_context: Annotated[Optional[str], _last_wins]
 
+    # -- Chat / relevance gate ------------------------------------------------
+    is_chat_message: bool               # True when invoked via /chat/broadcast
+    relevance_skipped: bool             # True if relevance gate decided to skip
+
     # -- Legacy metadata ----------------------------------------------------
     metadata: Dict[str, Any]
 
@@ -318,5 +322,7 @@ def make_initial_autonomous_state(
         "fallback": None,
         "memory_refs": [],
         "memory_context": None,
+        "is_chat_message": extra_metadata.pop("is_chat_message", False),
+        "relevance_skipped": False,
         "metadata": extra_metadata,
     }

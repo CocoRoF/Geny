@@ -13,7 +13,9 @@ Enhanced with resilience nodes (Approach B — LangGraph philosophy):
 
 Graph topology::
 
-    START → memory_inject → guard_classify → classify_difficulty → post_classify
+    START → memory_inject → relevance_gate → [continue/skip]
+              ↓ skip: END (chat message not relevant)
+              ↓ continue: guard_classify → classify_difficulty → post_classify
               ↓ [easy/medium/hard/end]
 
     [easy]  → guard_direct → direct_answer → post_direct → END
@@ -35,7 +37,7 @@ Graph topology::
             → final_review → post_final_review
             → guard_final_answer → final_answer → post_final_answer → END
 
-Total: 28 nodes, 4 conditional routers.
+Total: 30 nodes, 5 conditional routers (including relevance gate).
 """
 
 import asyncio
@@ -503,6 +505,114 @@ class AutonomousGraph:
             return updates
 
         return _gate_node
+
+    # ========================================================================
+    # Relevance Gate Node (Chat/Broadcast mode)
+    # ========================================================================
+
+    async def _relevance_gate_node(
+        self, state: AutonomousState
+    ) -> Dict[str, Any]:
+        """Determine if a broadcast/chat message is relevant to this agent.
+
+        Only activates when ``is_chat_message`` is True. If not a chat
+        message, passes through immediately. When active, performs a
+        lightweight LLM call to decide relevance based on the agent's
+        role and persona.
+
+        Returns:
+            State update with ``relevance_skipped`` set if irrelevant.
+        """
+        is_chat = state.get("is_chat_message", False)
+        session_logger = self._get_logger()
+
+        if session_logger:
+            session_logger.log_graph_node_enter(
+                node_name="relevance_gate",
+                iteration=state.get("iteration", 0),
+                state_summary={"is_chat_message": is_chat},
+            )
+
+        # Not a chat/broadcast message — pass through
+        if not is_chat:
+            if session_logger:
+                session_logger.log_graph_node_exit(
+                    node_name="relevance_gate",
+                    iteration=state.get("iteration", 0),
+                    output_preview="Not a chat message — pass through",
+                    duration_ms=0,
+                    state_changes={},
+                )
+            return {}
+
+        # Chat mode — check relevance
+        input_text = state.get("input", "")
+        metadata = state.get("metadata", {})
+        agent_name = metadata.get("agent_name", "Agent")
+        agent_role = metadata.get("agent_role", "worker")
+
+        try:
+            prompt = AutonomousPrompts.check_relevance().format(
+                agent_name=agent_name,
+                role=agent_role,
+                message=input_text,
+            )
+            messages = [HumanMessage(content=prompt)]
+
+            response, _ = await self._resilient_invoke(
+                messages, "relevance_gate", state
+            )
+            response_text = response.content.strip().lower()
+
+            is_relevant = "yes" in response_text
+
+            logger.info(
+                f"[{self._session_id}] relevance_gate: "
+                f"message {'relevant' if is_relevant else 'NOT relevant'} "
+                f"(response: {response_text[:50]})"
+            )
+
+            if session_logger:
+                session_logger.log_graph_node_exit(
+                    node_name="relevance_gate",
+                    iteration=state.get("iteration", 0),
+                    output_preview=f"Relevant: {is_relevant}",
+                    duration_ms=0,
+                    state_changes={"relevance_skipped": not is_relevant},
+                )
+
+            if not is_relevant:
+                return {
+                    "relevance_skipped": True,
+                    "is_complete": True,
+                    "final_answer": "",
+                    "current_step": "relevance_skipped",
+                }
+
+            return {"relevance_skipped": False}
+
+        except Exception as e:
+            logger.warning(
+                f"[{self._session_id}] relevance_gate: "
+                f"error during relevance check: {e}, defaulting to relevant"
+            )
+            if session_logger:
+                session_logger.log_graph_error(
+                    error_message=str(e),
+                    node_name="relevance_gate",
+                    iteration=state.get("iteration", 0),
+                    error_type=type(e).__name__,
+                )
+            # On error, assume relevant (don't block legitimate work)
+            return {"relevance_skipped": False}
+
+    def _route_after_relevance(
+        self, state: AutonomousState
+    ) -> Literal["continue", "skip"]:
+        """Route after relevance gate — continue processing or skip to END."""
+        if state.get("relevance_skipped") or state.get("is_complete"):
+            return "skip"
+        return "continue"
 
     # ========================================================================
     # Core Graph Nodes
@@ -1502,12 +1612,13 @@ class AutonomousGraph:
     def build(self) -> CompiledStateGraph:
         """Build and compile the resilience-enhanced autonomous graph.
 
-        Creates a StateGraph with 28 nodes organized into:
-        - 1 common entry (memory_inject → guard → classify → post)
+        Creates a StateGraph with 30 nodes organized into:
+        - 1 common entry (memory_inject → relevance_gate → guard → classify → post)
+        - 1 relevance gate for chat/broadcast filtering
         - 3 execution paths (easy/medium/hard), each with
           guard → execute → post patterns
         - 2 iteration gates for loop prevention
-        - 4 conditional routers for path decisions
+        - 5 conditional routers for path decisions
 
         Returns:
             Compiled StateGraph ready for execution.
@@ -1535,6 +1646,9 @@ class AutonomousGraph:
 
         graph_builder.add_node(
             "memory_inject", _noop_memory_inject
+        )
+        graph_builder.add_node(
+            "relevance_gate", self._relevance_gate_node
         )
         graph_builder.add_node(
             "guard_classify",
@@ -1648,7 +1762,18 @@ class AutonomousGraph:
 
         # -- Common entry ---------------------------------------------------
         graph_builder.add_edge(START, "memory_inject")
-        graph_builder.add_edge("memory_inject", "guard_classify")
+        graph_builder.add_edge("memory_inject", "relevance_gate")
+
+        # Relevance gate: chat messages may be skipped; normal messages pass through
+        graph_builder.add_conditional_edges(
+            "relevance_gate",
+            self._route_after_relevance,
+            {
+                "continue": "guard_classify",
+                "skip": END,
+            },
+        )
+
         graph_builder.add_edge("guard_classify", "classify_difficulty")
         graph_builder.add_edge(
             "classify_difficulty", "post_classify"
@@ -1759,7 +1884,7 @@ class AutonomousGraph:
 
         logger.info(
             f"[{self._session_id}] AutonomousGraph built successfully "
-            f"(28 nodes, 4 routers)"
+            f"(30 nodes, 5 routers)"
         )
         return self._graph
 

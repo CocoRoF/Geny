@@ -36,6 +36,7 @@ const en = {
     storage: 'Storage',
     logs: 'Logs',
     sharedFolder: 'Shared',
+    chat: 'Chat',
   },
 
   // ─── Sidebar ───
@@ -640,6 +641,23 @@ const en = {
     totalSize: 'Total Size',
     writeSuccess: 'File saved successfully',
     writeError: 'Failed to save file',
+  },
+
+  // ─── Chat Tab ───
+  chatTab: {
+    title: 'Group Chat',
+    subtitle: 'Broadcast to all sessions',
+    activeSessions: '{count} active',
+    emptyTitle: 'Start a conversation',
+    emptyDesc: 'Send a message and all active sessions will decide whether to respond based on their role and expertise.',
+    inputPlaceholder: 'Type a message to broadcast...',
+    sendHint: 'to send',
+    newlineHint: 'for new line',
+    noActiveSessions: 'No active sessions',
+    broadcasting: 'Broadcasting to {count} sessions...',
+    noResponses: 'No sessions found this message relevant.',
+    broadcastSummary: '{responded}/{total} sessions responded ({duration}s)',
+    broadcastError: 'Failed to broadcast message',
   },
 };
 
