@@ -302,14 +302,41 @@ async def broadcast_to_room(room_id: str, request: RoomBroadcastRequest):
 
         responded_count = 0
         total_count = len(tasks)
+        completed_count = 0
+        heartbeat_interval = 5.0  # seconds between keep-alive pings
 
-        # Consume results as they arrive
-        for _ in range(total_count):
+        # Consume results as they arrive, with heartbeat to keep SSE alive.
+        # NOTE: We use asyncio.wait() instead of asyncio.wait_for() because
+        # wait_for cancels the underlying Queue.get() on timeout, which can
+        # lose an item that was mid-dequeue.  With asyncio.wait(), the
+        # get-task survives across heartbeat iterations.
+        pending_get: asyncio.Task | None = None
+
+        while completed_count < total_count:
+            if pending_get is None:
+                pending_get = asyncio.ensure_future(result_queue.get())
+
+            done, _ = await asyncio.wait(
+                {pending_get}, timeout=heartbeat_interval,
+            )
+
+            if not done:
+                # No result yet — send heartbeat to keep SSE connection alive
+                elapsed = int(time.time() - start_time)
+                yield _sse_event("heartbeat", {"elapsed_s": elapsed})
+                continue  # pending_get is still alive — reuse next iteration
+
+            # A result arrived
             try:
-                result = await result_queue.get()
+                result = pending_get.result()
             except Exception as e:
                 logger.error("Queue get error: %s", e)
+                pending_get = None
+                completed_count += 1
                 continue
+
+            pending_get = None
+            completed_count += 1
 
             if result.get("responded") and result.get("output"):
                 # Save agent message and stream it

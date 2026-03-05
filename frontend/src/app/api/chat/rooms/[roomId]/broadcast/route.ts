@@ -4,12 +4,18 @@
  * Next.js `rewrites()` buffers the entire upstream response before forwarding it
  * to the browser, which means SSE events only arrive after the last agent finishes.
  *
- * This Route Handler bypasses that limitation by piping the backend's
- * ReadableStream directly to the client so each SSE event is delivered
- * as soon as the backend yields it.
+ * This Route Handler bypasses that limitation by explicitly reading chunks from
+ * the backend and forwarding them to the client via a ReadableStream so each
+ * SSE event is delivered as soon as the backend yields it.
  */
 
 import { NextRequest } from "next/server";
+
+/* Prevent Next.js from caching or statically rendering this route */
+export const dynamic = "force-dynamic";
+
+/* Allow long-running broadcasts (5 minutes) */
+export const maxDuration = 300;
 
 const API_URL = process.env.API_URL || "http://localhost:8000";
 
@@ -24,6 +30,7 @@ export async function POST(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body,
+    cache: "no-store",
   });
 
   if (!upstream.ok) {
@@ -34,8 +41,35 @@ export async function POST(
     });
   }
 
-  // Pipe the upstream SSE stream directly — no buffering.
-  return new Response(upstream.body, {
+  // Explicitly read chunks from upstream and forward them — avoids any
+  // internal buffering that may occur when passing upstream.body directly.
+  const upstreamReader = upstream.body?.getReader();
+  if (!upstreamReader) {
+    return new Response(JSON.stringify({ error: "No upstream body" }), {
+      status: 502,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const stream = new ReadableStream({
+    async pull(controller) {
+      try {
+        const { done, value } = await upstreamReader.read();
+        if (done) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(value);
+      } catch {
+        controller.close();
+      }
+    },
+    cancel() {
+      upstreamReader.cancel();
+    },
+  });
+
+  return new Response(stream, {
     status: 200,
     headers: {
       "Content-Type": "text/event-stream",
