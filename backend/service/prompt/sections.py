@@ -72,7 +72,6 @@ class SectionLibrary:
             "developer": "Execute implementation tasks with precision. Read existing code before changing it, follow project conventions, handle edge cases, and test your changes.",
             "researcher": "Discover cutting-edge information, explore emerging technologies, and generate actionable product ideas. Explore diverse sources broadly, try things hands-on, and synthesize findings into concise idea summaries.",
             "planner": "Evaluate ideas critically and transform promising ones into comprehensive, production-ready plans. Produce detailed specifications, architecture designs, and implementation guides that developers can build from directly.",
-            "manager": "Plan, delegate, and coordinate — never do implementation work yourself. Use `list_workers`, `delegate_task`, `get_worker_status`, and `broadcast_task` to manage workers.",
         }
 
         content = protocols.get(role, "")
@@ -252,34 +251,6 @@ Be mindful of context window limits. Follow these guidelines:
         )
 
     # ========================================================================
-    # §9 Delegation — Manager-only delegation protocol
-    # ========================================================================
-
-    @staticmethod
-    def delegation(worker_tools: Optional[List[str]] = None) -> PromptSection:
-        """Manager-only delegation protocol section."""
-        tools_list = worker_tools or ["list_workers", "delegate_task", "get_worker_status", "broadcast_task"]
-
-        content = f"""## Delegation Protocol
-
-### Available Management Tools
-{chr(10).join(f'- `{t}`' for t in tools_list)}
-
-### Delegation Best Practices
-- **Be specific**: Include enough detail in task descriptions for Workers to act independently
-- **Check availability**: Always `list_workers` before delegating
-- **Match capabilities**: Assign tasks to Workers with relevant expertise
-- **Clear success criteria**: Define what "done" looks like for each delegated task
-- **Parallel where possible**: Use `broadcast_task` when tasks are independent"""
-
-        return PromptSection(
-            name="delegation",
-            content=content,
-            priority=55,
-            modes={PromptMode.FULL},
-        )
-
-    # ========================================================================
     # §10 Status Reporting — Worker progress reporting
     # ========================================================================
 
@@ -288,7 +259,7 @@ Be mindful of context window limits. Follow these guidelines:
         """Worker progress reporting format."""
         content = """## Status Reporting
 
-When reporting progress to the Manager or system, use this format:
+When reporting progress, use this format:
 
 ```
 ## Task Status Report
@@ -552,12 +523,12 @@ def build_agent_prompt(
 
     Sections handled by infrastructure (not included here):
     - tool_style, safety, context_efficiency, execution_protocol,
-      error_recovery, completion_signals, delegation, status_reporting,
+      error_recovery, completion_signals, status_reporting,
       safety_wrap — all handled by Claude CLI, LangGraph, or role .md files.
 
     Args:
         agent_name: Display name for the agent.
-        role: Role (worker/developer/researcher/planner/manager).
+        role: Role (worker/developer/researcher/planner).
         agent_id: Agent identifier.
         working_dir: Working directory path.
         model: Model name.

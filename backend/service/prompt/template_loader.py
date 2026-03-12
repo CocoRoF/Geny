@@ -37,7 +37,6 @@ _ROLE_FILE_MAP: Dict[str, str] = {
     "developer":  "developer.md",
     "researcher": "researcher.md",
     "planner":    "planner.md",
-    "manager":    "manager.md",
 }
 
 

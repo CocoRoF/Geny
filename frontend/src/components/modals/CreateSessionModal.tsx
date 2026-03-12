@@ -41,15 +41,13 @@ export default function CreateSessionModal({ onClose }: Props) {
     role: 'developer',
     model: '',
     max_turns: 200,
-    timeout: 300,
+    timeout: 1800,
     max_iterations: 30,
-    manager_id: '',
     system_prompt: '',
   });
   const [selectedPrompt, setSelectedPrompt] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [availableManagers, setAvailableManagers] = useState<SessionInfo[]>([]);
   const [availableWorkflows, setAvailableWorkflows] = useState<WorkflowDefinition[]>([]);
   const [templateWorkflows, setTemplateWorkflows] = useState<WorkflowDefinition[]>([]);
   const [selectedWorkflow, setSelectedWorkflow] = useState('template-autonomous');
@@ -84,12 +82,6 @@ export default function CreateSessionModal({ onClose }: Props) {
     });
   }, []);
 
-  useEffect(() => {
-    if (formState.role !== 'manager') {
-      agentApi.listManagers().then(setAvailableManagers).catch(() => setAvailableManagers([]));
-    }
-  }, [formState.role]);
-
   const handlePromptChange = async (name: string) => {
     setSelectedPrompt(name);
     if (name) {
@@ -102,7 +94,7 @@ export default function CreateSessionModal({ onClose }: Props) {
   };
 
   const handleRoleChange = (role: string) => {
-    setFormState(f => ({ ...f, role, manager_id: role === 'manager' ? '' : f.manager_id }));
+    setFormState(f => ({ ...f, role }));
   };
 
   const handleSubmit = async () => {
@@ -159,7 +151,6 @@ export default function CreateSessionModal({ onClose }: Props) {
                 <option value="worker">{t('createSession.roleWorker')}</option>
                 <option value="researcher">{t('createSession.roleResearcher')}</option>
                 <option value="planner">{t('createSession.rolePlanner')}</option>
-                <option value="manager">{t('createSession.roleManager')}</option>
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
@@ -171,25 +162,6 @@ export default function CreateSessionModal({ onClose }: Props) {
               </select>
             </div>
           </div>
-
-          {/* Manager selection */}
-          {formState.role !== 'manager' && (
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)]">{t('createSession.managerSession')}</label>
-              <select className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8" style={selectArrow} value={formState.manager_id || ''} onChange={e => setFormState(f => ({ ...f, manager_id: e.target.value }))}>
-                <option value="">{t('createSession.noneStandalone')}</option>
-                {availableManagers.map(m => {
-                  const isRunning = m.status === 'running';
-                  return (
-                    <option key={m.session_id} value={m.session_id} disabled={!isRunning}>
-                      {isRunning ? '●' : '○'} {m.session_name || m.session_id.substring(0, 12)}
-                    </option>
-                  );
-                })}
-              </select>
-              <small className="text-[0.75rem] text-[var(--text-muted)] mt-0.5">{t('createSession.managerHelp')}</small>
-            </div>
-          )}
 
           {/* Prompt Template */}
           <div className="flex flex-col gap-1.5">
@@ -210,7 +182,7 @@ export default function CreateSessionModal({ onClose }: Props) {
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">{t('createSession.timeout')} <InfoTooltip text={t('createSession.timeoutHelp')} /></label>
-              <NumberStepper value={formState.timeout ?? 300} onChange={v => setFormState(f => ({ ...f, timeout: v }))} min={10} max={7200} step={30} />
+              <NumberStepper value={formState.timeout ?? 1800} onChange={v => setFormState(f => ({ ...f, timeout: v }))} min={10} max={7200} step={30} />
             </div>
           </div>
 

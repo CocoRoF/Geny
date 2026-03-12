@@ -13,7 +13,6 @@ const SESSION_TAB_DEFS = [
   { id: 'command', accent: true },
   { id: 'graph' },
   { id: 'sessionTools' },
-  { id: 'dashboard', managerOnly: true },
   { id: 'storage' },
   { id: 'logs' },
 ] as const;
@@ -67,7 +66,6 @@ export default function TabNavigation() {
 
   const selectedSession = sessions.find(s => s.session_id === selectedSessionId);
   const hasSession = !!selectedSessionId && !!selectedSession;
-  const showDashboard = selectedSession?.role === 'manager';
 
   const sessionName = selectedSession?.session_name
     || selectedSessionId?.substring(0, 10)
@@ -113,7 +111,7 @@ export default function TabNavigation() {
             {sessionName}
           </button>
           <div className="flex items-center gap-0.5">
-            {SESSION_TAB_DEFS.filter(tab => !('managerOnly' in tab && tab.managerOnly) || showDashboard).map(tab => (
+            {SESSION_TAB_DEFS.map(tab => (
               <TabButton
                 key={tab.id}
                 id={tab.id}

@@ -20,7 +20,7 @@ TABLE = "sessions"
 # Fields stored in dedicated columns (everything else goes into extra_data).
 _COLUMN_FIELDS = {
     "session_id", "session_name", "status", "model", "storage_path",
-    "role", "manager_id", "workflow_id", "graph_name",
+    "role", "workflow_id", "graph_name",
     "tool_preset_id", "tool_preset_name", "max_turns", "timeout",
     "max_iterations", "pid", "error_message", "is_deleted",
     "deleted_at", "registered_at",

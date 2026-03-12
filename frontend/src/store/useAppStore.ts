@@ -3,7 +3,7 @@ import type { SessionInfo, PromptInfo } from '@/types';
 import { agentApi, commandApi, healthApi } from '@/lib/api';
 
 // Session-scoped tab IDs (must match TabNavigation)
-const SESSION_TAB_IDS = new Set(['command', 'dashboard', 'logs', 'storage', 'graph', 'info', 'sessionTools']);
+const SESSION_TAB_IDS = new Set(['command', 'logs', 'storage', 'graph', 'info', 'sessionTools']);
 
 // ==================== Session Data Cache ====================
 export interface SessionData {

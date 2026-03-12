@@ -19,7 +19,6 @@ for the difficulty-based graph. Only `self-manager.md` includes execution signal
 |------|------|-------|---------|
 | `worker.md` | worker | ~150 | Task completion, autonomous work |
 | `developer.md` | developer | ~300 | Code quality, conventions, incremental changes |
-| `manager.md` | manager | ~500 | Delegation rules + tool reference |
 | `researcher.md` | researcher | ~250 | Research methodology |
 | `self-manager.md` | self-manager | ~800 | Full autonomy + execution signals |
 

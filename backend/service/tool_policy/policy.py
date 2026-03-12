@@ -3,7 +3,7 @@ Tool Policy Engine — profile-based tool / MCP-server access control.
 
 Design goals
 ~~~~~~~~~~~~
-1. Each *role* (developer, researcher, planner, manager) has a
+1. Each *role* (developer, researcher, planner) has a
    sensible **default profile** that limits which tools and MCP servers are
    available.
 2. A session can **override** the profile via ``CreateSessionRequest.allowed_tools``
@@ -125,13 +125,6 @@ _PROFILE_SERVER_GROUPS: Dict[ToolProfile, FrozenSet[str]] = {
 # Tool-name groups  (individual tool names from _builtin_tools)
 # ---------------------------------------------------------------------------
 
-_MANAGER_TOOLS: FrozenSet[str] = frozenset({
-    "list_workers",
-    "delegate_task",
-    "get_worker_status",
-    "broadcast_task",
-})
-
 _EXAMPLE_TOOLS: FrozenSet[str] = frozenset({
     "add_numbers",
     "multiply_numbers",
@@ -149,7 +142,6 @@ _EXAMPLE_TOOLS: FrozenSet[str] = frozenset({
 ROLE_DEFAULT_PROFILES: Dict[str, ToolProfile] = {
     "worker":       ToolProfile.CODING,
     "developer":    ToolProfile.CODING,
-    "manager":      ToolProfile.FULL,
     "researcher":   ToolProfile.RESEARCH,
     "planner":      ToolProfile.FULL,
 }

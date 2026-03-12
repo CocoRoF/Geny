@@ -19,15 +19,9 @@ from service.claude_manager.models import (
     SessionRole,
     ExecuteRequest,
     ExecuteResponse,
-    DelegateTaskRequest,
-    DelegateTaskResponse,
     StorageFile,
     StorageListResponse,
     StorageFileContent,
-    ManagerEvent,
-    ManagerEventType,
-    ManagerDashboard,
-    WorkerStatus,
 )
 from service.langgraph import (
     get_agent_session_manager,
@@ -192,31 +186,6 @@ async def get_stored_session_info(
 
 
 # ============================================================================
-# Manager/Worker API (must be before /{session_id} routes)
-# ============================================================================
-
-
-@router.get("/managers", response_model=List[SessionInfo])
-async def list_agent_managers():
-    """
-    Get all AgentSession managers.
-    """
-    managers = agent_manager.get_agent_managers()
-    return [m.get_session_info() for m in managers]
-
-
-@router.get("/{manager_id}/workers", response_model=List[SessionInfo])
-async def get_agent_workers(
-    manager_id: str = Path(..., description="Manager session ID")
-):
-    """
-    Get workers under a manager AgentSession.
-    """
-    workers = agent_manager.get_agent_workers_by_manager(manager_id)
-    return [w.get_session_info() for w in workers]
-
-
-# ============================================================================
 # Session CRUD (with /{session_id} path parameter)
 # ============================================================================
 
@@ -374,7 +343,6 @@ async def restore_session(
             timeout=params.get("timeout", 1800),
             max_iterations=params.get("max_iterations", params.get("autonomous_max_iterations", 100)),
             role=SessionRole(params["role"]) if params.get("role") else SessionRole.WORKER,
-            manager_id=params.get("manager_id"),
             graph_name=params.get("graph_name"),
             workflow_id=params.get("workflow_id"),
             tool_preset_id=params.get("tool_preset_id"),
@@ -785,198 +753,6 @@ async def download_storage_folder(
         headers={
             "Content-Disposition": f'attachment; filename="{zip_filename}"'
         },
-    )
-
-
-# ============================================================================
-# Manager Dashboard API
-# ============================================================================
-
-
-@router.post("/{session_id}/delegate")
-async def delegate_task(
-    session_id: str = Path(..., description="Manager session ID"),
-    request: DelegateTaskRequest = ...
-):
-    """
-    Delegate a task from manager to worker.
-    """
-    import uuid
-    from datetime import datetime
-
-    agent = agent_manager.get_agent(session_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail=f"Manager AgentSession not found: {session_id}")
-
-    if agent.role != SessionRole.MANAGER:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Session is not a manager (role: {agent.role})"
-        )
-
-    # Get worker
-    worker = agent_manager.get_agent(request.worker_id)
-    if not worker:
-        raise HTTPException(status_code=404, detail=f"Worker AgentSession not found: {request.worker_id}")
-
-    if worker.manager_id != session_id:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Worker {request.worker_id} is not managed by this manager"
-        )
-
-    worker_process = worker.process
-    if not worker_process or not worker_process.is_alive():
-        raise HTTPException(
-            status_code=400,
-            detail=f"Worker session is not running"
-        )
-
-    manager_logger = get_session_logger(session_id, create_if_missing=True)
-    delegation_id = str(uuid.uuid4())[:8]
-
-    try:
-        if manager_logger:
-            manager_logger.log_task_delegated(
-                worker_id=request.worker_id,
-                worker_name=worker.session_name,
-                task_prompt=request.prompt,
-                context=request.context
-            )
-
-        worker_process.is_busy = True
-        worker_process.current_task = request.prompt[:100]
-        worker_process.last_activity = datetime.now()
-
-        # Execute through the worker's graph
-        output = await worker.invoke(
-            input_text=request.prompt,
-        )
-        success = bool(output and not output.startswith("Error:"))
-
-        worker_process.is_busy = False
-        worker_process.last_output = output[:500] if output else None
-        worker_process.last_activity = datetime.now()
-
-        if manager_logger:
-            manager_logger.log_worker_completed(
-                worker_id=request.worker_id,
-                worker_name=worker.session_name,
-                success=success,
-                output_preview=output[:200] if output else None,
-                duration_ms=None,
-                cost_usd=None
-            )
-
-        return DelegateTaskResponse(
-            success=success,
-            manager_id=session_id,
-            worker_id=request.worker_id,
-            delegation_id=delegation_id,
-            status="completed" if success else "error",
-            output=output,
-            error=None if success else output
-        )
-
-    except Exception as e:
-        worker_process.is_busy = False
-        worker_process.last_activity = datetime.now()
-        logger.error(f"❌ Task delegation failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/{session_id}/events")
-async def get_manager_events(
-    session_id: str = Path(..., description="Manager session ID"),
-    limit: int = Query(50, description="Maximum number of events to return")
-):
-    """
-    Get manager event log.
-    """
-    import uuid
-    from datetime import datetime
-
-    agent = agent_manager.get_agent(session_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail=f"AgentSession not found: {session_id}")
-
-    if agent.role != SessionRole.MANAGER:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Session is not a manager (role: {agent.role})"
-        )
-
-    session_logger = get_session_logger(session_id, create_if_missing=False)
-    if not session_logger:
-        return []
-
-    raw_events = session_logger.get_manager_events(limit=limit)
-
-    events = []
-    for raw in raw_events:
-        metadata = raw.get("metadata", {})
-        events.append(ManagerEvent(
-            event_id=metadata.get("event_id", str(uuid.uuid4())[:8]),
-            event_type=ManagerEventType(metadata.get("event_type", "status_check")),
-            timestamp=datetime.fromisoformat(raw.get("timestamp")) if raw.get("timestamp") else datetime.now(),
-            manager_id=session_id,
-            worker_id=metadata.get("worker_id"),
-            message=raw.get("message", ""),
-            data=metadata.get("data")
-        ))
-
-    return events
-
-
-@router.get("/{session_id}/dashboard")
-async def get_manager_dashboard(
-    session_id: str = Path(..., description="Manager session ID")
-):
-    """
-    Get manager dashboard data.
-    """
-    agent = agent_manager.get_agent(session_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail=f"AgentSession not found: {session_id}")
-
-    if agent.role != SessionRole.MANAGER:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Session is not a manager (role: {agent.role})"
-        )
-
-    workers = agent_manager.get_agent_workers_by_manager(session_id)
-    worker_statuses = []
-
-    for worker in workers:
-        process = worker.process
-
-        worker_status = WorkerStatus(
-            worker_id=worker.session_id,
-            worker_name=worker.session_name,
-            status=worker.status,
-            is_busy=process.is_busy if process else False,
-            current_task=process.current_task if process else None,
-            last_output=process.last_output if process else None,
-            last_activity=process.last_activity if process else None
-        )
-        worker_statuses.append(worker_status)
-
-    events_response = await get_manager_events(session_id, limit=20)
-
-    active_delegations = sum(1 for w in worker_statuses if w.is_busy)
-    completed_delegations = sum(
-        1 for e in events_response
-        if e.event_type in [ManagerEventType.WORKER_COMPLETED, ManagerEventType.WORKER_ERROR]
-    )
-
-    return ManagerDashboard(
-        manager_id=session_id,
-        manager_name=agent.session_name,
-        workers=worker_statuses,
-        recent_events=events_response,
-        active_delegations=active_delegations,
-        completed_delegations=completed_delegations
     )
 
 

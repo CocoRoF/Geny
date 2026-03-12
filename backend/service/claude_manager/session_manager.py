@@ -93,13 +93,8 @@ class SessionManager:
         if merged_mcp_config and merged_mcp_config.servers:
             logger.info(f"[{session_id}]   mcp_servers: {list(merged_mcp_config.servers.keys())}")
 
-        # Prepare system prompt - add manager prompt if role is manager
+        # Prepare system prompt
         system_prompt = request.system_prompt or ""
-        if request.role and request.role.value == "manager":
-            manager_prompt = self._load_manager_prompt()
-            if manager_prompt:
-                system_prompt = manager_prompt + "\n\n" + system_prompt if system_prompt else manager_prompt
-                logger.info(f"[{session_id}]   📋 Manager prompt added automatically")
 
         # Create ClaudeProcess instance
         process = ClaudeProcess(
@@ -111,9 +106,8 @@ class SessionManager:
             max_turns=request.max_turns,
             timeout=request.timeout,  # Execution timeout
             mcp_config=merged_mcp_config,  # Use merged MCP config
-            system_prompt=system_prompt,  # System prompt (includes manager prompt if role is manager)
-            role=request.role.value if request.role else "worker",  # Session role
-            manager_id=request.manager_id  # Manager ID for worker sessions
+            system_prompt=system_prompt,
+            role=request.role.value if request.role else "worker",
         )
 
         # Initialize session
@@ -138,7 +132,6 @@ class SessionManager:
             timeout=process.timeout,
             storage_path=process.storage_path,
             role=SessionRole(process.role),
-            manager_id=process.manager_id
         )
 
         # Create session logger
@@ -234,24 +227,6 @@ class SessionManager:
 
     # ========== Helper Methods ==========
 
-    def _load_manager_prompt(self) -> Optional[str]:
-        """Load the manager prompt from prompts/manager.md"""
-        try:
-            import os
-            # Get project root (where prompts/ folder is)
-            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            prompt_path = os.path.join(project_root, "prompts", "manager.md")
-
-            if os.path.exists(prompt_path):
-                with open(prompt_path, 'r', encoding='utf-8') as f:
-                    return f.read()
-            else:
-                logger.warning(f"Manager prompt not found: {prompt_path}")
-                return None
-        except Exception as e:
-            logger.warning(f"Failed to load manager prompt: {e}")
-            return None
-
     def _process_to_session_info(self, session_id: str, process: ClaudeProcess) -> SessionInfo:
         """Convert ClaudeProcess to SessionInfo."""
         return SessionInfo(
@@ -266,7 +241,6 @@ class SessionManager:
             timeout=process.timeout,
             storage_path=process.storage_path,
             role=SessionRole(process.role),
-            manager_id=process.manager_id
         )
 
     def _dict_to_session_info(self, data: dict) -> SessionInfo:
@@ -293,41 +267,9 @@ class SessionManager:
             pod_name=data.get('pod_name'),
             pod_ip=data.get('pod_ip'),
             role=role,
-            manager_id=data.get('manager_id'),
             workflow_id=data.get('workflow_id'),
             graph_name=data.get('graph_name'),
         )
-
-    # ========== Manager/Worker Methods ==========
-
-    def get_workers_by_manager(self, manager_id: str) -> List[SessionInfo]:
-        """
-        Get all worker sessions under a manager.
-
-        Args:
-            manager_id: Manager session ID
-
-        Returns:
-            List of worker SessionInfo objects
-        """
-        all_sessions = self.list_sessions()
-        return [
-            session for session in all_sessions
-            if session.manager_id == manager_id and session.role == SessionRole.WORKER
-        ]
-
-    def get_managers(self) -> List[SessionInfo]:
-        """
-        Get all manager sessions.
-
-        Returns:
-            List of manager SessionInfo objects
-        """
-        all_sessions = self.list_sessions()
-        return [
-            session for session in all_sessions
-            if session.role == SessionRole.MANAGER
-        ]
 
 
 # Singleton session manager

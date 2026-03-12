@@ -14,7 +14,6 @@ import type { ChatRoom, ChatRoomMessage } from '@/types';
 
 const getRoleColor = (role: string) => {
   switch (role) {
-    case 'manager': return 'from-purple-500 to-indigo-500';
     case 'developer': return 'from-blue-500 to-cyan-500';
     case 'researcher': return 'from-amber-500 to-orange-500';
     case 'planner': return 'from-teal-500 to-emerald-500';
@@ -24,7 +23,6 @@ const getRoleColor = (role: string) => {
 
 const getRoleBadgeStyle = (role: string) => {
   switch (role) {
-    case 'manager': return 'background: linear-gradient(135deg, #8b5cf6, #6366f1)';
     case 'developer': return 'background: linear-gradient(135deg, #3b82f6, #06b6d4)';
     case 'researcher': return 'background: linear-gradient(135deg, #f59e0b, #ea580c)';
     case 'planner': return 'background: linear-gradient(135deg, #14b8a6, #10b981)';

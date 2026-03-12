@@ -16,7 +16,7 @@ Geny lets you spin up multiple Claude Code sessions, each working autonomously o
 - **🤖 Multi-Agent Orchestration**: Run multiple Claude Code sessions in parallel, each with independent storage
 - **🏙️ 3D City Playground**: Three.js / React Three Fiber visualization — agents are characters wandering a city
 - **🧠 LangGraph Autonomous Agent**: Resilient graph-based agent with memory, context guard, and model fallback
-- **🗂️ Role-based Prompts**: Pre-built prompts for developer, researcher, manager, and worker roles
+- **🗂️ Role-based Prompts**: Pre-built prompts for developer, researcher, planner, and worker roles
 - **📡 Multi-pod Support**: Redis-backed session sharing across Kubernetes pods
 - **🔌 MCP Auto-loading**: Drop JSON configs into `backend/mcp/` — automatically available in all sessions
 - **🔧 Custom Tools**: Drop Python tool files into `backend/tools/` — auto-registered
@@ -101,7 +101,7 @@ geny/
 │   ├── prompts/                        # Role-based prompt templates
 │   │   ├── developer.md
 │   │   ├── researcher.md
-│   │   ├── manager.md
+│   │   ├── planner.md
 │   │   ├── worker.md
 │   │   └── self-manager.md
 │   ├── mcp/                            # MCP server configs (auto-load)
@@ -129,7 +129,6 @@ geny/
 │       │   ├── TabNavigation.tsx       # Tab switcher
 │       │   ├── TabContent.tsx          # Active tab renderer
 │       │   ├── tabs/
-│       │   │   ├── DashboardTab.tsx
 │       │   │   ├── PlaygroundTab.tsx   # 3D city + R3F canvas
 │       │   │   ├── CommandTab.tsx
 │       │   │   ├── GraphTab.tsx

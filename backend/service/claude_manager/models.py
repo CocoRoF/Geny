@@ -23,21 +23,6 @@ class SessionRole(str, Enum):
     DEVELOPER = "developer"    # Alias for worker — implementation focus
     RESEARCHER = "researcher"  # Research & Ideation — discovers info, generates ideas
     PLANNER = "planner"        # Plan Architect — creates detailed plans and designs
-    MANAGER = "manager"        # Manager — delegates and coordinates workers
-
-
-class ManagerEventType(str, Enum):
-    """Event types for manager activity logging."""
-    PLAN_CREATED = "plan_created"
-    PLAN_UPDATED = "plan_updated"
-    TASK_DELEGATED = "task_delegated"
-    WORKER_STARTED = "worker_started"
-    WORKER_PROGRESS = "worker_progress"
-    WORKER_COMPLETED = "worker_completed"
-    WORKER_ERROR = "worker_error"
-    USER_MESSAGE = "user_message"
-    MANAGER_RESPONSE = "manager_response"
-    STATUS_CHECK = "status_check"
 
 
 # =============================================================================
@@ -200,14 +185,10 @@ class CreateSessionRequest(BaseModel):
         description="MCP server configuration - MCP tools to use in session"
     )
 
-    # Role settings for hierarchical management
+    # Role settings
     role: Optional[SessionRole] = Field(
         default=SessionRole.WORKER,
-        description="Session role: 'manager' or 'worker'"
-    )
-    manager_id: Optional[str] = Field(
-        default=None,
-        description="Manager session ID (required for worker role)"
+        description="Session role: 'worker', 'developer', 'researcher', or 'planner'"
     )
 
 
@@ -257,14 +238,10 @@ class SessionInfo(BaseModel):
         description="Pod IP where session is running"
     )
 
-    # Role settings for hierarchical management
+    # Role settings
     role: Optional[SessionRole] = Field(
         default=SessionRole.WORKER,
-        description="Session role: 'manager' or 'worker'"
-    )
-    manager_id: Optional[str] = Field(
-        default=None,
-        description="Manager session ID (for worker role)"
+        description="Session role: 'worker', 'developer', 'researcher', or 'planner'"
     )
 
     # Workflow / Graph settings
@@ -362,7 +339,7 @@ class ExecuteResponse(BaseModel):
         default=None,
         description="Reason for stopping (end_turn, max_tokens, tool_use, etc.)"
     )
-    # Auto-continue fields for self-manager mode
+    # Auto-continue fields
     should_continue: bool = Field(
         default=False,
         description="Whether the task should continue (detected from [CONTINUE: ...] pattern)"
@@ -413,83 +390,3 @@ class StorageFileContent(BaseModel):
     content: str
     size: int
     encoding: str = "utf-8"
-
-
-# =============================================================================
-# Manager/Worker Hierarchical Management Models
-# =============================================================================
-
-class ManagerEvent(BaseModel):
-    """
-    Event log entry for manager activities.
-
-    Used to track delegations, worker progress, and plan changes.
-    """
-    event_id: str = Field(description="Unique event identifier")
-    event_type: ManagerEventType = Field(description="Type of event")
-    timestamp: datetime = Field(description="When the event occurred")
-    manager_id: str = Field(description="Manager session ID")
-    worker_id: Optional[str] = Field(default=None, description="Worker session ID (if applicable)")
-    message: str = Field(description="Human-readable event description")
-    data: Optional[Dict[str, Any]] = Field(default=None, description="Additional event data")
-
-
-class DelegateTaskRequest(BaseModel):
-    """
-    Request to delegate a task from manager to worker.
-    """
-    worker_id: str = Field(description="Worker session ID to delegate to")
-    prompt: str = Field(description="Task prompt to send to worker")
-    timeout: Optional[float] = Field(
-        default=None,
-        description="Execution timeout (uses session default if not specified)"
-    )
-    skip_permissions: Optional[bool] = Field(
-        default=True,
-        description="Skip permission prompts"
-    )
-    context: Optional[str] = Field(
-        default=None,
-        description="Additional context from manager's plan"
-    )
-
-
-class DelegateTaskResponse(BaseModel):
-    """
-    Response from delegating a task to worker.
-    """
-    success: bool
-    manager_id: str
-    worker_id: str
-    delegation_id: str = Field(description="Unique ID for this delegation")
-    status: str = Field(description="Delegation status: 'started', 'completed', 'error'")
-    output: Optional[str] = Field(default=None, description="Worker output (if completed synchronously)")
-    error: Optional[str] = Field(default=None, description="Error message if failed")
-
-
-class WorkerStatus(BaseModel):
-    """
-    Status information for a worker session under a manager.
-    """
-    worker_id: str
-    worker_name: Optional[str] = None
-    status: SessionStatus
-    is_busy: bool = Field(default=False, description="Whether worker is currently executing")
-    current_task: Optional[str] = Field(default=None, description="Current task description")
-    last_output: Optional[str] = Field(default=None, description="Last execution output")
-    last_activity: Optional[datetime] = Field(default=None, description="Last activity timestamp")
-
-
-class ManagerDashboard(BaseModel):
-    """
-    Dashboard data for a manager session.
-
-    Shows workers, events, and overall status.
-    """
-    manager_id: str
-    manager_name: Optional[str] = None
-    workers: List[WorkerStatus] = Field(default_factory=list)
-    recent_events: List[ManagerEvent] = Field(default_factory=list)
-    active_delegations: int = Field(default=0)
-    completed_delegations: int = Field(default=0)
-    plan_summary: Optional[str] = Field(default=None, description="Current plan/todo summary")

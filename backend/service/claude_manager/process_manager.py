@@ -67,7 +67,6 @@ class ClaudeProcess:
         mcp_config: Optional[MCPConfig] = None,
         system_prompt: Optional[str] = None,
         role: Optional[str] = "worker",
-        manager_id: Optional[str] = None
     ):
         self.session_id = session_id
         self.session_name = session_name
@@ -78,15 +77,8 @@ class ClaudeProcess:
         self.mcp_config = mcp_config
         self.system_prompt = system_prompt  # Store system prompt for all executions
 
-        # Role settings for hierarchical management
+        # Role settings
         self.role = role or "worker"
-        self.manager_id = manager_id
-
-        # Worker execution state (for manager tracking)
-        self._is_busy: bool = False
-        self._current_task: Optional[str] = None
-        self._last_output: Optional[str] = None
-        self._last_activity: Optional[datetime] = None
 
         # Storage configuration (using Path for cross-platform compatibility)
         self._storage_root = storage_root or DEFAULT_STORAGE_ROOT
@@ -140,43 +132,6 @@ class ClaudeProcess:
         if self._current_process:
             return self._current_process.pid
         return None
-
-    # Worker state properties for manager tracking
-    @property
-    def is_busy(self) -> bool:
-        """Whether worker is currently executing a task."""
-        return self._is_busy
-
-    @is_busy.setter
-    def is_busy(self, value: bool):
-        self._is_busy = value
-
-    @property
-    def current_task(self) -> Optional[str]:
-        """Current task description (for workers)."""
-        return self._current_task
-
-    @current_task.setter
-    def current_task(self, value: Optional[str]):
-        self._current_task = value
-
-    @property
-    def last_output(self) -> Optional[str]:
-        """Last execution output (for workers)."""
-        return self._last_output
-
-    @last_output.setter
-    def last_output(self, value: Optional[str]):
-        self._last_output = value
-
-    @property
-    def last_activity(self) -> Optional[datetime]:
-        """Last activity timestamp (for workers)."""
-        return self._last_activity
-
-    @last_activity.setter
-    def last_activity(self, value: Optional[datetime]):
-        self._last_activity = value
 
     async def initialize(self) -> bool:
         """
@@ -237,14 +192,12 @@ class ClaudeProcess:
         """
         Create .claude_session.json with session information.
 
-        This file is read by manager tools to identify the current session.
         Placed in storage_path so tools can find it via cwd.
         """
         session_info = {
             "session_id": self.session_id,
             "session_name": self.session_name,
             "role": self.role,
-            "manager_id": self.manager_id,
             "storage_path": self._storage_path,
             "created_at": self.created_at.isoformat()
         }

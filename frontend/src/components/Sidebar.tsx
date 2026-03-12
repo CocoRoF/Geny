@@ -26,8 +26,6 @@ function SessionItem({ session, isSelected, onSelect }: {
     ? { boxShadow: '0 0 6px var(--success-color)' }
     : undefined;
 
-  const isManager = session.role === 'manager';
-
   return (
     <div
       className={`flex items-center py-3 px-3.5 mb-1 rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border
@@ -44,12 +42,10 @@ function SessionItem({ session, isSelected, onSelect }: {
       <span
         className="inline-flex items-center justify-center w-[18px] h-[18px] rounded text-[10px] font-semibold mr-1.5 text-white shrink-0"
         style={{
-          background: isManager
-            ? 'linear-gradient(135deg, #8b5cf6, #6366f1)'
-            : 'linear-gradient(135deg, #10b981, #059669)',
+          background: 'linear-gradient(135deg, #10b981, #059669)',
         }}
       >
-        {isManager ? 'M' : 'W'}
+        {session.role?.charAt(0).toUpperCase() || 'W'}
       </span>
 
       {/* Session info */}

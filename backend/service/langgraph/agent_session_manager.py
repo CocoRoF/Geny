@@ -187,7 +187,7 @@ class AgentSessionManager(SessionManager):
             try:
                 loader = ContextLoader(
                     working_dir=request.working_dir,
-                    include_readme=(role in ("researcher", "manager")),
+                    include_readme=(role in ("researcher",)),
                 )
                 context_files = loader.load_context_files()
                 if context_files:
@@ -213,11 +213,8 @@ class AgentSessionManager(SessionManager):
                 pass  # Memory not available yet — fine
 
         # Determine prompt mode
-        if role in ("manager", "developer", "researcher", "planner"):
+        if role in ("developer", "researcher", "planner"):
             mode = PromptMode.FULL
-        elif request.manager_id:
-            # Worker with a manager → MINIMAL (sub-agent)
-            mode = PromptMode.MINIMAL
         else:
             # Standalone worker → FULL
             mode = PromptMode.FULL
@@ -388,7 +385,6 @@ class AgentSessionManager(SessionManager):
             timeout=request.timeout or 1800.0,
             max_iterations=request.max_iterations or 100,
             role=request.role or SessionRole.WORKER,
-            manager_id=request.manager_id,
             enable_checkpointing=enable_checkpointing,
             workflow_id=workflow_id,
             graph_name=graph_name,
@@ -607,38 +603,6 @@ class AgentSessionManager(SessionManager):
 
         logger.info(f"[{session_id}] ✅ Upgraded to AgentSession")
         return agent
-
-    # ========================================================================
-    # Manager/Worker Methods (Override)
-    # ========================================================================
-
-    def get_agent_workers_by_manager(self, manager_id: str) -> List[AgentSession]:
-        """
-        매니저의 워커 AgentSession 목록 반환.
-
-        Args:
-            manager_id: 매니저 세션 ID
-
-        Returns:
-            워커 AgentSession 리스트
-        """
-        return [
-            agent for agent in self._local_agents.values()
-            if agent.manager_id == manager_id and agent.role == SessionRole.WORKER
-        ]
-
-    def get_agent_managers(self) -> List[AgentSession]:
-        """
-        매니저 AgentSession 목록 반환.
-
-        Returns:
-            매니저 AgentSession 리스트
-        """
-        return [
-            agent for agent in self._local_agents.values()
-            if agent.role == SessionRole.MANAGER
-        ]
-
 
 # ============================================================================
 # Singleton

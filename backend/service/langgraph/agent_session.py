@@ -102,7 +102,6 @@ class AgentSession:
         mcp_config: Optional[MCPConfig] = None,
         max_iterations: int = 100,
         role: SessionRole = SessionRole.WORKER,
-        manager_id: Optional[str] = None,
         enable_checkpointing: bool = False,
         workflow_id: Optional[str] = None,
         graph_name: Optional[str] = None,
@@ -122,8 +121,7 @@ class AgentSession:
             env_vars: Extra environment variables.
             mcp_config: MCP server configuration.
             max_iterations: Max graph iterations.
-            role: Session role (MANAGER / WORKER).
-            manager_id: Parent manager session ID (for workers).
+            role: Session role.
             enable_checkpointing: Enable LangGraph MemorySaver checkpointing.
             workflow_id: Optional workflow ID (used to load WorkflowDefinition).
             graph_name: Human-readable graph/workflow name.
@@ -145,7 +143,6 @@ class AgentSession:
 
         # Role
         self._role = role
-        self._manager_id = manager_id
 
         # Workflow / Graph
         self._workflow_id = workflow_id
@@ -260,7 +257,6 @@ class AgentSession:
             env_vars=process.env_vars or {},
             mcp_config=process.mcp_config,
             role=SessionRole(process.role) if process.role else SessionRole.WORKER,
-            manager_id=process.manager_id,
             enable_checkpointing=enable_checkpointing,
             workflow_id=workflow_id,
             graph_name=graph_name,
@@ -386,10 +382,6 @@ class AgentSession:
     @property
     def role(self) -> SessionRole:
         return self._role
-
-    @property
-    def manager_id(self) -> Optional[str]:
-        return self._manager_id
 
     @property
     def is_initialized(self) -> bool:
@@ -1086,7 +1078,6 @@ class AgentSession:
             pod_name=pod_name,
             pod_ip=pod_ip,
             role=self._role,
-            manager_id=self._manager_id,
             workflow_id=self._workflow_id,
             graph_name=self._graph_name,
             tool_preset_id=self._tool_preset_id,

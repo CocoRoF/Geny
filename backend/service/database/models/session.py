@@ -19,7 +19,6 @@ class SessionModel(BaseModel):
         model: str = "",
         storage_path: str = "",
         role: str = "worker",
-        manager_id: str = "",
         workflow_id: str = "",
         graph_name: str = "",
         tool_preset_id: str = "",
@@ -42,7 +41,6 @@ class SessionModel(BaseModel):
         self.model = model
         self.storage_path = storage_path
         self.role = role
-        self.manager_id = manager_id
         self.workflow_id = workflow_id
         self.graph_name = graph_name
         self.tool_preset_id = tool_preset_id
@@ -68,7 +66,6 @@ class SessionModel(BaseModel):
             "model": "VARCHAR(255) DEFAULT ''",
             "storage_path": "TEXT DEFAULT ''",
             "role": "VARCHAR(50) DEFAULT 'worker'",
-            "manager_id": "VARCHAR(255) DEFAULT ''",
             "workflow_id": "VARCHAR(255) DEFAULT ''",
             "graph_name": "VARCHAR(255) DEFAULT ''",
             "tool_preset_id": "VARCHAR(255) DEFAULT ''",
@@ -99,7 +96,6 @@ class SessionModel(BaseModel):
             ("idx_sessions_session_id", "session_id"),
             ("idx_sessions_status", "status"),
             ("idx_sessions_role", "role"),
-            ("idx_sessions_manager_id", "manager_id"),
             ("idx_sessions_is_deleted", "is_deleted"),
         ]
 
@@ -107,7 +103,7 @@ class SessionModel(BaseModel):
     def from_dict(cls, data: Dict[str, Any]) -> "SessionModel":
         known_fields = {
             "session_id", "session_name", "status", "model", "storage_path",
-            "role", "manager_id", "workflow_id", "graph_name",
+            "role", "workflow_id", "graph_name",
             "tool_preset_id", "tool_preset_name", "max_turns", "timeout",
             "max_iterations", "pid", "error_message", "is_deleted",
             "deleted_at", "registered_at", "extra_data",

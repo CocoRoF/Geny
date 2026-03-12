@@ -356,7 +356,6 @@ class SessionStore:
             "timeout": rec.get("timeout", 1800),
             "max_iterations": rec.get("max_iterations", rec.get("autonomous_max_iterations", 100)),
             "role": rec.get("role", "worker"),
-            "manager_id": rec.get("manager_id"),
             "graph_name": rec.get("graph_name"),
             "workflow_id": rec.get("workflow_id"),
             "tool_preset_id": rec.get("tool_preset_id"),

@@ -5,7 +5,7 @@ export interface SessionInfo {
   session_name: string | null;
   status: 'running' | 'stopped' | 'error' | 'idle' | string;
   model: string | null;
-  role: 'worker' | 'developer' | 'researcher' | 'planner' | 'manager';
+  role: 'worker' | 'developer' | 'researcher' | 'planner';
   max_turns: number | null;
   timeout: number | null;
   max_iterations: number | null;
@@ -14,7 +14,6 @@ export interface SessionInfo {
   pid: number | null;
   pod_name: string | null;
   pod_ip: string | null;
-  manager_id: string | null;
   workflow_id: string | null;
   graph_name: string | null;
   tool_preset_id: string | null;
@@ -31,7 +30,6 @@ export interface CreateAgentRequest {
   timeout?: number;
   max_iterations?: number;
   role?: string;
-  manager_id?: string;
   system_prompt?: string;
   enable_checkpointing?: boolean;
   workflow_id?: string;
@@ -264,32 +262,6 @@ export interface GraphStructure {
   graph_type: string;
   nodes: GraphNode[];
   edges: GraphEdge[];
-}
-
-// ==================== Dashboard Types ====================
-
-export interface WorkerInfo {
-  worker_id: string;
-  worker_name: string;
-  status: string;
-  is_busy: boolean;
-  current_task?: string;
-}
-
-export interface ManagerEvent {
-  timestamp: string;
-  event_type: string;
-  message: string;
-  worker_id?: string;
-}
-
-export interface ManagerDashboard {
-  manager_id: string;
-  manager_name: string;
-  workers: WorkerInfo[];
-  recent_events: ManagerEvent[];
-  active_delegations: number;
-  completed_delegations: number;
 }
 
 // ==================== Prompt Types ====================

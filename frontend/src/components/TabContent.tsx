@@ -8,7 +8,6 @@ import { useI18n } from '@/lib/i18n';
 const MainTab = dynamic(() => import('@/components/tabs/MainTab'));
 const PlaygroundTab = dynamic(() => import('@/components/tabs/PlaygroundTab'), { ssr: false });
 const CommandTab = dynamic(() => import('@/components/tabs/CommandTab'));
-const DashboardTab = dynamic(() => import('@/components/tabs/DashboardTab'));
 const LogsTab = dynamic(() => import('@/components/tabs/LogsTab'));
 const StorageTab = dynamic(() => import('@/components/tabs/StorageTab'));
 const GraphTab = dynamic(() => import('@/components/tabs/GraphTab'), { ssr: false });
@@ -24,7 +23,6 @@ const TAB_MAP: Record<string, React.ComponentType> = {
   main: MainTab,
   playground: PlaygroundTab,
   command: CommandTab,
-  dashboard: DashboardTab,
   logs: LogsTab,
   storage: StorageTab,
   graph: GraphTab,

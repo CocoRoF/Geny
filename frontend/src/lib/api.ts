@@ -33,7 +33,6 @@ import type {
   ExecuteRequest,
   ExecuteResponse,
   GraphStructure,
-  ManagerDashboard,
   StorageListResponse,
   StorageFileContent,
   CreateChatRoomRequest,
@@ -51,9 +50,6 @@ export const agentApi = {
 
   /** GET /api/agents/store/deleted — list deleted sessions */
   listDeleted: () => apiCall<SessionInfo[]>('/api/agents/store/deleted'),
-
-  /** GET /api/agents/managers — list manager sessions */
-  listManagers: () => apiCall<SessionInfo[]>('/api/agents/managers'),
 
   /** POST /api/agents — create new session */
   create: (data: CreateAgentRequest) =>
@@ -89,9 +85,6 @@ export const agentApi = {
     apiCall<{ success: boolean }>(`/api/agents/${id}/stop`, {
       method: 'POST',
     }),
-
-  /** GET /api/agents/{id}/dashboard — manager dashboard */
-  getDashboard: (id: string) => apiCall<ManagerDashboard>(`/api/agents/${id}/dashboard`),
 
   /** GET /api/agents/{id}/graph — graph structure */
   getGraph: (id: string) => apiCall<GraphStructure>(`/api/agents/${id}/graph`),
