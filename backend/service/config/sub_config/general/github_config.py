@@ -13,6 +13,22 @@ from service.config.base import BaseConfig, ConfigField, FieldType, register_con
 from service.config.sub_config.general.env_utils import env_sync, read_env_defaults
 
 
+def _github_token_sync() -> "Callable[[Any, Any], None]":
+    """Return an apply_change callback that syncs both GITHUB_TOKEN and GH_TOKEN.
+
+    ``gh`` CLI reads ``GH_TOKEN``, while our git URL-rewriting reads
+    ``GITHUB_TOKEN``.  Both must stay in sync.
+    """
+    _sync_github = env_sync("GITHUB_TOKEN")
+    _sync_gh = env_sync("GH_TOKEN")
+
+    def _apply(old_value: "Any", new_value: "Any") -> None:
+        _sync_github(old_value, new_value)
+        _sync_gh(old_value, new_value)
+
+    return _apply
+
+
 @register_config
 @dataclass
 class GitHubConfig(BaseConfig):
@@ -78,6 +94,6 @@ class GitHubConfig(BaseConfig):
                 placeholder="ghp_xxxxxxxxxxxx",
                 group="github",
                 secure=True,
-                apply_change=env_sync("GITHUB_TOKEN"),
+                apply_change=_github_token_sync(),
             ),
         ]

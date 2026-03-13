@@ -220,6 +220,47 @@ class ClaudeProcess:
         except Exception as e:
             logger.warning(f"[{self.session_id}] Failed to update session info: {e}")
 
+    # ── Git authentication helpers ──────────────────────────────────
+
+    @staticmethod
+    def _setup_git_auth_env(env: Dict[str, str]) -> None:
+        """Inject git HTTPS auth into *env* when ``GITHUB_TOKEN`` is present.
+
+        Three layers:
+        1. ``GH_TOKEN`` — authenticates the ``gh`` CLI.
+        2. ``GIT_TERMINAL_PROMPT=0`` — prevent interactive credential prompts
+           inside a non-interactive subprocess.
+        3. ``GIT_CONFIG_*`` env vars — transparently rewrite GitHub HTTPS
+           URLs to embed the PAT, exactly like GitHub Actions does::
+
+               url."https://x-access-token:<TOKEN>@github.com/".insteadOf
+                   = https://github.com/
+
+           This ensures ``git push``, ``git clone``, ``git fetch``, etc.
+           work without any credential helper or manual URL editing.
+        """
+        github_token = env.get('GITHUB_TOKEN')
+        if not github_token:
+            return
+
+        # gh CLI auth
+        env['GH_TOKEN'] = github_token
+
+        # Prevent interactive prompts in non-TTY subprocess
+        env['GIT_TERMINAL_PROMPT'] = '0'
+
+        # Inject git config via environment (git ≥ 2.31)
+        idx = int(env.get('GIT_CONFIG_COUNT', '0'))
+
+        # URL rewriting: https://github.com/ → https://x-access-token:<PAT>@github.com/
+        env[f'GIT_CONFIG_KEY_{idx}'] = (
+            f'url.https://x-access-token:{github_token}@github.com/.insteadOf'
+        )
+        env[f'GIT_CONFIG_VALUE_{idx}'] = 'https://github.com/'
+        idx += 1
+
+        env['GIT_CONFIG_COUNT'] = str(idx)
+
     async def _create_mcp_config(self) -> None:
         """
         Create .mcp.json configuration file.
@@ -327,6 +368,13 @@ class ClaudeProcess:
                 env = os.environ.copy()
                 env.update(get_claude_env_vars())
                 env.update(self.env_vars)
+
+                # ── GitHub HTTPS authentication ──────────────────────
+                # git doesn't natively read GITHUB_TOKEN.  We inject
+                # git config via GIT_CONFIG_* env vars (git 2.31+) to
+                # transparently rewrite https://github.com/ URLs so
+                # they include the PAT — same pattern GitHub Actions uses.
+                self._setup_git_auth_env(env)
 
                 # Get Claude CLI config
                 node_config = self._node_config or find_claude_node_config()
