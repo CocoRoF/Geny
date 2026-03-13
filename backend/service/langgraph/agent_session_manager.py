@@ -167,9 +167,14 @@ class AgentSessionManager(SessionManager):
         # Determine role
         role = request.role.value if request.role else "worker"
 
+        # Detect tool search mode
+        tool_search_mode = getattr(request, 'tool_search_mode', False) or False
+
         # Resolve tool policy for this role
+        override_profile = ToolProfile.TOOL_SEARCH if tool_search_mode else None
         policy = ToolPolicyEngine.for_role(
             role=role,
+            override_profile=override_profile,
             explicit_tools=request.allowed_tools,
         )
         logger.debug(f"  ToolPolicy: {policy}")
@@ -242,6 +247,7 @@ class AgentSessionManager(SessionManager):
             context_files=context_files if context_files else None,
             extra_system_prompt=request.system_prompt,
             shared_folder_path=shared_folder_path,
+            tool_search_mode=tool_search_mode,
         )
 
         # Append memory context if available
@@ -282,6 +288,8 @@ class AgentSessionManager(SessionManager):
         logger.info(f"  working_dir: {request.working_dir}")
         logger.info(f"  model: {request.model}")
         logger.info(f"  role: {request.role.value if request.role else 'worker'}")
+        if getattr(request, 'tool_search_mode', False):
+            logger.info(f"  tool_search_mode: enabled")
 
         # ── Tool Preset resolution ──
         # If a tool_preset_id is specified, load the preset and use its
@@ -311,15 +319,19 @@ class AgentSessionManager(SessionManager):
 
         # Merge MCP configs and apply tool policy
         role = request.role.value if request.role else "worker"
+        tool_search_mode = getattr(request, 'tool_search_mode', False) or False
 
         # If a tool preset specifies an explicit tool list, use it as override
         explicit_tools = request.allowed_tools
         if preset_tool_filter is not None:
             explicit_tools = preset_tool_filter
 
+        # In tool_search_mode, override to TOOL_SEARCH profile
+        override_profile = ToolProfile.TOOL_SEARCH if tool_search_mode else None
         policy = ToolPolicyEngine.for_role(
             role=role,
-            explicit_tools=explicit_tools,
+            override_profile=override_profile,
+            explicit_tools=explicit_tools if not tool_search_mode else None,
         )
         merged_mcp_config = merge_mcp_configs(self._global_mcp_config, request.mcp_config)
 
@@ -390,6 +402,7 @@ class AgentSessionManager(SessionManager):
             graph_name=graph_name,
             tool_preset_id=tool_preset_id,
             tool_preset_name=tool_preset_name,
+            tool_search_mode=tool_search_mode,
         )
 
         session_id = agent.session_id

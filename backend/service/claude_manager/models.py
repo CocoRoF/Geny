@@ -191,6 +191,12 @@ class CreateSessionRequest(BaseModel):
         description="Session role: 'worker', 'developer', 'researcher', or 'planner'"
     )
 
+    # Tool search mode
+    tool_search_mode: Optional[bool] = Field(
+        default=False,
+        description="Enable tool search mode — agent receives only ToolSearch discovery tools initially and discovers other tools dynamically"
+    )
+
 
 class SessionInfo(BaseModel):
     """
@@ -268,6 +274,12 @@ class SessionInfo(BaseModel):
     system_prompt: Optional[str] = Field(
         default=None,
         description="System prompt applied to every execution in this session"
+    )
+
+    # Tool search mode
+    tool_search_mode: Optional[bool] = Field(
+        default=False,
+        description="Whether tool search mode is active for this session"
     )
 
 

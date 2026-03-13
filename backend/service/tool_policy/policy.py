@@ -67,6 +67,9 @@ class ToolProfile(str, Enum):
     FULL = "full"
     """All available MCP servers and tools — unrestricted."""
 
+    TOOL_SEARCH = "tool_search"
+    """Only _builtin_tools server — agent discovers other tools dynamically via ToolSearch."""
+
 
 # ---------------------------------------------------------------------------
 # Server-group definitions  (extend as new MCP servers are added)
@@ -117,7 +120,8 @@ _PROFILE_SERVER_GROUPS: Dict[ToolProfile, FrozenSet[str]] = {
     ToolProfile.CODING:    _BUILTIN_SERVERS | _CODING_SERVERS,
     ToolProfile.MESSAGING: _BUILTIN_SERVERS | _MESSAGING_SERVERS,
     ToolProfile.RESEARCH:  _BUILTIN_SERVERS | _RESEARCH_SERVERS,
-    ToolProfile.FULL:      frozenset(),  # empty ⇒ allow-all sentinel
+    ToolProfile.FULL:         frozenset(),  # empty ⇒ allow-all sentinel
+    ToolProfile.TOOL_SEARCH:  _BUILTIN_SERVERS,  # only built-in tools (ToolSearch tools)
 }
 
 
@@ -132,6 +136,13 @@ _EXAMPLE_TOOLS: FrozenSet[str] = frozenset({
     "count_words",
     "echo",
     "calculator",
+})
+
+_TOOL_SEARCH_TOOLS: FrozenSet[str] = frozenset({
+    "tool_search",
+    "tool_schema",
+    "tool_browse",
+    "tool_workflow",
 })
 
 
@@ -199,6 +210,10 @@ class ToolPolicyEngine:
         """
         profile = override_profile or ROLE_DEFAULT_PROFILES.get(role, ToolProfile.CODING)
         prefixes = _PROFILE_SERVER_GROUPS.get(profile, frozenset())
+
+        # TOOL_SEARCH profile forces explicit tool whitelist to only ToolSearch tools
+        if profile == ToolProfile.TOOL_SEARCH:
+            explicit_tools = list(_TOOL_SEARCH_TOOLS)
 
         logger.debug(
             "ToolPolicyEngine: role=%s profile=%s prefixes=%s explicit_tools=%s",
