@@ -73,8 +73,8 @@ function LogLine({ entry }: { entry: LogEntry }) {
       <div className="w-[3px] shrink-0 rounded-sm" style={{ backgroundColor: colors.gutter, opacity: 0.6 }} />
       {/* Content */}
       <div className="flex-1 min-w-0 py-[5px] pl-3 pr-2">
-        <div className="flex items-center gap-2">
-          <span className="text-[0.5625rem] text-[var(--text-muted)] font-mono tabular-nums shrink-0 opacity-50 w-[52px]">
+        <div className="flex items-start gap-2">
+          <span className="text-[0.5625rem] text-[var(--text-muted)] font-mono tabular-nums shrink-0 opacity-50 w-[52px] pt-[1px]">
             {shortTime}
           </span>
           <span
@@ -83,18 +83,18 @@ function LogLine({ entry }: { entry: LogEntry }) {
           >
             {entry.level}
           </span>
-          <span className={`text-[0.75rem] leading-snug ${
+          <span className={`text-[0.75rem] leading-snug min-w-0 whitespace-pre-wrap break-words ${
             entry.level === 'ERROR' || entry.level === 'WARNING'
               ? `font-medium`
               : ''
           }`} style={{ color: entry.level === 'ERROR' ? '#ef4444' : entry.level === 'WARNING' ? '#f59e0b' : 'var(--text-secondary)' }}>
             {isLong && !expanded ? (
-              <span className="flex items-center gap-1">
-                <span className="truncate">{displayMsg.slice(0, 200)}...</span>
-                <ChevronRight size={10} className="shrink-0 text-[var(--text-muted)] opacity-50" />
+              <span>
+                {displayMsg.slice(0, 200)}...
+                <ChevronRight size={10} className="inline-block ml-1 text-[var(--text-muted)] opacity-50" />
               </span>
             ) : (
-              <span className="whitespace-pre-wrap break-words">{displayMsg}</span>
+              displayMsg
             )}
           </span>
           {isLong && expanded && (
