@@ -106,7 +106,13 @@ class MCPLoader:
         if self.tools:
             self._register_tools_as_mcp()
 
-        # 4. Create global config
+        # 4. Register tools in ToolRegistry (for graph-based search)
+        self._populate_tool_registry()
+
+        # 5. Initialize ToolExecutor (for tool_execute proxy)
+        self._populate_tool_executor()
+
+        # 6. Create global config
         config = MCPConfig(servers=self.servers)
         set_global_mcp_config(config)
 
@@ -393,6 +399,62 @@ if __name__ == "__main__":
         logger.info(f"   📝 Generated MCP server script: {script_path}")
 
         return script_path
+
+    def _populate_tool_registry(self) -> None:
+        """Register loaded tools in the ToolRegistry for search/retrieval.
+
+        Registers built-in tools (from tools/ folder) into the registry.
+        MCP server tools are registered lazily when their tool lists become
+        available (they require the server process to be running).
+        """
+        try:
+            from service.tool_registry import get_tool_registry
+            registry = get_tool_registry()
+
+            # Register built-in tools
+            if self.tools:
+                registry.register_builtin_tools(self.tools)
+
+            registry.finalize()
+            logger.info(f"   Tool Registry: {registry.tool_count} tools indexed")
+
+        except Exception as e:
+            logger.warning(f"   Tool Registry population failed: {e}")
+
+    def _populate_tool_executor(self) -> None:
+        """Initialize the ToolExecutor with built-in tools and MCP server configs.
+
+        Built-in tools (from tools/ folder) are registered for direct Python
+        execution. MCP servers (from mcp/ folder) are registered for lazy
+        connection — actual connections are established on first tool_execute call.
+        """
+        try:
+            from service.tool_executor import get_tool_executor
+            executor = get_tool_executor()
+
+            # Register built-in tools for direct execution
+            if self.tools:
+                executor.register_builtin_tools(self.tools)
+
+            # Register MCP servers for lazy connection
+            for server_name, server_config in self.servers.items():
+                if server_name == "_builtin_tools":
+                    continue  # Built-in tools already registered above
+
+                # Only stdio transport is supported for now
+                if hasattr(server_config, 'command'):
+                    executor.register_mcp_server(
+                        server_name=server_name,
+                        command=server_config.command,
+                        args=getattr(server_config, 'args', []),
+                        env=getattr(server_config, 'env', None),
+                    )
+
+            executor.finalize()
+            logger.info(f"   Tool Executor: {len(executor.list_executable_tools())} tools ready")
+
+        except Exception as e:
+            logger.warning(f"   Tool Executor initialization failed: {e}")
 
     def get_server_count(self) -> int:
         """Return number of loaded servers"""

@@ -91,6 +91,15 @@ class MemoryRef(TypedDict, total=False):
     injected_at_turn: int  # which iteration the chunk was first included
 
 
+class DiscoveredTool(TypedDict, total=False):
+    """A tool discovered dynamically via ToolSearch during execution."""
+    name: str
+    description: str
+    server_name: str
+    parameters: Dict[str, Any]
+    discovered_at_turn: int
+
+
 class FallbackRecord(TypedDict, total=False):
     """Tracks model fallback events within a single invocation."""
     original_model: str
@@ -142,6 +151,17 @@ def _merge_memory_refs(
     return merged
 
 
+def _merge_discovered_tools(
+    left: Dict[str, DiscoveredTool], right: Dict[str, DiscoveredTool]
+) -> Dict[str, DiscoveredTool]:
+    """Merge discovered tools by name (right/newer wins on conflict)."""
+    if not right:
+        return left
+    merged = dict(left)
+    merged.update(right)
+    return merged
+
+
 def _last_wins(left: Any, right: Any) -> Any:
     """Simple last-write-wins reducer for scalar fields."""
     return right if right is not None else left
@@ -187,6 +207,10 @@ class AgentState(TypedDict, total=False):
 
     # -- Memory context (formatted text for prompt injection) ---------------
     memory_context: Annotated[Optional[str], _last_wins]
+
+    # -- Tool Search Mode (dynamic tool discovery) ---------------------------
+    tool_search_mode: bool
+    discovered_tools: Annotated[Dict[str, DiscoveredTool], _merge_discovered_tools]
 
     # -- Legacy metadata (for backward compat) ------------------------------
     metadata: Dict[str, Any]
@@ -256,6 +280,10 @@ class AutonomousState(TypedDict, total=False):
     is_chat_message: bool               # True when invoked via /chat/broadcast
     relevance_skipped: bool             # True if relevance gate decided to skip
 
+    # -- Tool Search Mode (dynamic tool discovery) ---------------------------
+    tool_search_mode: bool
+    discovered_tools: Annotated[Dict[str, DiscoveredTool], _merge_discovered_tools]
+
     # -- Legacy metadata ----------------------------------------------------
     metadata: Dict[str, Any]
 
@@ -288,6 +316,8 @@ def make_initial_agent_state(
         "fallback": None,
         "memory_refs": [],
         "memory_context": None,
+        "tool_search_mode": extra_metadata.pop("tool_search_mode", False),
+        "discovered_tools": {},
         "metadata": extra_metadata,
     }
 
@@ -324,5 +354,7 @@ def make_initial_autonomous_state(
         "memory_context": None,
         "is_chat_message": extra_metadata.pop("is_chat_message", False),
         "relevance_skipped": False,
+        "tool_search_mode": extra_metadata.pop("tool_search_mode", False),
+        "discovered_tools": {},
         "metadata": extra_metadata,
     }

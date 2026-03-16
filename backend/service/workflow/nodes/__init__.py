@@ -13,6 +13,7 @@ from service.workflow.nodes import logic_nodes    # noqa: F401
 from service.workflow.nodes import memory_nodes   # noqa: F401
 from service.workflow.nodes import guard_nodes    # noqa: F401
 from service.workflow.nodes import task_nodes     # noqa: F401
+from service.workflow.nodes import tool_discovery_nodes  # noqa: F401
 
 
 def register_all_nodes() -> None:
