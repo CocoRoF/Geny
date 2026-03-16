@@ -1,0 +1,140 @@
+# ══════════════════════════════════════════════════════════════════════
+#  Geny — Docker Compose (Production with Nginx Reverse Proxy)
+#
+#  도메인을 연결하여 단일 포트(80)로 backend / frontend를 라우팅합니다.
+#    /api/*            → backend:8000
+#    /health           → backend:8000
+#    /static/assets/*  → backend:8000
+#    /*                → frontend:3000
+#
+#  Usage:
+#    docker compose -f docker-compose.prod.yml up --build -d
+#    docker compose -f docker-compose.prod.yml down
+#    docker compose -f docker-compose.prod.yml logs -f
+#
+#  도메인 / SSL 설정:
+#    DOMAIN=geny.example.com  → nginx server_name 에 반영
+#    SSL 은 별도의 certbot 또는 Cloudflare 등으로 처리 후
+#    nginx/nginx.conf 에 443 블록을 추가하세요.
+#
+#  Port 변경:
+#    NGINX_PORT=58443 docker compose -f docker-compose.prod.yml up --build
+#
+#  또는 .env 파일로 설정:
+#    NGINX_PORT=58443
+#    DOMAIN=geny.example.com
+# ══════════════════════════════════════════════════════════════════════
+
+services:
+
+  # ── PostgreSQL Database ───────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: geny-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-geny}
+      POSTGRES_USER: ${POSTGRES_USER:-geny}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-geny123}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+      TZ: ${TIMEZONE:-Asia/Seoul}
+    volumes:
+      - geny-pgdata-prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-geny} -d ${POSTGRES_DB:-geny}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - geny-net-prod
+
+  # ── Backend (FastAPI + LangGraph + Claude CLI) ────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: geny-backend-prod
+    restart: unless-stopped
+    # 외부 포트 노출 없음 — nginx 를 통해서만 접근
+    expose:
+      - "8000"
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8000
+      - GENY_AGENT_STORAGE_ROOT=/data/geny_agent_sessions
+      # PostgreSQL connection
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-geny}
+      - POSTGRES_USER=${POSTGRES_USER:-geny}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-geny123}
+      - AUTO_MIGRATION=true
+      - TIMEZONE=${TIMEZONE:-Asia/Seoul}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - geny-net-prod
+
+  # ── Frontend (Next.js) ────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - API_URL=http://backend:8000
+    container_name: geny-frontend-prod
+    restart: unless-stopped
+    # 외부 포트 노출 없음 — nginx 를 통해서만 접근
+    expose:
+      - "3000"
+    environment:
+      # Next.js rewrites proxy → backend container (server-side)
+      - API_URL=http://backend:8000
+      # Client-side SSE/EventSource direct URL — nginx 가 /api/ 를 라우팅하므로
+      # 브라우저에서 상대경로(/api/...)로 접근하면 nginx 가 backend 로 전달
+      - NEXT_PUBLIC_API_URL=
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - geny-net-prod
+
+  # ── Nginx Reverse Proxy ───────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: geny-nginx-prod
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT:-58443}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # SSL 인증서를 사용할 경우 아래 주석을 해제하세요
+      # - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
+    networks:
+      - geny-net-prod
+
+networks:
+  geny-net-prod:
+    driver: bridge
+
+volumes:
+  geny-pgdata-prod:
+    driver: local
