@@ -28,6 +28,8 @@ dependencies = [
     # PostgreSQL database
     "psycopg[binary]>=3.2.0",
     "psycopg-pool>=3.2.0",
+    # Web search
+    "ddgs==9.11.4",
 ]
 
 [project.optional-dependencies]
