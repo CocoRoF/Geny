@@ -186,16 +186,16 @@ export default function WorkflowCanvas({ readOnly = false }: { readOnly?: boolea
         />
         <MiniMap
           nodeStrokeWidth={2}
-          nodeStrokeColor="#555"
+          nodeStrokeColor="var(--minimap-stroke)"
           nodeColor={(n) => {
             const d = n.data as WorkflowNodeData;
             return d.color || '#6366f1';
           }}
-          maskColor="rgba(0,0,0,0.55)"
+          maskColor="var(--overlay-bg)"
           pannable
           zoomable
           style={{ width: 180, height: 130 }}
-          className="!bg-[#1a1a1e] !border-[var(--border-color)] !rounded-lg"
+          className="!bg-[var(--minimap-bg)] !border-[var(--border-color)] !rounded-lg"
         />
       </ReactFlow>
 

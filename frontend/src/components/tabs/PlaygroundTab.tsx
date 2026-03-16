@@ -278,33 +278,24 @@ export default function PlaygroundTab() {
   const sessionList = sessions.map((s) => ({ session_id: s.session_id, session_name: s.session_name ?? undefined }));
 
   return (
-    <div className="flex flex-col h-full rounded-lg overflow-hidden relative"
+    <div className="flex flex-col h-full overflow-hidden relative"
          style={{ background: 'linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 50%, #16213e 100%)' }}>
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 shrink-0 z-10"
-           style={{
-             background: 'rgba(0, 0, 0, 0.3)',
-             borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
-             minHeight: '44px',
-           }}>
+      <div className="flex items-center justify-between px-4 py-2 shrink-0 z-10 bg-[var(--bg-secondary)] border-b border-[var(--border-color)]"
+           style={{ minHeight: '44px' }}>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 text-[0.9rem] font-semibold text-[var(--text-primary)]">
             <Building2 size={18} />
             {t('playground.title')}
           </div>
-          <span className="text-[0.75rem] text-[var(--text-muted)] px-2 py-0.5 rounded-full"
-                style={{ background: 'rgba(255, 255, 255, 0.06)' }}>
+          <span className="text-[0.75rem] text-[var(--text-muted)] bg-[var(--bg-tertiary)] px-2 py-0.5 rounded-full">
             {t('playground.citizens', { count: sessions.length })}
           </span>
         </div>
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => cameraCtrl()?.zoomIn()}
-            className="flex items-center justify-center w-[30px] h-[30px] rounded-[6px] text-[var(--text-secondary)] cursor-pointer transition-all duration-150 text-[0.85rem] p-0"
-            style={{
-              background: 'rgba(255, 255, 255, 0.06)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-            }}
+            className="flex items-center justify-center w-[30px] h-[30px] rounded-[6px] bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-all duration-150 text-[0.85rem] p-0"
             title={t('playground.zoomIn')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
@@ -313,11 +304,7 @@ export default function PlaygroundTab() {
           </button>
           <button
             onClick={() => cameraCtrl()?.zoomOut()}
-            className="flex items-center justify-center w-[30px] h-[30px] rounded-[6px] text-[var(--text-secondary)] cursor-pointer transition-all duration-150 text-[0.85rem] p-0"
-            style={{
-              background: 'rgba(255, 255, 255, 0.06)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-            }}
+            className="flex items-center justify-center w-[30px] h-[30px] rounded-[6px] bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-all duration-150 text-[0.85rem] p-0"
             title={t('playground.zoomOut')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
@@ -326,11 +313,7 @@ export default function PlaygroundTab() {
           </button>
           <button
             onClick={() => cameraCtrl()?.resetView()}
-            className="flex items-center justify-center w-[30px] h-[30px] rounded-[6px] text-[var(--text-secondary)] cursor-pointer transition-all duration-150 text-[0.85rem] p-0"
-            style={{
-              background: 'rgba(255, 255, 255, 0.06)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-            }}
+            className="flex items-center justify-center w-[30px] h-[30px] rounded-[6px] bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-all duration-150 text-[0.85rem] p-0"
             title={t('playground.resetView')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">

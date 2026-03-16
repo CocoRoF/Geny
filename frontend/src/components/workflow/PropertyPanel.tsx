@@ -159,8 +159,8 @@ function PromptTemplateField({ param, value, onChange }: {
         rows={6}
         className="
           w-full px-2.5 py-2 text-[11px]
-          bg-[#0d0d0f] border border-[var(--border-color)]
-          rounded-md text-[#a5d6ff]
+          bg-[var(--code-bg)] border border-[var(--border-color)]
+          rounded-md text-[var(--code-property)]
           placeholder:text-[var(--text-muted)]
           focus:outline-none focus:border-[var(--primary-color)]
           font-mono resize-y min-h-[80px] leading-relaxed
@@ -204,7 +204,7 @@ function JsonField({ param, value, onChange }: {
         rows={4}
         className={`
           w-full px-2.5 py-2 text-[11px]
-          bg-[#0d0d0f] border rounded-md text-[#c3e88d]
+          bg-[var(--code-bg)] border rounded-md text-[var(--code-string)]
           placeholder:text-[var(--text-muted)]
           focus:outline-none focus:border-[var(--primary-color)]
           font-mono resize-y min-h-[60px]
@@ -304,7 +304,7 @@ function StructuredOutputPreview({ schema, color }: {
                 "
               >
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-mono font-semibold text-[#c3e88d]">
+                  <span className="text-[10px] font-mono font-semibold text-[var(--code-string)]">
                     {field.name}
                   </span>
                   <span className="text-[9px] font-mono text-[var(--text-muted)]">
@@ -339,8 +339,8 @@ function StructuredOutputPreview({ schema, color }: {
               </div>
               <pre className="
                 px-2.5 py-2 text-[10px] leading-relaxed
-                bg-[#0d0d0f] border border-[var(--border-color)]
-                rounded-md font-mono text-[#a5d6ff] overflow-x-auto
+                bg-[var(--code-bg)] border border-[var(--border-color)]
+                rounded-md font-mono text-[var(--code-property)] overflow-x-auto
                 max-h-[120px] overflow-y-auto
               ">
                 {JSON.stringify(schema.example, null, 2)}
@@ -350,7 +350,7 @@ function StructuredOutputPreview({ schema, color }: {
 
           {/* Validation badge */}
           <div className="flex items-center gap-1.5 pt-0.5">
-            <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(16,185,129,0.1)] text-[#10b981] border border-[rgba(16,185,129,0.2)]">
+            <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(16,185,129,0.1)] text-[var(--success-color)] border border-[rgba(16,185,129,0.2)]">
               <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>

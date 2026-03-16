@@ -26,7 +26,7 @@ export const StartNode = memo(({ data, selected }: NodeProps) => {
         type="source"
         position={Position.Bottom}
         id="default"
-        className="!w-3 !h-3 !bg-[#10b981] !border-2 !border-[#18181b] !-bottom-1.5"
+        className="!w-3 !h-3 !bg-[#10b981] !border-2 !border-[var(--node-handle-border)] !-bottom-1.5"
       />
     </div>
   );
@@ -51,7 +51,7 @@ export const EndNode = memo(({ data, selected }: NodeProps) => {
       <Handle
         type="target"
         position={Position.Top}
-        className="!w-3 !h-3 !bg-[#6b7280] !border-2 !border-[#18181b] !-top-1.5"
+        className="!w-3 !h-3 !bg-[#6b7280] !border-2 !border-[var(--node-handle-border)] !-top-1.5"
       />
       <NodeIcon name="square" size={16} className="text-[#6b7280] mr-1.5" />
       <span className="text-[13px] font-semibold text-[#6b7280]">{d.label}</span>
@@ -71,7 +71,7 @@ export const WorkflowNode = memo(({ data, selected }: NodeProps) => {
       className={`
         relative min-w-[180px] max-w-[220px] rounded-lg border-2
         transition-all duration-150 cursor-pointer select-none
-        bg-[#18181b]
+        bg-[var(--bg-secondary)]
         ${selected ? 'shadow-[0_0_0_3px_rgba(59,130,246,0.3)]' : 'hover:shadow-md'}
       `}
       style={{
@@ -82,7 +82,7 @@ export const WorkflowNode = memo(({ data, selected }: NodeProps) => {
       <Handle
         type="target"
         position={Position.Top}
-        className="!w-3 !h-3 !border-2 !border-[#18181b] !-top-1.5"
+        className="!w-3 !h-3 !border-2 !border-[var(--node-handle-border)] !-top-1.5"
         style={{ background: borderColor }}
       />
 
@@ -124,7 +124,7 @@ export const WorkflowNode = memo(({ data, selected }: NodeProps) => {
         type="source"
         position={Position.Bottom}
         id="default"
-        className="!w-3 !h-3 !border-2 !border-[#18181b] !-bottom-1.5"
+        className="!w-3 !h-3 !border-2 !border-[var(--node-handle-border)] !-bottom-1.5"
         style={{ background: borderColor }}
       />
     </div>
@@ -144,7 +144,7 @@ export const ConditionalNode = memo(({ data, selected }: NodeProps) => {
       className={`
         relative min-w-[200px] max-w-[240px] rounded-lg border-2
         transition-all duration-150 cursor-pointer select-none
-        bg-[#18181b]
+        bg-[var(--bg-secondary)]
         ${selected ? 'shadow-[0_0_0_3px_rgba(59,130,246,0.3)]' : 'hover:shadow-md'}
       `}
       style={{
@@ -155,7 +155,7 @@ export const ConditionalNode = memo(({ data, selected }: NodeProps) => {
       <Handle
         type="target"
         position={Position.Top}
-        className="!w-3 !h-3 !border-2 !border-[#18181b] !-top-1.5"
+        className="!w-3 !h-3 !border-2 !border-[var(--node-handle-border)] !-top-1.5"
         style={{ background: borderColor }}
       />
 
@@ -219,7 +219,7 @@ export const ConditionalNode = memo(({ data, selected }: NodeProps) => {
             type="source"
             position={Position.Bottom}
             id={port.id}
-            className="!w-2.5 !h-2.5 !border-2 !border-[#18181b] !-bottom-1.5"
+            className="!w-2.5 !h-2.5 !border-2 !border-[var(--node-handle-border)] !-bottom-1.5"
             style={{
               background: borderColor,
               left: `${pct}%`,

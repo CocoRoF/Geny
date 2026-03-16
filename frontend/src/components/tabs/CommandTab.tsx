@@ -87,7 +87,7 @@ function LogLine({ entry }: { entry: LogEntry }) {
             entry.level === 'ERROR' || entry.level === 'WARNING'
               ? `font-medium`
               : ''
-          }`} style={{ color: entry.level === 'ERROR' ? '#ef4444' : entry.level === 'WARNING' ? '#f59e0b' : 'var(--text-secondary)' }}>
+          }`} style={{ color: entry.level === 'ERROR' ? 'var(--danger-color)' : entry.level === 'WARNING' ? 'var(--warning-color)' : 'var(--text-secondary)' }}>
             {isLong && !expanded ? (
               <span>
                 {displayMsg.slice(0, 200)}...

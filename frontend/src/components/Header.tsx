@@ -1,17 +1,17 @@
 'use client';
 
-import { useState } from 'react';
-import Image from 'next/image';
+import { useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { useI18n } from '@/lib/i18n';
 import type { Locale } from '@/lib/i18n';
+import { useTheme } from '@/lib/theme';
 import { configApi } from '@/lib/api';
 import { Menu, Sun, Moon } from 'lucide-react';
 
 export default function Header() {
   const { healthStatus, sessions, setMobileSidebarOpen } = useAppStore();
   const { t, locale, setLocale } = useI18n();
-  const [isDark, setIsDark] = useState(true);
+  const { theme, setTheme } = useTheme();
 
   const isHealthy = healthStatus === 'connected';
 
@@ -20,10 +20,15 @@ export default function Header() {
     configApi.update('language', { language: lang }).catch(() => {});
   };
 
-  const toggleTheme = () => {
-    setIsDark(!isDark);
-    // TODO: implement light mode theme switching
-  };
+  /** Toggle theme: dark ↔ light */
+  const toggleTheme = useCallback(() => {
+    document.documentElement.classList.add('theme-transition');
+    setTimeout(() => document.documentElement.classList.remove('theme-transition'), 400);
+    setTheme(theme === 'dark' ? 'light' : 'dark');
+  }, [theme, setTheme]);
+
+  const themeIcon = theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />;
+  const themeTitle = theme === 'dark' ? 'Switch to Light' : 'Switch to Dark';
 
   return (
     <header className="flex justify-between items-center px-3 md:px-6 h-14 bg-[var(--bg-secondary)] border-b border-[var(--border-color)]">
@@ -41,13 +46,13 @@ export default function Header() {
         </span>
       </div>
       <div className="flex items-center gap-2.5">
-        {/* ── Theme Toggle ── */}
+        {/* ── Theme Toggle (3-state: System / Light / Dark) ── */}
         <button
           onClick={toggleTheme}
           className="flex items-center justify-center w-8 h-8 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-all duration-150"
-          title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          title={themeTitle}
         >
-          {isDark ? <Sun size={14} /> : <Moon size={14} />}
+          {themeIcon}
         </button>
 
         {/* ── Language Toggle ── */}

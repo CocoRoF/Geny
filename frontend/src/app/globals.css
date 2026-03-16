@@ -1,9 +1,19 @@
 @import "tailwindcss";
 
 /* ========================================
-   CSS Variables (dark theme)
+   Shared / non-theme CSS Variables
    ======================================== */
 :root {
+	--border-radius: 6px;
+	--border-radius-lg: 10px;
+	--transition-fast: 120ms ease;
+	--transition-normal: 200ms ease;
+}
+
+/* ========================================
+   Dark Theme (default)
+   ======================================== */
+html.dark {
 	--primary-color: #3b82f6;
 	--primary-hover: #2563eb;
 	--primary-subtle: rgba(59, 130, 246, 0.1);
@@ -22,13 +32,76 @@
 	--text-muted: #71717a;
 	--border-color: #27272a;
 	--border-subtle: #3f3f46;
-	--border-radius: 6px;
-	--border-radius-lg: 10px;
 	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
 	--shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
 	--shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
-	--transition-fast: 120ms ease;
-	--transition-normal: 200ms ease;
+
+	/* Code / Syntax */
+	--code-bg: #0d0d0f;
+	--code-string: #c3e88d;
+	--code-keyword: #c084fc;
+	--code-function: #60a5fa;
+	--code-number: #fbbf24;
+	--code-comment: #6b7280;
+	--code-property: #a5d6ff;
+
+	/* Node Handle border (matches bg so handles look punched-out) */
+	--node-handle-border: #18181b;
+
+	/* MiniMap */
+	--minimap-bg: #1a1a1e;
+	--minimap-stroke: #555;
+
+	/* Overlay / backdrop */
+	--overlay-bg: rgba(0, 0, 0, 0.55);
+	--backdrop-blur: rgba(0, 0, 0, 0.5);
+}
+
+/* ========================================
+   Light Theme
+   ======================================== */
+html.light {
+	--primary-color: #2563eb;
+	--primary-hover: #1d4ed8;
+	--primary-subtle: rgba(37, 99, 235, 0.08);
+	--secondary-color: #64748b;
+	--success-color: #059669;
+	--warning-color: #d97706;
+	--danger-color: #dc2626;
+	--error-color: #dc2626;
+	--bg-primary: #ffffff;
+	--bg-secondary: #f8fafc;
+	--bg-tertiary: #f1f5f9;
+	--bg-card: #ffffff;
+	--bg-hover: #f1f5f9;
+	--text-primary: #0f172a;
+	--text-secondary: #475569;
+	--text-muted: #94a3b8;
+	--border-color: #e2e8f0;
+	--border-subtle: #cbd5e1;
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+	--shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+	--shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+	/* Code / Syntax */
+	--code-bg: #f8fafc;
+	--code-string: #16a34a;
+	--code-keyword: #7c3aed;
+	--code-function: #2563eb;
+	--code-number: #b45309;
+	--code-comment: #94a3b8;
+	--code-property: #0369a1;
+
+	/* Node Handle border */
+	--node-handle-border: #f8fafc;
+
+	/* MiniMap */
+	--minimap-bg: #f1f5f9;
+	--minimap-stroke: #cbd5e1;
+
+	/* Overlay / backdrop */
+	--overlay-bg: rgba(255, 255, 255, 0.55);
+	--backdrop-blur: rgba(255, 255, 255, 0.5);
 }
 
 /* ========================================
@@ -148,6 +221,10 @@ input, textarea, select, button {
 	backdrop-filter: blur(2px);
 }
 
+html.light .sidebar-backdrop {
+	background: rgba(0, 0, 0, 0.2);
+}
+
 /* ========================================
    Safe area padding for notched devices
    ======================================== */
@@ -155,4 +232,32 @@ input, textarea, select, button {
 	.safe-bottom {
 		padding-bottom: env(safe-area-inset-bottom);
 	}
+}
+
+/* ========================================
+   Theme Transition
+   When switching themes, briefly animate
+   background & color for smoothness.
+   ======================================== */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+	transition: background-color 300ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease !important;
+}
+
+/* ========================================
+   Light-mode specific overrides
+   ======================================== */
+html.light ::selection {
+	background-color: var(--primary-color);
+	color: #ffffff;
+}
+
+html.light ::-webkit-scrollbar-thumb {
+	background: #cbd5e1;
+}
+
+html.light ::-webkit-scrollbar-thumb:hover {
+	background: #94a3b8;
 }

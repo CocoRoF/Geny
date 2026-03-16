@@ -28,8 +28,8 @@ function renderContent(text: string): React.ReactElement[] {
           key={key++}
           className="
             my-2 px-3 py-2 text-[11px] leading-relaxed
-            bg-[#0d0d0f] border border-[var(--border-color)]
-            rounded-md font-mono text-[#a5d6ff] overflow-x-auto
+            bg-[var(--code-bg)] border border-[var(--border-color)]
+            rounded-md font-mono text-[var(--code-property)] overflow-x-auto
           "
         >
           {codeLines.join('\n')}
@@ -124,7 +124,7 @@ function renderInline(text: string): (string | React.ReactElement)[] {
       parts.push(
         <code
           key={key++}
-          className="px-1 py-0.5 text-[10px] bg-[#0d0d0f] border border-[var(--border-color)] rounded text-[#c3e88d] font-mono"
+          className="px-1 py-0.5 text-[10px] bg-[var(--code-bg)] border border-[var(--border-color)] rounded text-[var(--code-string)] font-mono"
         >
           {match[3]}
         </code>,

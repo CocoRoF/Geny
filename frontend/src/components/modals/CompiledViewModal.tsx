@@ -256,7 +256,7 @@ function highlightPython(line: string): string {
 
   // Full comment lines
   if (line.trimStart().startsWith('#')) {
-    return `<span style="color:#6b7280;font-style:italic">${esc(line)}</span>`;
+    return `<span style="color:var(--code-comment);font-style:italic">${esc(line)}</span>`;
   }
 
   // Tokenize first so string/comment highlighting never collides with injected HTML
@@ -290,9 +290,9 @@ function highlightPython(line: string): string {
 
   return tokens.map(t => {
     if (t.kind === 'comment')
-      return `<span style="color:#6b7280;font-style:italic">${esc(t.text)}</span>`;
+      return `<span style="color:var(--code-comment);font-style:italic">${esc(t.text)}</span>`;
     if (t.kind === 'string')
-      return `<span style="color:#4ade80">${esc(t.text)}</span>`;
+      return `<span style="color:var(--code-string)">${esc(t.text)}</span>`;
 
     // Code token — single-pass tokenisation so injected HTML is never re-matched
     return highlightCodeSegment(t.text);
@@ -324,17 +324,17 @@ function highlightCodeSegment(code: string): string {
 
     if (m[1]) {
       // Graph API token
-      result += `<span style="color:#60a5fa;font-weight:bold">${esc(m[1])}</span>`;
+      result += `<span style="color:var(--code-function);font-weight:bold">${esc(m[1])}</span>`;
     } else if (m[2]) {
       // Identifier — check if it's a keyword
       if (KW_SET.has(m[2])) {
-        result += `<span style="color:#c084fc">${esc(m[2])}</span>`;
+        result += `<span style="color:var(--code-keyword)">${esc(m[2])}</span>`;
       } else {
         result += esc(m[2]);
       }
     } else if (m[3]) {
       // Number literal
-      result += `<span style="color:#fbbf24">${esc(m[3])}</span>`;
+      result += `<span style="color:var(--code-number)">${esc(m[3])}</span>`;
     }
 
     lastIndex = pattern.lastIndex;
