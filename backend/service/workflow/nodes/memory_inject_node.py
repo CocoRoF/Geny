@@ -1,20 +1,10 @@
 """
-Memory Nodes — memory injection and transcript recording.
+Memory Inject Node — LLM-gated memory injection at graph start.
 
-Handle interaction with the session memory manager
-for loading relevant context and recording conversation.
-
-Architecture note:
-    MemoryInjectNode performs **LLM-gated** memory retrieval:
-    - The LLM itself decides whether the input warrants long-term
-      memory search (via a lightweight structured-output call).
-    - If the LLM says memory is needed, the node runs a full
-      retrieval pipeline: session summary → MEMORY.md →
-      FAISS vector search → keyword search.
-    - Both ``memory_refs`` (metadata) and ``memory_context``
-      (formatted text) are written to state.
-    - Downstream model nodes reference ``{memory_context}`` in
-      their prompt templates via ``_safe_format(template, state)``.
+The LLM itself decides whether the input warrants long-term memory
+retrieval. When activated, performs vector semantic search and keyword
+search, then injects both structured MemoryRef entries and formatted
+context text into state.
 """
 
 from __future__ import annotations
@@ -32,10 +22,7 @@ from service.workflow.nodes.base import (
     register_node,
 )
 from service.workflow.workflow_state import NodeStateUsage
-from service.workflow.nodes.i18n import (
-    MEMORY_INJECT_I18N,
-    TRANSCRIPT_RECORD_I18N,
-)
+from service.workflow.nodes.i18n import MEMORY_INJECT_I18N
 
 logger = getLogger(__name__)
 
@@ -63,11 +50,6 @@ Respond with JSON only: {"needs_memory": true/false, "reasoning": "brief reason"
 
 User input:
 {input}"""
-
-
-# ============================================================================
-# Memory Inject
-# ============================================================================
 
 
 @register_node
@@ -371,85 +353,3 @@ class MemoryInjectNode(BaseNode):
         except Exception as e:
             logger.warning(f"[{context.session_id}] memory_inject failed: {e}")
             return {}
-
-
-# ============================================================================
-# Transcript Record
-# ============================================================================
-
-
-@register_node
-class TranscriptRecordNode(BaseNode):
-    """Record a state field's content to short-term memory transcript.
-
-    Generalised: Configurable source field and message role.
-    """
-
-    node_type = "transcript_record"
-    label = "Transcript Record"
-    description = "Records a state field's content to the short-term memory transcript with a configurable message role (assistant/user/system). Use for explicit transcript control when the built-in recording in PostModel is insufficient."
-    category = "memory"
-    icon = "file-text"
-    color = "#ec4899"
-    i18n = TRANSCRIPT_RECORD_I18N
-    state_usage = NodeStateUsage(
-        reads=[],
-        writes=[],  # writes to external memory, not state
-        config_dynamic_reads={"source_field": "last_output"},
-    )
-
-    parameters = [
-        NodeParameter(
-            name="max_length",
-            label="Max Content Length",
-            type="number",
-            default=5000,
-            min=100,
-            max=50000,
-            description="Maximum characters to record from the output.",
-            group="behavior",
-        ),
-        NodeParameter(
-            name="source_field",
-            label="Source State Field",
-            type="string",
-            default="last_output",
-            description="State field whose content is recorded to the transcript.",
-            group="state_fields",
-        ),
-        NodeParameter(
-            name="role",
-            label="Message Role",
-            type="select",
-            default="assistant",
-            description="Role label for the transcript entry.",
-            options=[
-                {"label": "Assistant", "value": "assistant"},
-                {"label": "User", "value": "user"},
-                {"label": "System", "value": "system"},
-            ],
-            group="behavior",
-        ),
-    ]
-
-    async def execute(
-        self,
-        state: Dict[str, Any],
-        context: ExecutionContext,
-        config: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        if not context.memory_manager:
-            return {}
-
-        source_field = config.get("source_field", "last_output")
-        content = state.get(source_field, "") or ""
-        max_length = int(config.get("max_length", 5000))
-        role = config.get("role", "assistant")
-
-        if content:
-            try:
-                context.memory_manager.record_message(role, content[:max_length])
-            except Exception:
-                logger.debug(f"[{context.session_id}] transcript_record: failed")
-
-        return {}

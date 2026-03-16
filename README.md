@@ -445,6 +445,14 @@ Geny works on Windows, macOS, and Linux:
 - **Windows**: Uses `%LOCALAPPDATA%\geny_agent_sessions`, auto-detects `.cmd`/`.exe` executables
 - **macOS/Linux**: Uses `/tmp/geny_agent_sessions`, standard executable paths
 
+### Community
+
+| Author|  Name | Description | URL |
+|-------|-------|-------------|----------|
+|<a href="https://github.com/SonAIengine"><img src="https://avatars.githubusercontent.com/u/166786347?v=4&s=48" width="48" height="48" alt="Son Seong Jun" title="Son Seong Jun"/></a>|`graph-tool-call` | Local process | https://github.com/SonAIengine/graph-tool-call |
+
+---
+
 ## License
 
 MIT License

@@ -17,7 +17,9 @@ except ImportError:
     sys.exit(1)
 
 # Import tools
+from tools.browser_tools import TOOLS as browser_tools_TOOLS
 from tools.tool_search_tools import TOOLS as tool_search_tools_TOOLS
+from tools.web_fetch_tools import TOOLS as web_fetch_tools_TOOLS
 from tools.web_search_tools import TOOLS as web_search_tools_TOOLS
 
 # Create MCP server
@@ -25,7 +27,9 @@ mcp = FastMCP("builtin-tools")
 
 # Collect all tools
 all_tools = []
+all_tools.extend(browser_tools_TOOLS)
 all_tools.extend(tool_search_tools_TOOLS)
+all_tools.extend(web_fetch_tools_TOOLS)
 all_tools.extend(web_search_tools_TOOLS)
 
 # Register each tool to MCP
