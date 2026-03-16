@@ -451,7 +451,7 @@ Geny works on Windows, macOS, and Linux:
 
 | Author|  Name | Description | URL |
 |-------|-------|-------------|----------|
-|<a href="https://github.com/SonAIengine"><img src="https://avatars.githubusercontent.com/u/166786347?v=4&s=48" width="48" height="48" alt="Son Seong Jun" title="Son Seong Jun"/></a>|`graph-tool-call` | Local process | https://github.com/SonAIengine/graph-tool-call |
+|<a href="https://github.com/SonAIengine"><img src="https://avatars.githubusercontent.com/u/166786347?v=4&s=48" width="48" height="48" alt="Son Seong Jun" title="Son Seong Jun"/></a>|`graph-tool-call` | Tool-Search-Logic is inspired by SonSJ| https://github.com/SonAIengine/graph-tool-call |
 
 ---
 
