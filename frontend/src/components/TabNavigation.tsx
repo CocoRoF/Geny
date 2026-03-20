@@ -13,6 +13,7 @@ const SESSION_TAB_DEFS = [
   { id: 'command', accent: true },
   { id: 'graph' },
   { id: 'storage' },
+  { id: 'sessionTools' },
   { id: 'logs' },
 ] as const;
 

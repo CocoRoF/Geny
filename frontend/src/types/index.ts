@@ -32,6 +32,7 @@ export interface CreateAgentRequest {
   enable_checkpointing?: boolean;
   workflow_id?: string;
   graph_name?: string;
+  tool_preset_id?: string;
 }
 
 export interface ExecuteRequest {
@@ -379,4 +380,45 @@ export interface AvailableToolInfo {
 export interface AvailableToolsResponse {
   servers: AvailableServerInfo[];
   tools: AvailableToolInfo[];
+}
+
+// ==================== Tool Preset Types ====================
+
+export interface ToolPresetDefinition {
+  id: string;
+  name: string;
+  description: string;
+  icon?: string;
+  custom_tools: string[];
+  mcp_servers: string[];
+  created_at: string;
+  updated_at: string;
+  is_template: boolean;
+  template_name?: string;
+}
+
+export interface ToolInfo {
+  name: string;
+  description: string;
+  category: string;    // "built_in" or "custom"
+  group?: string;      // source file stem
+  parameters?: Record<string, unknown>;
+}
+
+export interface MCPServerInfo {
+  name: string;
+  type: string;        // "stdio", "http", "sse"
+}
+
+export interface ToolCatalogResponse {
+  built_in: ToolInfo[];
+  custom: ToolInfo[];
+  mcp_servers: MCPServerInfo[];
+  total_python_tools: number;
+  total_mcp_servers: number;
+}
+
+export interface ToolPresetListResponse {
+  presets: ToolPresetDefinition[];
+  total: number;
 }

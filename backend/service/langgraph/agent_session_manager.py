@@ -32,6 +32,7 @@ AgentSession 전용 메서드를 추가합니다.
 from logging import getLogger
 from typing import Dict, List, Optional
 import asyncio
+import os
 import uuid
 
 from service.claude_manager.session_manager import SessionManager, merge_mcp_configs
@@ -94,6 +95,9 @@ class AgentSessionManager(SessionManager):
         # Database reference (for per-session memory/log DB wiring)
         self._app_db = None
 
+        # ToolLoader reference (for preset-based tool filtering)
+        self._tool_loader = None
+
         # Background idle monitor
         self._idle_monitor_task: Optional[asyncio.Task] = None
         self._idle_monitor_interval: float = 60.0  # check every 60 seconds
@@ -109,6 +113,14 @@ class AgentSessionManager(SessionManager):
         """
         self._app_db = app_db
         logger.info("AgentSessionManager: app_db set for per-session memory DB wiring")
+
+    def set_tool_loader(self, tool_loader) -> None:
+        """Store the ToolLoader for preset-based tool filtering.
+
+        Called once at startup from main.py lifespan.
+        """
+        self._tool_loader = tool_loader
+        logger.info("AgentSessionManager: tool_loader set for preset-based tool filtering")
 
     def set_shared_folder_config(
         self,
@@ -158,7 +170,13 @@ class AgentSessionManager(SessionManager):
     # Prompt Builder
     # ========================================================================
 
-    def _build_system_prompt(self, request: CreateSessionRequest, session_id: Optional[str] = None) -> str:
+    def _build_system_prompt(
+        self,
+        request: CreateSessionRequest,
+        session_id: Optional[str] = None,
+        resolved_tool_names: Optional[list[str]] = None,
+        resolved_mcp_servers: Optional[list[str]] = None,
+    ) -> str:
         """Build the system prompt using the modular prompt builder.
 
         Design: The system prompt tells the agent WHO it is and WHAT to do.
@@ -167,6 +185,8 @@ class AgentSessionManager(SessionManager):
         Args:
             request: Session creation request.
             session_id: Pre-generated session ID (for Geny platform tools awareness).
+            resolved_tool_names: Pre-computed list of allowed tool names (from preset).
+            resolved_mcp_servers: Pre-computed list of MCP server names (from session config).
 
         Returns:
             Assembled system prompt string.
@@ -174,11 +194,12 @@ class AgentSessionManager(SessionManager):
         # Determine role
         role = request.role.value if request.role else "worker"
 
-        # Merge global + per-session MCP configs
-        merged_mcp = merge_mcp_configs(self._global_mcp_config, request.mcp_config)
-        mcp_servers: list[str] = []
-        if merged_mcp and merged_mcp.servers:
-            mcp_servers = list(merged_mcp.servers.keys())
+        # MCP server names for the prompt
+        mcp_servers: list[str] = resolved_mcp_servers or []
+        if not mcp_servers:
+            merged_mcp = merge_mcp_configs(self._global_mcp_config, request.mcp_config)
+            if merged_mcp and merged_mcp.servers:
+                mcp_servers = [n for n in merged_mcp.servers.keys() if not n.startswith("_")]
 
         # Load bootstrap context files from working directory
         context_files: dict[str, str] = {}
@@ -218,8 +239,8 @@ class AgentSessionManager(SessionManager):
             # Standalone worker → FULL
             mode = PromptMode.FULL
 
-        # Allowed tools list
-        tools = request.allowed_tools or []
+        # Allowed tools list (preset-resolved or from request)
+        tools = resolved_tool_names or request.allowed_tools or []
 
         # Resolve shared folder path for prompt inclusion
         shared_folder_path: str | None = None
@@ -282,18 +303,74 @@ class AgentSessionManager(SessionManager):
         logger.info(f"  model: {request.model}")
         logger.info(f"  role: {request.role.value if request.role else 'worker'}")
 
-        # Merge MCP configs (global + per-session)
-        merged_mcp_config = merge_mcp_configs(self._global_mcp_config, request.mcp_config)
+        # ── Resolve Tool Preset ────────────────────────────────────────
+        # Determines which Python tools and MCP servers are available.
+        preset = None
+        allowed_tool_names: list[str] = []
+        allowed_mcp_servers: list[str] | None = None
 
-        if merged_mcp_config and merged_mcp_config.servers:
-            logger.info(f"  mcp_servers: {list(merged_mcp_config.servers.keys())}")
+        try:
+            from service.tool_preset.store import get_tool_preset_store
+            from service.tool_preset.templates import ROLE_DEFAULT_PRESET
+
+            preset_store = get_tool_preset_store()
+            preset_id = request.tool_preset_id
+            if not preset_id:
+                role_key = request.role.value if request.role else "worker"
+                preset_id = ROLE_DEFAULT_PRESET.get(role_key, "template-all-tools")
+
+            preset = preset_store.load(preset_id)
+            if preset:
+                logger.info(f"  tool_preset: {preset.name} ({preset_id})")
+            else:
+                logger.warning(f"  tool_preset {preset_id} not found, using all tools")
+        except Exception as e:
+            logger.warning(f"  Tool preset resolution failed: {e}")
+
+        # Compute allowed Python tools from preset
+        if self._tool_loader and preset:
+            allowed_tool_names = self._tool_loader.get_allowed_tools_for_preset(preset)
+            logger.info(f"  allowed_tools: {len(allowed_tool_names)} tools")
+        elif self._tool_loader:
+            allowed_tool_names = self._tool_loader.get_all_names()
+            logger.info(f"  allowed_tools: all ({len(allowed_tool_names)})")
+
+        # Compute allowed MCP servers from preset
+        if preset and preset.mcp_servers:
+            allowed_mcp_servers = preset.mcp_servers  # ["*"] = all, or list of names
+        else:
+            allowed_mcp_servers = ["*"]  # Default: all external MCP servers
+
+        # ── Build Session MCP Config (Proxy MCP Pattern) ─────────────────
+        from service.mcp_loader import build_session_mcp_config
+
+        # Determine backend port
+        backend_port = int(os.environ.get("PORT", "8000"))
 
         # Pre-generate session_id so it can be injected into the prompt
         if not session_id:
             session_id = str(uuid.uuid4())
 
+        merged_mcp_config = build_session_mcp_config(
+            global_config=self._global_mcp_config,
+            allowed_tools=allowed_tool_names,
+            session_id=session_id,
+            backend_port=backend_port,
+            allowed_mcp_servers=allowed_mcp_servers,
+            extra_mcp=request.mcp_config,
+        )
+
         # 시스템 프롬프트 준비 — 모듈러 프롬프트 빌더 사용
-        system_prompt = self._build_system_prompt(request, session_id=session_id)
+        # Extract non-internal MCP server names for the prompt
+        resolved_mcp_names = []
+        if merged_mcp_config and merged_mcp_config.servers:
+            resolved_mcp_names = [n for n in merged_mcp_config.servers.keys() if not n.startswith("_")]
+        system_prompt = self._build_system_prompt(
+            request,
+            session_id=session_id,
+            resolved_tool_names=allowed_tool_names,
+            resolved_mcp_servers=resolved_mcp_names,
+        )
         logger.info(f"  📋 System prompt built via PromptBuilder ({len(system_prompt)} chars)")
 
         # Resolve graph_name and workflow_id

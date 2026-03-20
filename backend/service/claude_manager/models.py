@@ -186,6 +186,13 @@ class CreateSessionRequest(BaseModel):
         description="Session role: 'worker', 'developer', 'researcher', or 'planner'"
     )
 
+    # Tool preset settings
+    tool_preset_id: Optional[str] = Field(
+        default=None,
+        description="Tool preset ID — determines which Python tools and MCP servers are available. "
+                    "If None, the default preset for the session role is used."
+    )
+
 
 class SessionInfo(BaseModel):
     """

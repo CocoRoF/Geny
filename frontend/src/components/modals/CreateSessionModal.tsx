@@ -4,11 +4,12 @@ import { useState, useEffect } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { agentApi } from '@/lib/api';
 import { workflowApi } from '@/lib/workflowApi';
+import { toolPresetApi } from '@/lib/toolApi';
 import NumberStepper from '@/components/ui/NumberStepper';
 import InfoTooltip from '@/components/ui/InfoTooltip';
 import { X } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
-import type { CreateAgentRequest, SessionInfo } from '@/types';
+import type { CreateAgentRequest, SessionInfo, ToolPresetDefinition } from '@/types';
 import type { WorkflowDefinition } from '@/types/workflow';
 
 const selectArrow: React.CSSProperties = {
@@ -50,6 +51,8 @@ export default function CreateSessionModal({ onClose }: Props) {
   const [availableWorkflows, setAvailableWorkflows] = useState<WorkflowDefinition[]>([]);
   const [templateWorkflows, setTemplateWorkflows] = useState<WorkflowDefinition[]>([]);
   const [selectedWorkflow, setSelectedWorkflow] = useState('template-autonomous');
+  const [toolPresets, setToolPresets] = useState<ToolPresetDefinition[]>([]);
+  const [selectedPreset, setSelectedPreset] = useState('');
 
   useEffect(() => { loadPrompts(); }, [loadPrompts]);
 
@@ -58,11 +61,13 @@ export default function CreateSessionModal({ onClose }: Props) {
     Promise.all([
       workflowApi.list().catch(() => ({ workflows: [] })),
       workflowApi.listTemplates().catch(() => ({ templates: [] })),
-    ]).then(([wfRes, tmplRes]) => {
+      toolPresetApi.list().catch(() => ({ presets: [] })),
+    ]).then(([wfRes, tmplRes, presetRes]) => {
       const tmpls = tmplRes.templates || [];
       setTemplateWorkflows(tmpls);
       const userWfs = (wfRes.workflows || []).filter(w => !w.is_template);
       setAvailableWorkflows(userWfs);
+      setToolPresets(presetRes.presets || []);
     });
   }, []);
 
@@ -91,6 +96,10 @@ export default function CreateSessionModal({ onClose }: Props) {
       const wf = allWfs.find(w => w.id === selectedWorkflow);
       payload.workflow_id = selectedWorkflow;
       payload.graph_name = wf?.name || selectedWorkflow;
+      // Send tool preset if explicitly selected
+      if (selectedPreset) {
+        payload.tool_preset_id = selectedPreset;
+      }
       await createSession(payload);
       onClose();
     } catch (e: unknown) {
@@ -207,6 +216,37 @@ export default function CreateSessionModal({ onClose }: Props) {
               </div>
             </div>
           )}
+
+          {/* Tool Preset */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">
+              Tool Preset <InfoTooltip text="Select which Python tools and MCP servers are available to the agent. Default is determined by the role." />
+            </label>
+            <select className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8" style={selectArrow} value={selectedPreset} onChange={e => setSelectedPreset(e.target.value)}>
+              <option value="">Default (based on role)</option>
+              {toolPresets.filter(p => p.is_template).length > 0 && (
+                <optgroup label="Templates">
+                  {toolPresets.filter(p => p.is_template).map(p => (
+                    <option key={p.id} value={p.id}>{p.icon || '🔧'} {p.name}</option>
+                  ))}
+                </optgroup>
+              )}
+              {toolPresets.filter(p => !p.is_template).length > 0 && (
+                <optgroup label="Custom">
+                  {toolPresets.filter(p => !p.is_template).map(p => (
+                    <option key={p.id} value={p.id}>{p.icon || '🔧'} {p.name}</option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+            <small className="text-[0.75rem] text-[var(--text-muted)] mt-0.5">
+              {(() => {
+                if (!selectedPreset) return 'Automatically selects the best preset for the chosen role.';
+                const p = toolPresets.find(tp => tp.id === selectedPreset);
+                return p?.description || '';
+              })()}
+            </small>
+          </div>
 
           {/* System Prompt */}
           <div className="flex flex-col gap-1.5">

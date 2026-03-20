@@ -16,6 +16,9 @@ from controller.config_controller import router as config_router
 from controller.workflow_controller import router as workflow_router
 from controller.shared_folder_controller import router as shared_folder_router
 from controller.chat_controller import router as chat_router
+from controller.internal_tool_controller import router as internal_tool_router
+from controller.tool_preset_controller import router as tool_preset_router
+from controller.tool_controller import router as tool_catalog_router
 from service.config import get_config_manager
 from service.mcp_loader import MCPLoader, get_global_mcp_config
 import uvicorn
@@ -177,8 +180,17 @@ async def lifespan(app: FastAPI):
         logger.info("   - SessionLogger: file only (database unavailable)")
         logger.info("   - AgentSession memory: file only (database unavailable)")
 
-    # Auto-load MCP configs and tools
-    print_step_banner("MCP", "MCP LOADER", "Loading MCP configs and tools...")
+    # Load Python tools via ToolLoader
+    print_step_banner("TOOLS", "TOOL LOADER", "Loading Python tools...")
+    from service.tool_loader import get_tool_loader
+    tool_loader = get_tool_loader()
+    tool_loader.load_all()
+    app.state.tool_loader = tool_loader
+    logger.info(f"   - Built-in tools: {len(tool_loader.get_builtin_names())}")
+    logger.info(f"   - Custom tools: {len(tool_loader.get_custom_names())}")
+
+    # Auto-load external MCP configs
+    print_step_banner("MCP", "MCP LOADER", "Loading external MCP configs...")
     mcp_loader = MCPLoader()
     mcp_config = mcp_loader.load_all()
     app.state.mcp_loader = mcp_loader
@@ -186,8 +198,18 @@ async def lifespan(app: FastAPI):
 
     # Inject global MCP config into AgentSessionManager
     agent_manager.set_global_mcp_config(mcp_config)
-    logger.info(f"   - MCP Servers: {mcp_loader.get_server_count()}")
-    logger.info(f"   - Custom Tools: {mcp_loader.get_tool_count()}")
+    logger.info(f"   - External MCP Servers: {mcp_loader.get_server_count()}")
+
+    # Inject ToolLoader into AgentSessionManager
+    agent_manager.set_tool_loader(tool_loader)
+
+    # Install Tool Preset templates
+    from service.tool_preset.store import get_tool_preset_store
+    from service.tool_preset.templates import install_templates as install_tool_preset_templates
+    tool_preset_store = get_tool_preset_store()
+    tool_preset_templates_installed = install_tool_preset_templates(tool_preset_store)
+    logger.info(f"   - Tool preset templates installed: {tool_preset_templates_installed}")
+    logger.info(f"   - Total tool presets: {len(tool_preset_store.list_all())}")
 
     # Register workflow nodes and install templates
     print_step_banner("WORKFLOW", "WORKFLOW ENGINE", "Registering workflow nodes and templates...")
@@ -330,6 +352,9 @@ app.include_router(config_router)  # Configuration management
 app.include_router(workflow_router)  # Workflow editor
 app.include_router(shared_folder_router)  # Shared folder
 app.include_router(chat_router)  # Chat broadcast
+app.include_router(internal_tool_router)  # Internal tool execution (Proxy MCP)
+app.include_router(tool_preset_router)  # Tool preset management
+app.include_router(tool_catalog_router)  # Tool catalog API
 
 # Mount static files for Web UI Dashboard
 static_dir = Path(__file__).parent / "static"

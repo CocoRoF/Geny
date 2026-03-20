@@ -1,8 +1,11 @@
 """
 MCP Loader
 
-Automatically loads JSON configs from mcp/ folder and tools from tools/ folder
-to create global MCP configurations available for all Claude Code sessions.
+Automatically loads JSON configs from mcp/ folder to create global MCP
+configurations available for all Claude Code sessions.
+
+Python tools are managed by ToolLoader and exposed to Claude CLI
+via the Proxy MCP server pattern.
 
 Usage:
     from service.mcp_loader import MCPLoader, get_global_mcp_config
@@ -13,8 +16,15 @@ Usage:
 
     # Get global MCP config
     config = get_global_mcp_config()
+
+    # Build per-session MCP config with proxy
+    session_config = build_session_mcp_config(
+        global_config=config,
+        allowed_tools=["geny_session_list", "web_search"],
+        session_id="abc-123",
+        backend_port=8000,
+    )
 """
-import asyncio
 import importlib.util
 import json
 import os
@@ -62,12 +72,99 @@ def set_global_mcp_config(config: MCPConfig) -> None:
     _global_mcp_config = config
 
 
+def build_proxy_mcp_server(
+    allowed_tools: List[str],
+    session_id: str,
+    backend_port: int = 8000,
+) -> MCPServerStdio:
+    """Build a Proxy MCP server config for a session.
+
+    The proxy server is a lightweight subprocess that:
+    - Registers tool schemas (from Python tool modules)
+    - Forwards execution requests to the main process via HTTP
+
+    Args:
+        allowed_tools: List of tool names to make available.
+        session_id: Session ID for context.
+        backend_port: Port of the FastAPI backend.
+
+    Returns:
+        MCPServerStdio config for the proxy server.
+    """
+    proxy_script = str(PROJECT_ROOT / "tools" / "_proxy_mcp_server.py")
+    backend_url = f"http://localhost:{backend_port}"
+    tools_arg = ",".join(allowed_tools) if allowed_tools else ""
+
+    return MCPServerStdio(
+        command=sys.executable,
+        args=[proxy_script, backend_url, session_id, tools_arg],
+        env=None,
+    )
+
+
+def build_session_mcp_config(
+    global_config: Optional[MCPConfig],
+    allowed_tools: List[str],
+    session_id: str,
+    backend_port: int = 8000,
+    allowed_mcp_servers: Optional[List[str]] = None,
+    extra_mcp: Optional[MCPConfig] = None,
+) -> MCPConfig:
+    """Build the complete MCP config for a session.
+
+    Combines:
+    1. _python_tools: Proxy MCP server (for Python tools)
+    2. External MCP servers from global config (filtered by preset)
+    3. Extra per-session MCP servers
+
+    Args:
+        global_config: Global MCP config (external servers from mcp/*.json).
+        allowed_tools: Python tool names to register in proxy.
+        session_id: Session ID.
+        backend_port: FastAPI backend port.
+        allowed_mcp_servers: List of external MCP server names to include.
+                             None or ["*"] includes all.
+        extra_mcp: Additional per-session MCP config.
+
+    Returns:
+        Complete MCPConfig for the session's .mcp.json.
+    """
+    servers: Dict[str, MCPServerConfig] = {}
+
+    # 1. Add proxy MCP server for Python tools
+    if allowed_tools:
+        servers["_python_tools"] = build_proxy_mcp_server(
+            allowed_tools=allowed_tools,
+            session_id=session_id,
+            backend_port=backend_port,
+        )
+
+    # 2. Add external MCP servers (filtered)
+    if global_config and global_config.servers:
+        for name, config in global_config.servers.items():
+            # Skip old _builtin_tools server (replaced by proxy)
+            if name.startswith("_"):
+                continue
+            # Apply filter
+            if allowed_mcp_servers is None or "*" in allowed_mcp_servers:
+                servers[name] = config
+            elif name in allowed_mcp_servers:
+                servers[name] = config
+
+    # 3. Merge extra per-session config
+    if extra_mcp and extra_mcp.servers:
+        for name, config in extra_mcp.servers.items():
+            servers[name] = config
+
+    return MCPConfig(servers=servers)
+
+
 class MCPLoader:
     """
-    Auto-loader for MCP configs and tools
+    Auto-loader for MCP configs (external MCP servers).
 
-    Loads JSON files from mcp/ folder and Python tools from tools/ folder
-    to create unified MCP configuration.
+    Loads JSON files from mcp/ folder to create the global MCP configuration.
+    Python tools are handled separately by ToolLoader + Proxy MCP pattern.
     """
 
     def __init__(
@@ -78,20 +175,19 @@ class MCPLoader:
         """
         Args:
             mcp_dir: MCP JSON config folder path (default: project_root/mcp)
-            tools_dir: Tools folder path (default: project_root/tools)
+            tools_dir: Tools folder path (default: project_root/tools) — kept for compatibility
         """
         self.mcp_dir = mcp_dir or PROJECT_ROOT / "mcp"
         self.tools_dir = tools_dir or PROJECT_ROOT / "tools"
         self.servers: Dict[str, MCPServerConfig] = {}
-        self.tools: List[Any] = []
-        self._tools_mcp_process = None
+        self.tools: List[Any] = []  # Legacy — kept for get_tool_count() compatibility
 
     def load_all(self) -> MCPConfig:
         """
-        Load all MCP configs and tools
+        Load all external MCP configs.
 
         Returns:
-            Unified MCP config
+            Global MCP config (external servers only).
         """
         logger.info("=" * 60)
         logger.info("🔌 MCP Loader: Starting...")
@@ -99,18 +195,13 @@ class MCPLoader:
         # 1. Load JSON configs from mcp/ folder
         self._load_mcp_configs()
 
-        # 2. Load tools from tools/ folder
-        self._load_tools()
-
-        # 3. Convert tools to MCP server
-        if self.tools:
-            self._register_tools_as_mcp()
-
-        # 4. Create global config
+        # 2. Create global config (external MCP servers only)
+        # Python tools are handled by ToolLoader + Proxy MCP pattern
         config = MCPConfig(servers=self.servers)
         set_global_mcp_config(config)
 
-        logger.info(f"🔌 MCP Loader: Loaded {len(self.servers)} MCP servers")
+        logger.info(f"🔌 MCP Loader: Loaded {len(self.servers)} external MCP servers")
+        logger.info("   ℹ️ Python tools managed by ToolLoader (Proxy MCP pattern)")
         logger.info("=" * 60)
 
         return config
@@ -213,213 +304,26 @@ class MCPLoader:
 
         return None
 
-    def _load_tools(self) -> None:
-        """Load tool files from tools/ folder"""
-        if not self.tools_dir.exists():
-            logger.info(f"📁 Tools directory not found: {self.tools_dir}")
-            return
-
-        # Find *_tool.py or *_tools.py files
-        tool_files = list(self.tools_dir.glob("*_tool.py")) + list(self.tools_dir.glob("*_tools.py"))
-
-        if not tool_files:
-            logger.info(f"📁 No tool files in: {self.tools_dir}")
-            return
-
-        logger.info(f"📁 Loading tools from: {self.tools_dir}")
-
-        # Add tools package to sys.path
-        if str(PROJECT_ROOT) not in sys.path:
-            sys.path.insert(0, str(PROJECT_ROOT))
-
-        for tool_file in tool_files:
-            try:
-                tools = self._load_tools_from_file(tool_file)
-                if tools:
-                    self.tools.extend(tools)
-                    logger.info(f"   ✅ {tool_file.name}: {len(tools)} tools")
-                    for t in tools:
-                        name = getattr(t, 'name', t.__name__ if hasattr(t, '__name__') else str(t))
-                        logger.info(f"      - {name}")
-
-            except Exception as e:
-                logger.warning(f"   ⚠️ Failed to load {tool_file.name}: {e}")
-
-    def _load_tools_from_file(self, file_path: Path) -> List[Any]:
-        """Load tools from file"""
-        # Dynamically load module
-        spec = importlib.util.spec_from_file_location(file_path.stem, file_path)
-        if spec is None or spec.loader is None:
-            return []
-
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[file_path.stem] = module
-        spec.loader.exec_module(module)
-
-        # Use TOOLS list if defined
-        if hasattr(module, 'TOOLS'):
-            return list(module.TOOLS)
-
-        # Otherwise auto-collect
-        tools = []
-        from tools.base import is_tool
-
-        for name in dir(module):
-            if name.startswith('_'):
-                continue
-            obj = getattr(module, name)
-            if is_tool(obj):
-                tools.append(obj)
-
-        return tools
-
-    def _register_tools_as_mcp(self) -> None:
-        """Register loaded tools as a single MCP server (_builtin_tools)."""
-        if not self.tools:
-            return
-
-        tools_server_script = self._create_tools_server_script()
-
-        if tools_server_script:
-            python_exe = sys.executable
-            script = str(tools_server_script)
-
-            self.servers["_builtin_tools"] = MCPServerStdio(
-                command=python_exe, args=[script], env=None
-            )
-
-            logger.info(f"   🔧 _builtin_tools: {len(self.tools)} tools registered")
-
-    def _create_tools_server_script(self) -> Optional[Path]:
-        """Create script to run all tools as a single MCP server."""
-        tool_files = list(self.tools_dir.glob("*_tool.py")) + list(self.tools_dir.glob("*_tools.py"))
-        if not tool_files:
-            return None
-
-        script_path = self.tools_dir / "_mcp_server.py"
-
-        imports: list[str] = []
-        extends: list[str] = []
-
-        for tool_file in tool_files:
-            module_name = tool_file.stem
-
-            spec = importlib.util.spec_from_file_location(module_name, tool_file)
-            if spec is None or spec.loader is None:
-                continue
-
-            module = importlib.util.module_from_spec(spec)
-            try:
-                spec.loader.exec_module(module)
-            except Exception:
-                continue
-
-            if not hasattr(module, 'TOOLS'):
-                continue
-
-            var = f"{module_name}_TOOLS"
-            imports.append(f"from tools.{module_name} import TOOLS as {var}")
-            extends.append(f"_tools.extend({var})")
-
-        if not imports:
-            return None
-
-        nl = chr(10)
-        script_content = f'''#!/usr/bin/env python3
-"""
-Auto-generated MCP Server for tools/
-This file is auto-generated. Do not edit manually.
-"""
-import sys
-import functools
-import asyncio
-from pathlib import Path
-
-# Add project root to path
-PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
-try:
-    from mcp.server.fastmcp import FastMCP
-except ImportError:
-    print("Error: MCP SDK not installed. Run: pip install mcp", file=sys.stderr)
-    sys.exit(1)
-
-{nl.join(imports)}
-
-_tools = []
-{nl.join(extends)}
-
-# Create MCP server
-mcp = FastMCP("builtin-tools")
-
-
-def _register_tool(tool_obj, mcp_server):
-    """Register a single tool with proper name, description, and parameter schema."""
-    name = getattr(tool_obj, 'name', None)
-    if not name and hasattr(tool_obj, '__name__'):
-        name = tool_obj.__name__
-    if not name:
-        return
-
-    description = (
-        getattr(tool_obj, 'description', '')
-        or getattr(tool_obj, '__doc__', '')
-        or f"Tool: {{name}}"
-    )
-
-    if hasattr(tool_obj, 'run') and callable(tool_obj.run):
-        source_fn = tool_obj.run
-    elif callable(tool_obj):
-        source_fn = tool_obj
-    else:
-        return
-
-    @functools.wraps(source_fn)
-    async def async_wrapper(*args, **kwargs):
-        if asyncio.iscoroutinefunction(source_fn):
-            return await source_fn(*args, **kwargs)
-        return source_fn(*args, **kwargs)
-
-    async_wrapper.__name__ = name
-
-    source_doc = source_fn.__doc__ or ""
-    args_section = ""
-    if "Args:" in source_doc:
-        args_idx = source_doc.index("Args:")
-        args_section = source_doc[args_idx:]
-    async_wrapper.__doc__ = (
-        f"{{description}}\\n\\n{{args_section}}" if args_section else description
-    )
-
-    mcp_server.tool(name=name, description=description)(async_wrapper)
-
-
-for tool_obj in _tools:
-    _register_tool(tool_obj, mcp)
-
-if __name__ == "__main__":
-    mcp.run(transport="stdio")
-'''
-
-        with open(script_path, 'w', encoding='utf-8') as f:
-            f.write(script_content)
-
-        logger.info(f"   📝 Generated MCP server script: {script_path}")
-
-        return script_path
-
     def get_server_count(self) -> int:
-        """Return number of loaded servers"""
+        """Return number of loaded external MCP servers."""
         return len(self.servers)
 
     def get_tool_count(self) -> int:
-        """Return number of loaded tools"""
-        return len(self.tools)
+        """Return number of loaded tools (from ToolLoader)."""
+        try:
+            from service.tool_loader import get_tool_loader
+            loader = get_tool_loader()
+            return len(loader.get_all_tools())
+        except Exception:
+            return 0
 
     def get_config(self) -> MCPConfig:
-        """Return current MCP config"""
+        """Return current MCP config (external servers only)."""
         return MCPConfig(servers=self.servers)
+
+    def get_external_server_names(self) -> List[str]:
+        """Return names of all loaded external MCP servers."""
+        return [name for name in self.servers.keys() if not name.startswith("_")]
 
 
 def merge_mcp_configs(base: Optional[MCPConfig], override: Optional[MCPConfig]) -> Optional[MCPConfig]:
