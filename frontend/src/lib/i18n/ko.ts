@@ -668,6 +668,12 @@ const ko: Translations = {
     cancel: '취소',
     create: '만들기',
     openMessenger: '메신저 열기',
+    inviteMembers: '멤버 초대',
+    inviteTitle: '채팅방에 초대',
+    inviteDesc: '이 채팅방에 추가할 세션을 선택하세요',
+    alreadyMember: '이미 참여 중',
+    invite: '초대',
+    noNewSessions: '모든 세션이 이미 이 채팅방에 있습니다',
     memberPanel: {
       title: '멤버 정보',
       role: '역할',

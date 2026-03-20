@@ -668,6 +668,12 @@ const en = {
     cancel: 'Cancel',
     create: 'Create',
     openMessenger: 'Open Messenger',
+    inviteMembers: 'Invite Members',
+    inviteTitle: 'Invite to Room',
+    inviteDesc: 'Select sessions to add to this room',
+    alreadyMember: 'Already in room',
+    invite: 'Invite',
+    noNewSessions: 'All sessions are already in this room',
     memberPanel: {
       title: 'Member Info',
       role: 'Role',

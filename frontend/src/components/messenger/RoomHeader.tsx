@@ -3,7 +3,7 @@
 import { useMessengerStore } from '@/store/useMessengerStore';
 import { useAppStore } from '@/store/useAppStore';
 import { useI18n } from '@/lib/i18n';
-import { Hash, Menu, Bot } from 'lucide-react';
+import { Hash, Menu, Bot, UserPlus } from 'lucide-react';
 
 const getRoleColor = (role: string) => {
   switch (role) {
@@ -15,7 +15,7 @@ const getRoleColor = (role: string) => {
 };
 
 export default function RoomHeader() {
-  const { getActiveRoom, setMobileSidebarOpen, setSelectedMemberId } = useMessengerStore();
+  const { getActiveRoom, setMobileSidebarOpen, setSelectedMemberId, setInviteModalOpen } = useMessengerStore();
   const { sessions } = useAppStore();
   const { t } = useI18n();
 
@@ -56,6 +56,15 @@ export default function RoomHeader() {
 
       {/* Right — Member avatars */}
       <div className="flex items-center gap-3">
+        {/* Invite button */}
+        <button
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--primary-color)] hover:bg-[var(--bg-hover)] transition-all border-none bg-transparent cursor-pointer"
+          title={t('messenger.inviteMembers')}
+          onClick={() => setInviteModalOpen(true)}
+        >
+          <UserPlus size={16} />
+        </button>
+
         {/* Member avatar stack */}
         <div className="hidden sm:flex items-center -space-x-1.5">
           {memberEntries.slice(0, 5).map((entry) => {

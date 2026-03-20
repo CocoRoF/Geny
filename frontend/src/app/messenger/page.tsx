@@ -8,22 +8,24 @@ import RoomHeader from '@/components/messenger/RoomHeader';
 import MessageList from '@/components/messenger/MessageList';
 import MessageInput from '@/components/messenger/MessageInput';
 import CreateRoomModal from '@/components/messenger/CreateRoomModal';
+import InviteMemberModal from '@/components/messenger/InviteMemberModal';
 import MemberPanel from '@/components/messenger/MemberPanel';
 import { MessageCircle } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 
 export default function MessengerPage() {
-  const { fetchRooms, activeRoomId, createModalOpen, memberPanelOpen } = useMessengerStore();
-  const { loadSessions, checkHealth } = useAppStore();
+  const { fetchRooms, activeRoomId, createModalOpen, inviteModalOpen, memberPanelOpen } = useMessengerStore();
+  const { loadSessions, checkHealth, loadUserName } = useAppStore();
   const { t } = useI18n();
 
   useEffect(() => {
     fetchRooms();
     loadSessions();
     checkHealth();
+    loadUserName();
     const interval = setInterval(fetchRooms, 10000);
     return () => clearInterval(interval);
-  }, [fetchRooms, loadSessions, checkHealth]);
+  }, [fetchRooms, loadSessions, checkHealth, loadUserName]);
 
   return (
     <div className="flex h-screen h-[100dvh] overflow-hidden bg-[var(--bg-primary)]">
@@ -58,6 +60,9 @@ export default function MessengerPage() {
 
       {/* Create Room Modal */}
       {createModalOpen && <CreateRoomModal />}
+
+      {/* Invite Member Modal */}
+      {inviteModalOpen && <InviteMemberModal />}
     </div>
   );
 }

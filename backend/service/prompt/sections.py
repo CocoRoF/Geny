@@ -55,6 +55,31 @@ class SectionLibrary:
         )
 
     # ========================================================================
+    # §1.5 User Context — Who the user is
+    # ========================================================================
+
+    @staticmethod
+    def user_context() -> Optional[PromptSection]:
+        """User persona context section.
+
+        Injects the configured user identity so agents know
+        who they are working with/for.
+        Returns None if no user info is configured.
+        """
+        from service.config.sub_config.general.user_config import UserConfig
+
+        ctx = UserConfig.get_user_context()
+        if not ctx:
+            return None
+
+        return PromptSection(
+            name="user_context",
+            content=ctx,
+            priority=12,
+            modes={PromptMode.FULL, PromptMode.MINIMAL},
+        )
+
+    # ========================================================================
     # §2 Role Protocol — Per-role behavior instructions
     # ========================================================================
 
@@ -589,6 +614,11 @@ def build_agent_prompt(
 
     # §1 Identity (1 line)
     builder.add_section(SectionLibrary.identity(agent_name, role, agent_id, session_name))
+
+    # §1.5 User context (who the user is)
+    user_section = SectionLibrary.user_context()
+    if user_section:
+        builder.add_section(user_section)
 
     # §2 Role behavior — always from prompts/{role}.md (worker = none)
     if role != "worker":

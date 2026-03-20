@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { SessionInfo, PromptInfo } from '@/types';
-import { agentApi, commandApi, healthApi } from '@/lib/api';
+import { agentApi, commandApi, healthApi, configApi } from '@/lib/api';
 
 // Session-scoped tab IDs (must match TabNavigation)
 const SESSION_TAB_IDS = new Set(['command', 'logs', 'storage', 'graph', 'info', 'sessionTools']);
@@ -37,6 +37,8 @@ interface AppState {
   isExecuting: boolean;
   deletedSectionOpen: boolean;
   devMode: boolean;
+  userName: string;
+  userTitle: string;
 
   // Actions
   loadSessions: () => Promise<void>;
@@ -55,6 +57,7 @@ interface AppState {
   checkHealth: () => Promise<void>;
   loadPrompts: () => Promise<void>;
   loadPromptContent: (name: string) => Promise<string | null>;
+  loadUserName: () => Promise<void>;
   getSessionData: (id: string) => SessionData;
   updateSessionData: (id: string, data: Partial<SessionData>) => void;
   setIsExecuting: (v: boolean) => void;
@@ -82,6 +85,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   isExecuting: false,
   deletedSectionOpen: false,
   devMode: true,
+  userName: '',
+  userTitle: '',
 
   loadSessions: async () => {
     try {
@@ -207,6 +212,18 @@ export const useAppStore = create<AppState>((set, get) => ({
         [id]: { ...(s.sessionDataCache[id] || { ...defaultSessionData }), ...data },
       },
     }));
+  },
+
+  loadUserName: async () => {
+    try {
+      const res = await configApi.get('user');
+      set({
+        userName: (res.values?.user_name as string) || '',
+        userTitle: (res.values?.user_title as string) || '',
+      });
+    } catch {
+      // ignore
+    }
   },
 
   setIsExecuting: (v) => set({ isExecuting: v }),

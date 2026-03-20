@@ -23,6 +23,7 @@ interface MessengerState {
 
   // UI
   createModalOpen: boolean;
+  inviteModalOpen: boolean;
   mobileSidebarOpen: boolean;
   sidebarCollapsed: boolean;
   memberPanelOpen: boolean;
@@ -32,6 +33,7 @@ interface MessengerState {
   fetchRooms: () => Promise<void>;
   setActiveRoom: (roomId: string | null) => Promise<void>;
   deleteRoom: (roomId: string) => Promise<void>;
+  addMembersToRoom: (sessionIds: string[]) => Promise<void>;
   setSearchQuery: (q: string) => void;
 
   // Actions - Messages
@@ -42,6 +44,7 @@ interface MessengerState {
 
   // Actions - UI
   setCreateModalOpen: (open: boolean) => void;
+  setInviteModalOpen: (open: boolean) => void;
   setMobileSidebarOpen: (open: boolean) => void;
   toggleSidebarCollapsed: () => void;
   setMemberPanelOpen: (open: boolean) => void;
@@ -62,6 +65,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => ({
   isSending: false,
   typingAgents: [],
   createModalOpen: false,
+  inviteModalOpen: false,
   mobileSidebarOpen: false,
   sidebarCollapsed: false,
   memberPanelOpen: false,
@@ -109,6 +113,20 @@ export const useMessengerStore = create<MessengerState>((set, get) => ({
   },
 
   setSearchQuery: (q) => set({ searchQuery: q }),
+
+  addMembersToRoom: async (sessionIds) => {
+    const { activeRoomId, fetchRooms } = get();
+    if (!activeRoomId || sessionIds.length === 0) return;
+    const room = get().getActiveRoom();
+    if (!room) return;
+    const merged = [...new Set([...room.session_ids, ...sessionIds])];
+    try {
+      await chatApi.updateRoom(activeRoomId, { session_ids: merged });
+      await fetchRooms();
+    } catch {
+      /* ignore */
+    }
+  },
 
   sendMessage: async (content, sessions) => {
     const { activeRoomId } = get();
@@ -207,6 +225,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => ({
   },
 
   setCreateModalOpen: (open) => set({ createModalOpen: open }),
+  setInviteModalOpen: (open) => set({ inviteModalOpen: open }),
   setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
   toggleSidebarCollapsed: () => set(s => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   setMemberPanelOpen: (open) => set({ memberPanelOpen: open, ...(!open ? { selectedMemberId: null } : {}) }),

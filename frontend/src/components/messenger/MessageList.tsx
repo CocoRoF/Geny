@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useMessengerStore } from '@/store/useMessengerStore';
+import { useAppStore } from '@/store/useAppStore';
 import { useI18n } from '@/lib/i18n';
 import { Bot, User, Loader2, MessageCircle } from 'lucide-react';
 import type { ChatRoomMessage } from '@/types';
@@ -63,6 +64,11 @@ function groupByDate(messages: ChatRoomMessage[]): Array<{ date: string; message
 // ── Message Components ──
 
 function UserMessage({ msg }: { msg: ChatRoomMessage }) {
+  const userName = useAppStore((s) => s.userName);
+  const userTitle = useAppStore((s) => s.userTitle);
+  const displayName = userName
+    ? userTitle ? `${userName}(${userTitle})` : userName
+    : 'You';
   return (
     <div className="flex gap-3 px-4 md:px-6 py-1.5 hover:bg-[var(--bg-hover)] transition-colors group">
       <div className="w-9 h-9 rounded-full bg-[var(--primary-color)] flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
@@ -70,7 +76,7 @@ function UserMessage({ msg }: { msg: ChatRoomMessage }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 mb-0.5">
-          <span className="text-[0.8125rem] font-semibold text-[var(--primary-color)]">You</span>
+          <span className="text-[0.8125rem] font-semibold text-[var(--primary-color)]">{displayName}</span>
           <span className="text-[0.625rem] text-[var(--text-muted)] opacity-0 group-hover:opacity-100 transition-opacity">
             {formatTime(msg.timestamp)}
           </span>
