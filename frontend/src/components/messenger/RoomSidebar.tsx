@@ -51,7 +51,7 @@ export default function RoomSidebar() {
   }, [theme, setTheme]);
 
   const sidebarContent = (
-    <div className="flex flex-col h-full bg-[var(--bg-secondary)]">
+    <div className="flex flex-col w-full h-full bg-[var(--bg-secondary)]">
       {/* Sidebar Header */}
       <div className="shrink-0 p-4 border-b border-[var(--border-color)]">
         <div className="flex items-center justify-between mb-3">
@@ -207,7 +207,7 @@ export default function RoomSidebar() {
 
   // ── Collapsed sidebar (icons only) ──
   const collapsedContent = (
-    <div className="flex flex-col items-center h-full bg-[var(--bg-secondary)] py-3 gap-1">
+    <div className="flex flex-col items-center w-full h-full bg-[var(--bg-secondary)] py-3 gap-1">
       {/* Expand button */}
       <button
         onClick={toggleSidebarCollapsed}
@@ -272,7 +272,7 @@ export default function RoomSidebar() {
       {/* Desktop sidebar */}
       <div
         className={`hidden md:flex shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out bg-[var(--bg-secondary)] border-r border-[var(--border-color)] ${
-          sidebarCollapsed ? 'w-[56px]' : 'w-[280px]'
+          sidebarCollapsed ? 'w-[48px]' : 'w-[280px]'
         }`}
       >
         {sidebarCollapsed ? collapsedContent : sidebarContent}

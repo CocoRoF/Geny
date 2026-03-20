@@ -8,7 +8,7 @@ function cn(...classes: (string | boolean | undefined | null)[]) {
   return twMerge(classes.filter(Boolean).join(' '));
 }
 
-const GLOBAL_TAB_IDS = ['main', 'playground', 'workflows', 'sharedFolder', 'settings'] as const;
+const GLOBAL_TAB_IDS = ['main', 'playground', 'workflows', 'toolSets', 'sharedFolder', 'settings'] as const;
 const SESSION_TAB_DEFS = [
   { id: 'command', accent: true },
   { id: 'graph' },
@@ -18,7 +18,7 @@ const SESSION_TAB_DEFS = [
 ] as const;
 
 // Tabs hidden in Normal mode
-const DEV_ONLY_GLOBAL = new Set(['workflows', 'settings']);
+const DEV_ONLY_GLOBAL = new Set(['workflows', 'toolSets', 'settings']);
 const DEV_ONLY_SESSION = new Set(['logs', 'graph']);
 
 const TAB_BASE =

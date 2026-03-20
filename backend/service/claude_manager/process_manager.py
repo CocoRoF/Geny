@@ -414,6 +414,16 @@ class ClaudeProcess:
                 if effective_max_turns:
                     args.extend(["--max-turns", str(effective_max_turns)])
 
+                # Disable built-in tools via config system
+                from service.config.manager import get_config_manager
+                from service.config.sub_config.general.limits_config import LimitsConfig
+                limits_cfg = get_config_manager().load_config(LimitsConfig)
+                if limits_cfg.disallowed_tools:
+                    for tool_name in limits_cfg.disallowed_tools.split(","):
+                        tool_name = tool_name.strip()
+                        if tool_name:
+                            args.extend(["--disallowedTools", tool_name])
+
                 # System prompt
                 effective_system_prompt = system_prompt or self.system_prompt
                 if effective_system_prompt:

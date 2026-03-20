@@ -256,6 +256,12 @@ class SessionInfo(BaseModel):
         description="Human-readable name of the graph/workflow used by this session"
     )
 
+    # Tool preset
+    tool_preset_id: Optional[str] = Field(
+        default=None,
+        description="Tool preset ID that determines available tools for this session"
+    )
+
     # System prompt
     system_prompt: Optional[str] = Field(
         default=None,

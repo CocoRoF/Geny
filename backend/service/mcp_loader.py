@@ -95,10 +95,25 @@ def build_proxy_mcp_server(
     backend_url = f"http://localhost:{backend_port}"
     tools_arg = ",".join(allowed_tools) if allowed_tools else ""
 
+    # Pass critical env vars for the proxy subprocess.
+    # Claude Code merges these with the parent environment, so we only
+    # need to ensure the subprocess can locate user-installed packages
+    # (e.g. pip install --user in Docker dev mode) and the project root.
+    env: Dict[str, str] = {}
+    home = os.environ.get("HOME") or os.environ.get("USERPROFILE")
+    if home:
+        env["HOME"] = home
+    pythonpath = os.environ.get("PYTHONPATH", "")
+    # Always include project root so the proxy can find tools/ and service/
+    project_root_str = str(PROJECT_ROOT)
+    if project_root_str not in pythonpath:
+        pythonpath = f"{project_root_str}{os.pathsep}{pythonpath}" if pythonpath else project_root_str
+    env["PYTHONPATH"] = pythonpath
+
     return MCPServerStdio(
         command=sys.executable,
         args=[proxy_script, backend_url, session_id, tools_arg],
-        env=None,
+        env=env if env else None,
     )
 
 

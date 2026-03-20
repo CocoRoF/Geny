@@ -34,12 +34,14 @@ class APIConfig(BaseConfig):
     anthropic_model: str = "claude-sonnet-4-6"
     max_thinking_tokens: int = 31999
     skip_permissions: bool = True
+    app_port: int = 8000
 
     _ENV_MAP = {
         "anthropic_api_key": "ANTHROPIC_API_KEY",
         "anthropic_model": "ANTHROPIC_MODEL",
         "max_thinking_tokens": "MAX_THINKING_TOKENS",
         "skip_permissions": "CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS",
+        "app_port": "APP_PORT",
     }
 
     @classmethod
@@ -94,6 +96,10 @@ class APIConfig(BaseConfig):
                         "label": "권한 확인 건너뛰기",
                         "description": "⚠️ 자율 모드 — 모든 확인 대화상자 건너뛰기",
                     },
+                    "app_port": {
+                        "label": "백엔드 포트",
+                        "description": "백엔드 서버 포트 (MCP 프록시 연결용)",
+                    },
                 },
             }
         }
@@ -141,5 +147,16 @@ class APIConfig(BaseConfig):
                 default=True,
                 group="permissions",
                 apply_change=env_sync("CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS"),
+            ),
+            ConfigField(
+                name="app_port",
+                field_type=FieldType.NUMBER,
+                label="Backend Port",
+                description="Backend server port (used for MCP proxy connections)",
+                default=8000,
+                min_value=1,
+                max_value=65535,
+                group="api",
+                apply_change=env_sync("APP_PORT"),
             ),
         ]

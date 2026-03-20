@@ -105,6 +105,7 @@ class AgentSession:
         enable_checkpointing: bool = False,
         workflow_id: Optional[str] = None,
         graph_name: Optional[str] = None,
+        tool_preset_id: Optional[str] = None,
     ):
         """Initialize AgentSession.
 
@@ -145,6 +146,7 @@ class AgentSession:
         # Workflow / Graph
         self._workflow_id = workflow_id
         self._graph_name = graph_name
+        self._tool_preset_id = tool_preset_id
         self._workflow: Optional[WorkflowDefinition] = None
 
         # Internal components
@@ -1328,6 +1330,7 @@ class AgentSession:
             role=self._role,
             workflow_id=self._workflow_id,
             graph_name=self._graph_name,
+            tool_preset_id=self._tool_preset_id,
             system_prompt=self._system_prompt,
         )
 

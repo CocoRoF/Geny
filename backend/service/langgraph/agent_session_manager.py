@@ -343,9 +343,12 @@ class AgentSessionManager(SessionManager):
 
         # ── Build Session MCP Config (Proxy MCP Pattern) ─────────────────
         from service.mcp_loader import build_session_mcp_config
+        from service.config.manager import get_config_manager
+        from service.config.sub_config.general.api_config import APIConfig
 
-        # Determine backend port
-        backend_port = int(os.environ.get("PORT", "8000"))
+        # Determine backend port via config system
+        api_cfg = get_config_manager().load_config(APIConfig)
+        backend_port = api_cfg.app_port
 
         # Pre-generate session_id so it can be injected into the prompt
         if not session_id:
@@ -415,6 +418,7 @@ class AgentSessionManager(SessionManager):
             enable_checkpointing=enable_checkpointing,
             workflow_id=workflow_id,
             graph_name=graph_name,
+            tool_preset_id=preset_id,
         )
 
         session_id = agent.session_id

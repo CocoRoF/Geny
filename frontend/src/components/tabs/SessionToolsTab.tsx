@@ -1,183 +1,285 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useAppStore } from '@/store/useAppStore';
 import { useToolPresetStore } from '@/store/useToolPresetStore';
-import { Copy, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
-import type { ToolPresetDefinition, ToolInfo } from '@/types';
+import { useI18n } from '@/lib/i18n';
+import {
+  ChevronDown, ChevronRight, Wrench, Check, Server, Search, Boxes,
+} from 'lucide-react';
+import type { ToolInfo } from '@/types';
 
 export default function SessionToolsTab() {
-  const { presets, catalog, isLoading, error, loadPresets, loadCatalog, deletePreset, clonePreset } = useToolPresetStore();
-
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ presets: true, catalog: true });
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const { selectedSessionId, sessions } = useAppStore();
+  const { presets, catalog, loadPresets, loadCatalog } = useToolPresetStore();
+  const { t } = useI18n();
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+    built_in: true,
+    custom_root: true,
+  });
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => { loadPresets(); loadCatalog(); }, [loadPresets, loadCatalog]);
 
-  const toggleSection = (section: string) => {
-    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
-  };
-  const toggleGroup = (group: string) => {
-    setExpandedGroups(prev => ({ ...prev, [group]: !prev[group] }));
-  };
+  const session = sessions.find(s => s.session_id === selectedSessionId);
 
-  const handleClone = async (preset: ToolPresetDefinition) => {
-    const name = `${preset.name} (Copy)`;
-    try { await clonePreset(preset.id, name); } catch { /* ignore */ }
-  };
+  const filteredBuiltIn = useMemo(() => {
+    if (!catalog) return [];
+    if (!searchTerm) return catalog.built_in;
+    const q = searchTerm.toLowerCase();
+    return catalog.built_in.filter(t => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q));
+  }, [catalog, searchTerm]);
 
-  const handleDelete = async (preset: ToolPresetDefinition) => {
-    if (preset.is_template) return;
-    try { await deletePreset(preset.id); } catch { /* ignore */ }
-  };
+  const filteredMcpServers = useMemo(() => {
+    if (!catalog) return [];
+    if (!searchTerm) return catalog.mcp_servers;
+    const q = searchTerm.toLowerCase();
+    return catalog.mcp_servers.filter(s => s.name.toLowerCase().includes(q));
+  }, [catalog, searchTerm]);
 
-  // Group custom tools by source file
+  // No session selected
+  if (!selectedSessionId || !session) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="flex flex-col items-center justify-center py-12 px-4">
+          <h3 className="text-[1rem] font-medium text-[var(--text-secondary)] mb-2">
+            {t('sessionTools.selectSession')}
+          </h3>
+          <p className="text-[0.8125rem] text-[var(--text-muted)]">
+            {t('sessionTools.selectSessionDesc')}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const presetId = session.tool_preset_id;
+  const boundPreset = presetId ? presets.find(p => p.id === presetId) : null;
+
+  // Resolve which tools are enabled
+  const isAllCustom = boundPreset?.custom_tools.includes('*') ?? true;
+  const enabledCustomTools = new Set(isAllCustom ? [] : boundPreset?.custom_tools ?? []);
+  const isAllMcp = boundPreset?.mcp_servers.includes('*') ?? true;
+  const enabledMcpServers = new Set(isAllMcp ? [] : boundPreset?.mcp_servers ?? []);
+
+  // Group & filter custom tools
   const groupedCustomTools: Record<string, ToolInfo[]> = {};
   if (catalog) {
+    const q = searchTerm.toLowerCase();
     for (const tool of catalog.custom) {
+      if (q && !tool.name.toLowerCase().includes(q) && !tool.description.toLowerCase().includes(q)) continue;
       const group = tool.group || 'other';
       if (!groupedCustomTools[group]) groupedCustomTools[group] = [];
       groupedCustomTools[group].push(tool);
     }
   }
 
+  const toggleGroup = (group: string) => {
+    setExpandedGroups(prev => ({ ...prev, [group]: !prev[group] }));
+  };
+
+  const customToolCount = isAllCustom
+    ? (catalog?.custom.length ?? 0)
+    : enabledCustomTools.size;
+  const mcpServerCount = isAllMcp
+    ? (catalog?.mcp_servers.length ?? 0)
+    : enabledMcpServers.size;
+
   return (
-    <div className="h-full overflow-y-auto p-4 md:p-6 flex flex-col gap-6">
-      {error && <div className="text-[0.8125rem] text-[var(--danger-color)] bg-[rgba(239,68,68,0.1)] p-2.5 rounded-[6px]">{error}</div>}
-
-      {/* ── Tool Presets Section ── */}
-      <section>
-        <button
-          className="flex items-center gap-2 text-[0.9375rem] font-semibold text-[var(--text-primary)] bg-transparent border-none cursor-pointer p-0 mb-3"
-          onClick={() => toggleSection('presets')}
-        >
-          {expandedSections.presets ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-          Tool Presets
-          <span className="text-[0.75rem] font-normal text-[var(--text-muted)]">({presets.length})</span>
-        </button>
-
-        {expandedSections.presets && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {presets.map(preset => (
-              <div key={preset.id} className="bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg p-3 flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[1rem]">{preset.icon || '🔧'}</span>
-                    <span className="text-[0.875rem] font-medium text-[var(--text-primary)]">{preset.name}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button className="p-1 rounded bg-transparent border-none text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer" title="Clone" onClick={() => handleClone(preset)}>
-                      <Copy size={14} />
-                    </button>
-                    {!preset.is_template && (
-                      <button className="p-1 rounded bg-transparent border-none text-[var(--text-muted)] hover:text-[var(--danger-color)] hover:bg-[var(--bg-hover)] cursor-pointer" title="Delete" onClick={() => handleDelete(preset)}>
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {preset.description && (
-                  <p className="text-[0.75rem] text-[var(--text-muted)] line-clamp-2">{preset.description}</p>
-                )}
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {preset.is_template && <span className="text-[0.6875rem] px-1.5 py-0.5 rounded-full bg-[rgba(59,130,246,0.15)] text-[var(--primary-color)]">template</span>}
-                  <span className="text-[0.6875rem] px-1.5 py-0.5 rounded-full bg-[var(--bg-hover)] text-[var(--text-muted)]">
-                    {preset.custom_tools.includes('*') ? 'all custom tools' : `${preset.custom_tools.length} custom tools`}
-                  </span>
-                  <span className="text-[0.6875rem] px-1.5 py-0.5 rounded-full bg-[var(--bg-hover)] text-[var(--text-muted)]">
-                    {preset.mcp_servers.includes('*') ? 'all MCP servers' : `${preset.mcp_servers.length} MCP servers`}
-                  </span>
-                </div>
-              </div>
-            ))}
+    <div className="flex flex-col h-full min-h-0 overflow-hidden bg-[var(--bg-primary)]">
+      {/* Header bar */}
+      <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#f59e0b] to-[#f97316] flex items-center justify-center shadow-sm shrink-0">
+            <Wrench size={13} className="text-white" />
           </div>
-        )}
-      </section>
+          <h3 className="text-[0.8125rem] font-semibold text-[var(--text-primary)]">
+            {t('sessionTools.title')}
+          </h3>
 
-      {/* ── Tool Catalog Section ── */}
-      <section>
-        <button
-          className="flex items-center gap-2 text-[0.9375rem] font-semibold text-[var(--text-primary)] bg-transparent border-none cursor-pointer p-0 mb-3"
-          onClick={() => toggleSection('catalog')}
-        >
-          {expandedSections.catalog ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-          Tool Catalog
-          {catalog && <span className="text-[0.75rem] font-normal text-[var(--text-muted)]">({catalog.total_python_tools} tools, {catalog.total_mcp_servers} MCP servers)</span>}
-        </button>
+          {/* Preset name */}
+          {boundPreset && (
+            <>
+              <span className="w-px h-4 bg-[var(--border-color)]" />
+              <span className="text-[0.75rem] font-medium text-[var(--text-secondary)] truncate max-w-[200px]">
+                {boundPreset.name}
+              </span>
+              {boundPreset.is_template && (
+                <span className="text-[10px] font-semibold py-[2px] px-1.5 rounded-md bg-[rgba(168,85,247,0.12)] text-[#c084fc] border border-[rgba(168,85,247,0.2)] uppercase tracking-wide shrink-0">
+                  {t('toolSetsTab.template')}
+                </span>
+              )}
+            </>
+          )}
+        </div>
 
-        {expandedSections.catalog && catalog && (
-          <div className="flex flex-col gap-4">
-            {/* Built-in Tools */}
-            <div>
-              <button
-                className="flex items-center gap-1.5 text-[0.8125rem] font-medium text-[var(--text-secondary)] bg-transparent border-none cursor-pointer p-0 mb-2"
-                onClick={() => toggleGroup('built_in')}
-              >
-                {expandedGroups.built_in ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                Built-in Tools ({catalog.built_in.length})
-              </button>
-              {expandedGroups.built_in && (
-                <div className="ml-4 flex flex-col gap-1">
-                  {catalog.built_in.map(t => (
-                    <div key={t.name} className="flex items-baseline gap-2 py-1 text-[0.8125rem]">
-                      <code className="text-[var(--primary-color)] text-[0.75rem] bg-[var(--bg-hover)] px-1.5 py-0.5 rounded">{t.name}</code>
-                      <span className="text-[var(--text-muted)] text-[0.75rem] truncate">{t.description}</span>
-                    </div>
-                  ))}
+        <div className="flex items-center gap-2">
+          {/* Stats pills */}
+          <span className="text-[10px] text-[var(--text-muted)]">
+            {t('sessionTools.builtInCount', { count: catalog?.built_in.length ?? 0 })}
+          </span>
+          <span className="w-px h-3 bg-[var(--border-color)]" />
+          <span className="text-[10px] text-[var(--accent-color)]">
+            {t('sessionTools.customCount', { count: customToolCount })}
+          </span>
+          <span className="w-px h-3 bg-[var(--border-color)]" />
+          <span className="text-[10px] text-[var(--success-color)]">
+            {t('sessionTools.mcpCount', { count: mcpServerCount })}
+          </span>
+        </div>
+      </div>
+
+      {/* Preset info bar (if bound) */}
+      {!boundPreset && (
+        <div className="shrink-0 px-4 py-2 bg-[var(--bg-tertiary)] border-b border-[var(--border-color)] text-[0.75rem] text-[var(--text-muted)]">
+          {presetId
+            ? t('sessionTools.presetNotFound', { id: presetId })
+            : t('sessionTools.defaultPreset')}
+        </div>
+      )}
+      {boundPreset?.description && (
+        <div className="shrink-0 px-4 py-2 bg-[var(--bg-tertiary)] border-b border-[var(--border-color)] text-[0.75rem] text-[var(--text-muted)]">
+          {boundPreset.description}
+        </div>
+      )}
+
+      {/* Search */}
+      <div className="shrink-0 px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
+        <div className="relative">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+          <input
+            className="w-full pl-8 pr-3 py-1.5 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-md text-[0.75rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--primary-color)] transition-all"
+            placeholder={t('sessionTools.searchPlaceholder')}
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Tool list */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Built-in Tools */}
+        <div className="border-b border-[var(--border-color)]">
+          <button
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-[0.8125rem] font-semibold text-[var(--text-primary)] bg-[var(--bg-secondary)] border-none cursor-pointer hover:bg-[var(--bg-hover)] transition-colors text-left"
+            onClick={() => toggleGroup('built_in')}
+          >
+            {expandedGroups.built_in ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            <Wrench size={13} className="text-[var(--primary-color)]" />
+            <span>{t('sessionTools.builtInTools')}</span>
+            <span className="text-[0.6875rem] font-normal text-[var(--text-muted)]">
+              ({filteredBuiltIn.length}) — {t('sessionTools.alwaysEnabled')}
+            </span>
+          </button>
+          {expandedGroups.built_in && (
+            <div className="px-4 pb-2 bg-[var(--bg-primary)]">
+              {filteredBuiltIn.map(tool => (
+                <div key={tool.name} className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-[var(--bg-hover)] transition-colors">
+                  <Check size={11} className="text-[var(--success-color)] shrink-0" />
+                  <code className="text-[var(--primary-color)] text-[0.75rem] bg-[var(--bg-hover)] px-1.5 py-0.5 rounded shrink-0">{tool.name}</code>
+                  <span className="text-[var(--text-muted)] text-[0.75rem] truncate">{tool.description}</span>
                 </div>
+              ))}
+              {filteredBuiltIn.length === 0 && (
+                <p className="text-[0.75rem] text-[var(--text-muted)] py-3 text-center">{t('sessionTools.noResults')}</p>
               )}
             </div>
+          )}
+        </div>
 
-            {/* Custom Tools grouped by source */}
-            {Object.entries(groupedCustomTools).map(([group, tools]) => (
-              <div key={group}>
-                <button
-                  className="flex items-center gap-1.5 text-[0.8125rem] font-medium text-[var(--text-secondary)] bg-transparent border-none cursor-pointer p-0 mb-2"
-                  onClick={() => toggleGroup(group)}
-                >
-                  {expandedGroups[group] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  {group.replace(/_/g, ' ')} ({tools.length})
-                </button>
-                {expandedGroups[group] && (
-                  <div className="ml-4 flex flex-col gap-1">
-                    {tools.map(t => (
-                      <div key={t.name} className="flex items-baseline gap-2 py-1 text-[0.8125rem]">
-                        <code className="text-[var(--accent-color)] text-[0.75rem] bg-[var(--bg-hover)] px-1.5 py-0.5 rounded">{t.name}</code>
-                        <span className="text-[var(--text-muted)] text-[0.75rem] truncate">{t.description}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+        {/* Custom Tools */}
+        <div className="border-b border-[var(--border-color)]">
+          <button
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-[0.8125rem] font-semibold text-[var(--text-primary)] bg-[var(--bg-secondary)] border-none cursor-pointer hover:bg-[var(--bg-hover)] transition-colors text-left"
+            onClick={() => toggleGroup('custom_root')}
+          >
+            {expandedGroups.custom_root ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            <Boxes size={13} className="text-[var(--accent-color)]" />
+            <span>{t('sessionTools.customTools')}</span>
+            <span className="text-[0.6875rem] font-normal text-[var(--text-muted)]">
+              ({customToolCount})
+              {isAllCustom && ` — ${t('sessionTools.allEnabled')}`}
+            </span>
+          </button>
+          {expandedGroups.custom_root && (
+            <div className="px-4 pb-2 bg-[var(--bg-primary)]">
+              {Object.entries(groupedCustomTools).map(([group, tools]) => (
+                <div key={group} className="mb-1">
+                  <button
+                    className="flex items-center gap-1.5 text-[0.75rem] font-medium text-[var(--text-secondary)] bg-transparent border-none cursor-pointer p-0 py-1.5"
+                    onClick={() => toggleGroup(`custom_${group}`)}
+                  >
+                    {expandedGroups[`custom_${group}`] ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                    {group.replace(/_/g, ' ')} ({tools.length})
+                  </button>
+                  {expandedGroups[`custom_${group}`] && (
+                    <div className="ml-4">
+                      {tools.map(tool => {
+                        const enabled = isAllCustom || enabledCustomTools.has(tool.name);
+                        return (
+                          <div
+                            key={tool.name}
+                            className={`flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-[var(--bg-hover)] transition-colors ${!enabled ? 'opacity-40' : ''}`}
+                          >
+                            {enabled
+                              ? <Check size={11} className="text-[var(--success-color)] shrink-0" />
+                              : <span className="w-[11px] h-[11px] shrink-0" />}
+                            <code className="text-[var(--accent-color)] text-[0.75rem] bg-[var(--bg-hover)] px-1.5 py-0.5 rounded shrink-0">{tool.name}</code>
+                            <span className="text-[var(--text-muted)] text-[0.75rem] truncate">{tool.description}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {Object.keys(groupedCustomTools).length === 0 && (
+                <p className="text-[0.75rem] text-[var(--text-muted)] py-3 text-center">{t('sessionTools.noResults')}</p>
+              )}
+            </div>
+          )}
+        </div>
 
-            {/* MCP Servers */}
-            {catalog.mcp_servers.length > 0 && (
-              <div>
-                <button
-                  className="flex items-center gap-1.5 text-[0.8125rem] font-medium text-[var(--text-secondary)] bg-transparent border-none cursor-pointer p-0 mb-2"
-                  onClick={() => toggleGroup('mcp')}
-                >
-                  {expandedGroups.mcp ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  External MCP Servers ({catalog.mcp_servers.length})
-                </button>
-                {expandedGroups.mcp && (
-                  <div className="ml-4 flex flex-col gap-1">
-                    {catalog.mcp_servers.map(s => (
-                      <div key={s.name} className="flex items-center gap-2 py-1 text-[0.8125rem]">
-                        <code className="text-[var(--success-color)] text-[0.75rem] bg-[var(--bg-hover)] px-1.5 py-0.5 rounded">{s.name}</code>
-                        <span className="text-[0.6875rem] px-1.5 py-0.5 rounded-full bg-[var(--bg-hover)] text-[var(--text-muted)]">{s.type}</span>
-                      </div>
-                    ))}
-                  </div>
+        {/* MCP Servers */}
+        {(catalog?.mcp_servers.length ?? 0) > 0 && (
+          <div className="border-b border-[var(--border-color)]">
+            <button
+              className="w-full flex items-center gap-2 px-4 py-2.5 text-[0.8125rem] font-semibold text-[var(--text-primary)] bg-[var(--bg-secondary)] border-none cursor-pointer hover:bg-[var(--bg-hover)] transition-colors text-left"
+              onClick={() => toggleGroup('mcp_root')}
+            >
+              {expandedGroups.mcp_root ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+              <Server size={13} className="text-[var(--success-color)]" />
+              <span>{t('sessionTools.mcpServers')}</span>
+              <span className="text-[0.6875rem] font-normal text-[var(--text-muted)]">
+                ({mcpServerCount})
+                {isAllMcp && ` — ${t('sessionTools.allEnabled')}`}
+              </span>
+            </button>
+            {expandedGroups.mcp_root && (
+              <div className="px-4 pb-2 bg-[var(--bg-primary)]">
+                {filteredMcpServers.map(server => {
+                  const enabled = isAllMcp || enabledMcpServers.has(server.name);
+                  return (
+                    <div
+                      key={server.name}
+                      className={`flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-[var(--bg-hover)] transition-colors ${!enabled ? 'opacity-40' : ''}`}
+                    >
+                      {enabled
+                        ? <Check size={11} className="text-[var(--success-color)] shrink-0" />
+                        : <span className="w-[11px] h-[11px] shrink-0" />}
+                      <code className="text-[var(--success-color)] text-[0.75rem] bg-[var(--bg-hover)] px-1.5 py-0.5 rounded">{server.name}</code>
+                      <span className="text-[0.6875rem] px-1.5 py-0.5 rounded-full bg-[var(--bg-hover)] text-[var(--text-muted)]">{server.type}</span>
+                    </div>
+                  );
+                })}
+                {filteredMcpServers.length === 0 && (
+                  <p className="text-[0.75rem] text-[var(--text-muted)] py-3 text-center">{t('sessionTools.noResults')}</p>
                 )}
               </div>
             )}
           </div>
         )}
-        {expandedSections.catalog && !catalog && isLoading && (
-          <div className="text-[0.8125rem] text-[var(--text-muted)]">Loading catalog...</div>
-        )}
-      </section>
+      </div>
     </div>
   );
 }

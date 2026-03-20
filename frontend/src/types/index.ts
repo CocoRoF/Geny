@@ -16,6 +16,7 @@ export interface SessionInfo {
   pod_ip: string | null;
   workflow_id: string | null;
   graph_name: string | null;
+  tool_preset_id: string | null;
   is_deleted?: boolean;
   deleted_at?: string | null;
 }

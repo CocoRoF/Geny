@@ -32,6 +32,8 @@ dependencies = [
     "ddgs==9.11.4",
     # Web fetch & browser automation
     "playwright>=1.49.0",
+    # MCP (Model Context Protocol) — proxy MCP server
+    "mcp>=1.0.0",
 ]
 
 [project.optional-dependencies]

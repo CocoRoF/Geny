@@ -62,7 +62,7 @@ export default function MemberPanel() {
   ].filter(item => item.value) : [];
 
   return (
-    <div className="hidden lg:flex w-[280px] shrink-0 flex-col h-full bg-[var(--bg-secondary)] border-l border-[var(--border-color)] animate-[slideInRight_200ms_ease-out]">
+    <div className="hidden lg:flex w-[clamp(240px,_14.6vw,_360px)] shrink-0 flex-col h-full bg-[var(--bg-secondary)] border-l border-[var(--border-color)] animate-[slideInRight_200ms_ease-out]">
       {/* Header */}
       <div className="shrink-0 h-14 px-4 flex items-center justify-between border-b border-[var(--border-color)]">
         <span className="text-[0.8125rem] font-semibold text-[var(--text-primary)]">

@@ -67,9 +67,6 @@ class ToolProfile(str, Enum):
     FULL = "full"
     """All available MCP servers and tools — unrestricted."""
 
-    TOOL_SEARCH = "tool_search"
-    """Only _builtin_tools server — agent discovers other tools dynamically via ToolSearch."""
-
 
 # ---------------------------------------------------------------------------
 # Server-group definitions  (extend as new MCP servers are added)
@@ -84,9 +81,6 @@ _GENY_SERVERS: FrozenSet[str] = frozenset({"_geny_tools"})
 
 # Custom tools (browser, web search, web fetch, ...) — non-TS sessions only
 _CUSTOM_SERVERS: FrozenSet[str] = frozenset({"_custom_tools"})
-
-# Tool search/discovery meta-tools — TS sessions only
-_TOOL_SEARCH_SERVERS: FrozenSet[str] = frozenset({"_tool_search"})
 
 _CODING_SERVERS: FrozenSet[str] = frozenset({
     "filesystem",
@@ -122,17 +116,12 @@ _RESEARCH_SERVERS: FrozenSet[str] = frozenset({
 })
 
 # Composite group map:  profile → set of allowed server-name prefixes
-#
-# TS OFF modes get: _geny_tools + _custom_tools + external MCP servers
-# TS ON mode gets:  _geny_tools + _tool_search  (custom tools are discoverable via tool_search)
-#
 _PROFILE_SERVER_GROUPS: Dict[ToolProfile, FrozenSet[str]] = {
     ToolProfile.MINIMAL:      _GENY_SERVERS,
     ToolProfile.CODING:       _GENY_SERVERS | _CUSTOM_SERVERS | _CODING_SERVERS,
     ToolProfile.MESSAGING:    _GENY_SERVERS | _CUSTOM_SERVERS | _MESSAGING_SERVERS,
     ToolProfile.RESEARCH:     _GENY_SERVERS | _CUSTOM_SERVERS | _RESEARCH_SERVERS,
     ToolProfile.FULL:         frozenset(),       # empty ⇒ allow-all sentinel
-    ToolProfile.TOOL_SEARCH:  _GENY_SERVERS | _TOOL_SEARCH_SERVERS,
 }
 
 
@@ -149,14 +138,6 @@ _EXAMPLE_TOOLS: FrozenSet[str] = frozenset({
     "calculator",
 })
 
-_TOOL_SEARCH_TOOLS: FrozenSet[str] = frozenset({
-    "tool_search",
-    "tool_schema",
-    "tool_browse",
-    "tool_workflow",
-    "tool_execute",
-})
-
 
 # ---------------------------------------------------------------------------
 # Role → default profile mapping
@@ -170,9 +151,7 @@ ROLE_DEFAULT_PROFILES: Dict[str, ToolProfile] = {
 }
 
 # Profile → servers to DENY (blacklist overrides allow-all)
-_PROFILE_SERVER_DENY: Dict[ToolProfile, FrozenSet[str]] = {
-    ToolProfile.FULL: _TOOL_SEARCH_SERVERS,  # Full access must NOT see discovery meta-tools
-}
+_PROFILE_SERVER_DENY: Dict[ToolProfile, FrozenSet[str]] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -230,10 +209,6 @@ class ToolPolicyEngine:
         profile = override_profile or ROLE_DEFAULT_PROFILES.get(role, ToolProfile.CODING)
         prefixes = _PROFILE_SERVER_GROUPS.get(profile, frozenset())
         deny = _PROFILE_SERVER_DENY.get(profile, frozenset())
-
-        # TOOL_SEARCH profile forces explicit tool whitelist to only ToolSearch tools
-        if profile == ToolProfile.TOOL_SEARCH:
-            explicit_tools = list(_TOOL_SEARCH_TOOLS)
 
         logger.debug(
             "ToolPolicyEngine: role=%s profile=%s prefixes=%s deny=%s explicit_tools=%s",

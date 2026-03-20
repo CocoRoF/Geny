@@ -22,6 +22,7 @@ class LimitsConfig(BaseConfig):
     max_turns: int = 50
     bash_default_timeout_ms: int = 30000
     bash_max_timeout_ms: int = 600000
+    disallowed_tools: str = "ToolSearch"
 
     _ENV_MAP = {
         "max_budget_usd": "CLAUDE_MAX_BUDGET_USD",
@@ -81,6 +82,10 @@ class LimitsConfig(BaseConfig):
                         "label": "Bash 최대 타임아웃 (ms)",
                         "description": "Bash 명령의 최대 허용 타임아웃",
                     },
+                    "disallowed_tools": {
+                        "label": "비활성화 도구",
+                        "description": "Claude CLI에서 비활성화할 내장 도구 (쉼표 구분)",
+                    },
                 },
             }
         }
@@ -131,5 +136,14 @@ class LimitsConfig(BaseConfig):
                 max_value=7200000,
                 group="limits",
                 apply_change=env_sync("BASH_MAX_TIMEOUT_MS"),
+            ),
+            ConfigField(
+                name="disallowed_tools",
+                field_type=FieldType.STRING,
+                label="Disallowed Tools",
+                description="Comma-separated list of Claude CLI built-in tools to disable",
+                default="ToolSearch",
+                group="limits",
+                placeholder="ToolSearch,OtherTool",
             ),
         ]

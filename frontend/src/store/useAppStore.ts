@@ -157,7 +157,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const next = !s.devMode;
     localStorage.setItem('geny-dev-mode', String(next));
     // If switching to normal mode while on a dev-only tab, fall back to main
-    const devOnlyTabs = new Set(['workflows', 'tools', 'settings', 'logs', 'graph', 'sessionTools']);
+    const devOnlyTabs = new Set(['workflows', 'toolSets', 'tools', 'settings', 'logs', 'graph', 'sessionTools']);
     const activeTab = !next && devOnlyTabs.has(s.activeTab) ? 'main' : s.activeTab;
     return { devMode: next, activeTab };
   }),
