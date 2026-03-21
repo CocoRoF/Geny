@@ -54,11 +54,7 @@ class ToolPresetStore:
             return None
 
     def delete(self, preset_id: str) -> bool:
-        """Delete a tool preset definition. Templates cannot be deleted."""
-        preset = self.load(preset_id)
-        if preset and preset.is_template:
-            logger.warning(f"Cannot delete template preset: {preset_id}")
-            return False
+        """Delete a tool preset definition."""
         path = self._path_for(preset_id)
         if path.exists():
             path.unlink()

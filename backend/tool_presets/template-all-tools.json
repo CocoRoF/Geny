@@ -9,8 +9,8 @@
   "mcp_servers": [
     "*"
   ],
-  "created_at": "2026-03-20T08:49:37.307264+00:00",
-  "updated_at": "2026-03-20T08:49:37.309039+00:00",
+  "created_at": "2026-03-21T00:39:21.420704+00:00",
+  "updated_at": "2026-03-21T00:39:21.421321+00:00",
   "is_template": true,
   "template_name": "all-tools"
 }

@@ -203,7 +203,7 @@ async def lifespan(app: FastAPI):
     # Inject ToolLoader into AgentSessionManager
     agent_manager.set_tool_loader(tool_loader)
 
-    # Install Tool Preset templates
+    # Install Tool Preset templates (all-tools only)
     from service.tool_preset.store import get_tool_preset_store
     from service.tool_preset.templates import install_templates as install_tool_preset_templates
     tool_preset_store = get_tool_preset_store()
