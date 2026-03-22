@@ -1,5 +1,9 @@
 # Chat & Messenger 심층 검토 및 구현 보고서
 
+> **참고**: 이 문서는 구현 과정의 기록입니다. 현재 로직의 최종 문서는 아래를 참조하세요:
+> - [docs/EXECUTION.md](docs/EXECUTION.md) / [docs/EXECUTION_KO.md](docs/EXECUTION_KO.md) — 실행 & 실시간 통신
+> - [docs/CHAT.md](docs/CHAT.md) / [docs/CHAT_KO.md](docs/CHAT_KO.md) — 데이터 & 저장소
+
 ## 1. 개요
 
 Geny 애플리케이션에는 두 가지 채팅/명령 실행 경로가 존재한다:
