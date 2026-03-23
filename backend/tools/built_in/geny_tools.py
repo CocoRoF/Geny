@@ -77,16 +77,10 @@ def _resolve_session(name_or_id: str):
     return None, None
 
 
-# Sessions currently being triggered by a DM — prevents infinite ping-pong.
-# When session A DMs session B and triggers B, B's reply DM back to A should
-# NOT re-trigger A (since A is expecting the reply, not a new conversation).
-_dm_triggered_sessions: set[str] = set()
-
-
 def _trigger_dm_response(
     target_session_id: str,
-    sender_session_id: str,
     sender_name: str,
+    sender_session_id: str,
     content: str,
     message_id: str,
 ) -> None:
@@ -96,9 +90,6 @@ def _trigger_dm_response(
     on the target session with a prompt telling it to read and respond
     to the incoming DM.  The response is then delivered back to the
     sender's inbox automatically.
-
-    Includes ping-pong prevention: if the target is already being
-    triggered by a DM response cycle, skip the re-trigger.
     """
     from service.execution.agent_executor import (
         execute_command,
@@ -107,21 +98,7 @@ def _trigger_dm_response(
         AgentNotAliveError,
     )
 
-    # Prevent infinite DM ping-pong
-    if target_session_id in _dm_triggered_sessions:
-        logger.debug(
-            "DM trigger skipped (ping-pong prevention): %s is already in a DM response cycle",
-            target_session_id,
-        )
-        return
-
     async def _deliver_and_respond():
-        # Mark BOTH sender and target to prevent ping-pong:
-        # - target: will be executing, don't re-trigger
-        # - sender: if target replies via DM, don't re-trigger sender
-        _dm_triggered_sessions.add(target_session_id)
-        if sender_session_id:
-            _dm_triggered_sessions.add(sender_session_id)
         try:
             # Build the prompt: system instruction on top, then the DM content
             prompt = (
@@ -167,10 +144,6 @@ def _trigger_dm_response(
                 "DM trigger unexpected error for session %s: %s",
                 target_session_id, e, exc_info=True,
             )
-        finally:
-            _dm_triggered_sessions.discard(target_session_id)
-            if sender_session_id:
-                _dm_triggered_sessions.discard(sender_session_id)
 
     # Schedule in the running event loop (fire-and-forget)
     try:
