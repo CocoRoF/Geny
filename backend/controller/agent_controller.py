@@ -355,7 +355,7 @@ async def restore_session(
             working_dir=params.get("working_dir"),
             model=params.get("model"),
             max_turns=params.get("max_turns", 100),
-            timeout=params.get("timeout", 1800),
+            timeout=params.get("timeout", 21600),
             max_iterations=params.get("max_iterations", params.get("autonomous_max_iterations", 100)),
             role=SessionRole(params["role"]) if params.get("role") else SessionRole.WORKER,
             graph_name=params.get("graph_name"),
@@ -511,18 +511,31 @@ async def _stream_execution_sse(holder: dict, session_id: str):
     Shared by ``/execute/events`` and ``/execute/stream``.
     Polls the session logger cache every 150ms for new log entries
     and streams them as ``log`` events until the execution completes.
+
+    A heartbeat comment is sent every ~15 seconds of inactivity to
+    prevent intermediate proxies/browsers from dropping the connection.
     """
     session_logger = get_session_logger(session_id, create_if_missing=False)
     cache_cursor = holder.get("cache_cursor", 0)
+    heartbeat_interval = 15.0  # seconds
+    last_event_time = time.monotonic()
 
     yield _sse("status", {"status": "running", "message": "Execution started"})
+    last_event_time = time.monotonic()
 
     try:
         while not holder.get("done"):
+            had_data = False
             if session_logger:
                 new_entries, cache_cursor = session_logger.get_cache_entries_since(cache_cursor)
                 for entry in new_entries:
                     yield _sse("log", entry.to_dict())
+                    had_data = True
+            if had_data:
+                last_event_time = time.monotonic()
+            elif time.monotonic() - last_event_time >= heartbeat_interval:
+                yield _sse("heartbeat", {"ts": time.time()})
+                last_event_time = time.monotonic()
             await asyncio.sleep(0.15)
 
         # Final drain — pick up entries written during last poll cycle
@@ -617,6 +630,31 @@ async def stream_execution_events(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.get("/{session_id}/execute/status")
+async def get_execution_status(
+    session_id: str = Path(..., description="Session ID"),
+):
+    """
+    Lightweight polling endpoint — check whether an execution is active.
+
+    Returns:
+      - ``active: true``  + ``done`` flag while the holder exists.
+      - ``active: false`` when there is no execution for this session.
+
+    Designed for the frontend to call on page load / visibility-change
+    so it can reconnect to ``GET /execute/events`` if needed.
+    """
+    holder = get_execution_holder(session_id)
+    if not holder:
+        return {"active": False, "session_id": session_id}
+    return {
+        "active": True,
+        "done": holder.get("done", False),
+        "has_error": holder.get("error") is not None,
+        "session_id": session_id,
+    }
 
 
 @router.post("/{session_id}/execute/stream")

@@ -41,7 +41,7 @@ export default function CreateSessionModal({ onClose }: Props) {
     role: 'developer',
     model: '',
     max_turns: 50,
-    timeout: 1800,
+    timeout: 21600,
     max_iterations: 50,
     system_prompt: '',
   });
@@ -171,7 +171,7 @@ export default function CreateSessionModal({ onClose }: Props) {
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">{t('createSession.timeout')} <InfoTooltip text={t('createSession.timeoutHelp')} /></label>
-              <NumberStepper value={formState.timeout ?? 1800} onChange={v => setFormState(f => ({ ...f, timeout: v }))} min={10} max={7200} step={30} />
+              <NumberStepper value={formState.timeout ?? 21600} onChange={v => setFormState(f => ({ ...f, timeout: v }))} min={10} max={86400} step={60} />
             </div>
           </div>
 

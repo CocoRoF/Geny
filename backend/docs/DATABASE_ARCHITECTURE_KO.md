@@ -196,7 +196,7 @@ APPLICATION_MODELS = [
 | workflow_id     | VARCHAR(255)           | ''            |
 | graph_name      | VARCHAR(255)           | ''            |
 | max_turns       | INTEGER                | 100           |
-| timeout         | DOUBLE PRECISION       | 1800.0        |
+| timeout         | DOUBLE PRECISION       | 21600.0       |
 | max_iterations  | INTEGER                | 100           |
 | pid             | INTEGER                | 0             |
 | error_message   | TEXT                   | ''            |

@@ -18,6 +18,9 @@ def _github_token_sync() -> "Callable[[Any, Any], None]":
 
     ``gh`` CLI reads ``GH_TOKEN``, while our git URL-rewriting reads
     ``GITHUB_TOKEN``.  Both must stay in sync.
+
+    Also triggers a reload of default MCP configs so that the GitHub
+    MCP server picks up the new token immediately.
     """
     _sync_github = env_sync("GITHUB_TOKEN")
     _sync_gh = env_sync("GH_TOKEN")
@@ -25,6 +28,13 @@ def _github_token_sync() -> "Callable[[Any, Any], None]":
     def _apply(old_value: "Any", new_value: "Any") -> None:
         _sync_github(old_value, new_value)
         _sync_gh(old_value, new_value)
+
+        # Reload default MCP configs so ${GITHUB_TOKEN} is re-expanded
+        try:
+            from service.mcp_loader import reload_default_mcp
+            reload_default_mcp()
+        except Exception:
+            pass  # MCP loader may not be initialized yet during startup
 
     return _apply
 

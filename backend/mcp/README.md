@@ -107,6 +107,27 @@ Use `${VARIABLE_NAME}` syntax to reference environment variables in JSON files:
 - Loaded MCP servers are **available in all sessions by default**
 - Additional MCP config passed during session creation will be **merged**
 
+## Default MCP Servers (`default/` folder)
+
+The `default/` subfolder contains MCP servers that are **always included in every session**, regardless of tool preset filtering.
+
+- `mcp/default/*.json` — always included (cannot be filtered out by presets)
+- `mcp/*.json` — user MCP servers (filtered by tool presets)
+
+### Built-in Defaults
+
+#### GitHub MCP (`default/github.json`)
+
+Automatically provides GitHub API tools (create repos, PRs, issues, etc.) to all sessions. Uses the **GitHub Token** from Settings (`GITHUB_TOKEN` env var).
+
+- If `GITHUB_TOKEN` is not set, the server is **skipped** (not an error)
+- When you update the token in Settings, the MCP config is **automatically reloaded**
+- No manual setup required — just enter your token in Settings
+
+### Adding Custom Defaults
+
+Create a `.json` file in `mcp/default/` with the standard schema. Environment variables are expanded via `${VAR}` syntax. If any `${VAR}` references remain unresolved, the server is skipped with a log message.
+
 ## Important Notes
 
 1. **Filename = Server Name**: `github.json` → MCP server name `github`

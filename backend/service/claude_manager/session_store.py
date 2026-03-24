@@ -371,7 +371,7 @@ class SessionStore:
             "working_dir": rec.get("storage_path"),
             "model": rec.get("model"),
             "max_turns": rec.get("max_turns", 100),
-            "timeout": rec.get("timeout", 1800),
+            "timeout": rec.get("timeout", 21600),
             "max_iterations": rec.get("max_iterations", rec.get("autonomous_max_iterations", 100)),
             "role": rec.get("role", "worker"),
             "graph_name": rec.get("graph_name"),

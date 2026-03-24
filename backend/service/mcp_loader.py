@@ -46,6 +46,8 @@ logger = getLogger(__name__)
 
 # Global MCP config storage
 _global_mcp_config: Optional[MCPConfig] = None
+_default_mcp_config: Optional[MCPConfig] = None
+_mcp_loader_instance: Optional["MCPLoader"] = None
 
 # Project root path
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -61,6 +63,15 @@ def get_global_mcp_config() -> Optional[MCPConfig]:
     return _global_mcp_config
 
 
+def get_default_mcp_config() -> Optional[MCPConfig]:
+    """Return default MCP config (from mcp/default/ folder).
+
+    Default MCP servers are always included in all sessions
+    regardless of tool preset filtering.
+    """
+    return _default_mcp_config
+
+
 def set_global_mcp_config(config: MCPConfig) -> None:
     """
     Set global MCP config
@@ -70,6 +81,30 @@ def set_global_mcp_config(config: MCPConfig) -> None:
     """
     global _global_mcp_config
     _global_mcp_config = config
+
+
+def set_default_mcp_config(config: MCPConfig) -> None:
+    """Set default MCP config."""
+    global _default_mcp_config
+    _default_mcp_config = config
+
+
+def set_mcp_loader_instance(loader: "MCPLoader") -> None:
+    """Store the MCPLoader singleton for reload access."""
+    global _mcp_loader_instance
+    _mcp_loader_instance = loader
+
+
+def reload_default_mcp() -> None:
+    """Reload default MCP configs (mcp/default/) with current env vars.
+
+    Called when a config that affects default MCP servers changes
+    (e.g. GitHub token updated via Settings).
+    """
+    if _mcp_loader_instance is None:
+        logger.debug("MCPLoader not initialized yet — skipping default MCP reload")
+        return
+    _mcp_loader_instance.reload_defaults()
 
 
 def build_proxy_mcp_server(
@@ -134,8 +169,9 @@ def build_session_mcp_config(
     Combines:
     1. _builtin_tools: Proxy MCP server for built-in tools (always included)
     2. _custom_tools: Proxy MCP server for custom tools (if any allowed)
-    3. External MCP servers from global config (filtered by preset)
-    4. Extra per-session MCP servers
+    3. Default MCP servers from mcp/default/ (always included, no filtering)
+    4. External MCP servers from global config (filtered by preset)
+    5. Extra per-session MCP servers
 
     Args:
         global_config: Global MCP config (external servers from mcp/*.json).
@@ -170,7 +206,13 @@ def build_session_mcp_config(
             backend_port=backend_port,
         )
 
-    # 3. Add external MCP servers (filtered)
+    # 3. Add default MCP servers (always included, bypass preset filter)
+    default_config = get_default_mcp_config()
+    if default_config and default_config.servers:
+        for name, config in default_config.servers.items():
+            servers[name] = config
+
+    # 4. Add external MCP servers (filtered by preset)
     if global_config and global_config.servers:
         for name, config in global_config.servers.items():
             # Skip internal proxy servers (starts with _)
@@ -182,7 +224,7 @@ def build_session_mcp_config(
             elif name in allowed_mcp_servers:
                 servers[name] = config
 
-    # 4. Merge extra per-session config
+    # 5. Merge extra per-session config
     if extra_mcp and extra_mcp.servers:
         for name, config in extra_mcp.servers.items():
             servers[name] = config
@@ -209,13 +251,15 @@ class MCPLoader:
             tools_dir: Tools folder path (default: project_root/tools) — kept for compatibility
         """
         self.mcp_dir = mcp_dir or PROJECT_ROOT / "mcp"
+        self.default_dir = self.mcp_dir / "default"
         self.tools_dir = tools_dir or PROJECT_ROOT / "tools"
         self.servers: Dict[str, MCPServerConfig] = {}
+        self.default_servers: Dict[str, MCPServerConfig] = {}
         self.tools: List[Any] = []  # Legacy — kept for get_tool_count() compatibility
 
     def load_all(self) -> MCPConfig:
         """
-        Load all external MCP configs.
+        Load all MCP configs: defaults + external.
 
         Returns:
             Global MCP config (external servers only).
@@ -223,19 +267,81 @@ class MCPLoader:
         logger.info("=" * 60)
         logger.info("🔌 MCP Loader: Starting...")
 
-        # 1. Load JSON configs from mcp/ folder
+        # Register singleton for reload access
+        set_mcp_loader_instance(self)
+
+        # 1. Load default MCP configs (mcp/default/*.json — always included)
+        self._load_default_configs()
+
+        # 2. Load user MCP configs (mcp/*.json — preset-filtered)
         self._load_mcp_configs()
 
-        # 2. Create global config (external MCP servers only)
-        # Python tools are handled by ToolLoader + Proxy MCP pattern
+        # 3. Create global configs
         config = MCPConfig(servers=self.servers)
         set_global_mcp_config(config)
 
-        logger.info(f"🔌 MCP Loader: Loaded {len(self.servers)} external MCP servers")
+        default_config = MCPConfig(servers=self.default_servers)
+        set_default_mcp_config(default_config)
+
+        logger.info(f"🔌 MCP Loader: {len(self.default_servers)} default + {len(self.servers)} external MCP servers")
         logger.info("   ℹ️ Python tools managed by ToolLoader (Proxy MCP pattern)")
         logger.info("=" * 60)
 
         return config
+
+    def reload_defaults(self) -> None:
+        """Reload default MCP configs from mcp/default/.
+
+        Called when a relevant config changes (e.g. GitHub token updated)
+        so that environment variable expansions pick up the new values.
+        """
+        self.default_servers.clear()
+        self._load_default_configs()
+        default_config = MCPConfig(servers=self.default_servers)
+        set_default_mcp_config(default_config)
+        logger.info(f"🔄 MCP Loader: Reloaded {len(self.default_servers)} default MCP servers")
+
+    def _load_default_configs(self) -> None:
+        """Load JSON config files from mcp/default/ folder.
+
+        Default MCP servers are always included in every session
+        regardless of tool preset filtering.
+        """
+        if not self.default_dir.exists():
+            return
+
+        json_files = list(self.default_dir.glob("*.json"))
+        if not json_files:
+            return
+
+        logger.info(f"📁 Loading default MCP configs from: {self.default_dir}")
+
+        for json_file in json_files:
+            try:
+                server_name = json_file.stem
+
+                with open(json_file, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+
+                # Expand environment variables
+                config_data = self._expand_env_vars(config_data)
+
+                # Skip if required env vars were not resolved
+                if self._has_unresolved_env(config_data):
+                    logger.info(f"   ⏭️ {server_name}: skipped (missing env vars — configure in Settings)")
+                    continue
+
+                server_config = self._create_server_config(config_data)
+
+                if server_config:
+                    self.default_servers[server_name] = server_config
+                    desc = config_data.get('description', '')
+                    logger.info(f"   ✅ [default] {server_name}: {desc[:50]}" + ("..." if len(desc) > 50 else ""))
+
+            except json.JSONDecodeError as e:
+                logger.warning(f"   ⚠️ Invalid JSON in default/{json_file.name}: {e}")
+            except Exception as e:
+                logger.warning(f"   ⚠️ Failed to load default/{json_file.name}: {e}")
 
     def _load_mcp_configs(self) -> None:
         """Load JSON config files from mcp/ folder"""
@@ -285,7 +391,7 @@ class MCPLoader:
                 var_name = match.group(1)
                 default = match.group(2)
                 value = os.environ.get(var_name)
-                if value is None:
+                if not value:  # None or empty string → treat as unset
                     if default is not None:
                         return default
                     return match.group(0)  # Keep original if env var not found
@@ -300,6 +406,17 @@ class MCPLoader:
             return [self._expand_env_vars(item) for item in data]
 
         return data
+
+    @staticmethod
+    def _has_unresolved_env(data: Any) -> bool:
+        """Check if any ${VAR} references remain unresolved."""
+        if isinstance(data, str):
+            return bool(re.search(r'\$\{[^}]+\}', data))
+        elif isinstance(data, dict):
+            return any(MCPLoader._has_unresolved_env(v) for v in data.values())
+        elif isinstance(data, list):
+            return any(MCPLoader._has_unresolved_env(item) for item in data)
+        return False
 
     def _create_server_config(self, data: Dict[str, Any]) -> Optional[MCPServerConfig]:
         """Create MCP server config from JSON data"""

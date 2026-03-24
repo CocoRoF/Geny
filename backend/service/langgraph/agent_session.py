@@ -96,7 +96,7 @@ class AgentSession:
         working_dir: Optional[str] = None,
         model_name: Optional[str] = None,
         max_turns: int = 100,
-        timeout: float = 1800.0,
+        timeout: float = 21600.0,
         system_prompt: Optional[str] = None,
         env_vars: Optional[Dict[str, str]] = None,
         mcp_config: Optional[MCPConfig] = None,

@@ -184,7 +184,7 @@ async def _execute_core(
             )
 
         # 2. Invoke
-        effective_timeout = timeout or getattr(agent, "timeout", 1800.0)
+        effective_timeout = timeout or getattr(agent, "timeout", 21600.0)
         invoke_result = await asyncio.wait_for(
             agent.invoke(input_text=prompt, **invoke_kwargs),
             timeout=effective_timeout,
@@ -396,12 +396,22 @@ async def start_command_background(
 
     # 4. Fire-and-forget background task
     async def _run():
-        await _execute_core(
-            agent, session_id, prompt, holder,
-            timeout=timeout,
-            system_prompt=system_prompt,
-            max_turns=max_turns,
-        )
+        try:
+            await _execute_core(
+                agent, session_id, prompt, holder,
+                timeout=timeout,
+                system_prompt=system_prompt,
+                max_turns=max_turns,
+            )
+        finally:
+            # Schedule deferred cleanup: keep the holder alive for a grace
+            # period so a reconnecting frontend can pick up the final result,
+            # then remove it to prevent memory leaks.
+            async def _deferred_cleanup():
+                await asyncio.sleep(300)  # 5 minutes
+                cleanup_execution(session_id)
+
+            asyncio.create_task(_deferred_cleanup())
 
     asyncio.create_task(_run())
     return holder

@@ -7,8 +7,8 @@ Constants and configuration values used across the Claude manager modules.
 # Buffer limit: 16MB
 STDIO_BUFFER_LIMIT = 16 * 1024 * 1024
 
-# Claude execution timeout (default 30 minutes)
-CLAUDE_DEFAULT_TIMEOUT = 1800
+# Claude execution timeout (default 6 hours)
+CLAUDE_DEFAULT_TIMEOUT = 21600
 
 # Claude Code environment variable keys (automatically passed to sessions)
 CLAUDE_ENV_KEYS = [

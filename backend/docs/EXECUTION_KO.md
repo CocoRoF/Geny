@@ -407,7 +407,7 @@ DB 스키마:
 | `AgentNotFoundError` | 404 | 세션 ID가 존재하지 않음 |
 | `AgentNotAliveError` | 400 | 프로세스 사망, 자동 복구 실패 |
 | `AlreadyExecutingError` | 409 | 해당 세션에서 이미 다른 커맨드가 실행 중 |
-| Timeout | — | 실행이 타임아웃 초과 (기본값: 1800초) |
+| Timeout | — | 실행이 타임아웃 초과 (기본값: 21600초 / 6시간) |
 
 ---
 

@@ -288,7 +288,7 @@ class ExecuteRequest(BaseModel):
     )
     timeout: Optional[float] = Field(
         default=None,
-        description="Execution timeout (seconds) - None uses session default (1800s)"
+        description="Execution timeout (seconds) - None uses session default (21600s / 6h)"
     )
     skip_permissions: Optional[bool] = Field(
         default=True,

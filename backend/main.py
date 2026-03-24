@@ -467,11 +467,12 @@ if __name__ == "__main__":
                 host=host,
                 port=port,
                 reload=True,
-                reload_excludes=["*/_mcp_server.py", "_mcp_server.py"]
+                reload_excludes=["*/_mcp_server.py", "_mcp_server.py"],
+                timeout_keep_alive=120,
             )
         else:
             # In normal mode, pass app object directly
-            uvicorn.run(app, host=host, port=port, reload=False)
+            uvicorn.run(app, host=host, port=port, reload=False, timeout_keep_alive=120)
     except Exception as e:
         logger.warning(f"Failed to load config for uvicorn: {e}")
         logger.info("Using default values for uvicorn")

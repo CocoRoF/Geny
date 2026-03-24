@@ -1,0 +1,9 @@
+{
+  "type": "stdio",
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-github"],
+  "env": {
+    "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+  },
+  "description": "GitHub MCP — Repository, PR, Issue management (auto-configured from Settings)"
+}

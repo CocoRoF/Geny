@@ -132,41 +132,73 @@ export const agentApi = {
     }
 
     // Step 2: connect EventSource DIRECTLY to backend (bypass Next.js proxy buffering)
+    // Supports auto-reconnection: if the SSE connection drops while execution is
+    // still running, reconnect to /execute/events (the holder persists on backend).
     return new Promise<void>((resolve) => {
       const backendUrl = getBackendUrl();
-      const evtSource = new EventSource(`${backendUrl}/api/agents/${id}/execute/events`);
+      let evtSource: EventSource | null = null;
+      let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+      let done = false;
+      const MAX_RECONNECT_ATTEMPTS = 20;
+      const RECONNECT_DELAY = 3_000;
+      let reconnectAttempts = 0;
 
       const cleanup = () => {
-        evtSource.close();
+        done = true;
+        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+        evtSource?.close();
+        evtSource = null;
       };
 
-      evtSource.addEventListener('log', (e) => {
-        try { onEvent('log', JSON.parse(e.data)); } catch { /* skip */ }
-      });
-      evtSource.addEventListener('status', (e) => {
-        try { onEvent('status', JSON.parse(e.data)); } catch { /* skip */ }
-      });
-      evtSource.addEventListener('result', (e) => {
-        try { onEvent('result', JSON.parse(e.data)); } catch { /* skip */ }
-      });
-      evtSource.addEventListener('error', (e) => {
-        // SSE error event — could be connection error or custom error event
-        if (e instanceof MessageEvent && e.data) {
-          try { onEvent('error', JSON.parse(e.data)); } catch { /* skip */ }
-        }
-      });
-      evtSource.addEventListener('done', () => {
-        onEvent('done', {});
-        cleanup();
-        resolve();
-      });
+      const connect = () => {
+        if (done) return;
+        evtSource = new EventSource(`${backendUrl}/api/agents/${id}/execute/events`);
 
-      // Handle connection errors
-      evtSource.onerror = () => {
-        // EventSource fires onerror on close too — only reject if not resolving
-        cleanup();
-        resolve(); // graceful close
+        evtSource.addEventListener('log', (e) => {
+          reconnectAttempts = 0;
+          try { onEvent('log', JSON.parse(e.data)); } catch { /* skip */ }
+        });
+        evtSource.addEventListener('status', (e) => {
+          reconnectAttempts = 0;
+          try { onEvent('status', JSON.parse(e.data)); } catch { /* skip */ }
+        });
+        evtSource.addEventListener('result', (e) => {
+          reconnectAttempts = 0;
+          try { onEvent('result', JSON.parse(e.data)); } catch { /* skip */ }
+        });
+        evtSource.addEventListener('heartbeat', () => {
+          reconnectAttempts = 0; // connection alive
+        });
+        evtSource.addEventListener('error', (e) => {
+          // SSE error event — could be connection error or custom error event
+          if (e instanceof MessageEvent && e.data) {
+            try { onEvent('error', JSON.parse(e.data)); } catch { /* skip */ }
+          }
+        });
+        evtSource.addEventListener('done', () => {
+          onEvent('done', {});
+          cleanup();
+          resolve();
+        });
+
+        // Handle connection errors — reconnect instead of giving up
+        evtSource.onerror = () => {
+          if (done) return;
+          evtSource?.close();
+          evtSource = null;
+
+          if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+            // Exhausted retries — give up
+            cleanup();
+            resolve();
+            return;
+          }
+          reconnectAttempts++;
+          reconnectTimer = setTimeout(connect, RECONNECT_DELAY);
+        };
       };
+
+      connect();
     });
   },
 
@@ -175,6 +207,84 @@ export const agentApi = {
     apiCall<{ success: boolean }>(`/api/agents/${id}/stop`, {
       method: 'POST',
     }),
+
+  /** GET /api/agents/{id}/execute/status — check if execution is active */
+  getExecutionStatus: (id: string) =>
+    apiCall<{ active: boolean; done?: boolean; has_error?: boolean; session_id: string }>(
+      `/api/agents/${id}/execute/status`,
+    ),
+
+  /**
+   * Reconnect to a running execution's SSE stream.
+   *
+   * Used when the page reloads or the user returns after locking the phone.
+   * If an execution is still active on the backend, this streams events
+   * from where the backend currently is via GET /execute/events.
+   */
+  reconnectStream: (
+    id: string,
+    onEvent: (eventType: string, eventData: Record<string, unknown>) => void,
+  ): { close: () => void } => {
+    let evtSource: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let closed = false;
+    const RECONNECT_DELAY = 3_000;
+    const MAX_RETRIES = 10;
+    let retries = 0;
+
+    const connect = () => {
+      if (closed) return;
+      const backendUrl = getBackendUrl();
+      evtSource = new EventSource(`${backendUrl}/api/agents/${id}/execute/events`);
+
+      evtSource.addEventListener('log', (e) => {
+        retries = 0;
+        try { onEvent('log', JSON.parse(e.data)); } catch { /* skip */ }
+      });
+      evtSource.addEventListener('status', (e) => {
+        retries = 0;
+        try { onEvent('status', JSON.parse(e.data)); } catch { /* skip */ }
+      });
+      evtSource.addEventListener('result', (e) => {
+        retries = 0;
+        try { onEvent('result', JSON.parse(e.data)); } catch { /* skip */ }
+      });
+      evtSource.addEventListener('heartbeat', () => { retries = 0; });
+      evtSource.addEventListener('error', (e) => {
+        if (e instanceof MessageEvent && e.data) {
+          try { onEvent('error', JSON.parse(e.data)); } catch { /* skip */ }
+        }
+      });
+      evtSource.addEventListener('done', () => {
+        onEvent('done', {});
+        closed = true;
+        evtSource?.close();
+        evtSource = null;
+      });
+
+      evtSource.onerror = () => {
+        if (closed) return;
+        evtSource?.close();
+        evtSource = null;
+        if (retries >= MAX_RETRIES) {
+          closed = true;
+          return;
+        }
+        retries++;
+        reconnectTimer = setTimeout(connect, RECONNECT_DELAY);
+      };
+    };
+
+    connect();
+    return {
+      close: () => {
+        closed = true;
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        evtSource?.close();
+        evtSource = null;
+      },
+    };
+  },
 
   /** GET /api/agents/{id}/graph — graph structure */
   getGraph: (id: string) => apiCall<GraphStructure>(`/api/agents/${id}/graph`),

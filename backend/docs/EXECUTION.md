@@ -407,7 +407,7 @@ Key design decisions:
 | `AgentNotFoundError` | 404 | Session ID does not exist |
 | `AgentNotAliveError` | 400 | Process dead, auto-revival failed |
 | `AlreadyExecutingError` | 409 | Another command is already running on this session |
-| Timeout | — | Execution exceeded timeout (default: 1800s) |
+| Timeout | — | Execution exceeded timeout (default: 21600s / 6h) |
 
 ---
 

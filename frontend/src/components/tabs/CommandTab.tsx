@@ -61,6 +61,100 @@ export default function CommandTab() {
     prevFinishedRef.current = hasFinished;
   }, [hasFinished]);
 
+  // ── Auto-reconnect to running execution on mount / visibility change ──
+  const reconnectRef = useRef<{ close: () => void } | null>(null);
+
+  useEffect(() => {
+    if (!selectedSessionId) return;
+
+    let cancelled = false;
+
+    const tryReconnect = async () => {
+      // Don't reconnect if we're already streaming
+      if (reconnectRef.current) return;
+      const current = useAppStore.getState().sessionDataCache[selectedSessionId];
+      if (current?.status === 'running') return; // already streaming
+
+      try {
+        const status = await agentApi.getExecutionStatus(selectedSessionId);
+        if (cancelled) return;
+        if (!status.active || status.done) return;
+
+        // Active execution found — reconnect SSE
+        updateSessionData(selectedSessionId, {
+          status: 'running',
+          statusText: t('commandTab.statusExecuting'),
+        });
+
+        reconnectRef.current = agentApi.reconnectStream(
+          selectedSessionId,
+          (eventType, eventData) => {
+            const cur = useAppStore.getState().sessionDataCache[selectedSessionId];
+            switch (eventType) {
+              case 'log':
+                updateSessionData(selectedSessionId, {
+                  logEntries: [...(cur?.logEntries || []), eventData as unknown as LogEntry],
+                });
+                break;
+              case 'status': {
+                const s = eventData.status as string;
+                const msg = eventData.message as string;
+                updateSessionData(selectedSessionId, {
+                  status: s === 'completed' ? 'success' : s,
+                  statusText: msg,
+                });
+                break;
+              }
+              case 'result': {
+                const success = eventData.success as boolean;
+                const output = (eventData.output || eventData.error || t('common.noOutput')) as string;
+                const ms = eventData.duration_ms as number | undefined;
+                updateSessionData(selectedSessionId, {
+                  output,
+                  status: success ? 'success' : 'error',
+                  statusText: success
+                    ? `${t('commandTab.statusSuccess')}${ms ? ` (${(ms / 1000).toFixed(1)}s)` : ''}`
+                    : `${(eventData.error || t('commandTab.statusFailed')) as string}`,
+                });
+                break;
+              }
+              case 'error':
+                updateSessionData(selectedSessionId, {
+                  output: (eventData.error || t('commandTab.requestFailed')) as string,
+                  status: 'error',
+                  statusText: t('commandTab.statusFailed'),
+                });
+                break;
+              case 'done':
+                reconnectRef.current = null;
+                break;
+            }
+          },
+        );
+      } catch {
+        // No active execution — that's fine
+      }
+    };
+
+    // Check on mount
+    tryReconnect();
+
+    // Check on visibility change (phone unlock, tab refocus)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        tryReconnect();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', handleVisibility);
+      reconnectRef.current?.close();
+      reconnectRef.current = null;
+    };
+  }, [selectedSessionId, updateSessionData, t]);
+
   // ── Resize handler for split pane ──
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -166,13 +260,32 @@ export default function CommandTab() {
         statusText: t('commandTab.requestFailed'),
       });
     } finally {
-      // Safety: if SSE stream closed without result/error event, clear running state
+      // Safety: if SSE stream closed without result/error event, check if
+      // execution might still be running on the backend before marking failed.
       const final = useAppStore.getState().sessionDataCache[selectedSessionId];
       if (final?.status === 'running') {
-        updateSessionData(selectedSessionId, {
-          status: 'error',
-          statusText: t('commandTab.statusFailed'),
-        });
+        // Try to poll the execution status once before giving up
+        try {
+          const holder = await fetch(`/api/agents/${selectedSessionId}/execute/events`);
+          if (holder.ok) {
+            // Execution still active — the reconnect logic in executeStream
+            // exhausted its retries, so mark as connection-lost rather than generic fail
+            updateSessionData(selectedSessionId, {
+              status: 'error',
+              statusText: t('commandTab.statusConnectionLost', 'Connection lost'),
+            });
+          } else {
+            updateSessionData(selectedSessionId, {
+              status: 'error',
+              statusText: t('commandTab.statusFailed'),
+            });
+          }
+        } catch {
+          updateSessionData(selectedSessionId, {
+            status: 'error',
+            statusText: t('commandTab.statusFailed'),
+          });
+        }
       }
     }
   }, [selectedSessionId, sessionData?.input, updateSessionData, t]);

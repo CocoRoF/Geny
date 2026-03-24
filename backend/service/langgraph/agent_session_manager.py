@@ -430,7 +430,7 @@ class AgentSessionManager(SessionManager):
             env_vars=request.env_vars,
             mcp_config=merged_mcp_config,
             max_turns=request.max_turns or 50,
-            timeout=request.timeout or 1800.0,
+            timeout=request.timeout or 21600.0,
             max_iterations=request.max_iterations or 50,
             role=request.role or SessionRole.WORKER,
             enable_checkpointing=enable_checkpointing,

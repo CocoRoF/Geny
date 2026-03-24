@@ -355,7 +355,7 @@ curl -X POST http://localhost:8000/api/sessions/{session_id}/execute \
     "prompt": "Analyze all files, refactor for quality, add types and tests, commit with descriptive messages.",
     "system_prompt": "Work autonomously without asking questions.",
     "max_turns": 50,
-    "timeout": 1800
+    "timeout": 21600
   }'
 ```
 
@@ -431,7 +431,7 @@ curl -X POST http://localhost:8000/api/sessions/{session_id}/execute \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "Clone https://github.com/user/repo.git, create branch feature/docs, add JSDoc to all functions, commit, push, and create a PR.",
-    "timeout": 1800,
+    "timeout": 21600,
     "system_prompt": "You are an autonomous coding agent. Complete all tasks without asking questions."
   }'
 ```

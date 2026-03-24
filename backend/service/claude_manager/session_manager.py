@@ -262,7 +262,7 @@ class SessionManager:
             error_message=data.get('error_message'),
             model=data.get('model'),
             max_turns=data.get('max_turns', 100),
-            timeout=data.get('timeout', 1800.0),
+            timeout=data.get('timeout', 21600.0),
             storage_path=data.get('storage_path'),
             pod_name=data.get('pod_name'),
             pod_ip=data.get('pod_ip'),
