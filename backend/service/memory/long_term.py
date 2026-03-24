@@ -463,14 +463,17 @@ class LongTermMemory:
             if f.is_file() and f.stat().st_size <= MAX_FILE_SIZE
         ]
 
-        def sort_key(p: Path) -> Tuple[int, str]:
+        def sort_key(p: Path) -> tuple:
             # MEMORY.md first (priority 0)
             if p.name == self.MAIN_FILE:
                 return (0, "")
-            # Dated files next (priority 1), newest first
+            # Dated files next (priority 1), newest first (negative ordinal)
             m = _DATE_RE.search(p.stem)
             if m:
-                return (1, f"9999-{m.group(1)}")  # inverted for desc
+                try:
+                    return (1, -int(m.group(1).replace("-", "")))
+                except ValueError:
+                    pass
             # Others last
             return (2, p.name)
 

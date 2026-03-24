@@ -276,6 +276,14 @@ class SessionStore:
             except Exception as e:
                 logger.warning(f"[SessionStore] DB permanent-delete failed for {session_id}: {e}")
 
+            # Also delete associated memory entries (prevent orphaned data)
+            try:
+                from service.database.memory_db_helper import db_delete_session_memory
+                db_delete_session_memory(self._app_db, session_id)
+                logger.debug(f"[SessionStore] Memory entries cleaned for {session_id}")
+            except Exception as e:
+                logger.debug(f"[SessionStore] Memory cleanup failed for {session_id}: {e}")
+
         # JSON backup
         with self._lock:
             if session_id in self._data:

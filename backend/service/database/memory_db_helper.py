@@ -585,6 +585,76 @@ def db_stm_message_count(
 
 
 # ======================================================================
+#  Statistics (Aggregation)
+# ======================================================================
+
+def db_memory_stats(
+    db_manager,
+    session_id: str,
+) -> Optional[Dict[str, Any]]:
+    """Get memory statistics efficiently via SQL aggregation.
+
+    Returns aggregate counts and char totals grouped by source,
+    without loading individual entries into memory.
+
+    Returns:
+        Dict with long_term_entries, short_term_entries,
+        long_term_chars, short_term_chars, total_files, last_write.
+        None on failure.
+    """
+    mgr = _get_db_manager(db_manager)
+    if not _is_db_available(db_manager):
+        return None
+
+    try:
+        query = (
+            f"SELECT source, "
+            f"COUNT(*) as entry_count, "
+            f"COALESCE(SUM(LENGTH(content)), 0) as total_chars, "
+            f"MAX(entry_timestamp) as last_ts "
+            f"FROM {TABLE} "
+            f"WHERE session_id = %s "
+            f"GROUP BY source"
+        )
+        rows = mgr.execute_query(query, (session_id,))
+        if rows is None:
+            return None
+
+        stats = {
+            "long_term_entries": 0,
+            "short_term_entries": 0,
+            "long_term_chars": 0,
+            "short_term_chars": 0,
+            "total_files": 0,
+            "last_write": None,
+        }
+
+        last_ts = None
+        for row in rows:
+            source = row.get("source", "")
+            count = row.get("entry_count", 0)
+            chars = row.get("total_chars", 0)
+            ts_str = row.get("last_ts", "")
+
+            if source == "long_term":
+                stats["long_term_entries"] = count
+                stats["long_term_chars"] = chars
+                stats["total_files"] = count
+            elif source == "short_term":
+                stats["short_term_entries"] = count
+                stats["short_term_chars"] = chars
+
+            if ts_str and (last_ts is None or ts_str > last_ts):
+                last_ts = ts_str
+
+        stats["last_write"] = last_ts
+        return stats
+    except Exception as e:
+        logger.debug(f"Failed to get memory stats for {session_id}: {e}")
+        return None
+
+
+# ======================================================================
 #  Delete
 # ======================================================================
 

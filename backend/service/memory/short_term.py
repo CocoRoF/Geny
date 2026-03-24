@@ -34,8 +34,12 @@ logger = getLogger(__name__)
 
 KST = timezone(timedelta(hours=9))
 
-# Maximum transcript size before we start dropping old entries from search.
+# Maximum transcript entries kept in the JSONL file.
+# DB retains full history; this limit prevents unbounded file growth.
 MAX_TRANSCRIPT_ENTRIES = 2000
+
+# Check for file truncation every N writes (amortised cost).
+_TRUNCATE_CHECK_INTERVAL = 100
 
 
 class ShortTermMemory:
@@ -75,6 +79,9 @@ class ShortTermMemory:
         # DB support (set via set_database)
         self._db_manager = None
         self._session_id: Optional[str] = None
+
+        # Write counter for periodic file truncation
+        self._write_count: int = 0
 
     def set_database(self, db_manager, session_id: str) -> None:
         """Enable DB-backed persistence for this memory store.
@@ -486,6 +493,11 @@ class ShortTermMemory:
         except OSError as exc:
             logger.warning("ShortTermMemory: write failed: %s", exc)
 
+        # Periodic truncation to prevent unbounded file growth
+        self._write_count += 1
+        if self._write_count % _TRUNCATE_CHECK_INTERVAL == 0:
+            self._maybe_truncate_file()
+
     def _read_jsonl(self) -> List[Dict[str, Any]]:
         """Read all records from the transcript file."""
         if not self._main_file.exists():
@@ -508,3 +520,28 @@ class ShortTermMemory:
             logger.warning("ShortTermMemory: read failed: %s", exc)
 
         return records
+
+    def _maybe_truncate_file(self) -> None:
+        """Truncate JSONL file to MAX_TRANSCRIPT_ENTRIES if oversized.
+
+        DB retains full history; this only trims the file to prevent
+        unbounded growth.  Keeps the most recent entries.
+        """
+        if not self._main_file.exists():
+            return
+        try:
+            records = self._read_jsonl()
+            if len(records) <= MAX_TRANSCRIPT_ENTRIES:
+                return
+
+            keep = records[-MAX_TRANSCRIPT_ENTRIES:]
+            with open(self._main_file, "w", encoding="utf-8") as f:
+                for rec in keep:
+                    f.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
+
+            logger.info(
+                "ShortTermMemory: truncated %d → %d entries (DB retains full history)",
+                len(records), len(keep),
+            )
+        except Exception as exc:
+            logger.debug("ShortTermMemory: truncation failed (non-critical): %s", exc)

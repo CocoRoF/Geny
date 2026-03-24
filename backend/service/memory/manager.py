@@ -742,6 +742,9 @@ class SessionMemoryManager:
         # Save to dated file
         self._ltm.write_dated(summary_text)
 
+        # Persist session summary for future context injection on restore
+        self._stm.write_summary(summary_text)
+
         # Persist vector index
         if self._vmm.enabled:
             self._vmm.save()
@@ -757,7 +760,37 @@ class SessionMemoryManager:
     # ------------------------------------------------------------------
 
     def get_stats(self) -> MemoryStats:
-        """Compute memory statistics."""
+        """Compute memory statistics.
+
+        Uses DB aggregation when available for efficiency;
+        falls back to loading all entries from file.
+        """
+        # Try lightweight DB aggregation first
+        if self._db_manager is not None and self._session_id is not None:
+            try:
+                from service.database.memory_db_helper import db_memory_stats
+
+                db_stats = db_memory_stats(self._db_manager, self._session_id)
+                if db_stats is not None:
+                    last_write = None
+                    ts_str = db_stats.get("last_write")
+                    if ts_str:
+                        try:
+                            last_write = datetime.fromisoformat(ts_str)
+                        except (ValueError, TypeError):
+                            pass
+                    return MemoryStats(
+                        long_term_entries=db_stats.get("long_term_entries", 0),
+                        short_term_entries=db_stats.get("short_term_entries", 0),
+                        long_term_chars=db_stats.get("long_term_chars", 0),
+                        short_term_chars=db_stats.get("short_term_chars", 0),
+                        total_files=db_stats.get("total_files", 0),
+                        last_write=last_write,
+                    )
+            except Exception:
+                pass
+
+        # Fallback: load all entries from file system
         ltm_entries = self._ltm.load_all()
         stm_entries = self._stm.load_all()
 
