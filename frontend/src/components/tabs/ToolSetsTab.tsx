@@ -323,15 +323,15 @@ function ToolSetEditor({
           </section>
 
           {/* Stats Banner */}
-          <div className="flex items-center gap-4 px-4 py-2.5 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg text-[0.75rem]">
+          <div className="flex items-center gap-4 px-4 py-2.5 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg text-[0.75rem] flex-wrap">
             <span className="text-[var(--text-muted)]">
               {t('toolSetsTab.builtInAlways', { count: catalog?.built_in.length ?? 0 })}
             </span>
-            <span className="w-px h-4 bg-[var(--border-color)]" />
+            <span className="w-px h-4 bg-[var(--border-color)] hidden sm:block" />
             <span className="text-[var(--accent-color)] font-medium">
               {t('toolSetsTab.customSelected', { count: effectiveCustomCount })}
             </span>
-            <span className="w-px h-4 bg-[var(--border-color)]" />
+            <span className="w-px h-4 bg-[var(--border-color)] hidden sm:block" />
             <span className="text-[var(--success-color)] font-medium">
               {t('toolSetsTab.mcpSelected', { count: effectiveMcpCount })}
             </span>

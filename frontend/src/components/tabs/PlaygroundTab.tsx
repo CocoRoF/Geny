@@ -126,6 +126,77 @@ function CameraController() {
     dom.addEventListener('wheel', onWheel, { passive: false });
     dom.addEventListener('contextmenu', ctx);
 
+    // ── Touch support for mobile ──
+    let lastTouchDist = 0;
+    const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      const s = state.current;
+      if (e.touches.length === 1) {
+        // Single finger → pan
+        s.isPanning = true;
+        s.panStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        s.targetStart.copy(s.target);
+      } else if (e.touches.length === 2) {
+        // Two fingers → rotate + pinch zoom
+        s.isPanning = false;
+        s.isRotating = true;
+        const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const my = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        s.rotateStart = { x: mx, y: my };
+        s.angleStart = s.angle;
+        s.pitchStart = s.pitch;
+        lastTouchDist = Math.hypot(
+          e.touches[1].clientX - e.touches[0].clientX,
+          e.touches[1].clientY - e.touches[0].clientY,
+        );
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      const s = state.current;
+      if (e.touches.length === 1 && s.isPanning) {
+        const dx = e.touches[0].clientX - s.panStart.x;
+        const dy = e.touches[0].clientY - s.panStart.y;
+        const panSpeed = 0.02 * (s.distance / 15);
+        const rX = Math.cos(s.angle), rZ = -Math.sin(s.angle);
+        const fX = Math.sin(s.angle), fZ = Math.cos(s.angle);
+        s.target.x = s.targetStart.x - dx * rX * panSpeed - dy * fX * panSpeed;
+        s.target.z = s.targetStart.z - dx * rZ * panSpeed - dy * fZ * panSpeed;
+        updateCam();
+      } else if (e.touches.length === 2) {
+        // Rotate
+        const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const my = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        const dx = mx - s.rotateStart.x;
+        const dy = my - s.rotateStart.y;
+        s.angle = s.angleStart - dx * 0.005;
+        s.pitch = Math.max(0.1, Math.min(Math.PI / 2.2, s.pitchStart + dy * 0.005));
+        // Pinch zoom
+        const dist = Math.hypot(
+          e.touches[1].clientX - e.touches[0].clientX,
+          e.touches[1].clientY - e.touches[0].clientY,
+        );
+        if (lastTouchDist > 0) {
+          const scale = lastTouchDist / dist;
+          s.distance = Math.max(8, Math.min(60, s.distance * scale));
+        }
+        lastTouchDist = dist;
+        updateCam();
+      }
+    };
+
+    const onTouchEnd = () => {
+      const s = state.current;
+      s.isPanning = false;
+      s.isRotating = false;
+      lastTouchDist = 0;
+    };
+
+    dom.addEventListener('touchstart', onTouchStart, { passive: false });
+    dom.addEventListener('touchmove', onTouchMove, { passive: false });
+    dom.addEventListener('touchend', onTouchEnd);
+
     return () => {
       dom.removeEventListener('mousedown', onDown);
       dom.removeEventListener('mousemove', onMove);
@@ -133,6 +204,9 @@ function CameraController() {
       dom.removeEventListener('mouseleave', onLeave);
       dom.removeEventListener('wheel', onWheel);
       dom.removeEventListener('contextmenu', ctx);
+      dom.removeEventListener('touchstart', onTouchStart);
+      dom.removeEventListener('touchmove', onTouchMove);
+      dom.removeEventListener('touchend', onTouchEnd);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gl, updateCam]);

@@ -4,6 +4,7 @@ import { useCallback, useRef, useEffect, useState, useMemo } from 'react';
 import { useAppStore, type SessionData } from '@/store/useAppStore';
 import { agentApi } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
+import { useIsMobile } from '@/lib/useIsMobile';
 import type { LogEntry } from '@/types';
 import ExecutionTimeline from '@/components/execution/ExecutionTimeline';
 import StepDetailPanel from '@/components/execution/StepDetailPanel';
@@ -12,7 +13,7 @@ import {
   Loader2,
   Terminal,
   Zap,
-
+  X,
   Clock,
   CheckCircle2,
   XCircle,
@@ -25,6 +26,7 @@ import {
 export default function CommandTab() {
   const { selectedSessionId, sessions, getSessionData, updateSessionData } = useAppStore();
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showAllLevels, setShowAllLevels] = useState(false);
   const [selectedStepIndex, setSelectedStepIndex] = useState<number | null>(null);
@@ -435,17 +437,17 @@ export default function CommandTab() {
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)] relative">
       {/* ── Header ── */}
-      <div className="shrink-0 px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
+      <div className="shrink-0 px-3 md:px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--primary-color)] to-[#6366f1] flex items-center justify-center shadow-sm shrink-0">
               <Terminal size={13} className="text-white" />
             </div>
-            <div className="flex items-center gap-2 min-w-0 flex-wrap">
-              <span className="text-[0.8125rem] font-semibold text-[var(--text-primary)] truncate">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-[0.8125rem] font-semibold text-[var(--text-primary)] truncate max-w-[100px] md:max-w-none">
                 {session.session_name || session.session_id.substring(0, 8)}
               </span>
-              <div className="flex items-center gap-1.5">
+              <div className="hidden sm:flex items-center gap-1.5">
                 <span className="px-1.5 py-[1px] rounded text-[0.5625rem] font-bold text-white uppercase tracking-wider"
                   style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
                   {session.role}
@@ -456,18 +458,15 @@ export default function CommandTab() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {session.max_turns && (
-              <span className="text-[0.625rem] text-[var(--text-muted)]">{t('commandTab.maxTurns')}: {session.max_turns}</span>
-            )}
-            {/* Elapsed timer + factual activity info (while executing) */}
+          <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+            {/* Elapsed timer — compact on mobile */}
             {isExecuting && elapsedMs > 0 && (
-              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[0.6875rem]">
-                <Clock size={11} className="text-[var(--text-muted)]" />
+              <div className="inline-flex items-center gap-1.5 md:gap-2 px-2 md:px-2.5 py-1 rounded-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[0.625rem] md:text-[0.6875rem]">
+                <Clock size={10} className="text-[var(--text-muted)]" />
                 <span className="font-mono text-[var(--text-secondary)] font-medium">{formatElapsed(elapsedMs)}</span>
                 <span className="text-[var(--text-muted)]">·</span>
-                <span className="text-[var(--text-muted)]">{logEntries.length} {t('commandTab.steps')}</span>
-                {lastActivityAge >= 10_000 && (
+                <span className="text-[var(--text-muted)]">{logEntries.length}</span>
+                {!isMobile && lastActivityAge >= 10_000 && (
                   <>
                     <span className="text-[var(--text-muted)]">·</span>
                     {lastToolName ? (
@@ -479,8 +478,9 @@ export default function CommandTab() {
                 )}
               </div>
             )}
-            {sessionData?.statusText && (
-              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[0.6875rem] font-medium ${
+            {/* Status badge — hidden on mobile when executing (timer is enough) */}
+            {sessionData?.statusText && !(isMobile && isExecuting) && (
+              <div className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[0.6875rem] font-medium ${
                 sessionData.status === 'success' ? 'bg-[rgba(16,185,129,0.1)] text-[var(--success-color)] border border-[rgba(16,185,129,0.2)]'
                   : sessionData.status === 'error' ? 'bg-[rgba(239,68,68,0.1)] text-[var(--danger-color)] border border-[rgba(239,68,68,0.2)]'
                   : 'bg-[rgba(245,158,11,0.08)] text-[var(--warning-color)] border border-[rgba(245,158,11,0.2)]'
@@ -491,8 +491,8 @@ export default function CommandTab() {
                 {sessionData.statusText}
               </div>
             )}
-            {/* Detail panel toggle */}
-            {selectedEntry && (
+            {/* Detail panel toggle — hidden on mobile (uses overlay) */}
+            {selectedEntry && !isMobile && (
               <button
                 onClick={() => setSelectedStepIndex(null)}
                 className="h-7 w-7 rounded-md bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] text-[var(--text-muted)] flex items-center justify-center transition-all border border-[var(--border-color)] cursor-pointer"
@@ -550,7 +550,10 @@ export default function CommandTab() {
             {/* ── Left pane: Accordion (Log / Result) ── */}
             <div
               className="flex flex-col min-w-0 border-r border-[var(--border-color)]"
-              style={{ width: selectedEntry ? `${100 - detailPanelWidth}%` : '100%', transition: isResizing ? 'none' : 'width 0.2s ease' }}
+              style={{
+                width: selectedEntry && !isMobile ? `${100 - detailPanelWidth}%` : '100%',
+                transition: isResizing ? 'none' : 'width 0.2s ease',
+              }}
             >
               {/* Submitted command echo */}
               {commandEntry && (
@@ -675,8 +678,8 @@ export default function CommandTab() {
               )}
             </div>
 
-            {/* ── Resize handle ── */}
-            {selectedEntry && (
+            {/* ── Resize handle — desktop only ── */}
+            {selectedEntry && !isMobile && (
               <div
                 className="shrink-0 w-[4px] cursor-col-resize hover:bg-[var(--primary-color)] active:bg-[var(--primary-color)] transition-colors z-10"
                 style={{ backgroundColor: isResizing ? 'var(--primary-color)' : 'transparent' }}
@@ -684,18 +687,39 @@ export default function CommandTab() {
               />
             )}
 
-            {/* ── Right pane: Step Detail ── */}
+            {/* ── Right pane: Step Detail — overlay on mobile ── */}
             {selectedEntry && (
-              <div
-                className="min-w-0 border-l border-[var(--border-color)]"
-                style={{ width: `${detailPanelWidth}%`, transition: isResizing ? 'none' : 'width 0.2s ease' }}
-              >
-                <StepDetailPanel
-                  entry={selectedEntry}
-                  allEntries={logEntries}
-                  onClose={() => setSelectedStepIndex(null)}
-                />
-              </div>
+              isMobile ? (
+                <div className="fixed inset-0 z-50 flex flex-col bg-[var(--bg-primary)]">
+                  <div className="shrink-0 flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
+                    <span className="text-[0.8125rem] font-semibold text-[var(--text-primary)]">Detail</span>
+                    <button
+                      onClick={() => setSelectedStepIndex(null)}
+                      className="h-8 w-8 rounded-md bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] text-[var(--text-muted)] flex items-center justify-center transition-all border border-[var(--border-color)] cursor-pointer"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-auto">
+                    <StepDetailPanel
+                      entry={selectedEntry}
+                      allEntries={logEntries}
+                      onClose={() => setSelectedStepIndex(null)}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className="min-w-0 border-l border-[var(--border-color)]"
+                  style={{ width: `${detailPanelWidth}%`, transition: isResizing ? 'none' : 'width 0.2s ease' }}
+                >
+                  <StepDetailPanel
+                    entry={selectedEntry}
+                    allEntries={logEntries}
+                    onClose={() => setSelectedStepIndex(null)}
+                  />
+                </div>
+              )
             )}
           </>
         )}

@@ -191,7 +191,7 @@ export default function LogEntryCard({ entry, isSelected, onClick }: LogEntryCar
               className={`shrink-0 transition-transform ${
                 isSelected
                   ? 'text-[var(--primary-color)] rotate-90'
-                  : 'text-[var(--text-muted)] opacity-0 group-hover:opacity-50'
+                  : 'text-[var(--text-muted)] opacity-0 group-hover:opacity-50 max-md:opacity-50'
               } ${!meta?.file_changes && !meta?.duration_ms ? 'ml-auto' : ''}`}
             />
           )}

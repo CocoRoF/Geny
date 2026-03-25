@@ -169,8 +169,8 @@ function TimelineEntry({ entry, index, isSelected, isLast, durationMs, onClick }
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-w-0 py-[6px] pr-3">
-        <div className="flex items-center gap-1.5 mb-[1px]">
+      <div className="flex-1 min-w-0 py-2 md:py-[6px] pr-3">
+        <div className="flex items-center gap-1.5 mb-[1px] flex-wrap">
           <span
             className="text-[0.5rem] font-bold uppercase tracking-wider shrink-0"
             style={{ color: config.color }}
@@ -190,13 +190,13 @@ function TimelineEntry({ entry, index, isSelected, isLast, durationMs, onClick }
             <ChevronRight
               size={9}
               className={`ml-auto shrink-0 transition-transform ${
-                isSelected ? 'text-[var(--primary-color)] rotate-90' : 'text-[var(--text-muted)] opacity-0 group-hover:opacity-50'
+                isSelected ? 'text-[var(--primary-color)] rotate-90' : 'text-[var(--text-muted)] opacity-0 group-hover:opacity-50 max-md:opacity-50'
               }`}
             />
           )}
         </div>
         <div
-          className="text-[0.6875rem] leading-snug truncate"
+          className="text-[0.75rem] md:text-[0.6875rem] leading-snug truncate"
           style={{
             color: entry.level === 'ERROR' ? 'var(--danger-color)' :
               entry.level === 'WARNING' ? 'var(--warning-color)' :

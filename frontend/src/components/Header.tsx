@@ -37,7 +37,7 @@ export default function Header() {
   const devModeTitle = devMode ? t('header.normalMode') : t('header.devMode');
 
   return (
-    <header className="flex justify-between items-center px-3 md:px-6 h-14 bg-[var(--bg-secondary)] border-b border-[var(--border-color)]">
+    <header className="flex justify-between items-center px-3 md:px-6 h-12 md:h-14 bg-[var(--bg-secondary)] border-b border-[var(--border-color)]">
       <div className="flex items-center gap-2 md:gap-3">
         {/* Mobile hamburger button */}
         <button
@@ -51,29 +51,29 @@ export default function Header() {
           {t('header.subtitle')}
         </span>
       </div>
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-1.5 md:gap-2.5">
         {/* ── Theme Toggle ── */}
         <button
           onClick={toggleTheme}
-          className="flex items-center justify-center w-8 h-8 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-all duration-150"
+          className="flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-all duration-150"
           title={themeTitle}
         >
           {themeIcon}
         </button>
 
-        {/* ── Dev / Normal Mode Toggle ── */}
+        {/* ── Dev / Normal Mode Toggle — hidden on mobile ── */}
         <button
           onClick={toggleDevMode}
-          className="flex items-center justify-center w-8 h-8 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-all duration-150"
+          className="hidden sm:flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-all duration-150"
           title={devModeTitle}
         >
           {devModeIcon}
         </button>
 
-        {/* ── Wiki Button ── */}
+        {/* ── Wiki Button — hidden on mobile ── */}
         <Link
           href="/wiki"
-          className="flex items-center justify-center w-8 h-8 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-all duration-150 no-underline"
+          className="hidden sm:flex items-center justify-center w-8 h-8 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-all duration-150 no-underline"
           title={t('header.wiki')}
         >
           <BookOpen size={14} />

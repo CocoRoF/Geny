@@ -159,6 +159,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     return { devMode: next, activeTab };
   }),
   hydrateDevMode: () => {
+    // Force normal mode on mobile
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
+      set({ devMode: false });
+      return;
+    }
     const stored = localStorage.getItem('geny-dev-mode');
     if (stored === 'false') {
       set({ devMode: false });

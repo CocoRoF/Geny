@@ -299,7 +299,7 @@ export default function SharedFolderTab() {
   const tree = buildFileTree(files);
 
   return (
-    <div className="flex flex-col flex-1 p-3 md:p-6 gap-3 md:gap-5 min-h-0 overflow-hidden">
+    <div className="flex flex-col flex-1 p-3 md:p-6 gap-3 md:gap-5 min-h-0 overflow-y-auto md:overflow-hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-[var(--border-color)] shrink-0">
         <div className="flex items-center gap-3">
@@ -322,7 +322,7 @@ export default function SharedFolderTab() {
             )}
             onClick={() => fileInputRef.current?.click()}
           >
-            <Upload size={12} /> {t('sharedFolderTab.uploadFile')}
+            <Upload size={12} /> <span className="hidden sm:inline">{t('sharedFolderTab.uploadFile')}</span>
           </button>
           <button
             className={cn(
@@ -331,7 +331,7 @@ export default function SharedFolderTab() {
             )}
             onClick={() => setShowCreateModal(true)}
           >
-            <Plus size={12} /> {t('sharedFolderTab.createFile')}
+            <Plus size={12} /> <span className="hidden sm:inline">{t('sharedFolderTab.createFile')}</span>
           </button>
           <button
             className={cn(
@@ -342,7 +342,7 @@ export default function SharedFolderTab() {
             disabled={downloading}
           >
             <Download size={12} />{' '}
-            {downloading ? t('common.loading') : t('sharedFolderTab.downloadFolder')}
+            <span className="hidden sm:inline">{downloading ? t('common.loading') : t('sharedFolderTab.downloadFolder')}</span>
           </button>
           <button
             className={cn(
@@ -351,7 +351,7 @@ export default function SharedFolderTab() {
             )}
             onClick={fetchFiles}
           >
-            <RefreshCw size={12} /> {t('sharedFolderTab.refresh')}
+            <RefreshCw size={12} /> <span className="hidden sm:inline">{t('sharedFolderTab.refresh')}</span>
           </button>
         </div>
       </div>
@@ -374,7 +374,7 @@ export default function SharedFolderTab() {
       {/* Content */}
       <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 min-h-0">
         {/* File Tree */}
-        <div className="md:w-[280px] shrink-0 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-[var(--border-radius)] p-3 overflow-y-auto max-h-[200px] md:max-h-none">
+        <div className="md:w-[280px] shrink-0 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-[var(--border-radius)] p-3 overflow-y-auto max-h-[300px] md:max-h-none">
           {files.length === 0 ? (
             <p className="text-[var(--text-muted)] text-[13px] text-center py-6 px-3">
               {t('sharedFolderTab.empty')}
@@ -385,7 +385,7 @@ export default function SharedFolderTab() {
         </div>
 
         {/* Preview */}
-        <div className="flex-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-[var(--border-radius)] flex flex-col min-w-0">
+        <div className="flex-1 min-h-[300px] md:min-h-0 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-[var(--border-radius)] flex flex-col min-w-0">
           <div
             className="flex items-center justify-between py-2.5 px-3.5 bg-[var(--bg-tertiary)] border-b border-[var(--border-color)]"
             style={{ borderRadius: 'var(--border-radius) var(--border-radius) 0 0' }}

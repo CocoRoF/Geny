@@ -91,7 +91,7 @@ export default function SessionToolsTab() {
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden bg-[var(--bg-primary)]">
       {/* Header bar */}
-      <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
+      <div className="shrink-0 hidden md:flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#f59e0b] to-[#f97316] flex items-center justify-center shadow-sm shrink-0">
             <Wrench size={13} className="text-white" />

@@ -305,7 +305,7 @@ const ko: Translations = {
     selectSessionDesc: '스토리지를 볼 세션을 목록에서 선택하세요',
     title: '세션 스토리지',
     refresh: '새로고침',
-    downloadFolder: '폴더 다운로드',
+    downloadFolder: '다운로드',
     downloadFolderError: '폴더 다운로드 실패',
     empty: '스토리지가 비어 있습니다',
     noFile: '선택된 파일 없음',

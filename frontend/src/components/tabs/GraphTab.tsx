@@ -8,7 +8,8 @@ import PropertyPanel from '@/components/workflow/PropertyPanel';
 import WorkflowCanvas from '@/components/workflow/WorkflowCanvas';
 import { agentApi } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
-import { BarChart3, AlertTriangle, RefreshCw } from 'lucide-react';
+import { BarChart3, AlertTriangle, RefreshCw, X } from 'lucide-react';
+import { useIsMobile } from '@/lib/useIsMobile';
 import type { WorkflowDefinition } from '@/types/workflow';
 
 // ========== Main GraphTab Component ==========
@@ -16,7 +17,8 @@ import type { WorkflowDefinition } from '@/types/workflow';
 export default function GraphTab() {
   const { selectedSessionId, sessions, setActiveTab } = useAppStore();
   const { t } = useI18n();
-  const { selectedNodeId, nodes } = useWorkflowStore();
+  const { selectedNodeId, setSelectedNode, nodes } = useWorkflowStore();
+  const isMobile = useIsMobile();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -135,7 +137,7 @@ export default function GraphTab() {
 
             {/* Template badge */}
             {isTemplate && (
-              <span className="text-[10px] font-semibold py-[2px] px-1.5 rounded-md bg-[rgba(168,85,247,0.12)] text-[#c084fc] border border-[rgba(168,85,247,0.2)] uppercase tracking-wide shrink-0">
+              <span className="hidden sm:inline text-[10px] font-semibold py-[2px] px-1.5 rounded-md bg-[rgba(168,85,247,0.12)] text-[#c084fc] border border-[rgba(168,85,247,0.2)] uppercase tracking-wide shrink-0">
                 Template
               </span>
             )}
@@ -174,6 +176,11 @@ export default function GraphTab() {
             <WorkflowCanvas readOnly />
           </div>
 
+          {/* Mobile backdrop for property panel */}
+          {isMobile && selectedNodeId && (
+            <div className="fixed inset-0 z-20 bg-black/40" onClick={() => setSelectedNode(null)} />
+          )}
+
           {/* Property Panel — overlay on mobile, side panel on desktop */}
           <div
             className={`shrink-0 border-l border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-y-auto transition-[width] duration-150 ${
@@ -182,6 +189,18 @@ export default function GraphTab() {
                 : 'w-0 overflow-hidden border-l-0'
             }`}
           >
+            {/* Mobile close button */}
+            {isMobile && selectedNodeId && (
+              <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)]">
+                <span className="text-xs font-medium text-[var(--text-secondary)]">{t('propertyPanel.title')}</span>
+                <button
+                  onClick={() => setSelectedNode(null)}
+                  className="p-1 rounded hover:bg-[var(--bg-hover)] text-[var(--text-muted)]"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            )}
             <div className="w-[280px] md:w-[300px]">
               <PropertyPanel readOnly />
             </div>

@@ -305,7 +305,7 @@ const en = {
     selectSessionDesc: 'Choose a session from the list to view its storage',
     title: 'Session Storage',
     refresh: 'Refresh',
-    downloadFolder: 'Download Folder',
+    downloadFolder: 'Download',
     downloadFolderError: 'Failed to download folder',
     empty: 'Storage is empty',
     noFile: 'No file selected',

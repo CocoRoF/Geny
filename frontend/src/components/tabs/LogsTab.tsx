@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { commandApi } from '@/lib/api';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { twMerge } from 'tailwind-merge';
 import { useI18n } from '@/lib/i18n';
 import {
@@ -17,6 +18,7 @@ import {
   ChevronRight,
   PanelRightClose,
   ScrollText,
+  X,
 } from 'lucide-react';
 import type { LogEntry } from '@/types';
 import LogEntryCard from '@/components/execution/LogEntryCard';
@@ -74,6 +76,7 @@ const PAGE_SIZE = 50;
 export default function LogsTab() {
   const { selectedSessionId } = useAppStore();
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [totalEntries, setTotalEntries] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -182,8 +185,8 @@ export default function LogsTab() {
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden bg-[var(--bg-primary)]">
       {/* ── Header bar ── */}
-      <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
-        <div className="flex items-center gap-2.5">
+      <div className="shrink-0 flex flex-row items-center justify-between px-3 md:px-4 py-2 gap-1.5 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
+        <div className="hidden md:flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#8b5cf6] to-[#6366f1] flex items-center justify-center shadow-sm shrink-0">
             <ScrollText size={13} className="text-white" />
           </div>
@@ -192,7 +195,7 @@ export default function LogsTab() {
         <div className="flex items-center gap-2">
           {/* Filter selector */}
           <select
-            className="py-1 pl-2 pr-6 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md text-[var(--text-primary)] text-[0.6875rem] font-medium cursor-pointer appearance-none transition-all hover:border-[var(--text-muted)] focus:outline-none focus:border-[var(--primary-color)]"
+            className="flex-1 sm:flex-initial py-1 pl-2 pr-6 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md text-[var(--text-primary)] text-[0.6875rem] font-medium cursor-pointer appearance-none transition-all hover:border-[var(--text-muted)] focus:outline-none focus:border-[var(--primary-color)]"
             style={{
               backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",
               backgroundRepeat: 'no-repeat',
@@ -242,7 +245,7 @@ export default function LogsTab() {
         <div
           className="flex flex-col min-w-0 min-h-0"
           style={{
-            width: selectedEntry ? `${100 - detailPanelWidth}%` : '100%',
+            width: selectedEntry && !isMobile ? `${100 - detailPanelWidth}%` : '100%',
             transition: isResizing ? 'none' : 'width 0.2s ease',
           }}
         >
@@ -277,13 +280,13 @@ export default function LogsTab() {
 
           {/* ── Pagination bar ── */}
           {totalEntries > 0 && (
-            <div className="shrink-0 flex items-center justify-between px-3 py-1.5 border-t border-[var(--border-color)] bg-[var(--bg-secondary)]">
+            <div className="shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between px-3 py-1.5 gap-1 border-t border-[var(--border-color)] bg-[var(--bg-secondary)]">
               <span className="text-[0.625rem] text-[var(--text-muted)]">
                 {pageStart}–{pageEnd} of {totalEntries.toLocaleString()} entries (newest first)
               </span>
               <div className="flex items-center gap-0.5">
                 <button
-                  className="w-7 h-7 rounded-md flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-30 disabled:pointer-events-none border-none bg-transparent cursor-pointer"
+                  className="w-8 h-8 md:w-7 md:h-7 rounded-md flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-30 disabled:pointer-events-none border-none bg-transparent cursor-pointer"
                   disabled={currentPage <= 1}
                   onClick={() => setCurrentPage(1)}
                   title="First page"
@@ -291,7 +294,7 @@ export default function LogsTab() {
                   <ChevronsLeft size={13} />
                 </button>
                 <button
-                  className="w-7 h-7 rounded-md flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-30 disabled:pointer-events-none border-none bg-transparent cursor-pointer"
+                  className="w-8 h-8 md:w-7 md:h-7 rounded-md flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-30 disabled:pointer-events-none border-none bg-transparent cursor-pointer"
                   disabled={currentPage <= 1}
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   title="Previous page"
@@ -299,10 +302,10 @@ export default function LogsTab() {
                   <ChevronLeft size={13} />
                 </button>
 
-                {/* Page number buttons */}
+                {/* Page number buttons — fewer on mobile */}
                 {(() => {
                   const pages: number[] = [];
-                  const maxVisible = 5;
+                  const maxVisible = isMobile ? 3 : 5;
                   let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
                   const end = Math.min(totalPages, start + maxVisible - 1);
                   if (end - start + 1 < maxVisible) start = Math.max(1, end - maxVisible + 1);
@@ -311,7 +314,7 @@ export default function LogsTab() {
                     <button
                       key={p}
                       className={cn(
-                        "w-7 h-7 rounded-md flex items-center justify-center text-[0.6875rem] font-medium transition-colors border-none cursor-pointer",
+                        "w-8 h-8 md:w-7 md:h-7 rounded-md flex items-center justify-center text-[0.6875rem] font-medium transition-colors border-none cursor-pointer",
                         p === currentPage
                           ? "bg-[var(--primary-color)] text-white"
                           : "text-[var(--text-secondary)] bg-transparent hover:bg-[var(--bg-hover)]",
@@ -324,7 +327,7 @@ export default function LogsTab() {
                 })()}
 
                 <button
-                  className="w-7 h-7 rounded-md flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-30 disabled:pointer-events-none border-none bg-transparent cursor-pointer"
+                  className="w-8 h-8 md:w-7 md:h-7 rounded-md flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-30 disabled:pointer-events-none border-none bg-transparent cursor-pointer"
                   disabled={currentPage >= totalPages}
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   title="Next page"
@@ -332,7 +335,7 @@ export default function LogsTab() {
                   <ChevronRight size={13} />
                 </button>
                 <button
-                  className="w-7 h-7 rounded-md flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-30 disabled:pointer-events-none border-none bg-transparent cursor-pointer"
+                  className="w-8 h-8 md:w-7 md:h-7 rounded-md flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-30 disabled:pointer-events-none border-none bg-transparent cursor-pointer"
                   disabled={currentPage >= totalPages}
                   onClick={() => setCurrentPage(totalPages)}
                   title="Last page"
@@ -344,8 +347,8 @@ export default function LogsTab() {
           )}
         </div>
 
-        {/* ── Resize handle ── */}
-        {selectedEntry && (
+        {/* ── Resize handle — desktop only ── */}
+        {selectedEntry && !isMobile && (
           <div
             className="shrink-0 w-[4px] cursor-col-resize hover:bg-[var(--primary-color)] active:bg-[var(--primary-color)] transition-colors z-10"
             style={{ backgroundColor: isResizing ? 'var(--primary-color)' : 'transparent' }}
@@ -353,21 +356,42 @@ export default function LogsTab() {
           />
         )}
 
-        {/* ── Right pane: Detail panel ── */}
+        {/* ── Right pane: Detail panel — overlay on mobile ── */}
         {selectedEntry && (
-          <div
-            className="min-w-0 border-l border-[var(--border-color)]"
-            style={{
-              width: `${detailPanelWidth}%`,
-              transition: isResizing ? 'none' : 'width 0.2s ease',
-            }}
-          >
-            <StepDetailPanel
-              entry={selectedEntry}
-              allEntries={entries}
-              onClose={() => setSelectedIdx(null)}
-            />
-          </div>
+          isMobile ? (
+            <div className="fixed inset-0 z-50 flex flex-col bg-[var(--bg-primary)]">
+              <div className="shrink-0 flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
+                <span className="text-[0.8125rem] font-semibold text-[var(--text-primary)]">Detail</span>
+                <button
+                  onClick={() => setSelectedIdx(null)}
+                  className="h-8 w-8 rounded-md bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] text-[var(--text-muted)] flex items-center justify-center transition-all border border-[var(--border-color)] cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="flex-1 min-h-0 overflow-auto">
+                <StepDetailPanel
+                  entry={selectedEntry}
+                  allEntries={entries}
+                  onClose={() => setSelectedIdx(null)}
+                />
+              </div>
+            </div>
+          ) : (
+            <div
+              className="min-w-0 border-l border-[var(--border-color)]"
+              style={{
+                width: `${detailPanelWidth}%`,
+                transition: isResizing ? 'none' : 'width 0.2s ease',
+              }}
+            >
+              <StepDetailPanel
+                entry={selectedEntry}
+                allEntries={entries}
+                onClose={() => setSelectedIdx(null)}
+              />
+            </div>
+          )
         )}
       </div>
     </div>
