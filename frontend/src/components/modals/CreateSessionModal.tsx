@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useAppStore } from '@/store/useAppStore';
 import { agentApi } from '@/lib/api';
 import { workflowApi } from '@/lib/workflowApi';
@@ -109,7 +110,7 @@ export default function CreateSessionModal({ onClose }: Props) {
     }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg w-full max-w-[480px] mx-4 max-h-[85vh] flex flex-col shadow-[var(--shadow-lg)]" onClick={e => e.stopPropagation()}>
         {/* Header */}
@@ -264,6 +265,7 @@ export default function CreateSessionModal({ onClose }: Props) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
