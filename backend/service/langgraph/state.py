@@ -39,8 +39,10 @@ class CompletionSignal(str, Enum):
 class Difficulty(str, Enum):
     """Task difficulty classification."""
     EASY = "easy"
+    TOOL_DIRECT = "tool_direct"
     MEDIUM = "medium"
     HARD = "hard"
+    EXTREME = "extreme"
 
 
 class ReviewResult(str, Enum):

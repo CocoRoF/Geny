@@ -2264,8 +2264,10 @@ ADAPTIVE_CLASSIFY_I18N = {
         },
         output_ports={
             "easy": {"label": "Easy", "description": "Simple, direct tasks"},
+            "tool_direct": {"label": "Tool Direct", "description": "Direct tool execution"},
             "medium": {"label": "Medium", "description": "Moderate complexity"},
             "hard": {"label": "Hard", "description": "Complex, multi-step tasks"},
+            "extreme": {"label": "Extreme", "description": "Very high complexity"},
             "end": {"label": "End", "description": "Error / early termination"},
         },
         groups={"prompt": "Prompt", "routing": "Routing", "output": "Output", "behavior": "Behavior"},
@@ -2322,8 +2324,10 @@ ADAPTIVE_CLASSIFY_I18N = {
         },
         output_ports={
             "easy": {"label": "쉬움", "description": "단순하고 직접적인 작업"},
+            "tool_direct": {"label": "도구 직접", "description": "도구 직접 실행"},
             "medium": {"label": "보통", "description": "중간 복잡도"},
             "hard": {"label": "어려움", "description": "복잡한 다단계 작업"},
+            "extreme": {"label": "극한", "description": "매우 높은 복잡도"},
             "end": {"label": "종료", "description": "오류 / 조기 종료"},
         },
         groups={"prompt": "프롬프트", "routing": "라우팅", "output": "출력", "behavior": "동작"},
@@ -2348,6 +2352,94 @@ ADAPTIVE_CLASSIFY_I18N = {
                 )),
             ],
         ),
+    ),
+}
+
+
+# ====================================================================
+#  Direct Tool Node
+# ====================================================================
+
+DIRECT_TOOL_I18N = {
+    "en": NodeI18n(
+        label="Direct Tool",
+        description="Single-shot tool execution node. For tasks where the essence IS a tool operation, executes it in one LLM call without planning. Marks workflow complete after execution.",
+        parameters={
+            "prompt_template": {
+                "label": "Tool Execution Prompt",
+                "description": "Prompt instructing the LLM to execute the tool directly.",
+            },
+            "output_field": {
+                "label": "Output State Field",
+                "description": "State field to store the execution result.",
+            },
+        },
+        output_ports={"default": {"label": "Next"}},
+        groups={"prompt": "Prompt", "output": "Output"},
+    ),
+    "ko": NodeI18n(
+        label="도구 직접 실행",
+        description="단일 LLM 호출로 도구를 직접 실행하는 노드. 작업의 본질이 도구 실행인 경우 계획 없이 바로 실행합니다.",
+        parameters={
+            "prompt_template": {
+                "label": "도구 실행 프롬프트",
+                "description": "LLM에게 도구를 직접 실행하도록 지시하는 프롬프트.",
+            },
+            "output_field": {
+                "label": "출력 상태 필드",
+                "description": "실행 결과를 저장할 상태 필드.",
+            },
+        },
+        output_ports={"default": {"label": "다음"}},
+        groups={"prompt": "프롬프트", "output": "출력"},
+    ),
+}
+
+
+# ====================================================================
+#  Batch Execute TODO Node
+# ====================================================================
+
+BATCH_EXECUTE_TODO_I18N = {
+    "en": NodeI18n(
+        label="Batch Execute TODOs",
+        description="Executes all pending TODO items in a single LLM call. Reduces N individual LLM calls to 1. Best for HARD-path tasks with a small number of predictable, independent TODO items.",
+        parameters={
+            "prompt_template": {
+                "label": "Batch Prompt",
+                "description": "Prompt for batch executing TODO items. Use {input} for the goal and {todo_list} for formatted items.",
+            },
+            "list_field": {
+                "label": "List State Field",
+                "description": "State field containing the TODO list.",
+            },
+            "index_field": {
+                "label": "Index State Field",
+                "description": "State field tracking the current TODO index.",
+            },
+        },
+        output_ports={"default": {"label": "Next"}},
+        groups={"prompt": "Prompt", "state_fields": "State Fields"},
+    ),
+    "ko": NodeI18n(
+        label="TODO 일괄 실행",
+        description="모든 대기 중인 TODO 항목을 단일 LLM 호출로 실행합니다. N개의 개별 LLM 호출을 1회로 줄입니다.",
+        parameters={
+            "prompt_template": {
+                "label": "일괄 프롬프트",
+                "description": "TODO 일괄 실행 프롬프트. {input}은 목표, {todo_list}는 포맷된 항목.",
+            },
+            "list_field": {
+                "label": "리스트 상태 필드",
+                "description": "TODO 리스트를 포함하는 상태 필드.",
+            },
+            "index_field": {
+                "label": "인덱스 상태 필드",
+                "description": "현재 TODO 인덱스를 추적하는 상태 필드.",
+            },
+        },
+        output_ports={"default": {"label": "다음"}},
+        groups={"prompt": "프롬프트", "state_fields": "상태 필드"},
     ),
 }
 

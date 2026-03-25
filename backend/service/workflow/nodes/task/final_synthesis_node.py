@@ -127,6 +127,20 @@ class FinalSynthesisNode(BaseNode):
             description="Maximum characters per item when context budget is tight.",
             group="behavior",
         ),
+        NodeParameter(
+            name="skip_threshold",
+            label="Skip Threshold",
+            type="number",
+            default=0,
+            min=0,
+            max=20,
+            description=(
+                "When the number of completed TODOs is <= this value "
+                "and all are completed, skip the synthesis LLM call and "
+                "return the last result directly. 0 = always synthesize."
+            ),
+            group="behavior",
+        ),
     ]
 
     async def execute(
@@ -141,6 +155,27 @@ class FinalSynthesisNode(BaseNode):
 
         todos = state.get(list_field, [])
         input_text = state.get("input", "")
+
+        # --- skip_threshold optimisation ---
+        skip_threshold = int(config.get("skip_threshold", 0))
+        if skip_threshold > 0 and 0 < len(todos) <= skip_threshold:
+            all_done = all(
+                (t.get("status") in ("completed", "COMPLETED"))
+                for t in todos
+            )
+            if all_done:
+                last = todos[-1].get("result", "") or state.get("last_output", "")
+                logger.info(
+                    "[%s] skip_threshold=%d, %d todos all completed — skipping LLM",
+                    context.session_id, skip_threshold, len(todos),
+                )
+                return {
+                    output_field: last,
+                    "last_output": last,
+                    "current_step": "complete",
+                    "is_complete": True,
+                    "iteration": state.get("iteration", 0) + 1,
+                }
 
         max_chars = int(config.get("max_item_chars", 2000))
         compact_chars = int(config.get("compact_item_chars", 500))

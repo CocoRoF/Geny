@@ -168,7 +168,7 @@ class AdaptiveClassifyNode(BaseNode):
             name="categories",
             label="Categories",
             type="string",
-            default="easy, medium, hard",
+            default="easy, tool_direct, medium, hard, extreme",
             description=(
                 "Comma-separated category names. Each becomes an output port."
             ),
@@ -203,8 +203,10 @@ class AdaptiveClassifyNode(BaseNode):
 
     output_ports = [
         OutputPort(id="easy", label="Easy", description="Simple, direct tasks"),
+        OutputPort(id="tool_direct", label="Tool Direct", description="Direct tool execution"),
         OutputPort(id="medium", label="Medium", description="Moderate complexity"),
         OutputPort(id="hard", label="Hard", description="Complex, multi-step tasks"),
+        OutputPort(id="extreme", label="Extreme", description="Very high complexity"),
         OutputPort(id="end", label="End", description="Error / early termination"),
     ]
 
@@ -261,8 +263,8 @@ class AdaptiveClassifyNode(BaseNode):
         enable_rules = config.get("enable_rules", True)
 
         categories = parse_categories(
-            config.get("categories", "easy, medium, hard"),
-            fallback=["easy", "medium", "hard"],
+            config.get("categories", "easy, tool_direct, medium, hard, extreme"),
+            fallback=["easy", "tool_direct", "medium", "hard", "extreme"],
         )
         default_category = config.get("default_category", "medium")
         if default_category not in categories:
@@ -351,8 +353,8 @@ class AdaptiveClassifyNode(BaseNode):
     ) -> Optional[Callable[[Dict[str, Any]], str]]:
         output_field = config.get("output_field", "difficulty")
         categories = parse_categories(
-            config.get("categories", "easy, medium, hard"),
-            fallback=["easy", "medium", "hard"],
+            config.get("categories", "easy, tool_direct, medium, hard, extreme"),
+            fallback=["easy", "tool_direct", "medium", "hard", "extreme"],
         )
         default_category = config.get("default_category", "medium")
         if default_category not in categories:
@@ -375,8 +377,8 @@ class AdaptiveClassifyNode(BaseNode):
         self, config: Dict[str, Any],
     ) -> Optional[List[OutputPort]]:
         categories = parse_categories(
-            config.get("categories", "easy, medium, hard"),
-            fallback=["easy", "medium", "hard"],
+            config.get("categories", "easy, tool_direct, medium, hard, extreme"),
+            fallback=["easy", "tool_direct", "medium", "hard", "extreme"],
         )
         ports = [
             OutputPort(

@@ -384,6 +384,149 @@ def create_optimized_autonomous_template() -> WorkflowDefinition:
 
 
 # ============================================================================
+# Ultra-Light Autonomous Workflow Template
+# ============================================================================
+
+
+def create_ultra_light_template() -> WorkflowDefinition:
+    """Build the ultra-light autonomous graph with 5-level difficulty paths.
+
+    Adds two new difficulty levels (tool_direct, extreme) so the right
+    amount of LLM budget is allocated per task complexity.
+
+    Topology (21 nodes)::
+
+        START → mem_inject → relevance_gate
+          ├─ skip → END
+          └─ continue → adaptive_classify (5-level)
+              ├─ easy        → easy_answer (llm_call, 1 LLM) → END
+              ├─ tool_direct → direct_tool (1 LLM + tool) → END
+              ├─ medium      → answer → post_ans → review
+              │    ├─ approved → END
+              │    ├─ retry → gate_med → [continue→answer | stop→END]
+              │    └─ end → END
+              ├─ hard        → mk_todos_h → batch_exec → final_synth_h → END
+              ├─ extreme     → mk_todos_e → guard_exec → exec_todo
+              │    → post_exec → chk_prog
+              │    → [continue→gate_ext→guard_exec | complete→final_synth_e]
+              │    gate_ext → [continue→guard_exec | stop→final_synth_e]
+              │    final_synth_e → END
+              └─ end → END
+
+    Path LLM-call counts (typical):
+        easy=1, tool_direct=1, medium=2-3, hard=2-3, extreme=N+2
+    """
+    nodes: List[WorkflowNodeInstance] = []
+    edges: List[WorkflowEdge] = []
+
+    def _add(ntype: str, nid: str, label: str, x: float, y: float, cfg=None):
+        nodes.append(WorkflowNodeInstance(
+            id=nid, node_type=ntype, label=label,
+            position={"x": x, "y": y}, config=cfg or {},
+        ))
+
+    def _edge(src: str, tgt: str, port: str = "default", lbl: str = ""):
+        edges.append(WorkflowEdge(
+            source=src, target=tgt, source_port=port, label=lbl,
+        ))
+
+    # ── START & Common Entry (4 nodes) ──
+    _add("start",             "start",          "Start",              250,   0)
+    _add("memory_inject",     "mem_inject",     "Memory Inject",     250, 100)
+    _add("relevance_gate",    "relevance_gate", "Relevance Gate",    250, 200)
+    _add("adaptive_classify", "classify",       "Adaptive Classify", 250, 350)
+
+    _edge("start", "mem_inject")
+    _edge("mem_inject", "relevance_gate")
+    _edge("relevance_gate", "classify", port="continue", lbl="relevant")
+    _edge("relevance_gate", "end",      port="skip",     lbl="not relevant")
+
+    # ── EASY PATH (1 node) ──
+    _add("llm_call", "easy_answer", "Easy Answer", -100, 550, {
+        "prompt_template": "{input}",
+        "output_field": "final_answer",
+        "output_mappings": '{"answer": true}',
+        "set_complete": True,
+    })
+    _edge("easy_answer", "end")
+
+    # ── TOOL_DIRECT PATH (1 node) ──
+    _add("direct_tool", "direct_tool", "Direct Tool", 50, 550)
+    _edge("direct_tool", "end")
+
+    # ── MEDIUM PATH (4 nodes) ──
+    _add("answer",         "answer",   "Answer",             200, 550)
+    _add("post_model",     "post_ans", "Post Answer",        200, 650,
+         {"detect_completion": False})
+    _add("review",         "review",   "Review",             200, 800)
+    _add("iteration_gate", "gate_med", "Iter Gate (Medium)", 200, 1000)
+
+    _edge("answer", "post_ans")
+    _edge("post_ans", "review")
+    _edge("review", "end",      port="approved", lbl="Approved")
+    _edge("review", "gate_med", port="retry",    lbl="Retry")
+    _edge("review", "end",      port="end",      lbl="End")
+    _edge("gate_med", "answer", port="continue",  lbl="Continue")
+    _edge("gate_med", "end",    port="stop",      lbl="Stop")
+
+    # ── HARD PATH (3 nodes) ──
+    _add("create_todos",      "mk_todos_h",    "Create TODOs (H)",  400, 550)
+    _add("batch_execute_todo", "batch_exec",    "Batch Execute",     400, 700)
+    _add("final_synthesis",   "final_synth_h",  "Final Synth (H)",   400, 850,
+         {"skip_threshold": 3})
+
+    _edge("mk_todos_h", "batch_exec")
+    _edge("batch_exec", "final_synth_h")
+    _edge("final_synth_h", "end")
+
+    # ── EXTREME PATH (7 nodes) ──
+    _add("create_todos",   "mk_todos_e",  "Create TODOs (E)",  600, 550)
+    _add("context_guard",  "guard_exec",  "Guard (Execute)",   600, 700,
+         {"position_label": "execute"})
+    _add("execute_todo",   "exec_todo",   "Execute TODO",      600, 800)
+    _add("post_model",     "post_exec",   "Post Execute",      600, 900)
+    _add("check_progress", "chk_prog",    "Check Progress",    600, 1000)
+    _add("iteration_gate", "gate_ext",    "Iter Gate (Ext)",   600, 1150)
+    _add("final_synthesis","final_synth_e","Final Synth (E)",   600, 1350)
+
+    _edge("mk_todos_e", "guard_exec")
+    _edge("guard_exec", "exec_todo")
+    _edge("exec_todo", "post_exec")
+    _edge("post_exec", "chk_prog")
+    _edge("chk_prog", "gate_ext",      port="continue", lbl="Continue")
+    _edge("chk_prog", "final_synth_e", port="complete", lbl="Complete")
+    _edge("gate_ext", "guard_exec",    port="continue", lbl="Continue")
+    _edge("gate_ext", "final_synth_e", port="stop",     lbl="Stop")
+    _edge("final_synth_e", "end")
+
+    # ── END NODE ──
+    _add("end", "end", "End", 250, 1500)
+
+    # ── Conditional routing: classify → 5 branches ──
+    _edge("classify", "easy_answer",  port="easy",        lbl="Easy")
+    _edge("classify", "direct_tool",  port="tool_direct", lbl="Tool Direct")
+    _edge("classify", "answer",       port="medium",      lbl="Medium")
+    _edge("classify", "mk_todos_h",   port="hard",        lbl="Hard")
+    _edge("classify", "mk_todos_e",   port="extreme",     lbl="Extreme")
+    _edge("classify", "end",          port="end",         lbl="End")
+
+    return WorkflowDefinition(
+        id="template-ultra-light",
+        name="Ultra-Light Autonomous",
+        description=(
+            "5-level difficulty classification (easy/tool_direct/medium/"
+            "hard/extreme). Minimizes LLM calls: easy=1, tool_direct=1, "
+            "medium=2-3, hard=2-3 (batch TODO), extreme=N+2 (full loop). "
+            "Pre-warming + skip_threshold further reduce latency."
+        ),
+        nodes=nodes,
+        edges=edges,
+        is_template=True,
+        template_name="ultra-light",
+    )
+
+
+# ============================================================================
 # Template Registry
 # ============================================================================
 
@@ -391,6 +534,7 @@ ALL_TEMPLATES = [
     create_autonomous_template,
     create_simple_template,
     create_optimized_autonomous_template,
+    create_ultra_light_template,
 ]
 
 

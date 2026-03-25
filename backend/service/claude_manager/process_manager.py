@@ -108,6 +108,13 @@ class ClaudeProcess:
         self._current_process: Optional[asyncio.subprocess.Process] = None
         self._execution_lock = asyncio.Lock()
 
+        # ── Pre-warming: overlap next subprocess creation with current execution ──
+        self._warm_process: Optional[asyncio.subprocess.Process] = None
+        self._warm_cmd: Optional[list] = None
+        self._warm_env: Optional[dict] = None
+        self._prewarm_lock = asyncio.Lock()
+        self._prewarm_task: Optional[asyncio.Task] = None
+
     @property
     def storage_path(self) -> str:
         """Session-specific storage path."""
@@ -283,6 +290,86 @@ class ClaudeProcess:
         except Exception as e:
             logger.error(f"[{self.session_id}] Failed to create MCP config: {e}")
 
+    # ── Pre-warm helpers ─────────────────────────────────────────
+
+    async def _take_warm_process(
+        self, cmd: list, env: dict,
+    ) -> Optional[asyncio.subprocess.Process]:
+        """Take the pre-warmed subprocess if its command matches *cmd*.
+
+        Returns the warm process (caller owns it) or ``None``.
+        """
+        async with self._prewarm_lock:
+            if (
+                self._warm_process is not None
+                and self._warm_cmd == cmd
+                and self._warm_process.returncode is None  # still alive
+            ):
+                proc = self._warm_process
+                self._warm_process = None
+                self._warm_cmd = None
+                self._warm_env = None
+                logger.info(
+                    f"[{self.session_id}] ♻️ Using pre-warmed subprocess (pid {proc.pid})"
+                )
+                return proc
+            # Mismatch or dead — discard if present
+            await self._discard_warm_process_locked()
+            return None
+
+    async def _discard_warm_process_locked(self) -> None:
+        """Kill and clear the warm process. Caller must hold ``_prewarm_lock``."""
+        if self._warm_process is not None:
+            try:
+                self._warm_process.kill()
+                await self._warm_process.wait()
+            except (ProcessLookupError, OSError):
+                pass
+            self._warm_process = None
+            self._warm_cmd = None
+            self._warm_env = None
+
+    async def _discard_warm_process(self) -> None:
+        """Public wrapper that acquires the lock first."""
+        async with self._prewarm_lock:
+            await self._discard_warm_process_locked()
+        # Cancel any running prewarm task
+        if self._prewarm_task and not self._prewarm_task.done():
+            self._prewarm_task.cancel()
+            self._prewarm_task = None
+
+    def _schedule_prewarm(self, cmd: list, env: dict) -> None:
+        """Fire-and-forget: create a warm subprocess in the background."""
+        if self._prewarm_task and not self._prewarm_task.done():
+            return  # already pre-warming
+        self._prewarm_task = asyncio.create_task(
+            self._do_prewarm(cmd, env)
+        )
+
+    async def _do_prewarm(self, cmd: list, env: dict) -> None:
+        """Background coroutine that creates a warm subprocess."""
+        try:
+            proc = await create_subprocess_cross_platform(
+                cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env,
+                cwd=self.working_dir,
+                limit=STDIO_BUFFER_LIMIT,
+            )
+            async with self._prewarm_lock:
+                # Another execution may have started; discard old warm if any
+                await self._discard_warm_process_locked()
+                self._warm_process = proc
+                self._warm_cmd = cmd
+                self._warm_env = env
+            logger.info(
+                f"[{self.session_id}] 🔥 Pre-warmed subprocess ready (pid {proc.pid})"
+            )
+        except Exception as e:
+            logger.debug(f"[{self.session_id}] Pre-warm failed (non-critical): {e}")
+
     async def execute(
         self,
         prompt: str,
@@ -436,16 +523,20 @@ class ClaudeProcess:
                 logger.info(f"[{self.session_id}] 🚀 Executing with stream-json output...")
                 logger.info(f"[{self.session_id}] Prompt length: {len(prompt)} chars")
 
-                # Start process
-                self._current_process = await create_subprocess_cross_platform(
-                    cmd,
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    env=env,
-                    cwd=self.working_dir,
-                    limit=STDIO_BUFFER_LIMIT
-                )
+                # Try pre-warmed process first, fall back to cold start
+                warm = await self._take_warm_process(cmd, env)
+                if warm is not None:
+                    self._current_process = warm
+                else:
+                    self._current_process = await create_subprocess_cross_platform(
+                        cmd,
+                        stdin=asyncio.subprocess.PIPE,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                        env=env,
+                        cwd=self.working_dir,
+                        limit=STDIO_BUFFER_LIMIT
+                    )
 
                 # Stream output with real-time parsing
                 result = await self._stream_execute(
@@ -509,6 +600,11 @@ class ClaudeProcess:
                 }
             finally:
                 self._current_process = None
+                # Pre-warm next subprocess in the background
+                try:
+                    self._schedule_prewarm(cmd, env)
+                except NameError:
+                    pass  # cmd/env not yet built when error occurred early
 
     async def _stream_execute(
         self,
@@ -860,6 +956,9 @@ This file contains a log of all work performed by this session.
         """Stop session and cleanup resources."""
         try:
             logger.info(f"[{self.session_id}] Stopping session...")
+
+            # Discard pre-warmed process
+            await self._discard_warm_process()
 
             # Terminate currently running process
             await self._kill_current_process()

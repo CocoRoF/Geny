@@ -45,6 +45,8 @@ from service.workflow.nodes.resilience import post_model_node           # noqa: 
 # ── Task nodes ───────────────────────────────────────────────
 from service.workflow.nodes.task import create_todos_node         # noqa: F401
 from service.workflow.nodes.task import execute_todo_node         # noqa: F401
+from service.workflow.nodes.task import batch_execute_todo_node   # noqa: F401
+from service.workflow.nodes.task import direct_tool_node          # noqa: F401
 from service.workflow.nodes.task import final_review_node         # noqa: F401
 from service.workflow.nodes.task import final_answer_node         # noqa: F401
 from service.workflow.nodes.task import final_synthesis_node      # noqa: F401
