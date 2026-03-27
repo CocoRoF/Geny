@@ -255,20 +255,22 @@ def create_optimized_autonomous_template() -> WorkflowDefinition:
         • **P3** — FinalSynthesis: merged FinalReview + FinalAnswer into
           a single LLM call, saving one full round-trip (10-20s).
 
-    Topology (18 nodes, down from 28)::
+    Topology (20 nodes, down from 28)::
 
         START → mem_inject → relevance_gate
           ├─ skip → END
           └─ continue → adaptive_classify  (inline guard + post)
-              ├─ easy  → easy_answer (llm_call, single-shot) → END
-              ├─ medium → answer → post_ans → review
+              ├─ easy        → easy_answer (llm_call, single-shot) → END
+              ├─ tool_direct → direct_tool (single-shot tool exec) → END
+              ├─ medium      → answer → post_ans → review
               │    ├─ approved → END
               │    ├─ retry → gate_med → [continue→answer | stop→END]
               │    └─ end → END
-              ├─ hard  → mk_todos → guard_exec → exec_todo → post_exec
+              ├─ hard    → mk_todos → guard_exec → exec_todo → post_exec
               │    → chk_prog → [continue→gate_hard | complete→final_synth]
               │    gate_hard → [continue→guard_exec | stop→final_synth]
               │    final_synth → END
+              ├─ extreme → mk_todos (same as hard: full TODO-based execution)
               └─ end → END
     """
     nodes: List[WorkflowNodeInstance] = []
@@ -306,6 +308,11 @@ def create_optimized_autonomous_template() -> WorkflowDefinition:
     })
 
     _edge("easy_answer", "end")
+
+    # ── TOOL_DIRECT PATH (1 node) ──
+    # Single-shot tool execution — the task IS the tool operation.
+    _add("direct_tool", "direct_tool", "Direct Tool", -400, 550)
+    _edge("direct_tool", "end")
 
     # ── MEDIUM PATH (4 nodes) ──
     # Removed guard_ans (not in loop first pass) and guard_rev.
@@ -360,21 +367,24 @@ def create_optimized_autonomous_template() -> WorkflowDefinition:
     # ── END NODE ──
     _add("end", "end", "End", 0, 1500)
 
-    # ── Conditional routing: adaptive_classify → branches ──
-    _edge("classify", "easy_answer", port="easy",   lbl="Easy")
-    _edge("classify", "answer",      port="medium", lbl="Medium")
-    _edge("classify", "mk_todos",    port="hard",   lbl="Hard")
-    _edge("classify", "end",         port="end",    lbl="End")
+    # ── Conditional routing: adaptive_classify → 5 branches ──
+    _edge("classify", "easy_answer",  port="easy",        lbl="Easy")
+    _edge("classify", "direct_tool",  port="tool_direct", lbl="Tool Direct")
+    _edge("classify", "answer",       port="medium",      lbl="Medium")
+    _edge("classify", "mk_todos",     port="hard",        lbl="Hard")
+    _edge("classify", "mk_todos",     port="extreme",     lbl="Extreme")
+    _edge("classify", "end",          port="end",         lbl="End")
 
     return WorkflowDefinition(
         id="template-optimized-autonomous",
         name="Optimized Autonomous",
         description=(
             "Optimized autonomous execution graph. "
+            "5-level difficulty classification (easy/tool_direct/medium/hard/extreme). "
             "Rule-based adaptive classify (skips LLM for easy inputs), "
             "reduced Guard/Post nodes, "
             "merged FinalSynthesis (review + answer in one LLM call). "
-            "18 nodes (vs 28 original), ~25-47% faster."
+            "20 nodes (vs 28 original), ~25-47% faster."
         ),
         nodes=nodes,
         edges=edges,
