@@ -388,11 +388,14 @@ export default function CommandTab() {
   }, [selectedSessionId, updateSessionData, t]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // On mobile, the Enter key always inserts a newline.
+    // Run is only triggered by tapping the Run button in the UI.
+    if (isMobile) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleExecute();
     }
-  }, [handleExecute]);
+  }, [isMobile, handleExecute]);
 
   // ── No session selected ──
   if (!selectedSessionId || !session) {
@@ -531,7 +534,9 @@ export default function CommandTab() {
           onKeyDown={handleKeyDown}
           disabled={isExecuting}
         />
-        <span className="text-[0.5625rem] text-[var(--text-muted)] opacity-50 mt-0.5 block px-0.5">Enter to execute · Shift+Enter for newline</span>
+        <span className="text-[0.5625rem] text-[var(--text-muted)] opacity-50 mt-0.5 block px-0.5">
+          {isMobile ? 'Tap Run to execute · Enter for newline' : 'Enter to execute · Shift+Enter for newline'}
+        </span>
       </div>
 
       {/* ── Main execution area: Split pane (Timeline | Detail) ── */}
