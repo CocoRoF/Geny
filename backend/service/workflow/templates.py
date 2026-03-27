@@ -244,34 +244,21 @@ def create_simple_template() -> WorkflowDefinition:
 def create_optimized_autonomous_template() -> WorkflowDefinition:
     """Build the optimized autonomous graph as a WorkflowDefinition.
 
-    Key optimizations over the standard autonomous template:
-        • **P1** — AdaptiveClassify: rule-based fast path skips the LLM
-          classify call for trivially-classifiable inputs (saves 8-15s).
-        • **P2** — Guard/Post node reduction: removed 10 Guard/Post nodes
-          that are unnecessary outside of loops.  The classify node now
-          includes inline guard+post.  Guard/Post are retained only in
-          the Medium retry loop and Hard execution loop where they are
-          essential for context budget tracking and iteration counting.
-        • **P3** — FinalSynthesis: merged FinalReview + FinalAnswer into
-          a single LLM call, saving one full round-trip (10-20s).
+        This template is intentionally aggressive about cost control.
+        It uses only two difficulty classes:
 
-    Topology (20 nodes, down from 28)::
+                • easy: one short answer
+                • not_easy: compact memory injection → capped TODO planning
+                    → batch execution in one model call
 
-        START → mem_inject → relevance_gate
-          ├─ skip → END
-          └─ continue → adaptive_classify  (inline guard + post)
-              ├─ easy        → easy_answer (llm_call, single-shot) → END
-              ├─ tool_direct → direct_tool (single-shot tool exec) → END
-              ├─ medium      → answer → post_ans → review
-              │    ├─ approved → END
-              │    ├─ retry → gate_med → [continue→answer | stop→END]
-              │    └─ end → END
-              ├─ hard    → mk_todos → guard_exec → exec_todo → post_exec
-              │    → chk_prog → [continue→gate_hard | complete→final_synth]
-              │    gate_hard → [continue→guard_exec | stop→final_synth]
-              │    final_synth → END
-              ├─ extreme → mk_todos (same as hard: full TODO-based execution)
-              └─ end → END
+        Topology (8 nodes)::
+
+                START → relevance_gate
+                    ├─ skip → END
+                    └─ continue → adaptive_classify
+                            ├─ easy     → easy_answer → END
+                            ├─ not_easy → mem_inject → mk_todos → batch_exec → END
+                            └─ end      → END
     """
     nodes: List[WorkflowNodeInstance] = []
     edges: List[WorkflowEdge] = []
@@ -287,21 +274,22 @@ def create_optimized_autonomous_template() -> WorkflowDefinition:
             source=src, target=tgt, source_port=port, label=lbl,
         ))
 
-    # ── START & Common Entry (4 nodes) ──
-    _add("start",              "start",           "Start",              0,   0)
-    _add("memory_inject",      "mem_inject",      "Memory Inject",     0, 100)
-    _add("relevance_gate",     "relevance_gate",  "Relevance Gate",    0, 200)
-    _add("adaptive_classify",  "classify",        "Adaptive Classify", 0, 350)
+    # ── START & Common Entry (3 nodes) ──
+    _add("start",             "start",          "Start",              0,   0)
+    _add("relevance_gate",    "relevance_gate", "Relevance Gate",    0, 150)
+    _add("adaptive_classify", "classify",       "Adaptive Classify", 0, 350, {
+        "prompt_template": AutonomousPrompts.classify_easy_or_not_easy(),
+        "categories": "easy, not_easy",
+        "default_category": "not_easy",
+    })
 
-    _edge("start", "mem_inject")
-    _edge("mem_inject", "relevance_gate")
+    _edge("start", "relevance_gate")
     _edge("relevance_gate", "classify",  port="continue", lbl="relevant")
     _edge("relevance_gate", "end",       port="skip",     lbl="not relevant")
 
     # ── EASY PATH (1 node) ──
-    # llm_call with set_complete=true replaces direct_answer + guard + post
     _add("llm_call", "easy_answer", "Easy Answer", -200, 550, {
-        "prompt_template": "{input}",
+        "prompt_template": AutonomousPrompts.optimized_easy_answer(),
         "output_field": "final_answer",
         "output_mappings": '{"answer": true}',
         "set_complete": True,
@@ -309,82 +297,45 @@ def create_optimized_autonomous_template() -> WorkflowDefinition:
 
     _edge("easy_answer", "end")
 
-    # ── TOOL_DIRECT PATH (1 node) ──
-    # Single-shot tool execution — the task IS the tool operation.
-    _add("direct_tool", "direct_tool", "Direct Tool", -400, 550)
-    _edge("direct_tool", "end")
-
-    # ── MEDIUM PATH (4 nodes) ──
-    # Removed guard_ans (not in loop first pass) and guard_rev.
-    # Kept post_ans for iteration tracking in retry loop.
-    _add("answer",         "answer",   "Answer",               0, 550)
-    _add("post_model",     "post_ans", "Post Answer",          0, 650, {
-        "detect_completion": False,
+    # ── NOT_EASY PATH (3 nodes) ──
+    _add("memory_inject", "mem_inject", "Memory Inject", 200, 550, {
+        "enable_llm_gate": False,
+        "max_results": 3,
+        "max_inject_chars": 4000,
     })
-    _add("review",         "review",   "Review",               0, 800)
-    _add("iteration_gate", "gate_med", "Iter Gate (Medium)",   0, 1000)
-
-    _edge("answer", "post_ans")
-    _edge("post_ans", "review")
-
-    # Review routing (self-routing conditional node)
-    _edge("review", "end",      port="approved", lbl="Approved")
-    _edge("review", "gate_med", port="retry",    lbl="Retry")
-    _edge("review", "end",      port="end",      lbl="End")
-
-    # Medium iteration gate
-    _edge("gate_med", "answer",  port="continue", lbl="Continue")
-    _edge("gate_med", "end",     port="stop",     lbl="Stop")
-
-    # ── HARD PATH (7 nodes) ──
-    # Removed guard_todo, post_todos.  Kept guard_exec + post_exec for loop.
-    # Replaced 6-node final chain with single final_synthesis.
-    _add("create_todos",    "mk_todos",      "Create TODOs",    200, 550)
-    _add("context_guard",   "guard_exec",    "Guard (Execute)", 200, 700, {
-        "position_label": "execute",
+    _add("create_todos", "mk_todos", "Create TODOs", 200, 750, {
+        "prompt_template": AutonomousPrompts.optimized_create_todos(),
+        "max_todos": 4,
     })
-    _add("execute_todo",    "exec_todo",     "Execute TODO",    200, 800)
-    _add("post_model",      "post_exec",     "Post Execute",    200, 900)
-    _add("check_progress",  "chk_prog",      "Check Progress",  200, 1000)
-    _add("iteration_gate",  "gate_hard",     "Iter Gate (Hard)", 200, 1150)
-    _add("final_synthesis", "final_synth",   "Final Synthesis",  200, 1350)
+    _add("batch_execute_todo", "batch_exec", "Batch Execute", 200, 950, {
+        "prompt_template": AutonomousPrompts.optimized_batch_execute(),
+        "batch_result_field": "batch_execution_result",
+        "output_field": "final_answer",
+        "set_complete": True,
+    })
 
-    _edge("mk_todos", "guard_exec")
-    _edge("guard_exec", "exec_todo")
-    _edge("exec_todo", "post_exec")
-    _edge("post_exec", "chk_prog")
-
-    # Hard progress check routing
-    _edge("chk_prog", "gate_hard",    port="continue", lbl="Continue")
-    _edge("chk_prog", "final_synth",  port="complete", lbl="Complete")
-
-    # Hard iteration gate
-    _edge("gate_hard", "guard_exec",  port="continue", lbl="Continue")
-    _edge("gate_hard", "final_synth", port="stop",     lbl="Stop")
-
-    _edge("final_synth", "end")
+    _edge("mem_inject", "mk_todos")
+    _edge("mk_todos", "batch_exec")
+    _edge("batch_exec", "end")
 
     # ── END NODE ──
-    _add("end", "end", "End", 0, 1500)
+    _add("end", "end", "End", 0, 1200)
 
-    # ── Conditional routing: adaptive_classify → 5 branches ──
-    _edge("classify", "easy_answer",  port="easy",        lbl="Easy")
-    _edge("classify", "direct_tool",  port="tool_direct", lbl="Tool Direct")
-    _edge("classify", "answer",       port="medium",      lbl="Medium")
-    _edge("classify", "mk_todos",     port="hard",        lbl="Hard")
-    _edge("classify", "mk_todos",     port="extreme",     lbl="Extreme")
-    _edge("classify", "end",          port="end",         lbl="End")
+    # ── Conditional routing: adaptive_classify → 2 branches ──
+    _edge("classify", "easy_answer", port="easy",     lbl="Easy")
+    _edge("classify", "mem_inject",  port="not_easy", lbl="Not Easy")
+    _edge("classify", "end",         port="end",      lbl="End")
 
     return WorkflowDefinition(
         id="template-optimized-autonomous",
         name="Optimized Autonomous",
         description=(
             "Optimized autonomous execution graph. "
-            "5-level difficulty classification (easy/tool_direct/medium/hard/extreme). "
-            "Rule-based adaptive classify (skips LLM for easy inputs), "
-            "reduced Guard/Post nodes, "
-            "merged FinalSynthesis (review + answer in one LLM call). "
-            "20 nodes (vs 28 original), ~25-47% faster."
+            "Binary routing only: easy or not_easy. "
+            "Easy returns a very short direct answer. "
+            "Not-easy work uses compact memory injection, capped TODO planning, "
+            "and single-pass batch execution. "
+            "Removes medium/hard/extreme loops to minimize token burn."
         ),
         nodes=nodes,
         edges=edges,
@@ -483,7 +434,7 @@ def create_ultra_light_template() -> WorkflowDefinition:
     _add("create_todos",      "mk_todos_h",    "Create TODOs (H)",  400, 550)
     _add("batch_execute_todo", "batch_exec",    "Batch Execute",     400, 700)
     _add("final_synthesis",   "final_synth_h",  "Final Synth (H)",   400, 850,
-         {"skip_threshold": 3})
+            {"skip_threshold": 3, "combined_result_field": "batch_execution_result"})
 
     _edge("mk_todos_h", "batch_exec")
     _edge("batch_exec", "final_synth_h")

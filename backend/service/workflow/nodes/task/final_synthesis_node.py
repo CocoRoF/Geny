@@ -74,7 +74,10 @@ class FinalSynthesisNode(BaseNode):
             "messages", "last_output", "current_step",
             "is_complete", "iteration",
         ],
-        config_dynamic_reads={"list_field": "todos"},
+        config_dynamic_reads={
+            "list_field": "todos",
+            "combined_result_field": "batch_execution_result",
+        },
         config_dynamic_writes={"output_field": "final_answer"},
     )
 
@@ -106,6 +109,17 @@ class FinalSynthesisNode(BaseNode):
             default="final_answer",
             description="State field to store the synthesised answer.",
             group="output",
+        ),
+        NodeParameter(
+            name="combined_result_field",
+            label="Combined Result Field",
+            type="string",
+            default="",
+            description=(
+                "Optional state field containing a shared combined result. "
+                "When set, that content is used once instead of expanding each item result."
+            ),
+            group="state_fields",
         ),
         NodeParameter(
             name="max_item_chars",
@@ -152,6 +166,7 @@ class FinalSynthesisNode(BaseNode):
         list_field = config.get("list_field", "todos")
         output_field = config.get("output_field", "final_answer")
         template = config.get("prompt_template", _DEFAULT_PROMPT)
+        combined_result_field = config.get("combined_result_field", "")
 
         todos = state.get(list_field, [])
         input_text = state.get("input", "")
@@ -164,7 +179,11 @@ class FinalSynthesisNode(BaseNode):
                 for t in todos
             )
             if all_done:
-                last = todos[-1].get("result", "") or state.get("last_output", "")
+                last = ""
+                if combined_result_field:
+                    last = state.get(combined_result_field, "") or ""
+                if not last:
+                    last = state.get("last_output", "") or todos[-1].get("result", "")
                 logger.info(
                     "[%s] skip_threshold=%d, %d todos all completed — skipping LLM",
                     context.session_id, skip_threshold, len(todos),
@@ -186,7 +205,17 @@ class FinalSynthesisNode(BaseNode):
             compact = budget.get("status") in ("block", "overflow")
             effective_chars = compact_chars if compact else max_chars
 
-            todo_results = format_list_items(todos, effective_chars)
+            combined_result = None
+            if combined_result_field:
+                combined_result = state.get(combined_result_field)
+
+            if combined_result:
+                combined_text = str(combined_result)
+                if len(combined_text) > effective_chars:
+                    combined_text = combined_text[:effective_chars] + "... (truncated)"
+                todo_results = combined_text
+            else:
+                todo_results = format_list_items(todos, effective_chars)
 
             try:
                 prompt = template.format(

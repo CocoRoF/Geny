@@ -79,6 +79,8 @@ class BatchExecuteTodoNode(BaseNode):
         config_dynamic_writes={
             "list_field": "todos",
             "index_field": "current_todo_index",
+            "batch_result_field": "batch_execution_result",
+            "output_field": "final_answer",
         },
     )
 
@@ -110,6 +112,30 @@ class BatchExecuteTodoNode(BaseNode):
             description="State field tracking the current TODO index.",
             group="state_fields",
         ),
+        NodeParameter(
+            name="batch_result_field",
+            label="Batch Result Field",
+            type="string",
+            default="batch_execution_result",
+            description="State field to store the shared combined batch result.",
+            group="state_fields",
+        ),
+        NodeParameter(
+            name="output_field",
+            label="Output State Field",
+            type="string",
+            default="",
+            description="Optional state field to store the combined response as the final output.",
+            group="output",
+        ),
+        NodeParameter(
+            name="set_complete",
+            label="Mark Complete After",
+            type="boolean",
+            default=False,
+            description="Set is_complete=True after successful batch execution.",
+            group="output",
+        ),
     ]
 
     async def execute(
@@ -120,7 +146,12 @@ class BatchExecuteTodoNode(BaseNode):
     ) -> Dict[str, Any]:
         list_field = config.get("list_field", "todos")
         index_field = config.get("index_field", "current_todo_index")
+        batch_result_field = config.get(
+            "batch_result_field", "batch_execution_result"
+        )
         template = config.get("prompt_template", _DEFAULT_PROMPT)
+        output_field = config.get("output_field", "")
+        set_complete = config.get("set_complete", False)
 
         todos = state.get(list_field, [])
         input_text = state.get("input", "")
@@ -148,23 +179,35 @@ class BatchExecuteTodoNode(BaseNode):
             response, fallback = await context.resilient_invoke(
                 messages, "batch_execute_todo"
             )
+            response_text = response.content
 
             # Mark all pending TODOs as completed
             updated: List[TodoItem] = []
             for t in pending:
+                per_item_result = response_text
+                if len(pending) > 1:
+                    per_item_result = (
+                        "Completed in shared batch execution. "
+                        f"See '{batch_result_field}' for the combined result."
+                    )
                 updated.append({
                     **t,
                     "status": TodoStatus.COMPLETED,
-                    "result": response.content,
+                    "result": per_item_result,
                 })
 
             result: Dict[str, Any] = {
                 list_field: updated,
                 index_field: len(todos),
+                batch_result_field: response_text,
                 "messages": [response],
-                "last_output": response.content,
+                "last_output": response_text,
                 "current_step": "batch_execute_complete",
             }
+            if output_field:
+                result[output_field] = response_text
+            if set_complete:
+                result["is_complete"] = True
             result.update(fallback)
             return result
 

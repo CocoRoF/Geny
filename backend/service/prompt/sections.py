@@ -462,6 +462,76 @@ class AutonomousPrompts:
         )
 
     @staticmethod
+    def classify_easy_or_not_easy() -> str:
+        """Prompt for low-cost binary classification in optimized-autonomous."""
+        return (
+            "You are a cost-sensitive request router for an autonomous coding agent.\n"
+            "Choose the cheapest route that can still solve the task correctly.\n\n"
+            "Classify the user's request into exactly one category:\n\n"
+            "## EASY\n"
+            "Use EASY only when the request can be fully answered in one very short reply.\n"
+            "No tools, no file changes, no planning, no multi-step reasoning.\n"
+            "Examples:\n"
+            "  - Greetings or acknowledgements\n"
+            "  - Very small factual questions\n"
+            "  - Tiny explanations that fit in 1-3 sentences\n\n"
+            "## NOT_EASY\n"
+            "Use NOT_EASY for everything else.\n"
+            "This includes coding, debugging, analysis, tool execution, file edits,\n"
+            "multi-step work, implementation, review, planning, and anything that\n"
+            "benefits from a structured procedure.\n\n"
+            "When uncertain, choose NOT_EASY.\n\n"
+            "User request:\n{input}\n\n"
+            "Respond with ONLY one word: easy or not_easy"
+        )
+
+    @staticmethod
+    def optimized_easy_answer() -> str:
+        """Prompt for the concise easy path in optimized-autonomous."""
+        return (
+            "You are on the EASY path.\n"
+            "Answer the user's request as briefly as possible while remaining correct.\n"
+            "Use 1-3 short sentences. Do not add plans, headings, extra caveats, or\n"
+            "expanded background unless the user explicitly asks for them.\n\n"
+            "User request:\n{input}"
+        )
+
+    @staticmethod
+    def optimized_create_todos() -> str:
+        """Prompt for a compact, execution-focused Not-Easy plan."""
+        return (
+            "Break the request into a minimal high-value execution plan.\n\n"
+            "{memory_context}\n\n"
+            "Request:\n{input}\n\n"
+            "Return 1 to 4 TODO items only.\n"
+            "Rules:\n"
+            "- Each item should represent a major deliverable, not micro-steps\n"
+            "- Prefer merging closely related work into one item\n"
+            "- Keep the plan compact enough for batch execution\n"
+            "- Order items logically\n\n"
+            "Respond with JSON only in this form:\n"
+            "[\n"
+            '  {{"id": 1, "title": "Short title", "description": "What to do"}},\n'
+            '  {{"id": 2, "title": "Short title", "description": "What to do"}}\n'
+            "]"
+        )
+
+    @staticmethod
+    def optimized_batch_execute() -> str:
+        """Prompt for the low-call Not-Easy execution path."""
+        return (
+            "Execute the following compact plan efficiently and produce the final user-facing result.\n\n"
+            "Overall Goal:\n{input}\n\n"
+            "TODO Items:\n{todo_list}\n\n"
+            "Requirements:\n"
+            "- Complete all items in one coherent pass\n"
+            "- Keep the response focused on the actual solution, not internal process\n"
+            "- Include only the detail needed to solve the request correctly\n"
+            "- If code or edits are required, provide the completed result directly\n"
+            "- Avoid repeating the TODO list back verbatim unless necessary"
+        )
+
+    @staticmethod
     def review() -> str:
         """Prompt for quality review of a medium-path answer."""
         return (
