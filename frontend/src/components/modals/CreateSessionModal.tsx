@@ -46,7 +46,7 @@ export default function CreateSessionModal({ onClose }: Props) {
     max_iterations: 50,
     system_prompt: '',
   });
-  const [selectedPrompt, setSelectedPrompt] = useState('');
+  const [selectedPrompt, setSelectedPrompt] = useState('geny-default');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [availableWorkflows, setAvailableWorkflows] = useState<WorkflowDefinition[]>([]);
@@ -56,6 +56,15 @@ export default function CreateSessionModal({ onClose }: Props) {
   const [selectedPreset, setSelectedPreset] = useState('');
 
   useEffect(() => { loadPrompts(); }, [loadPrompts]);
+
+  // Load default prompt template content on mount
+  useEffect(() => {
+    if (selectedPrompt && !formState.system_prompt) {
+      loadPromptContent(selectedPrompt).then(content => {
+        if (content) setFormState(f => ({ ...f, system_prompt: content }));
+      });
+    }
+  }, [selectedPrompt, loadPromptContent]);
 
   // Load available workflows
   useEffect(() => {
