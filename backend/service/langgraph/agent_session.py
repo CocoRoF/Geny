@@ -33,6 +33,7 @@ Usage::
 
 import asyncio
 from logging import getLogger
+import os
 import time
 import uuid
 from datetime import datetime
@@ -1329,6 +1330,19 @@ class AgentSession:
         except Exception:
             pass
 
+        # Resolve effective model name (same logic as ClaudeProcess.execute)
+        effective_model = self._model_name
+        if not effective_model:
+            effective_model = os.environ.get('ANTHROPIC_MODEL')
+        if not effective_model:
+            try:
+                from service.config.manager import get_config_manager
+                from service.config.sub_config.general.api_config import APIConfig
+                api_cfg = get_config_manager().load_config(APIConfig)
+                effective_model = api_cfg.anthropic_model or None
+            except Exception:
+                pass
+
         return SessionInfo(
             session_id=self._session_id,
             session_name=self._session_name,
@@ -1336,7 +1350,7 @@ class AgentSession:
             created_at=self._created_at,
             pid=self.pid,
             error_message=self._error_message,
-            model=self._model_name,
+            model=effective_model,
             max_turns=self._max_turns,
             timeout=self._timeout,
             max_iterations=self._max_iterations,

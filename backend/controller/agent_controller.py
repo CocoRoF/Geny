@@ -197,6 +197,22 @@ async def get_stored_session_info(
     record = store.get(session_id)
     if not record:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found in store")
+
+    # Resolve effective model name if not stored
+    if not record.get("model"):
+        import os
+        effective_model = os.environ.get('ANTHROPIC_MODEL')
+        if not effective_model:
+            try:
+                from service.config.manager import get_config_manager
+                from service.config.sub_config.general.api_config import APIConfig
+                api_cfg = get_config_manager().load_config(APIConfig)
+                effective_model = api_cfg.anthropic_model or None
+            except Exception:
+                pass
+        if effective_model:
+            record["model"] = effective_model
+
     return record
 
 
