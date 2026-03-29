@@ -50,6 +50,7 @@ const en = {
     sharedFolder: 'Shared',
     chat: 'Chat',
     memory: 'Memory',
+    vtuber: 'VTuber',
   },
 
   // ─── Sidebar ───
@@ -732,6 +733,19 @@ const en = {
       title: 'File Changes',
       filesChanged: '{count} file(s) changed',
     },
+  },
+
+  // ─── VTuber / Live2D ───
+  vtuber: {
+    model: 'Model',
+    selectModel: 'Select model...',
+    noModel: 'No model assigned. Select a model above.',
+    emotions: 'Emotions',
+    modelList: 'Models',
+    assignments: 'Agent Assignments',
+    none: 'None',
+    noModels: 'No models registered',
+    selectModelPreview: 'Select a model to preview',
   },
 };
 

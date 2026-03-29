@@ -10,7 +10,7 @@ const nextConfig: NextConfig = {
       fallback: [
         { source: "/api/:path*", destination: `${apiTarget}/api/:path*` },
         { source: "/health", destination: `${apiTarget}/health` },
-        { source: "/static/assets/:path*", destination: `${apiTarget}/static/assets/:path*` },
+        { source: "/static/:path*", destination: `${apiTarget}/static/:path*` },
       ],
     };
   },

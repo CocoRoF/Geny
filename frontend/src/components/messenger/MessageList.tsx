@@ -5,7 +5,10 @@ import { useMessengerStore } from '@/store/useMessengerStore';
 import { useAppStore } from '@/store/useAppStore';
 import { useI18n } from '@/lib/i18n';
 import { Bot, User, Loader2, MessageCircle, FileCode2, Plus, Minus } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import type { ChatRoomMessage, FileChanges } from '@/types';
+
+const MiniAvatar = dynamic(() => import('@/components/live2d/MiniAvatar'), { ssr: false });
 
 // ── Helpers ──
 
@@ -158,10 +161,16 @@ function AgentMessage({ msg }: { msg: ChatRoomMessage }) {
   return (
     <div className="flex gap-3 px-4 md:px-6 py-1.5 hover:bg-[var(--bg-hover)] transition-colors group">
       <button
-        className={`w-9 h-9 rounded-full bg-gradient-to-br ${getRoleColor(msg.role || 'worker')} flex items-center justify-center shrink-0 mt-0.5 shadow-sm border-none cursor-pointer transition-transform hover:scale-110`}
+        className="mt-0.5 border-none cursor-pointer p-0 bg-transparent transition-transform hover:scale-110"
         onClick={() => msg.session_id && setSelectedMemberId(msg.session_id)}
       >
-        <Bot size={15} className="text-white" />
+        <MiniAvatar
+          sessionId={msg.session_id || ''}
+          size={36}
+          fallbackGradient={getRoleColor(msg.role || 'worker')}
+          fallbackContent={<Bot size={15} className="text-white" />}
+          className="shadow-sm"
+        />
       </button>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5 flex-wrap">
@@ -221,14 +230,16 @@ function DateDivider({ date }: { date: string }) {
   );
 }
 
-function TypingIndicator({ name, role, thinkingPreview, elapsedMs }: { name: string; role: string; thinkingPreview?: string | null; elapsedMs?: number }) {
+function TypingIndicator({ name, role, sessionId, thinkingPreview, elapsedMs }: { name: string; role: string; sessionId?: string; thinkingPreview?: string | null; elapsedMs?: number }) {
   return (
     <div className="flex gap-3 px-4 md:px-6 py-1.5">
-      <div
-        className={`w-9 h-9 rounded-full bg-gradient-to-br ${getRoleColor(role)} flex items-center justify-center shrink-0 shadow-sm`}
-      >
-        <Bot size={15} className="text-white" />
-      </div>
+      <MiniAvatar
+        sessionId={sessionId || ''}
+        size={36}
+        fallbackGradient={getRoleColor(role)}
+        fallbackContent={<Bot size={15} className="text-white" />}
+        className="shadow-sm"
+      />
       <div className="flex items-center gap-2 min-w-0 flex-1">
         {/* Name + Role badge */}
         <span className="text-[0.8125rem] font-semibold text-[var(--text-primary)] shrink-0">{name}</span>
@@ -277,6 +288,7 @@ function AgentProgressIndicator({ agents }: { agents: import('@/types').AgentPro
           key={agent.session_id}
           name={agent.session_name}
           role={agent.role}
+          sessionId={agent.session_id}
           thinkingPreview={agent.thinking_preview}
           elapsedMs={agent.elapsed_ms}
         />

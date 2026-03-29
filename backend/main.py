@@ -22,6 +22,7 @@ from controller.tool_controller import router as tool_catalog_router
 from controller.docs_controller import router as docs_router
 from controller.memory_controller import router as memory_router
 from controller.memory_controller import global_router as global_memory_router
+from controller.vtuber_controller import router as vtuber_router
 from service.config import get_config_manager
 from service.mcp_loader import MCPLoader, get_global_mcp_config
 import uvicorn
@@ -250,6 +251,18 @@ async def lifespan(app: FastAPI):
     agent_manager.start_idle_monitor()
     logger.info("   - Session idle monitor: started (10min threshold)")
 
+    # ── VTuber Service: Live2D model management + avatar state ─────────
+    print_step_banner("VTUBER", "VTUBER SERVICE", "Initializing Live2D model management...")
+    from service.vtuber import Live2dModelManager, AvatarStateManager
+
+    live2d_models_dir = str(Path(__file__).parent / "static" / "live2d-models")
+    live2d_model_manager = Live2dModelManager(live2d_models_dir)
+    avatar_state_manager = AvatarStateManager()
+    app.state.live2d_model_manager = live2d_model_manager
+    app.state.avatar_state_manager = avatar_state_manager
+    logger.info(f"   - Live2D models: {len(live2d_model_manager.models)}")
+    logger.info(f"   - Default model: {live2d_model_manager.default_model_name}")
+
     # ── Tool Runtime Health Check ──────────────────────────────────────
     # Verify tools actually execute (not just registered) by invoking a
     # read-only tool directly and checking the response.
@@ -407,6 +420,7 @@ app.include_router(tool_catalog_router)  # Tool catalog API
 app.include_router(docs_router)  # Documentation API
 app.include_router(memory_router)  # Memory management API
 app.include_router(global_memory_router)  # Global memory API
+app.include_router(vtuber_router)  # VTuber Live2D API
 
 # Mount static files for Web UI Dashboard
 static_dir = Path(__file__).parent / "static"

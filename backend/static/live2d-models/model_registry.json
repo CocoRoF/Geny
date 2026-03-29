@@ -1,0 +1,46 @@
+{
+  "models": [
+    {
+      "name": "mao_pro",
+      "display_name": "Mao Pro",
+      "description": "기본 VTuber 캐릭터 (Niziiro Mao PRO)",
+      "url": "/static/live2d-models/mao_pro/runtime/mao_pro.model3.json",
+      "thumbnail": null,
+      "kScale": 0.5,
+      "initialXshift": 0,
+      "initialYshift": 0,
+      "idleMotionGroupName": "Idle",
+      "emotionMap": {
+        "neutral": 0,
+        "anger": 2,
+        "disgust": 2,
+        "fear": 1,
+        "joy": 3,
+        "smirk": 3,
+        "sadness": 1,
+        "surprise": 3
+      },
+      "tapMotions": {
+        "HitAreaHead": { "": 1 },
+        "HitAreaBody": { "": 1 }
+      }
+    },
+    {
+      "name": "shizuku",
+      "display_name": "Shizuku",
+      "description": "Shizuku PRO 캐릭터",
+      "url": "/static/live2d-models/shizuku/runtime/shizuku.model3.json",
+      "thumbnail": null,
+      "kScale": 0.3,
+      "initialXshift": 0,
+      "initialYshift": 0,
+      "idleMotionGroupName": "Idle",
+      "emotionMap": {
+        "neutral": 0
+      },
+      "tapMotions": {}
+    }
+  ],
+  "default_model": "mao_pro",
+  "agent_model_assignments": {}
+}

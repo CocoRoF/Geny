@@ -59,6 +59,8 @@ import type {
   ChatRoomBroadcastRequest,
   ChatRoomBroadcastResponse,
   ChatRoomMessage,
+  Live2dModelInfo,
+  AvatarState,
 } from '@/types';
 
 export const agentApi = {
@@ -805,5 +807,112 @@ export const globalMemoryApi = {
     return apiCall<import('@/types').MemorySearchResponse>(
       `/api/memory/global/search?${qs.toString()}`
     );
+  },
+};
+
+// ==================== VTuber API ====================
+
+export const vtuberApi = {
+  /** GET /api/vtuber/models — list all registered Live2D models */
+  listModels: () =>
+    apiCall<{ models: Live2dModelInfo[] }>('/api/vtuber/models'),
+
+  /** GET /api/vtuber/models/{name} — get single model details */
+  getModel: (name: string) =>
+    apiCall<Live2dModelInfo>(`/api/vtuber/models/${encodeURIComponent(name)}`),
+
+  /** PUT /api/vtuber/agents/{sessionId}/model — assign model to session */
+  assignModel: (sessionId: string, modelName: string) =>
+    apiCall<{ status: string; session_id: string; model_name: string }>(
+      `/api/vtuber/agents/${sessionId}/model`,
+      { method: 'PUT', body: JSON.stringify({ model_name: modelName }) },
+    ),
+
+  /** GET /api/vtuber/agents/{sessionId}/model — get assigned model */
+  getAgentModel: (sessionId: string) =>
+    apiCall<{ session_id: string; model: Live2dModelInfo | null }>(
+      `/api/vtuber/agents/${sessionId}/model`,
+    ),
+
+  /** DELETE /api/vtuber/agents/{sessionId}/model — unassign model */
+  unassignModel: (sessionId: string) =>
+    apiCall<{ status: string; session_id: string }>(
+      `/api/vtuber/agents/${sessionId}/model`,
+      { method: 'DELETE' },
+    ),
+
+  /** GET /api/vtuber/assignments — list all agent-model assignments */
+  listAssignments: () =>
+    apiCall<{ assignments: Record<string, string> }>('/api/vtuber/assignments'),
+
+  /** GET /api/vtuber/agents/{sessionId}/state — current avatar state */
+  getAvatarState: (sessionId: string) =>
+    apiCall<AvatarState>(`/api/vtuber/agents/${sessionId}/state`),
+
+  /** POST /api/vtuber/agents/{sessionId}/interact — touch/click interaction */
+  interact: (sessionId: string, hitArea: string, x?: number, y?: number) =>
+    apiCall<{ status: string; hit_area: string }>(
+      `/api/vtuber/agents/${sessionId}/interact`,
+      { method: 'POST', body: JSON.stringify({ hit_area: hitArea, x, y }) },
+    ),
+
+  /** POST /api/vtuber/agents/{sessionId}/emotion — manual emotion override */
+  setEmotion: (sessionId: string, emotion: string, intensity = 1.0, transitionMs = 300) =>
+    apiCall<{ status: string; emotion: string; expression_index: number }>(
+      `/api/vtuber/agents/${sessionId}/emotion`,
+      { method: 'POST', body: JSON.stringify({ emotion, intensity, transition_ms: transitionMs }) },
+    ),
+
+  /**
+   * Subscribe to avatar state SSE events.
+   * Connects directly to backend (bypasses Next.js proxy buffering).
+   */
+  subscribeToAvatarState: (
+    sessionId: string,
+    onState: (state: AvatarState) => void,
+  ): { close: () => void } => {
+    let evtSource: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let closed = false;
+    const RECONNECT_DELAY = 3_000;
+    const MAX_RETRIES = 10;
+    let retries = 0;
+
+    const connect = () => {
+      if (closed) return;
+      const backendUrl = getBackendUrl();
+      evtSource = new EventSource(`${backendUrl}/api/vtuber/agents/${sessionId}/events`);
+
+      evtSource.addEventListener('avatar_state', (e) => {
+        retries = 0;
+        try { onState(JSON.parse(e.data) as AvatarState); } catch { /* skip */ }
+      });
+
+      evtSource.addEventListener('heartbeat', () => {
+        retries = 0;
+      });
+
+      evtSource.onerror = () => {
+        if (closed) return;
+        evtSource?.close();
+        evtSource = null;
+        if (retries >= MAX_RETRIES) {
+          closed = true;
+          return;
+        }
+        retries++;
+        reconnectTimer = setTimeout(connect, RECONNECT_DELAY);
+      };
+    };
+
+    connect();
+    return {
+      close: () => {
+        closed = true;
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        evtSource?.close();
+        evtSource = null;
+      },
+    };
   },
 };

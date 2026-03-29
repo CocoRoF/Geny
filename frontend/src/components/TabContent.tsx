@@ -18,6 +18,7 @@ const SharedFolderTab = dynamic(() => import('@/components/tabs/SharedFolderTab'
 const SessionToolsTab = dynamic(() => import('@/components/tabs/SessionToolsTab'));
 const ToolSetsTab = dynamic(() => import('@/components/tabs/ToolSetsTab'));
 const MemoryTab = dynamic(() => import('@/components/tabs/MemoryTab'));
+const VTuberTab = dynamic(() => import('@/components/tabs/VTuberTab'), { ssr: false });
 
 const TAB_MAP: Record<string, React.ComponentType> = {
   main: MainTab,
@@ -33,6 +34,7 @@ const TAB_MAP: Record<string, React.ComponentType> = {
   sessionTools: SessionToolsTab,
   toolSets: ToolSetsTab,
   memory: MemoryTab,
+  vtuber: VTuberTab,
 };
 
 export default function TabContent() {

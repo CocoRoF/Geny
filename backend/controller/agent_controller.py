@@ -13,7 +13,7 @@ import json
 import time
 from logging import getLogger
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi import APIRouter, HTTPException, Path, Query, Request
 from starlette.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -530,10 +530,72 @@ def _sse(event_type: str, data: dict) -> str:
     return f"event: {event_type}\ndata: {payload}\n\n"
 
 
+async def _emit_avatar_state_for_log(entry_dict: dict, session_id: str, app_state) -> None:
+    """
+    Inspect a log entry and emit avatar state changes if relevant.
+
+    Called during SSE streaming for each log entry to automatically
+    update the Live2D avatar expression based on:
+    1. LLM response text → emotion tag extraction ([joy], [anger], etc.)
+    2. Agent execution state → state-to-emotion mapping
+    """
+    if not hasattr(app_state, "avatar_state_manager") or not hasattr(app_state, "live2d_model_manager"):
+        return
+
+    state_manager = app_state.avatar_state_manager
+    model_manager = app_state.live2d_model_manager
+
+    model = model_manager.get_agent_model(session_id)
+    if not model:
+        return
+
+    level = entry_dict.get("level", "")
+    message = entry_dict.get("message", "")
+
+    try:
+        from service.vtuber.emotion_extractor import EmotionExtractor
+        extractor = EmotionExtractor(model.emotionMap)
+
+        if level == "RESPONSE":
+            # LLM response — extract emotion tags
+            emotion, index = extractor.resolve_emotion(message, None)
+            await state_manager.update_state(
+                session_id=session_id,
+                emotion=emotion,
+                expression_index=index,
+                trigger="agent_output",
+            )
+        elif level == "TOOL":
+            # Tool usage — show "working" expression
+            await state_manager.update_state(
+                session_id=session_id,
+                emotion="surprise",
+                expression_index=model.emotionMap.get("surprise", 0),
+                trigger="state_change",
+            )
+        elif level == "GRAPH":
+            if "error" in message.lower() or "fail" in message.lower():
+                await state_manager.update_state(
+                    session_id=session_id,
+                    emotion="fear",
+                    expression_index=model.emotionMap.get("fear", 0),
+                    trigger="state_change",
+                )
+            elif "complet" in message.lower() or "success" in message.lower():
+                await state_manager.update_state(
+                    session_id=session_id,
+                    emotion="joy",
+                    expression_index=model.emotionMap.get("joy", 0),
+                    trigger="state_change",
+                )
+    except Exception:
+        pass  # Avatar state is best-effort; never break the SSE stream
+
+
 # ── Shared SSE helpers ────────────────────────────────────────────────────────
 
 
-async def _stream_execution_sse(holder: dict, session_id: str):
+async def _stream_execution_sse(holder: dict, session_id: str, app_state=None):
     """Yield SSE events for a running execution.
 
     Shared by ``/execute/events`` and ``/execute/stream``.
@@ -542,6 +604,9 @@ async def _stream_execution_sse(holder: dict, session_id: str):
 
     A heartbeat is sent every ~15 seconds of inactivity to keep the
     connection alive and report execution health (elapsed time, activity).
+
+    If ``app_state`` is provided and the session has a Live2D model assigned,
+    avatar state updates are automatically emitted based on log content.
     """
     session_logger = get_session_logger(session_id, create_if_missing=False)
     cache_cursor = holder.get("cache_cursor", 0)
@@ -575,7 +640,11 @@ async def _stream_execution_sse(holder: dict, session_id: str):
             if session_logger:
                 new_entries, cache_cursor = session_logger.get_cache_entries_since(cache_cursor)
                 for entry in new_entries:
-                    yield _sse("log", entry.to_dict())
+                    entry_dict = entry.to_dict()
+                    yield _sse("log", entry_dict)
+                    # Emit avatar state change based on log content
+                    if app_state:
+                        await _emit_avatar_state_for_log(entry_dict, session_id, app_state)
                     had_data = True
             if had_data:
                 last_event_time = time.monotonic()
@@ -649,6 +718,7 @@ async def start_agent_execution(
 @router.get("/{session_id}/execute/events")
 async def stream_execution_events(
     session_id: str = Path(..., description="Session ID"),
+    request: Request = None,
 ):
     """
     SSE event stream for a running execution.
@@ -667,8 +737,9 @@ async def stream_execution_events(
     if not holder:
         raise HTTPException(status_code=404, detail="No active execution for this session")
 
+    app_state = request.app.state if request else None
     return StreamingResponse(
-        _stream_execution_sse(holder, session_id),
+        _stream_execution_sse(holder, session_id, app_state=app_state),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -723,7 +794,8 @@ async def get_execution_status(
 @router.post("/{session_id}/execute/stream")
 async def execute_agent_prompt_stream(
     session_id: str = Path(..., description="Session ID"),
-    request: ExecuteRequest = ...,
+    execute_request: ExecuteRequest = ...,
+    http_request: Request = None,
 ):
     """
     Execute prompt with real-time SSE log streaming.
@@ -738,21 +810,23 @@ async def execute_agent_prompt_stream(
       - done      : stream complete sentinel
       - error     : top-level error
     """
+    app_state = http_request.app.state if http_request else None
+
     async def event_stream():
         try:
             holder = await start_command_background(
                 session_id=session_id,
-                prompt=request.prompt,
-                timeout=request.timeout,
-                system_prompt=request.system_prompt,
-                max_turns=request.max_turns,
+                prompt=execute_request.prompt,
+                timeout=execute_request.timeout,
+                system_prompt=execute_request.system_prompt,
+                max_turns=execute_request.max_turns,
             )
         except (AgentNotFoundError, AgentNotAliveError, AlreadyExecutingError) as e:
             yield _sse("error", {"error": str(e)})
             yield _sse("done", {})
             return
 
-        async for event in _stream_execution_sse(holder, session_id):
+        async for event in _stream_execution_sse(holder, session_id, app_state=app_state):
             yield event
 
     return StreamingResponse(

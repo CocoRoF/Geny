@@ -14,6 +14,7 @@ function cn(...classes: (string | boolean | undefined | null)[]) {
 const GLOBAL_TAB_IDS = ['main', 'playground', 'workflows', 'toolSets', 'sharedFolder', 'settings'] as const;
 const SESSION_TAB_DEFS = [
   { id: 'command', accent: true },
+  { id: 'vtuber' },
   { id: 'graph' },
   { id: 'memory' },
   { id: 'storage' },

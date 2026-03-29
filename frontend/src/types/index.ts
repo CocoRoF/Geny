@@ -544,3 +544,31 @@ export interface MemoryFileListResponse {
   files: MemoryFileDetail[];
   total: number;
 }
+
+// ==================== VTuber / Live2D Types ====================
+
+export interface Live2dModelInfo {
+  name: string;
+  display_name: string;
+  description: string;
+  url: string;
+  thumbnail: string | null;
+  kScale: number;
+  initialXshift: number;
+  initialYshift: number;
+  idleMotionGroupName: string;
+  emotionMap: Record<string, number>;
+  tapMotions: Record<string, Record<string, number>>;
+}
+
+export interface AvatarState {
+  session_id: string;
+  emotion: string;
+  expression_index: number;
+  motion_group: string;
+  motion_index: number;
+  intensity: number;
+  transition_ms: number;
+  trigger: string;
+  timestamp: string;
+}

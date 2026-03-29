@@ -50,6 +50,7 @@ const ko: Translations = {
     sharedFolder: '공유 폴더',
     chat: '채팅',
     memory: '메모리',
+    vtuber: 'VTuber',
   },
 
   // ─── Sidebar ───
@@ -732,6 +733,19 @@ const ko: Translations = {
       title: '파일 변경',
       filesChanged: '파일 {count}개 변경됨',
     },
+  },
+
+  // ─── VTuber / Live2D ───
+  vtuber: {
+    model: '모델',
+    selectModel: '모델 선택...',
+    noModel: '할당된 모델이 없습니다. 위에서 모델을 선택하세요.',
+    emotions: '감정',
+    modelList: '모델 목록',
+    assignments: '에이전트 할당',
+    none: '없음',
+    noModels: '등록된 모델이 없습니다',
+    selectModelPreview: '미리보기할 모델을 선택하세요',
   },
 };
 
