@@ -414,7 +414,8 @@ class SessionMemoryManager:
         indexed into FAISS (awaited to prevent race conditions with
         ``auto_flush`` / ``vmm.save()``).
 
-        Skipped entirely when LTM is disabled in config.
+        File/DB recording is always active regardless of LTM config.
+        Only vector indexing (FAISS) requires LTM to be enabled.
 
         Args:
             input_text: The user's input prompt.
@@ -423,15 +424,6 @@ class SessionMemoryManager:
             execution_number: Sequential execution counter for this session.
             success: Whether execution completed without errors.
         """
-        # Guard: skip when long-term memory is disabled in config
-        from service.config.sub_config.general.ltm_config import LTMConfig
-
-        if not LTMConfig.is_enabled():
-            logger.debug(
-                "record_execution: LTM disabled by config — skipping"
-            )
-            return
-
         try:
             entry = self._build_execution_entry(
                 input_text=input_text,
@@ -473,8 +465,10 @@ class SessionMemoryManager:
                         exc_info=True,
                     )
 
-            # Index into vector DB (awaited to avoid race with auto_flush/save)
-            if self._vmm.enabled:
+            # Index into vector DB (only when LTM config is enabled)
+            from service.config.sub_config.general.ltm_config import LTMConfig
+
+            if LTMConfig.is_enabled() and self._vmm.enabled:
                 try:
                     date_str = datetime.now(KST).strftime("%Y-%m-%d")
                     source = f"memory/{date_str}.md"
