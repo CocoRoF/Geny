@@ -49,6 +49,7 @@ function SessionItem({ session, isSelected, onSelect, cliSession }: {
         style={{
           background: {
             developer: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+            worker: 'linear-gradient(135deg, #10b981, #059669)',
             researcher: 'linear-gradient(135deg, #f97316, #ea580c)',
             planner: 'linear-gradient(135deg, #14b8a6, #0d9488)',
             vtuber: 'linear-gradient(135deg, #ec4899, #db2777)',
