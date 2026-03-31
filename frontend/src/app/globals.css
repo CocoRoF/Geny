@@ -540,3 +540,21 @@ html.light ::-webkit-scrollbar-thumb:hover {
 .file-viewer-lines > div:last-child > div:first-child {
 	padding-bottom: 4px;
 }
+
+/* ========================================
+   Pet Interaction — heart float animation
+   ======================================== */
+@keyframes petHeartFloat {
+	0% {
+		opacity: 1;
+		transform: translate(-50%, -50%) scale(1);
+	}
+	60% {
+		opacity: 0.8;
+		transform: translate(-50%, -120%) scale(1.4);
+	}
+	100% {
+		opacity: 0;
+		transform: translate(-50%, -200%) scale(0.8);
+	}
+}

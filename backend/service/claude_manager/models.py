@@ -325,6 +325,12 @@ class SessionInfo(BaseModel):
         description="Chat room ID auto-created for VTuber sessions"
     )
 
+    # Pet interaction
+    affection: Optional[int] = Field(
+        default=0,
+        description="Affection level — increases when the agent is petted"
+    )
+
 
 class ExecuteRequest(BaseModel):
     """

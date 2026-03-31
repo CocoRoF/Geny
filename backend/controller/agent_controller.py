@@ -1276,3 +1276,48 @@ async def get_session_workflow(
         status_code=404,
         detail=f"No workflow definition found for session {session_id}",
     )
+
+
+# ============================================================================
+# Pet Interaction API
+# ============================================================================
+
+
+class PetResponse(BaseModel):
+    success: bool
+    session_id: str
+    affection: int
+    message: str
+
+
+@router.post("/{session_id}/pet", response_model=PetResponse)
+async def pet_agent_session(
+    session_id: str = Path(..., description="Session ID"),
+):
+    """
+    Pet an agent session — increases its affection level by 1.
+
+    The agent's affection counter is incremented and persisted in the
+    session store. Use GET /api/agents/{session_id} to read the current value.
+    """
+    store = get_session_store()
+    record = store.get(session_id)
+
+    if not record:
+        # Also accept live agents that haven't been registered yet
+        if not agent_manager.has_agent(session_id):
+            raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+        record = {}
+
+    current_affection: int = int(record.get("affection", 0) or 0)
+    new_affection = current_affection + 1
+
+    store.update(session_id, {"affection": new_affection})
+
+    logger.info(f"[{session_id}] Petted! affection={new_affection}")
+    return PetResponse(
+        success=True,
+        session_id=session_id,
+        affection=new_affection,
+        message=f"💕 Agent petted! affection={new_affection}",
+    )

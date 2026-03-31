@@ -93,6 +93,13 @@ export const agentApi = {
   /** GET /api/agents/store/{id} — get stored (deleted) session detail */
   getStore: (id: string) => apiCall<SessionInfo>(`/api/agents/store/${id}`),
 
+  /** POST /api/agents/{id}/pet — pet the agent (increases affection) */
+  pet: (id: string) =>
+    apiCall<{ success: boolean; session_id: string; affection: number; message: string }>(
+      `/api/sessions/${id}/pet`,
+      { method: 'POST' },
+    ),
+
   /** POST /api/agents/{id}/execute — execute single command */
   execute: (id: string, data: ExecuteRequest) =>
     apiCall<ExecuteResponse>(`/api/agents/${id}/execute`, {

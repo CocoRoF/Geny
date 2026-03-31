@@ -23,6 +23,7 @@ export interface SessionInfo {
   total_cost: number | null;
   is_deleted?: boolean;
   deleted_at?: string | null;
+  affection?: number | null;
 }
 
 export interface CreateAgentRequest {

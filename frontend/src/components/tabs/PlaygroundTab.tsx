@@ -9,13 +9,31 @@ import { Asset3DLoader } from '@/lib/assetLoader';
 import { AvatarSystem } from '@/lib/avatarSystem';
 import { useI18n } from '@/lib/i18n';
 import { Building2 } from 'lucide-react';
+import { agentApi } from '@/lib/api';
+
+/* ──────────────────────────────────────────────────────────
+   Heart particle that floats up and fades out
+   ────────────────────────────────────────────────────────── */
+interface HeartParticle {
+  id: number;
+  x: number;
+  y: number;
+  opacity: number;
+  scale: number;
+}
+
+let _heartId = 0;
 
 /* ────────────────────────────────────────────────────────────
    Camera controller (reproduces the orbit / pan / zoom from
    the original vanilla JS scene)
    ──────────────────────────────────────────────────────────── */
 
-function CameraController() {
+interface CameraControllerProps {
+  onAvatarPet?: (sessionId: string, screenX: number, screenY: number) => void;
+}
+
+function CameraController({ onAvatarPet }: CameraControllerProps) {
   const { camera, gl } = useThree();
   const state = useRef({
     angle: Math.PI / 4,
@@ -260,9 +278,11 @@ function CameraController() {
       if (sid) {
         // dispatch to zustand store
         useAppStore.getState().selectSession(sid);
+        // trigger pet interaction
+        onAvatarPet?.(sid, e.clientX, e.clientY);
       }
     }
-  }, [camera, gl]);
+  }, [camera, gl, onAvatarPet]);
 
   return null;
 }
@@ -342,6 +362,36 @@ export default function PlaygroundTab() {
   const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [loadingPct, setLoadingPct] = useState<number | null>(0);
+  const [hearts, setHearts] = useState<HeartParticle[]>([]);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const handleAvatarPet = useCallback(async (sessionId: string, screenX: number, screenY: number) => {
+    // Fire heart particles relative to the canvas container
+    const rect = containerRef.current?.getBoundingClientRect();
+    const relX = rect ? screenX - rect.left : screenX;
+    const relY = rect ? screenY - rect.top : screenY;
+
+    const newHeart: HeartParticle = {
+      id: ++_heartId,
+      x: relX,
+      y: relY,
+      opacity: 1,
+      scale: 1,
+    };
+    setHearts((prev) => [...prev, newHeart]);
+
+    // Remove after animation completes (1.2s)
+    setTimeout(() => {
+      setHearts((prev) => prev.filter((h) => h.id !== newHeart.id));
+    }, 1200);
+
+    // Call backend
+    try {
+      await agentApi.pet(sessionId);
+    } catch {
+      // pet is best-effort — ignore errors
+    }
+  }, []);
 
   /** Toolbar button handlers — delegate to CameraController via domElement */
   const cameraCtrl = useCallback(() => {
@@ -399,7 +449,7 @@ export default function PlaygroundTab() {
       </div>
 
       {/* Canvas container */}
-      <div className="flex-1 relative overflow-hidden cursor-grab active:cursor-grabbing">
+      <div ref={containerRef} className="flex-1 relative overflow-hidden cursor-grab active:cursor-grabbing">
         {/* Loading overlay */}
         {loadingPct !== null && loadingPct < 100 && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4"
@@ -462,12 +512,29 @@ export default function PlaygroundTab() {
           </mesh>
 
           {/* Camera controller (custom orbit) */}
-          <CameraController />
+          <CameraController onAvatarPet={handleAvatarPet} />
 
           {/* City + avatars */}
           <CitySceneInner sessions={sessionList} onProgress={setLoadingPct} />
         </Canvas>
       </div>
+
+      {/* Heart particle overlay */}
+      {hearts.map((heart) => (
+        <div
+          key={heart.id}
+          className="absolute pointer-events-none z-30 select-none"
+          style={{
+            left: heart.x,
+            top: heart.y,
+            transform: 'translate(-50%, -50%)',
+            fontSize: '2rem',
+            animation: 'petHeartFloat 1.2s ease-out forwards',
+          }}
+        >
+          💕
+        </div>
+      ))}
 
       {/* Status overlay placeholder */}
       <div className="absolute bottom-3 left-3 flex flex-col gap-1 z-10 pointer-events-none" />

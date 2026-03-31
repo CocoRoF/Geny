@@ -12,6 +12,7 @@ import uuid
 from typing import List, AsyncGenerator
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Path, Query
+from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 
 # Pattern to detect auto-continue signal from self-manager
@@ -394,4 +395,48 @@ async def read_storage_file(
     return StorageFileContent(
         session_id=session_id,
         **file_content
+    )
+
+
+# ========== Pet Interaction API ==========
+
+class PetResponse(BaseModel):
+    success: bool
+    session_id: str
+    affection: int
+    message: str
+
+
+@router.post("/{session_id}/pet", response_model=PetResponse)
+async def pet_session(
+    session_id: str = Path(..., description="Session ID"),
+):
+    """
+    Pet an agent session — increases its affection level.
+
+    Each call increments the session's affection counter by 1.
+    """
+    from service.claude_manager.session_store import get_session_store
+
+    store = get_session_store()
+    record = store.get(session_id)
+
+    # Fall back: accept any known session (live or stored)
+    if not record:
+        process = session_manager.get_process(session_id)
+        if not process:
+            raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+        record = {}
+
+    current_affection: int = int(record.get("affection", 0) or 0)
+    new_affection = current_affection + 1
+
+    store.update(session_id, {"affection": new_affection})
+
+    logger.info(f"[{session_id}] Petted! affection={new_affection}")
+    return PetResponse(
+        success=True,
+        session_id=session_id,
+        affection=new_affection,
+        message=f"💕 Agent petted! affection={new_affection}",
     )

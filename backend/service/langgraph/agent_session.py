@@ -1337,13 +1337,15 @@ class AgentSession:
         Returns:
             SessionInfo instance.
         """
-        # Read persisted total_cost from session store
+        # Read persisted total_cost and affection from session store
         _total_cost = 0.0
+        _affection = 0
         try:
             from service.claude_manager.session_store import get_session_store
             store_data = get_session_store().get(self._session_id)
             if store_data:
                 _total_cost = store_data.get("total_cost", 0.0) or 0.0
+                _affection = int(store_data.get("affection", 0) or 0)
         except Exception:
             pass
 
@@ -1383,6 +1385,7 @@ class AgentSession:
             linked_session_id=self._linked_session_id,
             session_type=self._session_type,
             chat_room_id=self._chat_room_id,
+            affection=_affection,
         )
 
     # ========================================================================
