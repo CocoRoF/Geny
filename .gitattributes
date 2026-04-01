@@ -1,0 +1,12 @@
+# This file itself
+.gitattributes text eol=lf
+
+# Force LF line endings for shell scripts
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Docker & config files that must be LF
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.conf text eol=lf
