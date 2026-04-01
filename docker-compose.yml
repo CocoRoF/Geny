@@ -132,29 +132,29 @@ services:
       - geny-net
 
   # ── Fish Speech (Optional — TTS 로컬 엔진, GPU 필요) ──────────────
-  fish-speech:
-    image: fishaudio/fish-speech:latest
-    container_name: geny-fish-speech
-    profiles: ["tts-local"]
-    restart: unless-stopped
-    entrypoint: ["/bin/bash", "/app/scripts/fish-speech-entrypoint.sh"]
-    ports:
-      - "${FISH_SPEECH_PORT:-8080}:8080"
-    volumes:
-      - ./fish-speech-checkpoints:/app/checkpoints
-      - ./scripts/fish-speech-entrypoint.sh:/app/scripts/fish-speech-entrypoint.sh:ro
-    environment:
-      - FISH_SPEECH_AUTO_DOWNLOAD=${FISH_SPEECH_AUTO_DOWNLOAD:-false}
-      - FISH_SPEECH_MODEL_REPO=${FISH_SPEECH_MODEL_REPO:-fishaudio/s2-pro}
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    networks:
-      - geny-net
+  # fish-speech:
+  #   image: fishaudio/fish-speech:latest
+  #   container_name: geny-fish-speech
+  #   profiles: ["tts-local"]
+  #   restart: unless-stopped
+  #   entrypoint: ["/bin/bash", "/app/scripts/fish-speech-entrypoint.sh"]
+  #   ports:
+  #     - "${FISH_SPEECH_PORT:-8080}:8080"
+  #   volumes:
+  #     - ./fish-speech-checkpoints:/app/checkpoints
+  #     - ./scripts/fish-speech-entrypoint.sh:/app/scripts/fish-speech-entrypoint.sh:ro
+  #   environment:
+  #     - FISH_SPEECH_AUTO_DOWNLOAD=${FISH_SPEECH_AUTO_DOWNLOAD:-false}
+  #     - FISH_SPEECH_MODEL_REPO=${FISH_SPEECH_MODEL_REPO:-fishaudio/s2-pro}
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+  #   networks:
+  #     - geny-net
 
 networks:
   geny-net:
