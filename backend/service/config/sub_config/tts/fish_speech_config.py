@@ -18,7 +18,7 @@ class FishSpeechConfig(BaseConfig):
     """Fish Speech TTS settings — open-source fast TTS"""
 
     enabled: bool = False
-    api_url: str = "http://localhost:8080"
+    api_url: str = "http://fish-speech:8080"
     reference_id: str = ""
 
     @classmethod

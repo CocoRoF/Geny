@@ -1,0 +1,22 @@
+{
+  "1f66945be0dd6a64": {
+    "key": "1f66945be0dd6a64",
+    "file": "1f66945be0dd6a64.mp3",
+    "created": 1775061513.0325396,
+    "size": 51840,
+    "text_preview": "안녕하세요! 반가워요~ 오늘 제가 도와드릴 일이 있나요? 아니면 그냥 이야기하고 싶으신 거",
+    "emotion": "joy",
+    "engine": "gpt_sovits",
+    "last_accessed": 1775061513.0325418
+  },
+  "0c916386c2d890bd": {
+    "key": "0c916386c2d890bd",
+    "file": "0c916386c2d890bd.mp3",
+    "created": 1775061678.948822,
+    "size": 505644,
+    "text_preview": "안녕하세요! 반가워요~ 오늘 기분이 어때요? 무슨 얘기하고 싶으신가요?",
+    "emotion": "joy",
+    "engine": "gpt_sovits",
+    "last_accessed": 1775061678.9488232
+  }
+}

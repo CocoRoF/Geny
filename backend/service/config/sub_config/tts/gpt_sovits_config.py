@@ -18,10 +18,10 @@ class GPTSoVITSConfig(BaseConfig):
     """GPT-SoVITS TTS settings — open-source voice cloning"""
 
     enabled: bool = False
-    api_url: str = "http://gpt-sovits:9871"
-    ref_audio_dir: str = "/app/static/voices/mao_pro"
-    container_ref_dir: str = "/app/references/mao_pro"
-    prompt_text: str = ""
+    api_url: str = "http://gpt-sovits:9880"
+    ref_audio_dir: str = "/app/static/voices/paimon_ko"
+    container_ref_dir: str = "/workspace/GPT-SoVITS/references/paimon_ko"
+    prompt_text: str = "우와아 이건 세상에서 제일 맛있는 요리야 이히힛 역시 네가 최고야"
     prompt_lang: str = "ko"
     top_k: int = 5
     top_p: float = 1.0
@@ -62,9 +62,9 @@ class GPTSoVITSConfig(BaseConfig):
                 name="api_url",
                 field_type=FieldType.URL,
                 label="API URL",
-                description="GPT-SoVITS API v2 server address (Docker: http://gpt-sovits:9871)",
+                description="GPT-SoVITS API v2 server address (Docker: http://gpt-sovits:9880)",
                 group="server",
-                placeholder="http://gpt-sovits:9871",
+                placeholder="http://gpt-sovits:9880",
             ),
             ConfigField(
                 name="ref_audio_dir",
@@ -72,15 +72,15 @@ class GPTSoVITSConfig(BaseConfig):
                 label="Reference Audio Path (Backend)",
                 description="Backend container path to per-emotion reference files",
                 group="voice",
-                placeholder="/app/static/voices/mao_pro",
+                placeholder="/app/static/voices/paimon_ko",
             ),
             ConfigField(
                 name="container_ref_dir",
                 field_type=FieldType.STRING,
                 label="Reference Audio Path (GPT-SoVITS Container)",
-                description="GPT-SoVITS container path — must match Docker volume mount",
+                description="GPT-SoVITS container path — must match Docker volume mount (/workspace/GPT-SoVITS/references/...)",
                 group="voice",
-                placeholder="/app/references/mao_pro",
+                placeholder="/workspace/GPT-SoVITS/references/paimon_ko",
             ),
             ConfigField(
                 name="prompt_text",

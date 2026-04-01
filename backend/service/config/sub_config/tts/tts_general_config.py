@@ -20,7 +20,7 @@ class TTSGeneralConfig(BaseConfig):
 
     # ─── Basic ───
     enabled: bool = True
-    provider: str = "edge_tts"
+    provider: str = "gpt_sovits"
     auto_speak: bool = True
     default_language: str = "ko"
 
@@ -32,11 +32,11 @@ class TTSGeneralConfig(BaseConfig):
     emotion_speed_surprise: float = 1.2
 
     # ─── Emotion pitch mapping ───
-    emotion_pitch_joy: str = "+5%"
-    emotion_pitch_anger: str = "+2%"
-    emotion_pitch_sadness: str = "-5%"
-    emotion_pitch_fear: str = "+8%"
-    emotion_pitch_surprise: str = "+10%"
+    emotion_pitch_joy: str = "+50Hz"
+    emotion_pitch_anger: str = "+20Hz"
+    emotion_pitch_sadness: str = "-50Hz"
+    emotion_pitch_fear: str = "+80Hz"
+    emotion_pitch_surprise: str = "+100Hz"
 
     # ─── Audio ───
     audio_format: str = "mp3"

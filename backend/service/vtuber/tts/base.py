@@ -29,7 +29,7 @@ class TTSRequest:
     emotion: str = "neutral"
     language: str = "ko"
     speed: float = 1.0
-    pitch_shift: str = "+0%"
+    pitch_shift: str = "+0Hz"
     audio_format: AudioFormat = AudioFormat.MP3
     sample_rate: int = 24000
 
@@ -115,7 +115,7 @@ class TTSEngine(ABC):
                 "surprise": general.emotion_pitch_surprise,
             }
             request.speed *= emotion_speeds.get(request.emotion, 1.0)
-            request.pitch_shift = emotion_pitches.get(request.emotion, "+0%")
+            request.pitch_shift = emotion_pitches.get(request.emotion, "+0Hz")
         except Exception as e:
             logger.warning(f"Failed to load emotion config, using defaults: {e}")
 

@@ -27,7 +27,7 @@
 #    NGINX_PORT=58443 docker compose -f docker-compose.prod.yml up --build
 #
 #  TTS 설정:
-#    GPT-SoVITS API URL → 설정 UI에서 http://gpt-sovits:9871 입력
+#    GPT-SoVITS API URL → 설정 UI에서 http://gpt-sovits:9880 입력
 #    Fish Speech API URL → 설정 UI에서 http://fish-speech:8080 입력
 # ══════════════════════════════════════════════════════════════════════
 
@@ -139,17 +139,31 @@ services:
       - geny-net-prod
 
   # ── GPT-SoVITS (Optional — TTS 로컬 엔진, GPU 필요) ──────────────
+  # xxxxrt666/gpt-sovits (공식 이미지, v2 API, 한국어 지원)
   gpt-sovits:
-    image: breakstring/gpt-sovits:latest
+    image: xxxxrt666/gpt-sovits:latest-cu128
     container_name: geny-gpt-sovits-prod
     profiles: ["tts-local"]
     init: true
     restart: unless-stopped
+    working_dir: /workspace/GPT-SoVITS
+    command:
+      - /bin/bash
+      - "-c"
+      - |
+        rm -rf GPT_SoVITS/pretrained_models GPT_SoVITS/text/G2PWModel tools/asr/models tools/uvr5/uvr5_weights 2>/dev/null;
+        ln -sf /workspace/models/pretrained_models GPT_SoVITS/pretrained_models;
+        ln -sf /workspace/models/G2PWModel       GPT_SoVITS/text/G2PWModel;
+        ln -sf /workspace/models/asr_models       tools/asr/models;
+        ln -sf /workspace/models/uvr5_weights     tools/uvr5/uvr5_weights;
+        exec python api_v2.py -a 0.0.0.0 -p 9880
     expose:
-      - "9871"
+      - "9880"
     volumes:
-      - geny-voices-prod:/app/references:ro
-      - gpt-sovits-models-prod:/app/models
+      - geny-voices-prod:/workspace/GPT-SoVITS/references:ro
+    tty: true
+    stdin_open: true
+    shm_size: 16G
     deploy:
       resources:
         reservations:
@@ -159,6 +173,7 @@ services:
               capabilities: [gpu]
     environment:
       - is_half=True
+      - LD_LIBRARY_PATH=/root/conda/lib:/root/conda/lib/python3.12/site-packages/nvidia/npp/lib
     networks:
       - geny-net-prod
 
@@ -197,6 +212,4 @@ volumes:
   geny-tts-cache-prod:
     driver: local
   geny-voices-prod:
-    driver: local
-  gpt-sovits-models-prod:
     driver: local

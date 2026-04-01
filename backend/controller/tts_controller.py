@@ -64,6 +64,10 @@ async def speak(session_id: str, body: SpeakRequest):
         }.get(general.audio_format, "audio/mpeg")
         default_language = general.default_language
         current_provider = general.provider
+
+        # GPT-SoVITS v1 api.py always returns wav regardless of config
+        if current_provider == "gpt_sovits":
+            content_type = "audio/wav"
     except Exception:
         default_language = "ko"
         current_provider = "edge_tts"
@@ -91,21 +95,7 @@ async def speak(session_id: str, body: SpeakRequest):
                 f"engine={current_provider}"
             )
 
-    # Pre-flight: TTS 서비스 상태 확인 후 에러 시 즉시 4xx 응답
-    try:
-        engine = tts.get_engine(body.engine)
-        if engine and not await engine.health_check():
-            return JSONResponse(
-                status_code=503,
-                content={
-                    "error": "TTS engine unavailable",
-                    "engine": current_provider,
-                    "message": f"TTS engine '{current_provider}' health check failed. "
-                               f"Check if the engine is enabled and the server is running.",
-                },
-            )
-    except Exception as e:
-        logger.warning(f"TTS pre-flight check error: {e}")
+    # speak() 내부에서 health check + fallback 처리하므로 별도 pre-flight 불필요
 
     return StreamingResponse(
         audio_generator(),
