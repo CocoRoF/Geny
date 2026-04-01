@@ -145,10 +145,15 @@ services:
     container_name: geny-fish-speech-dev
     profiles: ["tts-local"]
     restart: unless-stopped
+    entrypoint: ["/bin/bash", "/app/scripts/fish-speech-entrypoint.sh"]
     ports:
       - "${FISH_SPEECH_PORT:-8080}:8080"
     volumes:
-      - fish-speech-models-dev:/app/models
+      - ./fish-speech-checkpoints:/app/checkpoints
+      - ./scripts/fish-speech-entrypoint.sh:/app/scripts/fish-speech-entrypoint.sh:ro
+    environment:
+      - FISH_SPEECH_AUTO_DOWNLOAD=${FISH_SPEECH_AUTO_DOWNLOAD:-false}
+      - FISH_SPEECH_MODEL_REPO=${FISH_SPEECH_MODEL_REPO:-fishaudio/s2-pro}
     deploy:
       resources:
         reservations:
@@ -167,6 +172,4 @@ volumes:
   geny-pgdata-dev:
     driver: local
   gpt-sovits-models-dev:
-    driver: local
-  fish-speech-models-dev:
     driver: local
