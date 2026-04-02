@@ -115,7 +115,7 @@ services:
   # xxxxrt666/gpt-sovits (공식 이미지, v2 API, 한국어 지원)
   # api_v2.py → 포트 9880 서빙
   gpt-sovits:
-    image: xxxxrt666/gpt-sovits:latest-cu128
+    image: xxxxrt666/gpt-sovits:latest-cu126
     container_name: geny-gpt-sovits
     profiles: ["tts-local"]
     init: true
@@ -146,7 +146,7 @@ services:
               count: 1
               capabilities: [gpu]
     environment:
-      - is_half=True
+      - is_half=False
       - LD_LIBRARY_PATH=/root/conda/lib:/root/conda/lib/python3.12/site-packages/nvidia/npp/lib
     networks:
       - geny-net
