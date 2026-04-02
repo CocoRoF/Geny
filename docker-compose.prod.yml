@@ -151,8 +151,8 @@ services:
       - /bin/bash
       - "-c"
       - |
-        echo '[1/3] Installing FFmpeg...';
-        apt-get update -qq && apt-get install -y -qq ffmpeg;
+        echo '[1/3] Installing nvidia-npp-cu12...';
+        pip install --no-cache-dir nvidia-npp-cu12;
         echo '[2/3] Fixing torchaudio...';
         pip install --no-cache-dir --no-deps --force-reinstall torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu126;
         echo '[3/3] Starting GPT-SoVITS...';
