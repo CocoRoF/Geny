@@ -45,7 +45,8 @@ from service.memory.vector_store import (
 
 logger = getLogger(__name__)
 
-KST = timezone(timedelta(hours=9))
+# Use configured timezone (unused in this module but kept for consistency)
+from service.utils.utils import _configured_tz as _get_tz  # noqa: F401
 
 
 class VectorMemoryManager:

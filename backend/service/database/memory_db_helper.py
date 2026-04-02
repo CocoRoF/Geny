@@ -17,7 +17,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger("memory-db-helper")
 
 TABLE = "session_memory_entries"
-KST = timezone(timedelta(hours=9))
+# Use configured timezone from GENY_TIMEZONE env var
+from service.utils.utils import _configured_tz as _get_tz
 
 
 def _get_db_manager(db_manager):
@@ -69,7 +70,7 @@ def db_ltm_append(
 
     try:
         entry_id = str(uuid.uuid4())
-        now = datetime.now(KST).isoformat()
+        now = datetime.now(_get_tz()).isoformat()
         query = (
             f"INSERT INTO {TABLE} "
             f"(entry_id, session_id, source, entry_type, content, filename, heading, entry_timestamp) "
@@ -106,9 +107,9 @@ def db_ltm_write_dated(
 
     try:
         entry_id = str(uuid.uuid4())
-        now = datetime.now(KST).isoformat()
+        now = datetime.now(_get_tz()).isoformat()
         if not date_str:
-            date_str = datetime.now(KST).strftime("%Y-%m-%d")
+            date_str = datetime.now(_get_tz()).strftime("%Y-%m-%d")
         filename = f"memory/{date_str}.md"
         query = (
             f"INSERT INTO {TABLE} "
@@ -142,7 +143,7 @@ def db_ltm_write_topic(
         import re
         slug = re.sub(r"[^a-z0-9_-]", "_", topic.lower().strip())[:64]
         entry_id = str(uuid.uuid4())
-        now = datetime.now(KST).isoformat()
+        now = datetime.now(_get_tz()).isoformat()
         filename = f"memory/topics/{slug}.md"
         query = (
             f"INSERT INTO {TABLE} "
@@ -287,7 +288,7 @@ def db_stm_add_message(
 
     try:
         entry_id = str(uuid.uuid4())
-        now = datetime.now(KST).isoformat()
+        now = datetime.now(_get_tz()).isoformat()
         meta_str = json.dumps(metadata, ensure_ascii=False, default=str) if metadata else "{}"
         query = (
             f"INSERT INTO {TABLE} "
@@ -319,7 +320,7 @@ def db_stm_add_event(
 
     try:
         entry_id = str(uuid.uuid4())
-        now = datetime.now(KST).isoformat()
+        now = datetime.now(_get_tz()).isoformat()
         data_str = json.dumps(data, ensure_ascii=False, default=str) if data else "{}"
         query = (
             f"INSERT INTO {TABLE} "
@@ -352,7 +353,7 @@ def db_stm_write_summary(
 
     try:
         entry_id = f"{session_id}__summary"
-        now = datetime.now(KST).isoformat()
+        now = datetime.now(_get_tz()).isoformat()
         query = (
             f"INSERT INTO {TABLE} "
             f"(entry_id, session_id, source, entry_type, content, filename, entry_timestamp) "
@@ -726,7 +727,7 @@ def db_structured_write(
 
     try:
         entry_id = str(uuid.uuid4())
-        now = datetime.now(KST).isoformat()
+        now = datetime.now(_get_tz()).isoformat()
         tags_str = json.dumps(tags or [], ensure_ascii=False)
         links_to_str = json.dumps(links_to or [], ensure_ascii=False)
         linked_from_str = json.dumps(linked_from or [], ensure_ascii=False)

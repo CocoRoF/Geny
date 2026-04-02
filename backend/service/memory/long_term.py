@@ -30,7 +30,8 @@ from service.memory.types import MemoryEntry, MemorySearchResult, MemorySource
 
 logger = getLogger(__name__)
 
-KST = timezone(timedelta(hours=9))
+# Use configured timezone from GENY_TIMEZONE env var
+from service.utils.utils import _configured_tz as _get_tz
 
 # Maximum file size we will index (256 KB).
 MAX_FILE_SIZE = 256_000
@@ -125,12 +126,12 @@ class LongTermMemory:
             heading: Optional markdown heading to prepend.
         """
         self.ensure_directory()
-        now = datetime.now(KST)
+        now = datetime.now(_get_tz())
 
         lines: list[str] = []
         if heading:
             lines.append(f"\n## {heading}\n")
-        lines.append(f"<!-- {now.strftime('%Y-%m-%d %H:%M KST')} -->\n")
+        lines.append(f"<!-- {now.strftime('%Y-%m-%d %H:%M %Z')} -->\n")
         lines.append(text.rstrip() + "\n")
 
         with open(self._main_file, "a", encoding="utf-8") as f:
@@ -168,11 +169,11 @@ class LongTermMemory:
             Path to the written file.
         """
         self.ensure_directory()
-        date = date or datetime.now(KST)
+        date = date or datetime.now(_get_tz())
         filename = f"{date.strftime('%Y-%m-%d')}.md"
         filepath = self._memory_dir / filename
 
-        now_str = date.strftime("%H:%M KST")
+        now_str = date.strftime("%H:%M %Z")
         with open(filepath, "a", encoding="utf-8") as f:
             f.write(f"\n---\n_({now_str})_\n\n{text.rstrip()}\n")
 
@@ -213,10 +214,10 @@ class LongTermMemory:
         slug = re.sub(r"[^a-z0-9_-]", "_", topic.lower().strip())[:64]
         filepath = topics_dir / f"{slug}.md"
 
-        now = datetime.now(KST)
+        now = datetime.now(_get_tz())
         with open(filepath, "a", encoding="utf-8") as f:
             f.write(
-                f"\n---\n_({now.strftime('%Y-%m-%d %H:%M KST')})_\n\n"
+                f"\n---\n_({now.strftime('%Y-%m-%d %H:%M %Z')})_\n\n"
                 f"{text.rstrip()}\n"
             )
 
@@ -272,7 +273,7 @@ class LongTermMemory:
                     continue
 
                 rel = str(filepath.relative_to(self._storage_path))
-                mtime = datetime.fromtimestamp(stat.st_mtime, tz=KST)
+                mtime = datetime.fromtimestamp(stat.st_mtime, tz=_get_tz())
 
                 entries.append(MemoryEntry(
                     source=MemorySource.LONG_TERM,
@@ -335,7 +336,7 @@ class LongTermMemory:
                 content=content,
                 filename=str(self._main_file.relative_to(self._storage_path)),
                 timestamp=datetime.fromtimestamp(
-                    self._main_file.stat().st_mtime, tz=KST
+                    self._main_file.stat().st_mtime, tz=_get_tz()
                 ),
             )
         except (OSError, UnicodeDecodeError) as exc:
@@ -411,7 +412,7 @@ class LongTermMemory:
             return []
 
         results: list[MemorySearchResult] = []
-        now = datetime.now(KST)
+        now = datetime.now(_get_tz())
 
         for entry in entries:
             content_lower = entry.content.lower()

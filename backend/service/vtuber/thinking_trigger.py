@@ -552,8 +552,9 @@ class ThinkingTriggerService:
 
     @staticmethod
     def _get_time_category() -> str:
-        """Return a time-of-day category based on the current local hour."""
-        hour = datetime.now().hour
+        """Return a time-of-day category based on the configured timezone hour."""
+        from service.utils.utils import now_kst
+        hour = now_kst().hour
         if 6 <= hour < 12:
             return "time_morning"
         if 12 <= hour < 18:

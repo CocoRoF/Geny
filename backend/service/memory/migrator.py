@@ -25,7 +25,8 @@ from service.memory.frontmatter import (
 
 logger = getLogger(__name__)
 
-KST = timezone(timedelta(hours=9))
+# Use configured timezone from GENY_TIMEZONE env var
+from service.utils.utils import _configured_tz as _get_tz
 
 # Pattern to match dated filenames (e.g. 2026-03-29.md).
 _DATE_FILE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.md$")
@@ -164,7 +165,7 @@ class MemoryMigrator:
                 ex_meta, ex_body = parse_frontmatter(existing)
                 merged_body = ex_body.rstrip() + "\n\n" + content
                 if ex_meta:
-                    ex_meta["modified"] = datetime.now(KST).isoformat()
+                    ex_meta["modified"] = datetime.now(_get_tz()).isoformat()
                     merged_content = render_frontmatter(ex_meta, merged_body)
                 else:
                     merged_content = render_frontmatter(new_metadata, merged_body)
@@ -221,9 +222,9 @@ class MemoryMigrator:
         # File modification time as created date
         try:
             mtime = filepath.stat().st_mtime
-            created = datetime.fromtimestamp(mtime, tz=KST).isoformat()
+            created = datetime.fromtimestamp(mtime, tz=_get_tz()).isoformat()
         except OSError:
-            created = datetime.now(KST).isoformat()
+            created = datetime.now(_get_tz()).isoformat()
 
         return build_default_metadata(
             title=title,

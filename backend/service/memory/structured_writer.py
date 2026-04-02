@@ -27,7 +27,8 @@ from service.memory.index import MemoryIndexManager, MemoryFileInfo
 
 logger = getLogger(__name__)
 
-KST = timezone(timedelta(hours=9))
+# Use configured timezone from GENY_TIMEZONE env var
+from service.utils.utils import _configured_tz as _get_tz
 
 # Valid categories that map to subdirectories.
 VALID_CATEGORIES = {"daily", "topics", "entities", "projects", "insights", "root"}
@@ -208,7 +209,7 @@ class StructuredMemoryWriter:
                 )
 
             # Update metadata fields
-            now = datetime.now(KST).isoformat()
+            now = datetime.now(_get_tz()).isoformat()
             metadata["modified"] = now
 
             if tags:
@@ -295,7 +296,7 @@ class StructuredMemoryWriter:
             # Append link reference
             body = body.rstrip() + f"\n\n> See also: [[{target_stem}]]\n"
 
-            metadata["modified"] = datetime.now(KST).isoformat()
+            metadata["modified"] = datetime.now(_get_tz()).isoformat()
             metadata["links_to"] = extract_wikilinks(body)
 
             full_content = render_frontmatter(metadata, body)
@@ -414,7 +415,7 @@ class StructuredMemoryWriter:
 
             mgr = _get_db_manager(self._db_manager)
             entry_id = str(uuid.uuid4())
-            now = datetime.now(KST).isoformat()
+            now = datetime.now(_get_tz()).isoformat()
             tags_json = json.dumps(metadata.get("tags", []), ensure_ascii=False)
             category = metadata.get("category", "topics")
             importance = metadata.get("importance", "medium")

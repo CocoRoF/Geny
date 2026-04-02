@@ -32,7 +32,8 @@ from service.memory.types import MemoryEntry, MemorySearchResult, MemorySource
 
 logger = getLogger(__name__)
 
-KST = timezone(timedelta(hours=9))
+# Use configured timezone from GENY_TIMEZONE env var
+from service.utils.utils import _configured_tz as _get_tz
 
 # Maximum transcript entries kept in the JSONL file.
 # DB retains full history; this limit prevents unbounded file growth.
@@ -134,7 +135,7 @@ class ShortTermMemory:
             metadata: Optional extra fields (tool_calls, duration_ms, etc.).
         """
         self.ensure_directory()
-        now = datetime.now(KST)
+        now = datetime.now(_get_tz())
 
         record: Dict[str, Any] = {
             "type": "message",
@@ -173,7 +174,7 @@ class ShortTermMemory:
             data: Event payload.
         """
         self.ensure_directory()
-        now = datetime.now(KST)
+        now = datetime.now(_get_tz())
 
         record: Dict[str, Any] = {
             "type": "event",

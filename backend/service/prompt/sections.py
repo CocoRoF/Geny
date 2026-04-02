@@ -18,8 +18,8 @@ from service.prompt.builder import PromptBuilder, PromptMode, PromptSection
 
 logger = getLogger(__name__)
 
-# KST timezone
-KST = timezone(timedelta(hours=9))
+# Configured timezone (respects GENY_TIMEZONE env var)
+from service.utils.utils import _configured_tz as _get_tz, _configured_tz_abbr as _get_tz_abbr
 
 
 class SectionLibrary:
@@ -275,11 +275,13 @@ class SectionLibrary:
     @staticmethod
     def datetime_info() -> PromptSection:
         """Current time (1-line). Captures the time at prompt build."""
-        now_kst = datetime.now(timezone.utc).astimezone(KST)
+        tz = _get_tz()
+        now_local = datetime.now(timezone.utc).astimezone(tz)
+        abbr = now_local.strftime("%Z")
 
         return PromptSection(
             name="datetime",
-            content=f"Current time: {now_kst.strftime('%Y-%m-%d %H:%M:%S KST')}",
+            content=f"Current time: {now_local.strftime('%Y-%m-%d %H:%M:%S')} {abbr}",
             priority=45,
             modes={PromptMode.FULL},
         )

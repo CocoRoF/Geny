@@ -49,7 +49,8 @@ import numpy as np
 
 logger = getLogger(__name__)
 
-KST = timezone(timedelta(hours=9))
+# Use configured timezone from GENY_TIMEZONE env var
+from service.utils.utils import _configured_tz as _get_tz
 
 # Directory name inside the session storage path
 _VECTORDB_DIR = "vectordb"
@@ -261,7 +262,7 @@ class SessionVectorStore:
         if not texts:
             return 0
 
-        now_str = datetime.now(KST).isoformat()
+        now_str = datetime.now(_get_tz()).isoformat()
 
         new_vecs: List[List[float]] = []
         new_metas: List[ChunkMeta] = []

@@ -36,7 +36,8 @@ from service.memory.types import (
 
 logger = getLogger(__name__)
 
-KST = timezone(timedelta(hours=9))
+# Use configured timezone from GENY_TIMEZONE env var
+from service.utils.utils import _configured_tz as _get_tz
 
 # Maximum characters injected from memory into context.
 DEFAULT_MAX_INJECT_CHARS = 8_000
@@ -470,7 +471,7 @@ class SessionMemoryManager:
 
             if LTMConfig.is_enabled() and self._vmm.enabled:
                 try:
-                    date_str = datetime.now(KST).strftime("%Y-%m-%d")
+                    date_str = datetime.now(_get_tz()).strftime("%Y-%m-%d")
                     source = f"memory/{date_str}.md"
                     await self._vmm.index_text(entry, source)
                 except Exception:
@@ -927,7 +928,7 @@ class SessionMemoryManager:
             logger.debug("auto_flush: LTM disabled by config — skipping")
             return None
 
-        now = datetime.now(KST)
+        now = datetime.now(_get_tz())
         all_entries = self._stm.load_all()
         if not all_entries:
             return None

@@ -25,7 +25,8 @@ from service.memory.frontmatter import (
 
 logger = getLogger(__name__)
 
-KST = timezone(timedelta(hours=9))
+# Use configured timezone from GENY_TIMEZONE env var
+from service.utils.utils import _configured_tz as _get_tz
 _INDEX_FILE = "_index.json"
 _MD_PATTERN = re.compile(r"\.md$", re.IGNORECASE)
 
@@ -161,7 +162,7 @@ class MemoryIndexManager:
             self._rebuild_link_graph(idx)
             self._compute_totals(idx)
 
-            idx.last_rebuilt = datetime.now(KST).isoformat()
+            idx.last_rebuilt = datetime.now(_get_tz()).isoformat()
             self._index = idx
             self._save_to_disk()
 
@@ -202,7 +203,7 @@ class MemoryIndexManager:
             self._rebuild_tag_map(idx)
             self._rebuild_link_graph(idx)
             self._compute_totals(idx)
-            idx.last_rebuilt = datetime.now(KST).isoformat()
+            idx.last_rebuilt = datetime.now(_get_tz()).isoformat()
 
             self._save_to_disk()
             return info
@@ -288,7 +289,7 @@ class MemoryIndexManager:
             wikilinks = extract_wikilinks(body)
 
             # Determine mtime
-            mtime = datetime.fromtimestamp(stat.st_mtime, tz=KST).isoformat()
+            mtime = datetime.fromtimestamp(stat.st_mtime, tz=_get_tz()).isoformat()
 
             # Build summary (first 200 chars of body, stripping headings)
             body_text = re.sub(r"^#+\s+.*$", "", body, flags=re.MULTILINE).strip()

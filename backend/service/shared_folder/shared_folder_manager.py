@@ -19,6 +19,7 @@ from logging import getLogger
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from service.utils.utils import now_kst as _now_tz
 from service.claude_manager.platform_utils import DEFAULT_STORAGE_ROOT
 from service.claude_manager.storage_utils import (
     list_storage_files as _list_storage_files,
@@ -234,7 +235,7 @@ class SharedFolderManager:
         return {
             "file_path": file_path,
             "size": len(content.encode(encoding)),
-            "created_at": datetime.now().isoformat(),
+            "created_at": _now_tz().isoformat(),
         }
 
     def write_binary(
@@ -268,7 +269,7 @@ class SharedFolderManager:
         return {
             "file_path": file_path,
             "size": len(data),
-            "created_at": datetime.now().isoformat(),
+            "created_at": _now_tz().isoformat(),
         }
 
     # ------------------------------------------------------------------ #
@@ -320,7 +321,7 @@ class SharedFolderManager:
 
         return {
             "path": dir_path,
-            "created_at": datetime.now().isoformat(),
+            "created_at": _now_tz().isoformat(),
         }
 
     # ------------------------------------------------------------------ #

@@ -11,7 +11,8 @@ import re
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-KST = timezone(timedelta(hours=9))
+# Use configured timezone from GENY_TIMEZONE env var
+from service.utils.utils import _configured_tz as _get_tz
 
 # Regex: match ``---`` delimited YAML block at file start.
 _FRONTMATTER_RE = re.compile(
@@ -164,7 +165,7 @@ def build_default_metadata(
     Returns:
         A complete metadata dict suitable for ``render_frontmatter``.
     """
-    now = datetime.now(KST).isoformat()
+    now = datetime.now(_get_tz()).isoformat()
     return {
         "title": title,
         "aliases": [],
