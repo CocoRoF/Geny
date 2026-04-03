@@ -291,6 +291,47 @@ async def clear_cache():
 
 VOICES_DIR = Path(__file__).parent.parent / "static" / "voices"
 
+# Built-in template profiles — auto-created if directory exists but profile.json is missing.
+_BUILTIN_PROFILES = {
+    "paimon_ko": {
+        "name": "paimon_ko",
+        "display_name": "파이몬 (한국어)",
+        "language": "ko",
+        "is_template": True,
+        "prompt_text": "으음~ 나쁘지 않은데? 너도 먹어봐~ 우리 같이 먹자!",
+        "prompt_lang": "ko",
+        "emotion_refs": {
+            "neutral": {
+                "file": "ref_neutral.wav",
+                "prompt_text": "으음~ 나쁘지 않은데? 너도 먹어봐~ 우리 같이 먹자!",
+                "prompt_lang": "ko",
+            },
+            "joy": {
+                "file": "ref_joy.wav",
+                "prompt_text": "우와아——! 이건 세상에서 제일 맛있는 요리야! 이히힛, 역시 네가 최고야!",
+                "prompt_lang": "ko",
+            },
+        },
+    },
+}
+
+
+def _ensure_builtin_profiles() -> None:
+    """Auto-create profile.json for built-in template profiles if missing."""
+    for name, data in _BUILTIN_PROFILES.items():
+        profile_dir = VOICES_DIR / name
+        if profile_dir.is_dir():
+            profile_json = profile_dir / "profile.json"
+            if not profile_json.exists():
+                try:
+                    profile_json.write_text(
+                        json.dumps(data, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                    logger.info(f"Auto-created profile.json for built-in profile: {name}")
+                except Exception as e:
+                    logger.warning(f"Failed to auto-create profile.json for {name}: {e}")
+
 
 def _is_template_profile(name: str) -> bool:
     """Check if a voice profile is marked as a template (read-only)."""
@@ -361,6 +402,7 @@ class UpdateProfileRequest(BaseModel):
 @router.get("/profiles")
 async def list_profiles():
     """List all voice profiles"""
+    _ensure_builtin_profiles()
     profiles = []
     if VOICES_DIR.exists():
         for profile_dir in sorted(VOICES_DIR.iterdir()):
@@ -413,11 +455,22 @@ async def get_profile(name: str):
     if not profile_dir.exists() or not profile_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"Profile '{name}' not found")
 
-    profile_json = profile_dir / "profile.json"
-    if not profile_json.exists():
-        raise HTTPException(status_code=404, detail=f"Profile '{name}' has no profile.json")
+    _ensure_builtin_profiles()
 
-    data = json.loads(profile_json.read_text(encoding="utf-8"))
+    profile_json = profile_dir / "profile.json"
+    if profile_json.exists():
+        data = json.loads(profile_json.read_text(encoding="utf-8"))
+    else:
+        # Graceful fallback for directories without profile.json
+        data = {
+            "name": name,
+            "display_name": name,
+            "language": "ko",
+            "prompt_text": "",
+            "prompt_lang": "ko",
+            "emotion_refs": {},
+        }
+
     data["available_refs"] = [f.name for f in profile_dir.glob("ref_*.wav")]
     data["has_refs"] = {f.stem.replace("ref_", ""): True for f in profile_dir.glob("ref_*.wav")}
     _migrate_emotion_refs(data)
