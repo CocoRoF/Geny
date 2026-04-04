@@ -2,15 +2,19 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import { useI18n } from '@/lib/i18n';
 import type { Locale } from '@/lib/i18n';
 import { useTheme } from '@/lib/theme';
 import { configApi } from '@/lib/api';
-import { Menu, Sun, Moon, Code2, User, BookOpen, Mic, AudioLines } from 'lucide-react';
+import { Menu, Sun, Moon, Code2, User, BookOpen, Mic, AudioLines, LogIn, LogOut } from 'lucide-react';
 import Link from 'next/link';
+import LoginModal from '@/components/auth/LoginModal';
 
 export default function Header() {
   const { healthStatus, sessions, setMobileSidebarOpen, devMode, toggleDevMode, hydrateDevMode } = useAppStore();
+  const { isAuthenticated, hasUsers, displayName, logout } = useAuthStore();
+  const [showLogin, setShowLogin] = useState(false);
 
   useEffect(() => { hydrateDevMode(); }, [hydrateDevMode]);
 
@@ -69,14 +73,16 @@ export default function Header() {
           {themeIcon}
         </button>
 
-        {/* ── Dev / Normal Mode Toggle — hidden on mobile ── */}
-        <button
-          onClick={toggleDevMode}
-          className="hidden sm:flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-all duration-150"
-          title={devModeTitle}
-        >
-          {devModeIcon}
-        </button>
+        {/* ── Dev / Normal Mode Toggle — hidden on mobile, requires auth ── */}
+        {isAuthenticated && (
+          <button
+            onClick={toggleDevMode}
+            className="hidden sm:flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-all duration-150"
+            title={devModeTitle}
+          >
+            {devModeIcon}
+          </button>
+        )}
 
         {/* ── Wiki Button — hidden on mobile ── */}
         <Link
@@ -131,6 +137,33 @@ export default function Header() {
           </button>
         </div>
 
+        {/* ── Login / Logout Button ── */}
+        {hasUsers && (
+          isAuthenticated ? (
+            <button
+              onClick={() => {
+                logout();
+                // Reset to normal mode so dev-only tabs disappear
+                if (devMode) toggleDevMode();
+              }}
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-[0.6875rem] font-medium rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-all duration-150"
+              title={t('header.logout')}
+            >
+              <LogOut size={13} />
+              <span className="hidden md:inline">{displayName || t('header.logout')}</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowLogin(true)}
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-[0.6875rem] font-medium rounded-md bg-[var(--primary-color)] border-none text-white hover:opacity-90 cursor-pointer transition-opacity"
+              title={t('header.login')}
+            >
+              <LogIn size={13} />
+              <span className="hidden md:inline">{t('header.login')}</span>
+            </button>
+          )
+        )}
+
         {/* ── Session Status ── */}
         <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] rounded-full text-[0.75rem] md:text-[0.8125rem]">
           <span
@@ -146,6 +179,9 @@ export default function Header() {
           </span>
         </div>
       </div>
+
+      {/* Login Modal */}
+      {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
     </header>
   );
 }

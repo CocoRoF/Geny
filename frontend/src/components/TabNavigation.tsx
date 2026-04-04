@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '@/store/useAppStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import { twMerge } from 'tailwind-merge';
 import { useI18n } from '@/lib/i18n';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -165,6 +166,7 @@ function MobileSessionTabDropdown({
 
 export default function TabNavigation() {
   const { activeTab, setActiveTab, selectedSessionId, sessions, devMode } = useAppStore();
+  const { isAuthenticated, hasUsers } = useAuthStore();
   const { t } = useI18n();
   const isMobile = useIsMobile();
 
@@ -175,8 +177,10 @@ export default function TabNavigation() {
     || selectedSessionId?.substring(0, 10)
     || '';
 
-  const visibleGlobalTabs = GLOBAL_TAB_IDS.filter(id => devMode || !DEV_ONLY_GLOBAL.has(id));
-  const visibleSessionTabs = SESSION_TAB_DEFS.filter(tab => devMode || !DEV_ONLY_SESSION.has(tab.id));
+  // Dev-only tabs require both devMode AND authentication (when auth is set up)
+  const canShowDevTabs = devMode && (!hasUsers || isAuthenticated);
+  const visibleGlobalTabs = GLOBAL_TAB_IDS.filter(id => canShowDevTabs || !DEV_ONLY_GLOBAL.has(id));
+  const visibleSessionTabs = SESSION_TAB_DEFS.filter(tab => canShowDevTabs || !DEV_ONLY_SESSION.has(tab.id));
 
   return (
     <div className="flex items-center gap-0.5 h-11 px-2 md:px-4 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] shrink-0 overflow-x-auto scrollbar-hide">

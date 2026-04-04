@@ -14,6 +14,7 @@ from service.database.models.chat_room import ChatRoomModel
 from service.database.models.chat_message import ChatMessageModel
 from service.database.models.session_log import SessionLogModel
 from service.database.models.session_memory_entry import SessionMemoryEntryModel
+from service.database.models.admin_user import AdminUserModel
 
 __all__ = [
     'BaseModel',
@@ -23,6 +24,7 @@ __all__ = [
     'ChatMessageModel',
     'SessionLogModel',
     'SessionMemoryEntryModel',
+    'AdminUserModel',
 ]
 
 # List of models used by the application
@@ -35,4 +37,5 @@ APPLICATION_MODELS = [
     ChatMessageModel,
     SessionLogModel,
     SessionMemoryEntryModel,
+    AdminUserModel,
 ]

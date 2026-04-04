@@ -14,9 +14,10 @@ Provides REST API endpoints for managing configurations:
 from logging import getLogger
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body
 from pydantic import BaseModel
 
+from service.auth.auth_middleware import require_auth
 from service.config import ConfigManager, get_config_manager
 
 logger = getLogger(__name__)
@@ -149,7 +150,7 @@ async def get_config(config_name: str):
 
 
 @router.put("/{config_name}")
-async def update_config(config_name: str, request: ConfigUpdateRequest):
+async def update_config(config_name: str, request: ConfigUpdateRequest, auth: dict = Depends(require_auth)):
     """
     Update a configuration.
 
@@ -185,7 +186,7 @@ async def update_config(config_name: str, request: ConfigUpdateRequest):
 
 
 @router.delete("/{config_name}")
-async def reset_config(config_name: str):
+async def reset_config(config_name: str, auth: dict = Depends(require_auth)):
     """
     Reset a configuration to default values.
 
@@ -220,7 +221,7 @@ async def reset_config(config_name: str):
 
 
 @router.post("/export")
-async def export_configs():
+async def export_configs(auth: dict = Depends(require_auth)):
     """
     Export all configurations.
 
@@ -242,7 +243,7 @@ async def export_configs():
 
 
 @router.post("/import")
-async def import_configs(request: ConfigImportRequest):
+async def import_configs(request: ConfigImportRequest, auth: dict = Depends(require_auth)):
     """
     Import configurations from backup.
 
@@ -271,7 +272,7 @@ async def import_configs(request: ConfigImportRequest):
 
 
 @router.post("/reload")
-async def reload_configs():
+async def reload_configs(auth: dict = Depends(require_auth)):
     """
     Reload all configurations from files.
 

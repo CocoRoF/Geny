@@ -23,3 +23,6 @@ playwright>=1.49.0
 mcp>=1.0.0
 # TTS (Text-to-Speech) — Edge TTS engine
 edge-tts>=6.1
+# Auth — password hashing and JWT tokens
+bcrypt>=4.0.0
+PyJWT>=2.8.0

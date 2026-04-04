@@ -3,11 +3,17 @@
  * Mirrors all legacy frontend-legacy/static/components/api.js endpoints
  */
 
+import { getToken } from '@/lib/authApi';
+
 // ==================== Base Fetch Wrapper ====================
 
 async function apiCall<T = unknown>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const token = getToken();
+  const authHeaders: Record<string, string> = {};
+  if (token) authHeaders['Authorization'] = `Bearer ${token}`;
+
   const res = await fetch(endpoint, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers: { 'Content-Type': 'application/json', ...authHeaders, ...options.headers },
     ...options,
   });
   if (!res.ok) {
@@ -414,8 +420,12 @@ export const sharedFolderApi = {
     const params = new URLSearchParams();
     if (path) params.set('path', path);
     params.set('overwrite', String(overwrite));
+    const uploadToken = getToken();
+    const uploadHeaders: Record<string, string> = {};
+    if (uploadToken) uploadHeaders['Authorization'] = `Bearer ${uploadToken}`;
     const res = await fetch(`/api/shared-folder/upload?${params}`, {
       method: 'POST',
+      headers: uploadHeaders,
       body: formData,
     });
     if (!res.ok) {
@@ -1032,8 +1042,12 @@ export const ttsApi = {
     form.append('emotion', emotion);
     if (text) form.append('text', text);
     if (lang) form.append('lang', lang);
+    const refToken = getToken();
+    const refHeaders: Record<string, string> = {};
+    if (refToken) refHeaders['Authorization'] = `Bearer ${refToken}`;
     const res = await fetch(`/api/tts/profiles/${encodeURIComponent(name)}/ref`, {
       method: 'POST',
+      headers: refHeaders,
       body: form,
     });
     if (!res.ok) {

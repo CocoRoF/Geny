@@ -24,6 +24,7 @@ from controller.memory_controller import router as memory_router
 from controller.memory_controller import global_router as global_memory_router
 from controller.vtuber_controller import router as vtuber_router
 from controller.tts_controller import router as tts_router
+from controller.auth_controller import router as auth_router
 from service.config import get_config_manager
 from service.mcp_loader import MCPLoader, get_global_mcp_config
 import uvicorn
@@ -131,6 +132,18 @@ async def lifespan(app: FastAPI):
 
     # ── Step 2: Initialize Config Manager (with DB backend) ────────────
     print_step_banner("CONFIG", "CONFIG MANAGER", "Loading configurations...")
+
+    # Initialize Auth Service (requires DB)
+    if app_db is not None:
+        from service.auth import init_auth_service
+        auth_svc = init_auth_service(app_db)
+        app.state.auth_service = auth_svc
+        has_admin = auth_svc.has_users()
+        logger.info(f"   - Auth service: initialized (admin exists: {has_admin})")
+    else:
+        app.state.auth_service = None
+        logger.info("   - Auth service: disabled (no database)")
+
     config_manager = get_config_manager()
 
     # Connect database to config manager if available
@@ -422,6 +435,7 @@ async def health_check():
 
 
 # Register routers
+app.include_router(auth_router)  # Auth (must be first — no auth guard on itself)
 app.include_router(claude_router)
 app.include_router(command_router)
 app.include_router(agent_router)  # LangGraph agent sessions

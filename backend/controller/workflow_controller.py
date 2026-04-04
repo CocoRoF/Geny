@@ -21,9 +21,10 @@ import uuid
 from logging import getLogger
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from service.auth.auth_middleware import require_auth
 from service.workflow.nodes.base import get_node_registry
 from service.workflow.workflow_model import (
     WorkflowDefinition,
@@ -149,7 +150,7 @@ async def list_workflows():
 
 
 @router.post("")
-async def create_workflow(req: CreateWorkflowRequest):
+async def create_workflow(req: CreateWorkflowRequest, auth: dict = Depends(require_auth)):
     """Create a new workflow definition."""
     nodes = [
         WorkflowNodeInstance(
@@ -201,7 +202,7 @@ async def get_workflow(workflow_id: str):
 
 
 @router.put("/{workflow_id}")
-async def update_workflow(workflow_id: str, req: UpdateWorkflowRequest):
+async def update_workflow(workflow_id: str, req: UpdateWorkflowRequest, auth: dict = Depends(require_auth)):
     """Update an existing workflow definition."""
     store = get_workflow_store()
     workflow = store.load(workflow_id)
@@ -237,8 +238,7 @@ async def update_workflow(workflow_id: str, req: UpdateWorkflowRequest):
 
 
 @router.delete("/{workflow_id}")
-async def delete_workflow(workflow_id: str):
-    """Delete a workflow definition."""
+async def delete_workflow(workflow_id: str, auth: dict = Depends(require_auth)):
     store = get_workflow_store()
     workflow = store.load(workflow_id)
     if not workflow:
@@ -251,7 +251,7 @@ async def delete_workflow(workflow_id: str):
 
 
 @router.post("/{workflow_id}/clone")
-async def clone_workflow(workflow_id: str):
+async def clone_workflow(workflow_id: str, auth: dict = Depends(require_auth)):
     """Clone a workflow (useful for cloning templates)."""
     store = get_workflow_store()
     original = store.load(workflow_id)
@@ -270,7 +270,7 @@ async def clone_workflow(workflow_id: str):
 
 
 @router.post("/{workflow_id}/validate")
-async def validate_workflow(workflow_id: str):
+async def validate_workflow(workflow_id: str, auth: dict = Depends(require_auth)):
     """Validate a workflow graph structure."""
     store = get_workflow_store()
     workflow = store.load(workflow_id)
@@ -282,7 +282,7 @@ async def validate_workflow(workflow_id: str):
 
 
 @router.post("/{workflow_id}/compile-view")
-async def compile_view(workflow_id: str):
+async def compile_view(workflow_id: str, auth: dict = Depends(require_auth)):
     """Return a code-level inspection of the compiled graph.
 
     Does NOT actually execute anything — it simulates the compilation
@@ -335,7 +335,7 @@ async def list_state_fields():
 
 
 @router.post("/{workflow_id}/execute")
-async def execute_workflow(workflow_id: str, req: ExecuteWorkflowRequest):
+async def execute_workflow(workflow_id: str, req: ExecuteWorkflowRequest, auth: dict = Depends(require_auth)):
     """Execute a workflow on an existing agent session.
 
     This compiles the workflow definition into a LangGraph and

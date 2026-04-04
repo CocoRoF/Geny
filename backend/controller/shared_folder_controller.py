@@ -21,10 +21,11 @@ import zipfile
 from logging import getLogger
 from typing import Optional
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from service.auth.auth_middleware import require_auth
 from service.shared_folder import get_shared_folder_manager
 
 logger = getLogger(__name__)
@@ -171,7 +172,7 @@ async def read_shared_file(
 
 
 @router.post("/files", response_model=WriteFileResponse)
-async def write_shared_file(request: WriteFileRequest):
+async def write_shared_file(request: WriteFileRequest, auth: dict = Depends(require_auth)):
     """
     Write or create a file in the shared folder.
     """
@@ -198,7 +199,7 @@ async def write_shared_file(request: WriteFileRequest):
 
 
 @router.delete("/files/{file_path:path}", response_model=DeleteResponse)
-async def delete_shared_file(file_path: str):
+async def delete_shared_file(file_path: str, auth: dict = Depends(require_auth)):
     """
     Delete a file or directory from the shared folder.
     """
@@ -216,6 +217,7 @@ async def upload_shared_file(
     file: UploadFile = File(...),
     path: str = Query("", description="Subdirectory to place the file in"),
     overwrite: bool = Query(True, description="Overwrite if exists"),
+    auth: dict = Depends(require_auth),
 ):
     """
     Upload a file to the shared folder (multipart form).
@@ -246,7 +248,7 @@ async def upload_shared_file(
 
 
 @router.post("/directory", response_model=CreateDirectoryResponse)
-async def create_shared_directory(request: CreateDirectoryRequest):
+async def create_shared_directory(request: CreateDirectoryRequest, auth: dict = Depends(require_auth)):
     """
     Create a directory in the shared folder.
     """

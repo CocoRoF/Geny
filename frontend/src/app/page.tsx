@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/store/useAppStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import { useI18n, type Locale } from '@/lib/i18n';
 import { configApi } from '@/lib/api';
 import Header from '@/components/Header';
@@ -11,7 +13,21 @@ import TabContent from '@/components/TabContent';
 
 export default function Home() {
   const { loadSessions, loadDeletedSessions, checkHealth, loadPrompts } = useAppStore();
+  const { checkAuth, initialized, hasUsers } = useAuthStore();
   const setLocale = useI18n(s => s.setLocale);
+  const router = useRouter();
+
+  // Check auth status on mount
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  // Redirect to /setup if no admin account exists
+  useEffect(() => {
+    if (initialized && !hasUsers) {
+      router.replace('/setup');
+    }
+  }, [initialized, hasUsers, router]);
 
   useEffect(() => {
     loadSessions();

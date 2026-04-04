@@ -13,9 +13,11 @@ import json
 import time
 from logging import getLogger
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from starlette.responses import StreamingResponse
 from pydantic import BaseModel, Field
+
+from service.auth.auth_middleware import require_auth
 
 from service.claude_manager.models import (
     CreateSessionRequest,
@@ -128,7 +130,7 @@ class UpgradeToAgentRequest(BaseModel):
 
 
 @router.post("", response_model=SessionInfo)
-async def create_agent_session(request: CreateAgentRequest):
+async def create_agent_session(request: CreateAgentRequest, auth: dict = Depends(require_auth)):
     """
     Create a new AgentSession.
 
@@ -262,6 +264,7 @@ class UpdateThinkingTriggerRequest(BaseModel):
 async def update_system_prompt(
     request: UpdateSystemPromptRequest,
     session_id: str = Path(..., description="Session ID"),
+    auth: dict = Depends(require_auth),
 ):
     """
     Update the system prompt of a running AgentSession.
@@ -308,6 +311,7 @@ async def get_thinking_trigger(
 async def update_thinking_trigger(
     request: UpdateThinkingTriggerRequest,
     session_id: str = Path(..., description="Session ID"),
+    auth: dict = Depends(require_auth),
 ):
     """Enable or disable thinking trigger for a VTuber session."""
     from service.vtuber.thinking_trigger import get_thinking_trigger_service
@@ -322,7 +326,8 @@ async def update_thinking_trigger(
 @router.delete("/{session_id}")
 async def delete_agent_session(
     session_id: str = Path(..., description="Session ID"),
-    cleanup_storage: bool = Query(False, description="Also delete storage (default: False to preserve files)")
+    cleanup_storage: bool = Query(False, description="Also delete storage (default: False to preserve files)"),
+    auth: dict = Depends(require_auth),
 ):
     """
     Delete AgentSession (soft-delete — metadata preserved in sessions.json).
@@ -341,6 +346,7 @@ async def delete_agent_session(
 @router.delete("/{session_id}/permanent")
 async def permanent_delete_session(
     session_id: str = Path(..., description="Session ID"),
+    auth: dict = Depends(require_auth),
 ):
     """
     Permanently delete a session from the persistent store.
@@ -400,6 +406,7 @@ async def permanent_delete_session(
 @router.post("/{session_id}/restore")
 async def restore_session(
     session_id: str = Path(..., description="Session ID to restore"),
+    auth: dict = Depends(require_auth),
 ):
     """
     Restore a soft-deleted session.
@@ -516,7 +523,8 @@ async def restore_session(
 @router.post("/{session_id}/invoke", response_model=AgentInvokeResponse)
 async def invoke_agent(
     session_id: str = Path(..., description="Session ID"),
-    request: AgentInvokeRequest = ...
+    request: AgentInvokeRequest = ...,
+    auth: dict = Depends(require_auth),
 ):
     """
     Invoke AgentSession with LangGraph state execution.
@@ -587,7 +595,8 @@ async def invoke_agent(
 @router.post("/{session_id}/execute", response_model=ExecuteResponse)
 async def execute_agent_prompt(
     session_id: str = Path(..., description="Session ID"),
-    request: ExecuteRequest = ...
+    request: ExecuteRequest = ...,
+    auth: dict = Depends(require_auth),
 ):
     """
     Execute prompt with AgentSession via the compiled StateGraph.
@@ -786,6 +795,7 @@ async def _stream_execution_sse(holder: dict, session_id: str, app_state=None):
 async def start_agent_execution(
     session_id: str = Path(..., description="Session ID"),
     request: ExecuteRequest = ...,
+    auth: dict = Depends(require_auth),
 ):
     """
     Start prompt execution in the background.
@@ -897,6 +907,7 @@ async def execute_agent_prompt_stream(
     session_id: str = Path(..., description="Session ID"),
     execute_request: ExecuteRequest = ...,
     http_request: Request = None,
+    auth: dict = Depends(require_auth),
 ):
     """
     Execute prompt with real-time SSE log streaming.
@@ -1011,7 +1022,8 @@ async def get_agent_history(
 @router.post("/{session_id}/upgrade", response_model=SessionInfo)
 async def upgrade_to_agent_session(
     session_id: str = Path(..., description="Session ID"),
-    request: UpgradeToAgentRequest = UpgradeToAgentRequest()
+    request: UpgradeToAgentRequest = UpgradeToAgentRequest(),
+    auth: dict = Depends(require_auth),
 ):
     """
     Upgrade existing ClaudeProcess session to AgentSession.
@@ -1047,7 +1059,8 @@ async def upgrade_to_agent_session(
 
 @router.post("/{session_id}/stop")
 async def stop_execution(
-    session_id: str = Path(..., description="Session ID")
+    session_id: str = Path(..., description="Session ID"),
+    auth: dict = Depends(require_auth),
 ):
     """
     Stop the current execution for a session.

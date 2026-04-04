@@ -23,10 +23,12 @@ import os
 from logging import getLogger
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from typing import Optional
+
+from service.auth.auth_middleware import require_auth
 
 logger = getLogger(__name__)
 
@@ -146,7 +148,7 @@ async def get_session_profile(session_id: str):
 
 
 @router.put("/agents/{session_id}/profile")
-async def assign_session_profile(session_id: str, body: AssignProfileRequest):
+async def assign_session_profile(session_id: str, body: AssignProfileRequest, auth: dict = Depends(require_auth)):
     """Assign a voice profile to a VTuber session.
 
     Stores the profile name in the session's extra_data JSON blob.
@@ -170,8 +172,7 @@ async def assign_session_profile(session_id: str, body: AssignProfileRequest):
 
 
 @router.delete("/agents/{session_id}/profile")
-async def unassign_session_profile(session_id: str):
-    """Remove the voice profile assignment from a session."""
+async def unassign_session_profile(session_id: str, auth: dict = Depends(require_auth)):
     from service.claude_manager.session_store import get_session_store
 
     store = get_session_store()
@@ -279,7 +280,7 @@ async def get_cache_stats():
 
 
 @router.delete("/cache")
-async def clear_cache():
+async def clear_cache(auth: dict = Depends(require_auth)):
     """Clear the TTS audio cache"""
     from service.vtuber.tts.cache import get_tts_cache
 
@@ -478,7 +479,7 @@ async def get_profile(name: str):
 
 
 @router.post("/profiles")
-async def create_profile(body: CreateProfileRequest):
+async def create_profile(body: CreateProfileRequest, auth: dict = Depends(require_auth)):
     """Create a new voice profile directory with profile.json"""
     profile_dir = VOICES_DIR / body.name
     if profile_dir.exists():
@@ -508,7 +509,7 @@ async def create_profile(body: CreateProfileRequest):
 
 
 @router.put("/profiles/{name}")
-async def update_profile(name: str, body: UpdateProfileRequest):
+async def update_profile(name: str, body: UpdateProfileRequest, auth: dict = Depends(require_auth)):
     """Update an existing voice profile"""
     _guard_template(name)
     profile_dir = VOICES_DIR / name
@@ -543,6 +544,7 @@ async def upload_reference_audio(
     text: str = Form(""),
     lang: str = Form(""),
     file: UploadFile = File(...),
+    auth: dict = Depends(require_auth),
 ):
     """Upload a reference audio file for a specific emotion"""
     _guard_template(name)
@@ -590,7 +592,7 @@ async def upload_reference_audio(
 
 
 @router.delete("/profiles/{name}/ref/{emotion}")
-async def delete_reference_audio(name: str, emotion: str):
+async def delete_reference_audio(name: str, emotion: str, auth: dict = Depends(require_auth)):
     """Delete a reference audio file for a specific emotion"""
     _guard_template(name)
     # Validate name to prevent path traversal
@@ -639,7 +641,7 @@ async def get_reference_audio(name: str, emotion: str):
 
 
 @router.put("/profiles/{name}/ref/{emotion}")
-async def update_emotion_ref(name: str, emotion: str, body: UpdateEmotionRefRequest):
+async def update_emotion_ref(name: str, emotion: str, body: UpdateEmotionRefRequest, auth: dict = Depends(require_auth)):
     """Update prompt_text / prompt_lang for a single emotion reference"""
     _guard_template(name)
     if "/" in name or "\\" in name or ".." in name:
@@ -669,7 +671,7 @@ async def update_emotion_ref(name: str, emotion: str, body: UpdateEmotionRefRequ
 
 
 @router.post("/profiles/{name}/activate")
-async def activate_profile(name: str):
+async def activate_profile(name: str, auth: dict = Depends(require_auth)):
     """Set a voice profile as the active GPT-SoVITS voice"""
     # Validate name to prevent path traversal
     if "/" in name or "\\" in name or ".." in name:

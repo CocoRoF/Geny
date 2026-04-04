@@ -10,9 +10,10 @@ from __future__ import annotations
 from logging import getLogger
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from service.auth.auth_middleware import require_auth
 from service.tool_preset.models import ToolPresetDefinition
 from service.tool_preset.store import get_tool_preset_store
 
@@ -77,7 +78,7 @@ async def list_templates():
 
 
 @router.post("/", response_model=ToolPresetDefinition, status_code=201)
-async def create_preset(req: CreateToolPresetRequest):
+async def create_preset(req: CreateToolPresetRequest, auth: dict = Depends(require_auth)):
     """Create a new user tool preset."""
     store = get_tool_preset_store()
 
@@ -104,7 +105,7 @@ async def get_preset(preset_id: str):
 
 
 @router.put("/{preset_id}", response_model=ToolPresetDefinition)
-async def update_preset(preset_id: str, req: UpdateToolPresetRequest):
+async def update_preset(preset_id: str, req: UpdateToolPresetRequest, auth: dict = Depends(require_auth)):
     """Update an existing tool preset. Templates cannot be modified."""
     store = get_tool_preset_store()
     preset = store.load(preset_id)
@@ -129,7 +130,7 @@ async def update_preset(preset_id: str, req: UpdateToolPresetRequest):
 
 
 @router.delete("/{preset_id}")
-async def delete_preset(preset_id: str):
+async def delete_preset(preset_id: str, auth: dict = Depends(require_auth)):
     """Delete a tool preset. Templates cannot be deleted."""
     store = get_tool_preset_store()
     preset = store.load(preset_id)
@@ -143,7 +144,7 @@ async def delete_preset(preset_id: str):
 
 
 @router.post("/{preset_id}/clone", response_model=ToolPresetDefinition, status_code=201)
-async def clone_preset(preset_id: str, req: ClonePresetRequest):
+async def clone_preset(preset_id: str, req: ClonePresetRequest, auth: dict = Depends(require_auth)):
     """Clone a preset (template or user) with a new name."""
     store = get_tool_preset_store()
     cloned = store.clone(preset_id, req.new_name)
