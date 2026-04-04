@@ -871,25 +871,7 @@ export default function MemoryTab() {
             </button>
           )}
         </form>
-        {/* Tag pills — compact row */}
-        {sortedTags.length > 0 && (
-          <div className="hidden md:flex items-center gap-1 flex-wrap max-w-[400px]">
-            {sortedTags.slice(0, 8).map(([tag, count]) => (
-              <button
-                key={tag}
-                onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
-                className={cn(
-                  'text-[10px] px-2 py-0.5 rounded-full transition-colors whitespace-nowrap',
-                  selectedTag === tag
-                    ? 'bg-[var(--primary-color)] text-white'
-                    : 'bg-[rgba(100,116,139,0.1)] text-[var(--text-muted)] hover:text-[var(--text-primary)]',
-                )}
-              >
-                {tag} ({count})
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Tag pills removed — Obsidian page provides full tag interface */}
       </div>
 
       {/* Main content — matches StorageTab layout */}
