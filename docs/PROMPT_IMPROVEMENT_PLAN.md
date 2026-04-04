@@ -1,6 +1,6 @@
 # Geny 프롬프트 시스템 개선 계획
 
-> 작성일: 2025-07-14  
+> 작성일: 2025-07-14
 > 목표: VTuber / CLI / 일반 에이전트의 시스템 프롬프트를 깔끔하고 목적에 맞게 재설계
 
 ---
@@ -216,7 +216,7 @@ You are the conversational face of the Geny system.
 
 #### 3.2.3 Character Files 정비 (`prompts/vtuber_characters/`)
 
-현재 `default.md` 도 persona와 비슷. 
+현재 `default.md` 도 persona와 비슷.
 
 **개선**: character file은 **Live2D 모델 특화** 정보만
 ```markdown
@@ -295,7 +295,7 @@ f"Report results via `geny_send_direct_message` to this session."
 - `context_efficiency()` — Claude CLI가 처리
 - `status_reporting()` — 사용처 없음
 
-**결정 필요**: 
+**결정 필요**:
 - 삭제? → 깔끔하지만 향후 쓸 수 있음
 - `# DEPRECATED` 주석? → 안전하지만 코드 잡음
 - 별도 파일로 이동? → 과도한 엔지니어링
