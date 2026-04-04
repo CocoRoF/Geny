@@ -7,6 +7,7 @@ Endpoint: POST /tts
 Selects emotion-specific reference audio files for natural voice expression.
 """
 
+import asyncio
 import os
 from logging import getLogger
 from typing import AsyncIterator, Optional
@@ -21,6 +22,12 @@ from service.vtuber.tts.base import (
 )
 
 logger = getLogger(__name__)
+
+
+# Module-level lock: GPT-SoVITS runs on a single GPU and cannot handle
+# concurrent synthesis requests.  Serialise all calls so that overlapping
+# VTuber sessions wait in line instead of getting 400/connection errors.
+_synthesis_lock = asyncio.Lock()
 
 
 class GPTSoVITSEngine(TTSEngine):
@@ -92,23 +99,26 @@ class GPTSoVITSEngine(TTSEngine):
         }
 
         api_url = config.api_url.rstrip("/")
-        logger.info(
-            f"GPT-SoVITS v2 request: url={api_url}/tts, "
-            f"text_lang={text_lang}, prompt_lang={prompt_lang}, ref={ref_audio_path}"
-        )
 
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                resp = await client.post(f"{api_url}/tts", json=payload)
-                resp.raise_for_status()
-                audio_data = resp.content
-        except httpx.HTTPStatusError as e:
-            body = e.response.text[:500] if e.response else ""
-            logger.error(f"GPT-SoVITS API error {e.response.status_code}: {body}")
-            raise ValueError(f"GPT-SoVITS API error {e.response.status_code}: {body}")
-        except Exception as e:
-            logger.error(f"GPT-SoVITS synthesis error: {e}")
-            raise
+        # Acquire lock — GPT-SoVITS is single-GPU, serialize requests
+        async with _synthesis_lock:
+            logger.info(
+                f"GPT-SoVITS v2 request: url={api_url}/tts, "
+                f"text_lang={text_lang}, prompt_lang={prompt_lang}, ref={ref_audio_path}"
+            )
+
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    resp = await client.post(f"{api_url}/tts", json=payload)
+                    resp.raise_for_status()
+                    audio_data = resp.content
+            except httpx.HTTPStatusError as e:
+                body = e.response.text[:500] if e.response else ""
+                logger.error(f"GPT-SoVITS API error {e.response.status_code}: {body}")
+                raise ValueError(f"GPT-SoVITS API error {e.response.status_code}: {body}")
+            except Exception as e:
+                logger.error(f"GPT-SoVITS synthesis error: {e}")
+                raise
 
         if audio_data:
             yield TTSChunk(audio_data=audio_data, chunk_index=0)
