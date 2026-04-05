@@ -360,16 +360,16 @@ interface GraphFilterState {
 def get_graph(self) -> Dict[str, Any]:
     idx = self.get_index()
     files_map = idx.get("files", {})
-    
+
     nodes = []
     edges = []
     edge_set = set()
     tag_to_files: Dict[str, List[str]] = {}
-    
+
     for fn, info in files_map.items():
         links_to = info.get("links_to", [])
         linked_from = info.get("linked_from", [])
-        
+
         nodes.append({
             "id": fn,
             "label": info.get("title", fn),
@@ -380,7 +380,7 @@ def get_graph(self) -> Dict[str, Any]:
             "summary": info.get("summary", ""),
             "charCount": info.get("char_count", 0),
         })
-        
+
         # Wikilink 엣지
         for target in links_to:
             if target in files_map:
@@ -391,11 +391,11 @@ def get_graph(self) -> Dict[str, Any]:
                         "source": fn, "target": target,
                         "type": "wikilink", "weight": 1.0,
                     })
-        
+
         # 태그 맵 구축
         for tag in info.get("tags", []):
             tag_to_files.setdefault(tag, []).append(fn)
-    
+
     # 태그 기반 엣지
     for tag, fns in tag_to_files.items():
         if len(fns) < 2:
@@ -409,7 +409,7 @@ def get_graph(self) -> Dict[str, Any]:
                         "source": a, "target": b,
                         "type": "tag", "weight": 0.5, "label": tag,
                     })
-    
+
     return {"nodes": nodes, "edges": edges}
 ```
 
@@ -418,17 +418,17 @@ def get_graph(self) -> Dict[str, Any]:
 ```python
 def _resolve_link(self, link_target: str, idx: MemoryIndex) -> Optional[str]:
     slug = link_target.lower().strip()
-    
+
     # 1. 정확한 경로 매칭 (e.g. "topics/python-async")
     for filename in idx.files:
         if filename.rsplit(".", 1)[0].lower() == slug:
             return filename
-    
+
     # 2. 정확한 stem 매칭
     for filename in idx.files:
         if Path(filename).stem.lower() == slug:
             return filename
-    
+
     # 3. 엄격한 부분 매칭: slug ≥ 3자이고 stem의 50% 이상 차지, 유일할 때만
     if len(slug) >= 3:
         candidates = []
@@ -438,7 +438,7 @@ def _resolve_link(self, link_target: str, idx: MemoryIndex) -> Optional[str]:
                 candidates.append(filename)
         if len(candidates) == 1:
             return candidates[0]
-    
+
     return None
 ```
 
@@ -490,7 +490,7 @@ function getHighlightSet(
 ): Map<string, number> {  // nodeId → hop distance
   const result = new Map<string, number>();
   result.set(selectedId, 0);
-  
+
   let frontier = new Set([selectedId]);
   for (let depth = 1; depth <= maxDepth; depth++) {
     const next = new Set<string>();
