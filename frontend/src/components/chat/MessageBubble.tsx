@@ -42,12 +42,10 @@ export default function MessageBubble({ mode, isUser, children, className = '' }
     return <>{children}</>;
   }
 
-  // VTuber mode: speech bubble wrapper
+  // VTuber mode: bubble only (caller handles flex alignment)
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className={`${bubbleClass} ${className}`}>
-        {children}
-      </div>
+    <div className={`${bubbleClass} ${className}`}>
+      {children}
     </div>
   );
 }
