@@ -35,7 +35,6 @@ import {
   ArrowLeft,
   Home,
   Edit3,
-  Eye,
   Loader2,
 } from 'lucide-react';
 import '../obsidian/obsidian.css';
@@ -619,7 +618,8 @@ function CuratedNoteEditor({
     try {
       await curatedKnowledgeApi.updateFile(selectedFile, { content: editContent });
       setEditing(false);
-      onRefresh();
+      await onRefresh();
+      await onSelectFile(selectedFile);
     } catch (e) {
       console.error('Save failed:', e);
     } finally {
@@ -662,70 +662,119 @@ function CuratedNoteEditor({
     },
   );
 
-  return (
-    <div style={{ padding: '20px 32px', maxWidth: 900, margin: '0 auto' }}>
-      {/* Title bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <h1 style={{ flex: 1, fontSize: 22, fontWeight: 700, margin: 0, color: 'var(--obs-text)' }}>
-          {String(meta.title || selectedFile)}
-        </h1>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {!editing ? (
+  if (editing) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {/* Toolbar — matches DraftEditor */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px',
+          borderBottom: '1px solid var(--obs-border-subtle)',
+          background: 'var(--obs-bg-panel)',
+        }}>
+          {!!meta.category && (
+            <span style={{
+              padding: '4px 10px', fontSize: 11, borderRadius: 4,
+              background: `${CATEGORY_COLORS[String(meta.category)] || '#64748b'}20`,
+              color: CATEGORY_COLORS[String(meta.category)] || '#64748b',
+            }}>{String(meta.category)}</span>
+          )}
+          {!!meta.importance && (
+            <span style={{
+              padding: '4px 10px', fontSize: 11, borderRadius: 4,
+              background: IMPORTANCE_STYLES[String(meta.importance)]?.bg || 'transparent',
+              color: IMPORTANCE_STYLES[String(meta.importance)]?.color || 'var(--obs-text-dim)',
+            }}>{String(meta.importance)}</span>
+          )}
+          {Array.isArray(meta.tags) && meta.tags.length > 0 && (
+            <span style={{
+              flex: 1, padding: '4px 8px', fontSize: 11,
+              color: 'var(--obs-text-dim)', overflow: 'hidden', textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>{meta.tags.map(String).join(', ')}</span>
+          )}
+          {!!meta.source && (
+            <span style={{
+              padding: '4px 8px', fontSize: 11, borderRadius: 4,
+              background: 'rgba(6,182,212,0.1)', color: '#06b6d4',
+            }}>source: {String(meta.source)}</span>
+          )}
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
             <button
-              onClick={() => setEditing(true)}
+              onClick={() => { setEditing(false); setEditContent(body); }}
               style={{
-                display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px',
-                fontSize: 12, fontWeight: 500, background: 'var(--obs-purple-dim)',
-                color: 'var(--obs-purple-bright)', border: '1px solid rgba(139,92,246,0.3)',
-                borderRadius: 6, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 4, padding: '5px 12px',
+                fontSize: 12, background: 'var(--obs-bg-hover)', color: 'var(--obs-text-dim)',
+                border: '1px solid var(--obs-border)', borderRadius: 5, cursor: 'pointer',
               }}
             >
-              <Edit3 size={12} /> {t('opsidian.edit')}
+              <X size={12} /> {t('opsidian.cancel')}
             </button>
-          ) : (
-            <>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px',
-                  fontSize: 12, fontWeight: 500, background: 'var(--obs-purple)',
-                  color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer',
-                }}
-              >
-                <Save size={12} /> {saving ? '...' : t('opsidian.save')}
-              </button>
-              <button
-                onClick={() => { setEditing(false); setEditContent(body); }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px',
-                  fontSize: 12, background: 'var(--obs-bg-hover)', color: 'var(--obs-text-dim)',
-                  border: '1px solid var(--obs-border)', borderRadius: 6, cursor: 'pointer',
-                }}
-              >
-                <Eye size={12} /> {t('opsidian.cancel')}
-              </button>
-            </>
-          )}
-          <button
-            onClick={handleDelete}
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 4, padding: '5px 14px',
+                fontSize: 12, fontWeight: 600, background: 'var(--obs-purple)',
+                color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer',
+              }}
+            >
+              {saving ? <Loader2 size={12} className="spin" /> : <Save size={12} />}
+              {t('opsidian.save')}
+            </button>
+            <button
+              onClick={handleDelete}
+              style={{
+                display: 'flex', alignItems: 'center', padding: '5px 8px',
+                fontSize: 12, background: 'rgba(239,68,68,0.1)', color: '#ef4444',
+                border: '1px solid rgba(239,68,68,0.2)', borderRadius: 5, cursor: 'pointer',
+              }}
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
+        </div>
+
+        {/* Title (read-only) */}
+        <div style={{ padding: '16px 32px 0', maxWidth: 900, margin: '0 auto', width: '100%' }}>
+          <h1 style={{
+            fontSize: 24, fontWeight: 700, margin: 0, paddingBottom: 8,
+            borderBottom: '1px solid var(--obs-border-subtle)',
+            color: 'var(--obs-text)', marginBottom: 16,
+          }}>
+            {String(meta.title || selectedFile)}
+          </h1>
+        </div>
+
+        {/* Content textarea — matches DraftEditor */}
+        <div style={{ flex: 1, padding: '0 32px 16px', maxWidth: 900, margin: '0 auto', width: '100%' }}>
+          <textarea
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            autoFocus
             style={{
-              display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px',
-              fontSize: 12, background: 'rgba(239,68,68,0.1)', color: '#ef4444',
-              border: '1px solid rgba(239,68,68,0.2)', borderRadius: 6, cursor: 'pointer',
+              width: '100%', height: '100%', minHeight: 300, padding: 0,
+              background: 'transparent', color: 'var(--obs-text)',
+              border: 'none', fontFamily: 'var(--obs-font-mono)', fontSize: 14,
+              lineHeight: 1.8, resize: 'none', outline: 'none',
             }}
-          >
-            <Trash2 size={12} />
-          </button>
+          />
         </div>
       </div>
+    );
+  }
 
-      {/* Metadata pills */}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Toolbar — view mode */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px',
+        borderBottom: '1px solid var(--obs-border-subtle)',
+        background: 'var(--obs-bg-panel)',
+      }}>
         {!!meta.category && (
           <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px',
-            fontSize: 11, borderRadius: 12,
+            display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px',
+            fontSize: 11, borderRadius: 4,
             background: `${CATEGORY_COLORS[String(meta.category)] || '#64748b'}20`,
             color: CATEGORY_COLORS[String(meta.category)] || '#64748b',
           }}>
@@ -737,17 +786,15 @@ function CuratedNoteEditor({
           const s = IMPORTANCE_STYLES[String(meta.importance)];
           return s ? (
             <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px',
-              fontSize: 11, borderRadius: 12, background: s.bg, color: s.color,
-            }}>
-              {s.label}
-            </span>
+              display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px',
+              fontSize: 11, borderRadius: 4, background: s.bg, color: s.color,
+            }}>{s.label}</span>
           ) : null;
         })()}
         {Array.isArray(meta.tags) && meta.tags.map((tag) => (
           <span key={String(tag)} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 3, padding: '3px 8px',
-            fontSize: 11, borderRadius: 12, background: 'var(--obs-purple-dim)',
+            display: 'inline-flex', alignItems: 'center', gap: 3, padding: '4px 8px',
+            fontSize: 11, borderRadius: 4, background: 'var(--obs-purple-dim)',
             color: 'var(--obs-purple-bright)',
           }}>
             <Tag size={9} /> {String(tag)}
@@ -755,31 +802,44 @@ function CuratedNoteEditor({
         ))}
         {!!meta.source && (
           <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 3, padding: '3px 8px',
-            fontSize: 11, borderRadius: 12, background: 'rgba(6,182,212,0.1)',
+            display: 'inline-flex', alignItems: 'center', gap: 3, padding: '4px 8px',
+            fontSize: 11, borderRadius: 4, background: 'rgba(6,182,212,0.1)',
             color: '#06b6d4',
           }}>
             source: {String(meta.source)}
           </span>
         )}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          <button
+            onClick={() => setEditing(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4, padding: '5px 12px',
+              fontSize: 12, fontWeight: 500, background: 'var(--obs-purple-dim)',
+              color: 'var(--obs-purple-bright)', border: '1px solid rgba(139,92,246,0.3)',
+              borderRadius: 5, cursor: 'pointer',
+            }}
+          >
+            <Edit3 size={12} /> {t('opsidian.edit')}
+          </button>
+          <button
+            onClick={handleDelete}
+            style={{
+              display: 'flex', alignItems: 'center', padding: '5px 8px',
+              fontSize: 12, background: 'rgba(239,68,68,0.1)', color: '#ef4444',
+              border: '1px solid rgba(239,68,68,0.2)', borderRadius: 5, cursor: 'pointer',
+            }}
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
       </div>
 
-      {/* Body */}
-      {editing ? (
-        <textarea
-          value={editContent}
-          onChange={(e) => setEditContent(e.target.value)}
-          style={{
-            width: '100%', minHeight: 400, padding: 16, background: 'var(--obs-bg-surface)',
-            color: 'var(--obs-text)', border: '1px solid var(--obs-border)',
-            borderRadius: 8, fontFamily: 'var(--obs-font-mono)', fontSize: 13,
-            lineHeight: 1.7, resize: 'vertical', outline: 'none',
-          }}
-        />
-      ) : (
-        <div style={{
-          padding: '16px 0', fontSize: 14, lineHeight: 1.8, color: 'var(--obs-text)',
-        }}>
+      {/* Title + Body */}
+      <div style={{ flex: 1, overflow: 'auto', padding: '16px 32px', maxWidth: 900, margin: '0 auto', width: '100%' }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, margin: '0 0 16px', color: 'var(--obs-text)' }}>
+          {String(meta.title || selectedFile)}
+        </h1>
+        <div style={{ fontSize: 14, lineHeight: 1.8, color: 'var(--obs-text)' }}>
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
@@ -804,7 +864,7 @@ function CuratedNoteEditor({
             {processedBody}
           </ReactMarkdown>
         </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -16,7 +16,6 @@ import {
   PanelRightClose,
   Loader2,
   ArrowLeftRight,
-  Sparkles,
 } from 'lucide-react';
 
 export default function StatusBar({ onRefresh }: { onRefresh: () => void }) {
@@ -94,7 +93,6 @@ export default function StatusBar({ onRefresh }: { onRefresh: () => void }) {
               className={`obs-hub-nav-btn ${hub.mode === 'curator' ? 'obs-hub-nav-active' : ''}`}
               onClick={() => hub.setMode('curator')}
             >
-              <Sparkles size={10} />
               {t('opsidian.curatedVault')}
             </button>
             <button
