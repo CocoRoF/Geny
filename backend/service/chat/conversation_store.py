@@ -27,6 +27,8 @@ Public API::
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from logging import getLogger
@@ -83,9 +85,19 @@ class ChatConversationStore:
             return False
 
     def _migrate_to_db(self) -> None:
-        """Migrate existing JSON rooms + messages to DB (one-time)."""
+        """Migrate existing JSON rooms + messages to DB (one-time, idempotent).
+
+        Uses a marker file to prevent duplicate migrations on restart.
+        """
         if not self._db_available or not self._rooms:
             return
+
+        # Idempotency check: skip if already migrated
+        migration_marker = self._dir / ".db_migrated"
+        if migration_marker.exists():
+            logger.debug("ChatConversationStore: Migration marker found — skipping")
+            return
+
         try:
             from service.database.chat_db_helper import db_migrate_rooms_from_json
             store_ref = self  # capture for the loader callback
@@ -100,6 +112,16 @@ class ChatConversationStore:
                 logger.info(
                     f"ChatConversationStore: Migrated {count} rooms from JSON to DB"
                 )
+
+            # Write marker file to prevent re-migration on next startup
+            try:
+                migration_marker.write_text(
+                    datetime.now(timezone.utc).isoformat(),
+                    encoding="utf-8",
+                )
+            except Exception as e:
+                logger.warning(f"ChatConversationStore: Failed to write migration marker: {e}")
+
         except Exception as e:
             logger.warning(f"ChatConversationStore: Migration to DB failed: {e}")
 
@@ -124,11 +146,27 @@ class ChatConversationStore:
         else:
             self._rooms = []
 
-    def _save_rooms(self) -> None:
-        """Write rooms to disk (must hold _lock)."""
+    @staticmethod
+    def _atomic_write_json(path: Path, data: Any) -> None:
+        """Write JSON data atomically via temp-file-then-rename."""
+        fd, tmp = tempfile.mkstemp(
+            dir=str(path.parent), suffix=".tmp", prefix=".chat_"
+        )
         try:
-            with open(self._rooms_path, "w", encoding="utf-8") as f:
-                json.dump(self._rooms, f, indent=2, ensure_ascii=False, default=str)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False, default=str)
+            os.replace(tmp, str(path))
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
+    def _save_rooms(self) -> None:
+        """Write rooms to disk atomically (must hold _lock)."""
+        try:
+            self._atomic_write_json(self._rooms_path, self._rooms)
         except Exception as e:
             logger.error(f"Failed to save rooms.json: {e}")
 
@@ -149,8 +187,7 @@ class ChatConversationStore:
 
     def _save_messages(self, room_id: str, messages: List[Dict[str, Any]]) -> None:
         try:
-            with open(self._messages_path(room_id), "w", encoding="utf-8") as f:
-                json.dump(messages, f, indent=2, ensure_ascii=False, default=str)
+            self._atomic_write_json(self._messages_path(room_id), messages)
         except Exception as e:
             logger.error(f"Failed to save messages for room {room_id}: {e}")
 
@@ -318,33 +355,62 @@ class ChatConversationStore:
     # Public API — Messages
     # ------------------------------------------------------------------
 
-    def get_messages(self, room_id: str) -> List[Dict[str, Any]]:
-        """Load all messages for a room.
+    def get_messages(self, room_id: str, *, limit: int = 0, before: str = "") -> List[Dict[str, Any]]:
+        """Load messages for a room.
 
         Reads from DB first, falls back to JSON file.
+
+        Args:
+            limit: Max messages to return. 0 = all.
+            before: Cursor message ID — return only older messages.
         """
         if self._db_available:
             try:
                 from service.database.chat_db_helper import db_get_messages
-                result = db_get_messages(self._app_db, room_id)
+                result = db_get_messages(self._app_db, room_id, limit=limit, before=before)
                 if result is not None:
                     return result
             except Exception as e:
                 logger.debug(f"[ChatStore] DB get_messages failed: {e}")
 
         with self._lock:
-            return self._load_messages(room_id)
+            msgs = self._load_messages(room_id)
+            # Apply cursor + limit for JSON fallback
+            if before:
+                idx = next((i for i, m in enumerate(msgs) if m.get("id") == before), None)
+                if idx is not None:
+                    msgs = msgs[:idx]
+            if limit > 0:
+                msgs = msgs[-limit:]
+            return msgs
+
+    def cleanup_old_messages(self, retention_days: int) -> int:
+        """Delete messages older than ``retention_days``. Returns deleted count."""
+        if retention_days <= 0:
+            return 0
+        if self._db_available:
+            try:
+                from service.database.chat_db_helper import db_delete_old_messages
+                return db_delete_old_messages(self._app_db, retention_days)
+            except Exception as e:
+                logger.warning("[ChatStore] DB cleanup_old_messages failed: %s", e)
+        return 0
 
     def add_message(self, room_id: str, message: Dict[str, Any]) -> Dict[str, Any]:
         """Append a message to a room's history and update room metadata.
 
         Writes to DB (primary) and JSON file (backup).
+        If DB write succeeds but JSON fails, the message is still considered
+        saved (DB is the source of truth). JSON inconsistency is logged
+        but does not propagate as an error.
         """
         # Ensure message has an id and timestamp
         if "id" not in message:
             message["id"] = str(uuid.uuid4())
         if "timestamp" not in message:
             message["timestamp"] = datetime.now(timezone.utc).isoformat()
+
+        db_saved = False
 
         # DB primary
         if self._db_available:
@@ -362,21 +428,29 @@ class ChatConversationStore:
                     updated_at=message["timestamp"],
                     message_count=count,
                 )
+                db_saved = True
             except Exception as e:
                 logger.warning(f"[ChatStore] DB add_message failed: {e}")
 
-        # JSON backup
-        with self._lock:
-            messages = self._load_messages(room_id)
-            messages.append(message)
-            self._save_messages(room_id, messages)
+        # JSON backup — always attempt, log failure independently
+        try:
+            with self._lock:
+                messages = self._load_messages(room_id)
+                messages.append(message)
+                self._save_messages(room_id, messages)
 
-            for r in self._rooms:
-                if r["id"] == room_id:
-                    r["updated_at"] = message["timestamp"]
-                    r["message_count"] = len(messages)
-                    break
-            self._save_rooms()
+                for r in self._rooms:
+                    if r["id"] == room_id:
+                        r["updated_at"] = message["timestamp"]
+                        r["message_count"] = len(messages)
+                        break
+                self._save_rooms()
+        except Exception as e:
+            if db_saved:
+                logger.warning(f"[ChatStore] JSON backup failed (DB ok): {e}")
+            else:
+                logger.error(f"[ChatStore] Both DB and JSON write failed: {e}")
+                raise  # Both failed — propagate the error
 
         return message
 

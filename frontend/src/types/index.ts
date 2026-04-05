@@ -105,6 +105,7 @@ export interface ChatRoomMessageListResponse {
   room_id: string;
   messages: ChatRoomMessage[];
   total: number;
+  has_more?: boolean;
 }
 
 export interface ChatRoomBroadcastRequest {
@@ -143,6 +144,16 @@ export interface AgentProgressState {
   elapsed_ms?: number;
   last_activity_ms?: number;
   last_tool_name?: string;
+  recent_logs?: AgentLogEntry[];
+  log_cursor?: number;
+}
+
+export interface AgentLogEntry {
+  level: string;
+  message: string;
+  ts?: string | null;
+  tool_name?: string;
+  node_name?: string;
 }
 
 export interface AgentProgressEvent {

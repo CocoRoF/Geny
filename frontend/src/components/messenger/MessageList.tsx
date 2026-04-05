@@ -1,67 +1,36 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useMessengerStore } from '@/store/useMessengerStore';
 import { useAppStore } from '@/store/useAppStore';
 import { useI18n } from '@/lib/i18n';
-import { Bot, User, Loader2, MessageCircle, FileCode2, Plus, Minus, Clock } from 'lucide-react';
+import { Bot, User, Loader2, MessageCircle, Clock, ChevronDown, ChevronRight, XCircle } from 'lucide-react';
+import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import dynamic from 'next/dynamic';
-import type { ChatRoomMessage, FileChanges } from '@/types';
+import type { ChatRoomMessage, AgentLogEntry } from '@/types';
+import { ChatMarkdown, FileChangeSummary, AgentBadge, ExecutionMeta, getRoleColor, formatTime, formatDate } from '@/components/chat';
 
 const MiniAvatar = dynamic(() => import('@/components/live2d/MiniAvatar'), { ssr: false });
 
-// ── Helpers ──
+// ── Flat list item types for Virtuoso ──
+type ListItem =
+  | { kind: 'date'; date: string }
+  | { kind: 'message'; msg: ChatRoomMessage };
 
-const getRoleColor = (role: string) => {
-  switch (role) {
-    case 'developer': return 'from-blue-500 to-cyan-500';
-    case 'researcher': return 'from-amber-500 to-orange-500';
-    case 'planner': return 'from-teal-500 to-emerald-500';
-    default: return 'from-emerald-500 to-green-500';
-  }
-};
-
-const getRoleBadgeBg = (role: string) => {
-  switch (role) {
-    case 'developer': return 'linear-gradient(135deg, #3b82f6, #06b6d4)';
-    case 'researcher': return 'linear-gradient(135deg, #f59e0b, #ea580c)';
-    case 'planner': return 'linear-gradient(135deg, #14b8a6, #10b981)';
-    default: return 'linear-gradient(135deg, #10b981, #059669)';
-  }
-};
-
-const formatTime = (ts: string) => {
-  const d = new Date(ts);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-};
-
-const formatDate = (ts: string) => {
-  const d = new Date(ts);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  if (d.toDateString() === today.toDateString()) return 'Today';
-  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-};
-
-// Group messages by date
-function groupByDate(messages: ChatRoomMessage[]): Array<{ date: string; messages: ChatRoomMessage[] }> {
-  const groups: Array<{ date: string; messages: ChatRoomMessage[] }> = [];
+function buildFlatList(messages: ChatRoomMessage[]): ListItem[] {
+  const items: ListItem[] = [];
   let currentDate = '';
 
   for (const msg of messages) {
     const dateStr = formatDate(msg.timestamp);
     if (dateStr !== currentDate) {
       currentDate = dateStr;
-      groups.push({ date: dateStr, messages: [msg] });
-    } else {
-      groups[groups.length - 1].messages.push(msg);
+      items.push({ kind: 'date', date: dateStr });
     }
+    items.push({ kind: 'message', msg });
   }
 
-  return groups;
+  return items;
 }
 
 // ── Message Components ──
@@ -92,72 +61,8 @@ function UserMessage({ msg }: { msg: ChatRoomMessage }) {
   );
 }
 
-function FileChangeSummary({ fileChanges }: { fileChanges: FileChanges[] }) {
-  const { setFileChangeDetail } = useMessengerStore();
-  const totalAdded = fileChanges.reduce((s, f) => s + f.lines_added, 0);
-  const totalRemoved = fileChanges.reduce((s, f) => s + f.lines_removed, 0);
-
-  const shortName = (fp: string) => {
-    const parts = fp.replace(/\\/g, '/').split('/');
-    return parts[parts.length - 1] || fp;
-  };
-
-  return (
-    <button
-      type="button"
-      className="mt-2 w-full text-left rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors cursor-pointer p-0"
-      onClick={() => setFileChangeDetail(fileChanges)}
-    >
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[var(--border-color)]">
-        <FileCode2 size={12} className="text-[var(--text-muted)] shrink-0" />
-        <span className="text-[0.6875rem] font-medium text-[var(--text-secondary)]">
-          {fileChanges.length} file{fileChanges.length > 1 ? 's' : ''} changed
-        </span>
-        <span className="ml-auto flex items-center gap-2 text-[0.625rem] font-mono">
-          {totalAdded > 0 && (
-            <span className="flex items-center gap-0.5 text-[var(--success-color,#22c55e)]">
-              <Plus size={9} />
-              {totalAdded}
-            </span>
-          )}
-          {totalRemoved > 0 && (
-            <span className="flex items-center gap-0.5 text-[var(--danger-color,#ef4444)]">
-              <Minus size={9} />
-              {totalRemoved}
-            </span>
-          )}
-        </span>
-      </div>
-      <div className="px-3 py-1.5 space-y-0.5">
-        {fileChanges.map((fc, i) => (
-          <div key={i} className="flex items-center gap-2 text-[0.625rem]">
-            <span
-              className="px-1 py-[0.5px] rounded text-[0.5rem] font-bold uppercase tracking-wider"
-              style={{
-                backgroundColor: fc.operation === 'create' ? 'rgba(34,197,94,0.1)' :
-                  fc.operation === 'edit' || fc.operation === 'multi_edit' ? 'rgba(245,158,11,0.1)' :
-                  'rgba(59,130,246,0.1)',
-                color: fc.operation === 'create' ? 'var(--success-color)' :
-                  fc.operation === 'edit' || fc.operation === 'multi_edit' ? 'var(--warning-color)' :
-                  'var(--primary-color)',
-              }}
-            >
-              {fc.operation === 'multi_edit' ? 'edit' : fc.operation}
-            </span>
-            <span className="font-mono text-[var(--text-secondary)] truncate">{shortName(fc.file_path)}</span>
-            <span className="ml-auto flex items-center gap-1.5 font-mono shrink-0">
-              {fc.lines_added > 0 && <span className="text-[var(--success-color,#22c55e)]">+{fc.lines_added}</span>}
-              {fc.lines_removed > 0 && <span className="text-[var(--danger-color,#ef4444)]">-{fc.lines_removed}</span>}
-            </span>
-          </div>
-        ))}
-      </div>
-    </button>
-  );
-}
-
 function AgentMessage({ msg }: { msg: ChatRoomMessage }) {
-  const { setSelectedMemberId } = useMessengerStore();
+  const { setSelectedMemberId, setFileChangeDetail } = useMessengerStore();
   return (
     <div className="flex gap-3 px-4 md:px-6 py-1.5 hover:bg-[var(--bg-hover)] transition-colors group">
       <button
@@ -180,28 +85,15 @@ function AgentMessage({ msg }: { msg: ChatRoomMessage }) {
           >
             {msg.session_name || msg.session_id?.substring(0, 8)}
           </button>
-          {msg.role && (
-            <span
-              className="inline-flex items-center px-1.5 py-[1px] rounded text-[0.5625rem] font-bold text-white uppercase tracking-wider"
-              style={{ background: getRoleBadgeBg(msg.role) }}
-            >
-              {msg.role}
-            </span>
-          )}
+          {msg.role && <AgentBadge role={msg.role} />}
           <span className="text-[0.625rem] text-[var(--text-muted)]">
             {formatTime(msg.timestamp)}
           </span>
-          {typeof msg.duration_ms === 'number' && msg.duration_ms > 0 && (
-            <span className="text-[0.5625rem] text-[var(--text-muted)]">
-              ({(msg.duration_ms / 1000).toFixed(1)}s)
-            </span>
-          )}
+          <ExecutionMeta durationMs={msg.duration_ms} />
         </div>
-        <div className="text-[0.8125rem] text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap break-words">
-          {msg.content}
-        </div>
+        <ChatMarkdown content={msg.content} />
         {msg.file_changes && msg.file_changes.length > 0 && (
-          <FileChangeSummary fileChanges={msg.file_changes} />
+          <FileChangeSummary fileChanges={msg.file_changes} onViewDetail={setFileChangeDetail} />
         )}
       </div>
     </div>
@@ -251,14 +143,7 @@ function TypingIndicator({ name, role, sessionId, thinkingPreview, elapsedMs }: 
       <div className="flex items-center gap-2 min-w-0 flex-1">
         {/* Name + Role badge */}
         <span className="text-[0.8125rem] font-semibold text-[var(--text-primary)] shrink-0">{name}</span>
-        {role && role !== 'processing' && (
-          <span
-            className="inline-flex items-center px-1.5 py-[1px] rounded text-[0.5625rem] font-bold text-white uppercase tracking-wider shrink-0"
-            style={{ background: getRoleBadgeBg(role) }}
-          >
-            {role}
-          </span>
-        )}
+        {role && role !== 'processing' && <AgentBadge role={role} className="shrink-0" />}
         {/* Thinking preview bubble */}
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--bg-secondary)] border border-[var(--border-color)] min-w-0">
           {thinkingPreview && (
@@ -282,6 +167,52 @@ function TypingIndicator({ name, role, sessionId, thinkingPreview, elapsedMs }: 
   );
 }
 
+// Inline execution log viewer for a single agent
+function AgentLogPanel({ logs, logCursor }: { logs: AgentLogEntry[]; logCursor?: number }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!logs.length) return null;
+
+  const levelColor = (level: string) => {
+    switch (level) {
+      case 'GRAPH': return 'text-purple-500';
+      case 'TOOL': return 'text-blue-500';
+      case 'TOOL_RES': return 'text-cyan-500';
+      case 'INFO': return 'text-[var(--text-muted)]';
+      default: return 'text-[var(--text-secondary)]';
+    }
+  };
+
+  return (
+    <div className="mt-1">
+      <button
+        className="flex items-center gap-1 text-[0.6875rem] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors bg-transparent border-none cursor-pointer p-0"
+        onClick={() => setExpanded(!expanded)}
+      >
+        {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        <span>{logCursor ?? logs.length} steps</span>
+      </button>
+      {expanded && (
+        <div className="mt-1 pl-1 border-l-2 border-[var(--border-color)] space-y-0.5 max-h-[200px] overflow-y-auto">
+          {logs.map((log, i) => (
+            <div key={i} className="flex items-start gap-1.5 text-[0.625rem] font-mono">
+              <span className={`shrink-0 font-semibold ${levelColor(log.level)}`}>
+                {log.level}
+              </span>
+              {log.node_name && (
+                <span className="text-purple-400 shrink-0">{log.node_name}</span>
+              )}
+              {log.tool_name && (
+                <span className="text-blue-400 shrink-0">{log.tool_name}</span>
+              )}
+              <span className="text-[var(--text-secondary)] truncate">{log.message}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Per-agent progress indicator during broadcast
 function AgentProgressIndicator({ agents }: { agents: import('@/types').AgentProgressState[] }) {
   // Show agents that are pending, executing, or queued (waiting for current task)
@@ -294,31 +225,70 @@ function AgentProgressIndicator({ agents }: { agents: import('@/types').AgentPro
   return (
     <div className="space-y-1">
       {activeAgents.map(agent => (
-        <TypingIndicator
-          key={agent.session_id}
-          name={agent.session_name}
-          role={agent.role}
-          sessionId={agent.session_id}
-          thinkingPreview={agent.thinking_preview}
-          elapsedMs={agent.elapsed_ms}
-        />
+        <div key={agent.session_id}>
+          <TypingIndicator
+            name={agent.session_name}
+            role={agent.role}
+            sessionId={agent.session_id}
+            thinkingPreview={agent.thinking_preview}
+            elapsedMs={agent.elapsed_ms}
+          />
+          {agent.recent_logs && agent.recent_logs.length > 0 && (
+            <div className="pl-[52px]">
+              <AgentLogPanel logs={agent.recent_logs} logCursor={agent.log_cursor} />
+            </div>
+          )}
+        </div>
       ))}
     </div>
   );
 }
 
+// ── Item renderer for Virtuoso ──
+function ItemRenderer({ item }: { item: ListItem }) {
+  if (item.kind === 'date') {
+    return <DateDivider date={item.date} />;
+  }
+  const msg = item.msg;
+  if (msg.type === 'user') return <UserMessage msg={msg} />;
+  if (msg.type === 'agent') return <AgentMessage msg={msg} />;
+  return <SystemMessage msg={msg} />;
+}
+
 // ── Main Component ──
 
 export default function MessageList() {
-  const { messages, loadingMessages, broadcastStatus, agentProgress } = useMessengerStore();
+  const { messages, loadingMessages, loadingOlderMessages, hasMoreMessages, broadcastStatus, agentProgress, loadOlderMessages, cancelBroadcast } = useMessengerStore();
   const { t } = useI18n();
-  const endRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const isAtBottomRef = useRef(true);
 
-  // Auto-scroll to bottom on new messages / broadcast progress
+  // Build flat list for Virtuoso
+  const flatItems = useMemo(() => buildFlatList(messages), [messages]);
+
+  // Track whether user is at bottom for followOutput
+  const handleAtBottomStateChange = useCallback((atBottom: boolean) => {
+    isAtBottomRef.current = atBottom;
+  }, []);
+
+  // Load older messages when top is reached
+  const handleStartReached = useCallback(() => {
+    if (!loadingOlderMessages && hasMoreMessages) {
+      loadOlderMessages();
+    }
+  }, [loadingOlderMessages, hasMoreMessages, loadOlderMessages]);
+
+  // Follow output only when at bottom
+  const followOutput = useCallback((isAtBottom: boolean) => {
+    return isAtBottom ? 'smooth' : false;
+  }, []);
+
+  // Scroll to bottom when broadcast progress changes
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, broadcastStatus, agentProgress]);
+    if (broadcastStatus && !broadcastStatus.finished && isAtBottomRef.current) {
+      virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'smooth' });
+    }
+  }, [agentProgress, broadcastStatus]);
 
   if (loadingMessages) {
     return (
@@ -344,41 +314,66 @@ export default function MessageList() {
     );
   }
 
-  const groups = groupByDate(messages);
-
   return (
-    <div ref={containerRef} className="flex-1 min-h-0 overflow-y-auto">
-      {/* Top spacer */}
-      <div className="h-4" />
-
-      {groups.map((group, gi) => (
-        <div key={gi}>
-          <DateDivider date={group.date} />
-          {group.messages.map(msg => {
-            if (msg.type === 'user') return <UserMessage key={msg.id} msg={msg} />;
-            if (msg.type === 'agent') return <AgentMessage key={msg.id} msg={msg} />;
-            return <SystemMessage key={msg.id} msg={msg} />;
-          })}
-        </div>
-      ))}
-
-      {/* Broadcast in-progress indicator */}
-      {broadcastStatus && !broadcastStatus.finished && (
-        <>
-          {/* Show per-agent progress if available */}
-          {agentProgress && agentProgress.length > 0 ? (
-            <AgentProgressIndicator agents={agentProgress} />
-          ) : (
-            /* Fallback: show generic counter */
-            <TypingIndicator
-              name={`${broadcastStatus.completed}/${broadcastStatus.total}`}
-              role="processing"
-            />
-          )}
-        </>
-      )}
-
-      <div ref={endRef} className="h-2" />
+    <div className="flex-1 min-h-0 flex flex-col">
+      <Virtuoso
+        ref={virtuosoRef}
+        data={flatItems}
+        startReached={handleStartReached}
+        followOutput={followOutput}
+        atBottomStateChange={handleAtBottomStateChange}
+        atBottomThreshold={60}
+        increaseViewportBy={{ top: 400, bottom: 200 }}
+        itemContent={(_index, item) => <ItemRenderer item={item} />}
+        components={{
+          Header: () => (
+            <div>
+              <div className="h-4" />
+              {loadingOlderMessages && (
+                <div className="flex justify-center py-2">
+                  <Loader2 size={16} className="animate-spin text-[var(--text-muted)]" />
+                </div>
+              )}
+              {hasMoreMessages && !loadingOlderMessages && (
+                <div className="flex justify-center py-2">
+                  <button
+                    className="text-[0.75rem] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors bg-transparent border border-[var(--border-color)] rounded-full px-4 py-1 cursor-pointer"
+                    onClick={loadOlderMessages}
+                  >
+                    {t('messenger.loadEarlier') || 'Load earlier messages'}
+                  </button>
+                </div>
+              )}
+            </div>
+          ),
+          Footer: () => (
+            <div>
+              {broadcastStatus && !broadcastStatus.finished && (
+                <>
+                  {agentProgress && agentProgress.length > 0 ? (
+                    <AgentProgressIndicator agents={agentProgress} />
+                  ) : (
+                    <TypingIndicator
+                      name={`${broadcastStatus.completed}/${broadcastStatus.total}`}
+                      role="processing"
+                    />
+                  )}
+                  <div className="flex justify-center py-1">
+                    <button
+                      className="flex items-center gap-1 text-[0.6875rem] text-red-400 hover:text-red-300 transition-colors bg-transparent border-none cursor-pointer p-0"
+                      onClick={cancelBroadcast}
+                    >
+                      <XCircle size={14} />
+                      <span>{t('messenger.cancelBroadcast') || 'Cancel'}</span>
+                    </button>
+                  </div>
+                </>
+              )}
+              <div className="h-2" />
+            </div>
+          ),
+        }}
+      />
     </div>
   );
 }

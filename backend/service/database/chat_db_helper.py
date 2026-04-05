@@ -283,18 +283,46 @@ def db_add_messages_batch(db_manager, room_id: str,
     return results
 
 
-def db_get_messages(db_manager, room_id: str) -> List[Dict[str, Any]]:
-    """Load all messages for a room, ordered by timestamp."""
+def db_get_messages(db_manager, room_id: str, *, limit: int = 0, before: str = "") -> List[Dict[str, Any]]:
+    """Load messages for a room, ordered by timestamp.
+
+    Args:
+        limit: Max messages to return. 0 = unlimited (all).
+        before: If given, return only messages with DB ``id`` less than the row
+                whose ``message_id`` matches this value (cursor-based paging).
+    """
     mgr = _get_db_manager(db_manager)
     if not _is_db_available(db_manager):
         return []
 
     try:
-        query = (
-            f"SELECT * FROM {MESSAGES_TABLE} WHERE room_id = %s "
-            f"ORDER BY id ASC"
-        )
-        rows = mgr.execute_query(query, (room_id,))
+        params: list = [room_id]
+        where_clause = f"WHERE room_id = %s"
+
+        if before:
+            where_clause += (
+                f" AND id < (SELECT id FROM {MESSAGES_TABLE}"
+                f" WHERE room_id = %s AND message_id = %s LIMIT 1)"
+            )
+            params.extend([room_id, before])
+
+        if limit > 0:
+            # When paging backwards we want the *last* N rows before the cursor,
+            # so we sort DESC, take N, then re-sort ASC in a subquery.
+            query = (
+                f"SELECT * FROM ("
+                f"  SELECT * FROM {MESSAGES_TABLE} {where_clause}"
+                f"  ORDER BY id DESC LIMIT %s"
+                f") sub ORDER BY id ASC"
+            )
+            params.append(limit)
+        else:
+            query = (
+                f"SELECT * FROM {MESSAGES_TABLE} {where_clause} "
+                f"ORDER BY id ASC"
+            )
+
+        rows = mgr.execute_query(query, tuple(params))
         if not rows:
             return []
 
@@ -339,6 +367,30 @@ def db_get_message_count(db_manager, room_id: str) -> int:
             return row.get("cnt", 0)
         return 0
     except Exception:
+        return 0
+
+
+def db_delete_old_messages(db_manager, retention_days: int) -> int:
+    """Delete messages older than ``retention_days`` across all rooms.
+
+    Returns the number of deleted rows.
+    """
+    mgr = _get_db_manager(db_manager)
+    if not _is_db_available(db_manager):
+        return 0
+
+    try:
+        query = (
+            f"DELETE FROM {MESSAGES_TABLE} "
+            f"WHERE timestamp < (NOW() - INTERVAL '%s days')"
+        )
+        result = mgr.execute_query(query, (retention_days,))
+        # execute_query may return row count or None depending on driver
+        if isinstance(result, int):
+            return result
+        return 0
+    except Exception as e:
+        logger.error(f"Failed to delete old messages: {e}")
         return 0
 
 

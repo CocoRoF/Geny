@@ -189,11 +189,27 @@ async def _notify_linked_vtuber(session_id: str, result: 'ExecutionResult') -> N
                     logger.info(
                         "VTuber %s busy — CLI_RESULT stored in inbox", linked_id
                     )
-                except Exception:
-                    logger.debug(
-                        "VTuber notification inbox fallback failed for %s",
-                        linked_id, exc_info=True,
+                except Exception as inbox_err:
+                    # Inbox also failed — store in DLQ for recovery
+                    logger.warning(
+                        "VTuber notification inbox fallback failed for %s: %s",
+                        linked_id, inbox_err,
                     )
+                    try:
+                        from service.chat.inbox import get_inbox_manager
+                        get_inbox_manager().send_to_dlq(
+                            target_session_id=linked_id,
+                            content=content,
+                            sender_session_id=session_id,
+                            sender_name="CLI Agent",
+                            reason="vtuber_notify_inbox_failed",
+                            original_error=str(inbox_err),
+                        )
+                    except Exception:
+                        logger.error(
+                            "VTuber notification DLQ fallback also failed for %s",
+                            linked_id, exc_info=True,
+                        )
             except (AgentNotFoundError, AgentNotAliveError) as exc:
                 logger.debug(
                     "VTuber notification to %s skipped: %s", linked_id, exc
@@ -333,6 +349,38 @@ async def abort_trigger_execution(session_id: str) -> bool:
 
     # Ensure cleanup (only our holder)
     cleanup_execution(session_id, exec_id=abort_exec_id)
+    return True
+
+
+async def stop_execution(session_id: str) -> bool:
+    """
+    Cancel any running execution for a session (trigger or user-initiated).
+
+    Returns True if an execution was stopped. Used by broadcast cancel.
+    """
+    holder = _active_executions.get(session_id)
+    if not holder or holder.get("done", True):
+        return False
+
+    stop_exec_id = holder.get("exec_id")
+    task = holder.get("task")
+    if not task or task.done():
+        cleanup_execution(session_id, exec_id=stop_exec_id)
+        return True
+
+    logger.info(
+        "Stopping execution for %s (elapsed=%.1fs)",
+        session_id,
+        time.time() - holder.get("start_time", time.time()),
+    )
+
+    task.cancel()
+    try:
+        await task
+    except (asyncio.CancelledError, Exception):
+        pass
+
+    cleanup_execution(session_id, exec_id=stop_exec_id)
     return True
 
 
@@ -852,7 +900,9 @@ async def start_command_background(
             # period so a reconnecting frontend can pick up the final result,
             # then remove it to prevent memory leaks.
             async def _deferred_cleanup():
-                await asyncio.sleep(300)  # 5 minutes
+                from service.config.sub_config.general.chat_config import ChatConfig
+                _chat_cfg = ChatConfig.get_default_instance()
+                await asyncio.sleep(_chat_cfg.holder_grace_period_s)
                 cleanup_execution(session_id, exec_id=exec_id)
 
             asyncio.create_task(_deferred_cleanup())

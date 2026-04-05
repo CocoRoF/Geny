@@ -4,6 +4,7 @@
  */
 
 import { getToken } from '@/lib/authApi';
+import { sseSubscribe } from '@/lib/sse';
 
 // ==================== Base Fetch Wrapper ====================
 
@@ -140,75 +141,29 @@ export const agentApi = {
       throw new Error(message);
     }
 
-    // Step 2: connect EventSource DIRECTLY to backend (bypass Next.js proxy buffering)
-    // Supports auto-reconnection: if the SSE connection drops while execution is
-    // still running, reconnect to /execute/events (the holder persists on backend).
+    // Step 2: connect EventSource via unified SSE manager
+    const backendUrl = getBackendUrl();
     return new Promise<void>((resolve) => {
-      const backendUrl = getBackendUrl();
-      let evtSource: EventSource | null = null;
-      let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-      let done = false;
-      const MAX_RECONNECT_ATTEMPTS = 20;
-      const RECONNECT_DELAY = 3_000;
-      let reconnectAttempts = 0;
-
-      const cleanup = () => {
-        done = true;
-        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-        evtSource?.close();
-        evtSource = null;
-      };
-
-      const connect = () => {
-        if (done) return;
-        evtSource = new EventSource(`${backendUrl}/api/agents/${id}/execute/events`);
-
-        evtSource.addEventListener('log', (e) => {
-          reconnectAttempts = 0;
-          try { onEvent('log', JSON.parse(e.data)); } catch { /* skip */ }
-        });
-        evtSource.addEventListener('status', (e) => {
-          reconnectAttempts = 0;
-          try { onEvent('status', JSON.parse(e.data)); } catch { /* skip */ }
-        });
-        evtSource.addEventListener('result', (e) => {
-          reconnectAttempts = 0;
-          try { onEvent('result', JSON.parse(e.data)); } catch { /* skip */ }
-        });
-        evtSource.addEventListener('heartbeat', (e) => {
-          reconnectAttempts = 0; // connection alive
-          try { onEvent('heartbeat', JSON.parse((e as MessageEvent).data)); } catch { /* skip */ }
-        });
-        evtSource.addEventListener('error', (e) => {
-          // SSE error event — could be connection error or custom error event
-          if (e instanceof MessageEvent && e.data) {
-            try { onEvent('error', JSON.parse(e.data)); } catch { /* skip */ }
-          }
-        });
-        evtSource.addEventListener('done', () => {
+      const dispatch = (name: string) => (d: unknown) => onEvent(name, d as Record<string, unknown>);
+      const sub = sseSubscribe({
+        url: `${backendUrl}/api/agents/${id}/execute/events`,
+        events: {
+          log: dispatch('log'),
+          status: dispatch('status'),
+          result: dispatch('result'),
+          heartbeat: dispatch('heartbeat'),
+          error: dispatch('error'),
+        },
+        reconnect: { maxAttempts: 20, delay: 3_000 },
+        doneEvents: ['done'],
+        onDone: () => {
           onEvent('done', {});
-          cleanup();
           resolve();
-        });
+        },
+      });
 
-        // Handle connection errors — reconnect instead of giving up
-        evtSource.onerror = () => {
-          if (done) return;
-          evtSource?.close();
-          evtSource = null;
-
-          if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-            // Exhausted retries — give up
-            cleanup();
-            resolve();
-            return;
-          }
-          reconnectAttempts++;
-          reconnectTimer = setTimeout(connect, RECONNECT_DELAY);
-        };
-      };
-
-      connect();
+      // If SSE never connects and exhausts retries, resolve anyway
+      void sub;
     });
   },
 
@@ -235,68 +190,22 @@ export const agentApi = {
     id: string,
     onEvent: (eventType: string, eventData: Record<string, unknown>) => void,
   ): { close: () => void } => {
-    let evtSource: EventSource | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let closed = false;
-    const RECONNECT_DELAY = 3_000;
-    const MAX_RETRIES = 10;
-    let retries = 0;
-
-    const connect = () => {
-      if (closed) return;
-      const backendUrl = getBackendUrl();
-      evtSource = new EventSource(`${backendUrl}/api/agents/${id}/execute/events`);
-
-      evtSource.addEventListener('log', (e) => {
-        retries = 0;
-        try { onEvent('log', JSON.parse(e.data)); } catch { /* skip */ }
-      });
-      evtSource.addEventListener('status', (e) => {
-        retries = 0;
-        try { onEvent('status', JSON.parse(e.data)); } catch { /* skip */ }
-      });
-      evtSource.addEventListener('result', (e) => {
-        retries = 0;
-        try { onEvent('result', JSON.parse(e.data)); } catch { /* skip */ }
-      });
-      evtSource.addEventListener('heartbeat', (e) => {
-        retries = 0;
-        try { onEvent('heartbeat', JSON.parse((e as MessageEvent).data)); } catch { /* skip */ }
-      });
-      evtSource.addEventListener('error', (e) => {
-        if (e instanceof MessageEvent && e.data) {
-          try { onEvent('error', JSON.parse(e.data)); } catch { /* skip */ }
-        }
-      });
-      evtSource.addEventListener('done', () => {
-        onEvent('done', {});
-        closed = true;
-        evtSource?.close();
-        evtSource = null;
-      });
-
-      evtSource.onerror = () => {
-        if (closed) return;
-        evtSource?.close();
-        evtSource = null;
-        if (retries >= MAX_RETRIES) {
-          closed = true;
-          return;
-        }
-        retries++;
-        reconnectTimer = setTimeout(connect, RECONNECT_DELAY);
-      };
-    };
-
-    connect();
-    return {
-      close: () => {
-        closed = true;
-        if (reconnectTimer) clearTimeout(reconnectTimer);
-        evtSource?.close();
-        evtSource = null;
+    const backendUrl = getBackendUrl();
+    const dispatch = (name: string) => (d: unknown) => onEvent(name, d as Record<string, unknown>);
+    const sub = sseSubscribe({
+      url: `${backendUrl}/api/agents/${id}/execute/events`,
+      events: {
+        log: dispatch('log'),
+        status: dispatch('status'),
+        result: dispatch('result'),
+        heartbeat: dispatch('heartbeat'),
+        error: dispatch('error'),
       },
-    };
+      reconnect: { maxAttempts: 10, delay: 3_000 },
+      doneEvents: ['done'],
+      onDone: () => onEvent('done', {}),
+    });
+    return { close: () => sub.close() };
   },
 
   /** GET /api/agents/{id}/graph — graph structure */
@@ -563,9 +472,16 @@ export const chatApi = {
       method: 'DELETE',
     }),
 
-  /** GET /api/chat/rooms/:id/messages — get room message history */
-  getRoomMessages: (roomId: string) =>
-    apiCall<ChatRoomMessageListResponse>(`/api/chat/rooms/${roomId}/messages`),
+  /** GET /api/chat/rooms/:id/messages — get room message history (supports pagination) */
+  getRoomMessages: (roomId: string, opts?: { limit?: number; before?: string }) => {
+    const params = new URLSearchParams();
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    if (opts?.before) params.set('before', opts.before);
+    const qs = params.toString();
+    return apiCall<ChatRoomMessageListResponse>(
+      `/api/chat/rooms/${roomId}/messages${qs ? `?${qs}` : ''}`,
+    );
+  },
 
   /**
    * POST /api/chat/rooms/:id/broadcast — fire-and-forget broadcast.
@@ -577,6 +493,13 @@ export const chatApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  /** POST /api/chat/rooms/:id/broadcast/cancel — cancel active broadcast */
+  cancelBroadcast: (roomId: string) =>
+    apiCall<{ status: string; broadcast_id: string; cancelled_agents: number }>(
+      `/api/chat/rooms/${roomId}/broadcast/cancel`,
+      { method: 'POST' },
+    ),
 
   /**
    * Subscribe to SSE events for a chat room.
@@ -590,62 +513,23 @@ export const chatApi = {
     onEvent: (eventType: string, eventData: Record<string, unknown>) => void,
     getLatestMsgId?: () => string | null,
   ): { close: () => void } => {
-    let evtSource: EventSource | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let closed = false;
-
-    const RECONNECT_DELAY = 3_000;
-
-    const getUrl = () => {
-      const currentAfter = getLatestMsgId?.() ?? afterId;
-      const qs = currentAfter ? `?after=${encodeURIComponent(currentAfter)}` : '';
-      return `${getBackendUrl()}/api/chat/rooms/${roomId}/events${qs}`;
-    };
-
-    const connect = () => {
-      if (closed) return;
-
-      const url = getUrl();
-      evtSource = new EventSource(url);
-
-      const handleEvent = (e: MessageEvent) => {
-        try {
-          onEvent(e.type, JSON.parse(e.data));
-        } catch { /* skip malformed */ }
-      };
-
-      evtSource.addEventListener('message', handleEvent);
-      evtSource.addEventListener('broadcast_status', handleEvent);
-      evtSource.addEventListener('broadcast_done', handleEvent);
-      evtSource.addEventListener('agent_progress', handleEvent);
-      evtSource.addEventListener('heartbeat', handleEvent);
-
-      evtSource.onerror = () => {
-        if (closed) return;
-        evtSource?.close();
-        evtSource = null;
-        scheduleReconnect();
-      };
-    };
-
-    const scheduleReconnect = () => {
-      if (closed || reconnectTimer) return;
-      reconnectTimer = setTimeout(() => {
-        reconnectTimer = null;
-        connect();
-      }, RECONNECT_DELAY);
-    };
-
-    connect();
-
-    return {
-      close: () => {
-        closed = true;
-        if (reconnectTimer) clearTimeout(reconnectTimer);
-        evtSource?.close();
-        evtSource = null;
+    const dispatch = (name: string) => (d: unknown) => onEvent(name, d as Record<string, unknown>);
+    const sub = sseSubscribe({
+      url: () => {
+        const currentAfter = getLatestMsgId?.() ?? afterId;
+        const qs = currentAfter ? `?after=${encodeURIComponent(currentAfter)}` : '';
+        return `${getBackendUrl()}/api/chat/rooms/${roomId}/events${qs}`;
       },
-    };
+      events: {
+        message: dispatch('message'),
+        broadcast_status: dispatch('broadcast_status'),
+        broadcast_done: dispatch('broadcast_done'),
+        agent_progress: dispatch('agent_progress'),
+        heartbeat: dispatch('heartbeat'),
+      },
+      reconnect: { delay: 3_000 },
+    });
+    return { close: () => sub.close() };
   },
 };
 
@@ -901,49 +785,16 @@ export const vtuberApi = {
     sessionId: string,
     onState: (state: AvatarState) => void,
   ): { close: () => void } => {
-    let evtSource: EventSource | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let closed = false;
-    const RECONNECT_DELAY = 3_000;
-    const MAX_RETRIES = 10;
-    let retries = 0;
-
-    const connect = () => {
-      if (closed) return;
-      const backendUrl = getBackendUrl();
-      evtSource = new EventSource(`${backendUrl}/api/vtuber/agents/${sessionId}/events`);
-
-      evtSource.addEventListener('avatar_state', (e) => {
-        retries = 0;
-        try { onState(JSON.parse(e.data) as AvatarState); } catch { /* skip */ }
-      });
-
-      evtSource.addEventListener('heartbeat', () => {
-        retries = 0;
-      });
-
-      evtSource.onerror = () => {
-        if (closed) return;
-        evtSource?.close();
-        evtSource = null;
-        if (retries >= MAX_RETRIES) {
-          closed = true;
-          return;
-        }
-        retries++;
-        reconnectTimer = setTimeout(connect, RECONNECT_DELAY);
-      };
-    };
-
-    connect();
-    return {
-      close: () => {
-        closed = true;
-        if (reconnectTimer) clearTimeout(reconnectTimer);
-        evtSource?.close();
-        evtSource = null;
+    const backendUrl = getBackendUrl();
+    const sub = sseSubscribe({
+      url: `${backendUrl}/api/vtuber/agents/${sessionId}/events`,
+      events: {
+        avatar_state: (d) => onState(d as AvatarState),
+        heartbeat: () => {},
       },
-    };
+      reconnect: { maxAttempts: 10, delay: 3_000 },
+    });
+    return { close: () => sub.close() };
   },
 };
 

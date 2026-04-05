@@ -4,13 +4,95 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { chatApi } from '@/lib/api';
 import { useVTuberStore } from '@/store/useVTuberStore';
 import { useI18n } from '@/lib/i18n';
-import type { ChatRoomMessage } from '@/types';
+import { parseEmotion, ChatMarkdown, FileChangeSummary, AgentBadge, ExecutionMeta, MessageBubble } from '@/components/chat';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import type { ChatRoomMessage, FileChanges, AgentProgressState, AgentLogEntry } from '@/types';
 
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: number;
+  agentRole?: string;
+  sessionName?: string;
+  durationMs?: number;
+  fileChanges?: FileChanges[];
+}
+
+// ── Compact execution log panel for VTuber ──
+
+function VTuberLogPanel({ logs, logCursor }: { logs: AgentLogEntry[]; logCursor?: number }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!logs.length) return null;
+
+  const levelColor = (level: string) => {
+    switch (level) {
+      case 'GRAPH': return 'text-purple-400';
+      case 'TOOL': return 'text-blue-400';
+      case 'TOOL_RES': return 'text-cyan-400';
+      default: return 'text-[var(--text-muted)]';
+    }
+  };
+
+  return (
+    <div className="mt-0.5">
+      <button
+        className="flex items-center gap-0.5 text-[0.625rem] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors bg-transparent border-none cursor-pointer p-0"
+        onClick={() => setExpanded(!expanded)}
+      >
+        {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+        <span>{logCursor ?? logs.length} steps</span>
+      </button>
+      {expanded && (
+        <div className="mt-0.5 pl-1 border-l border-[var(--border-color)] space-y-0 max-h-[120px] overflow-y-auto">
+          {logs.map((log, i) => (
+            <div key={i} className="flex items-start gap-1 text-[0.5625rem] font-mono leading-tight">
+              <span className={`shrink-0 font-semibold ${levelColor(log.level)}`}>{log.level}</span>
+              <span className="text-[var(--text-secondary)] truncate">{log.message}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VTuberProgressPanel({ agents }: { agents: AgentProgressState[] }) {
+  const active = agents.filter(a => a.status === 'pending' || a.status === 'executing' || a.status === 'queued');
+  if (active.length === 0) return null;
+
+  return (
+    <div className="space-y-1">
+      {active.map(agent => (
+        <div key={agent.session_id} className="flex justify-start">
+          <div className="max-w-[80%] px-3 py-1.5 rounded-2xl rounded-bl-md bg-[var(--bg-tertiary)] text-[var(--text-primary)]">
+            <div className="flex items-center gap-1.5">
+              <AgentBadge role={agent.role} />
+              <span className="text-[0.75rem] text-[var(--text-muted)]">{agent.session_name}</span>
+              {agent.thinking_preview && (
+                <span className="text-[0.6875rem] text-[var(--text-muted)] truncate max-w-[120px]">
+                  {agent.thinking_preview}
+                </span>
+              )}
+              <span className="inline-flex items-center gap-0.5">
+                <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] animate-[typingBounce_1.4s_ease-in-out_infinite]" style={{ animationDelay: '0s' }} />
+                <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] animate-[typingBounce_1.4s_ease-in-out_infinite]" style={{ animationDelay: '0.2s' }} />
+                <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] animate-[typingBounce_1.4s_ease-in-out_infinite]" style={{ animationDelay: '0.4s' }} />
+              </span>
+              {typeof agent.elapsed_ms === 'number' && agent.elapsed_ms > 0 && (
+                <span className="text-[0.5625rem] text-[var(--text-muted)]">
+                  ({(agent.elapsed_ms / 1000).toFixed(1)}s)
+                </span>
+              )}
+            </div>
+            {agent.recent_logs && agent.recent_logs.length > 0 && (
+              <VTuberLogPanel logs={agent.recent_logs} logCursor={agent.log_cursor} />
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /**
@@ -34,6 +116,7 @@ export default function VTuberChatPanel({
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [agentProgress, setAgentProgress] = useState<AgentProgressState[] | null>(null);
   const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -46,15 +129,6 @@ export default function VTuberChatPanel({
   const speakResponse = useVTuberStore((s) => s.speakResponse);
   const stopSpeaking = useVTuberStore((s) => s.stopSpeaking);
 
-  // Parse emotion tag: "[joy] Hello" → ["joy", "Hello"]
-  const parseEmotion = useCallback((content: string): [string, string] => {
-    const match = content.match(/^\[(neutral|joy|anger|disgust|fear|smirk|sadness|surprise)\]\s*/);
-    if (match) {
-      return [match[1], content.slice(match[0].length)];
-    }
-    return ['neutral', content];
-  }, []);
-
   // Convert ChatRoomMessage to display format
   const toDisplayMessage = useCallback((msg: ChatRoomMessage): ChatMessage => {
     const role = msg.type === 'user' ? 'user' : msg.type === 'system' ? 'system' : 'assistant';
@@ -63,6 +137,10 @@ export default function VTuberChatPanel({
       role,
       content: msg.content,
       timestamp: new Date(msg.timestamp).getTime(),
+      agentRole: msg.role,
+      sessionName: msg.session_name,
+      durationMs: msg.duration_ms,
+      fileChanges: msg.file_changes,
     };
   }, []);
 
@@ -117,6 +195,11 @@ export default function VTuberChatPanel({
                   }
                 }
               }
+            } else if (eventType === 'agent_progress') {
+              const progress = eventData as unknown as { agents: AgentProgressState[] };
+              setAgentProgress(progress.agents);
+            } else if (eventType === 'broadcast_done') {
+              setAgentProgress(null);
             }
           },
           () => lastMsgIdRef.current,
@@ -186,11 +269,8 @@ export default function VTuberChatPanel({
 
   // Strip emotion tag for display, return [emotion, cleanText]
   const parseMessage = (content: string): [string | null, string] => {
-    const match = content.match(/^\[(neutral|joy|anger|disgust|fear|smirk|sadness|surprise)\]\s*/);
-    if (match) {
-      return [match[1], content.slice(match[0].length)];
-    }
-    return [null, content];
+    const [emo, clean] = parseEmotion(content);
+    return emo === 'neutral' && !content.startsWith('[neutral]') ? [null, content] : [emo, clean];
   };
 
   // No chat room available yet
@@ -240,20 +320,29 @@ export default function VTuberChatPanel({
               key={msg.id}
               className={`flex ${isUser ? 'justify-end' : 'justify-start'} group`}
             >
-              <div
-                className={`max-w-[80%] px-3.5 py-2 rounded-2xl text-[0.875rem] leading-relaxed whitespace-pre-wrap break-words ${
-                  isUser
-                    ? 'bg-[var(--primary-color)] text-white rounded-br-md'
-                    : 'bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-bl-md'
-                }`}
-              >
+              <MessageBubble mode="vtuber" isUser={isUser}>
+                {/* Role badge + duration for assistant */}
+                {!isUser && msg.agentRole && (
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <AgentBadge role={msg.agentRole} />
+                    {msg.durationMs ? <ExecutionMeta durationMs={msg.durationMs} /> : null}
+                  </div>
+                )}
                 {emotion && (
                   <span className="text-[0.6875rem] opacity-60 mr-1.5">
                     [{emotion}]
                   </span>
                 )}
-                {text}
-              </div>
+                {isUser ? text : (
+                  <ChatMarkdown content={text} className="text-[0.875rem]" />
+                )}
+                {/* File changes */}
+                {!isUser && msg.fileChanges && msg.fileChanges.length > 0 && (
+                  <div className="mt-1.5">
+                    <FileChangeSummary fileChanges={msg.fileChanges} />
+                  </div>
+                )}
+              </MessageBubble>
               {/* TTS Speak button for assistant messages */}
               {!isUser && ttsEnabled && (
                 <button
@@ -276,6 +365,10 @@ export default function VTuberChatPanel({
             </div>
           );
         })}
+        {/* Agent progress during broadcast */}
+        {agentProgress && agentProgress.length > 0 && (
+          <VTuberProgressPanel agents={agentProgress} />
+        )}
         {sending && (
           <div className="flex justify-start">
             <div className="px-3.5 py-2 rounded-2xl rounded-bl-md bg-[var(--bg-tertiary)] text-[var(--text-muted)] text-[0.875rem]">

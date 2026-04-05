@@ -12,6 +12,8 @@ interface MessengerState {
   // Messages
   messages: ChatRoomMessage[];
   loadingMessages: boolean;
+  loadingOlderMessages: boolean;
+  hasMoreMessages: boolean;
   isSending: boolean;
 
   // Broadcast progress
@@ -40,6 +42,8 @@ interface MessengerState {
 
   // Actions - Messages
   sendMessage: (content: string) => Promise<void>;
+  loadOlderMessages: () => Promise<void>;
+  cancelBroadcast: () => Promise<void>;
 
   // Actions - Event stream
   _subscribeToEvents: (roomId: string) => void;
@@ -67,6 +71,8 @@ export const useMessengerStore = create<MessengerState>((set, get) => ({
   searchQuery: '',
   messages: [],
   loadingMessages: false,
+  loadingOlderMessages: false,
+  hasMoreMessages: false,
   isSending: false,
   broadcastStatus: null,
   agentProgress: null,
@@ -97,15 +103,16 @@ export const useMessengerStore = create<MessengerState>((set, get) => ({
     _unsubscribeEvents();
 
     if (!roomId) {
-      set({ activeRoomId: null, messages: [], mobileSidebarOpen: false, broadcastStatus: null, _lastMsgId: null });
+      set({ activeRoomId: null, messages: [], mobileSidebarOpen: false, broadcastStatus: null, _lastMsgId: null, hasMoreMessages: false });
       return;
     }
     set({ activeRoomId: roomId, loadingMessages: true, mobileSidebarOpen: false, broadcastStatus: null });
     try {
-      const msgsRes = await chatApi.getRoomMessages(roomId);
+      const PAGE_SIZE = 50;
+      const msgsRes = await chatApi.getRoomMessages(roomId, { limit: PAGE_SIZE });
       const msgs = msgsRes.messages;
       const lastId = msgs.length > 0 ? msgs[msgs.length - 1].id : null;
-      set({ messages: msgs, _lastMsgId: lastId });
+      set({ messages: msgs, _lastMsgId: lastId, hasMoreMessages: msgsRes.has_more ?? false });
 
       // Subscribe to live events starting from the last known message
       get()._subscribeToEvents(roomId);
@@ -193,6 +200,39 @@ export const useMessengerStore = create<MessengerState>((set, get) => ({
       }));
     } finally {
       set({ isSending: false });
+    }
+  },
+
+  loadOlderMessages: async () => {
+    const { activeRoomId, messages, loadingOlderMessages, hasMoreMessages } = get();
+    if (!activeRoomId || loadingOlderMessages || !hasMoreMessages) return;
+
+    const oldestId = messages.length > 0 ? messages[0].id : undefined;
+    set({ loadingOlderMessages: true });
+    try {
+      const PAGE_SIZE = 50;
+      const res = await chatApi.getRoomMessages(activeRoomId, {
+        limit: PAGE_SIZE,
+        before: oldestId,
+      });
+      set(s => ({
+        messages: [...res.messages, ...s.messages],
+        hasMoreMessages: res.has_more ?? false,
+      }));
+    } catch {
+      /* ignore */
+    } finally {
+      set({ loadingOlderMessages: false });
+    }
+  },
+
+  cancelBroadcast: async () => {
+    const { activeRoomId, broadcastStatus } = get();
+    if (!activeRoomId || !broadcastStatus || broadcastStatus.finished) return;
+    try {
+      await chatApi.cancelBroadcast(activeRoomId);
+    } catch {
+      /* ignore — broadcast may have already finished */
     }
   },
 
