@@ -61,6 +61,11 @@ class CurateBatchRequest(BaseModel):
     use_llm: bool = True
 
 
+class CurateAllRequest(BaseModel):
+    """Request to curate all uncurated notes."""
+    use_llm: bool = True
+
+
 # ============================================================================
 # Helpers
 # ============================================================================
@@ -339,6 +344,74 @@ async def curate_batch_from_opsidian(
     )
 
     results = await engine.curate_batch(req.filenames, use_llm=req.use_llm)
+
+    return {
+        "total": len(results),
+        "success_count": sum(1 for r in results if r.success),
+        "results": [
+            {
+                "success": r.success,
+                "curated_filename": r.curated_filename,
+                "method_used": r.method_used,
+                "quality_score": r.quality_score,
+                "reason": r.reason,
+            }
+            for r in results
+        ],
+    }
+
+
+@router.post("/curate/all")
+async def curate_all_from_opsidian(
+    req: CurateAllRequest,
+    auth: dict = Depends(require_auth),
+):
+    """Curate all uncurated notes from User Opsidian."""
+    username = auth.get("sub", "anonymous")
+    curated_mgr = _get_manager(username)
+    opsidian_mgr = _get_opsidian_manager(username)
+
+    # Get all User Opsidian filenames
+    opsidian_index = opsidian_mgr.get_index()
+    if not opsidian_index or not opsidian_index.get("files"):
+        return {
+            "total": 0,
+            "success_count": 0,
+            "results": [],
+            "message": "No user opsidian notes found",
+        }
+
+    all_files = list(opsidian_index["files"].keys())
+
+    # Prepare LLM model
+    llm_model = None
+    if req.use_llm:
+        try:
+            from service.config.sub_config.general.ltm_config import (
+                LTMConfig,
+            )
+            from service.config import get_config_manager
+
+            ltm_cfg = get_config_manager().load_config(LTMConfig)
+            if ltm_cfg and ltm_cfg.auto_curation_use_llm:
+                from service.workflow.nodes.memory.memory_reflect_node import (
+                    _get_memory_model,
+                )
+                llm_model = _get_memory_model()
+        except Exception:
+            pass
+
+    from service.memory.curation_engine import CurationEngine
+
+    engine = CurationEngine(
+        curated_manager=curated_mgr,
+        user_opsidian_manager=opsidian_mgr,
+        llm_model=llm_model,
+    )
+
+    results = await engine.curate_batch(
+        all_files, use_llm=req.use_llm,
+    )
 
     return {
         "total": len(results),

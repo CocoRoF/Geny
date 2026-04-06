@@ -79,6 +79,12 @@ class LTMConfig(BaseConfig):
     auto_curation_use_llm: bool = True
     auto_curation_quality_threshold: float = 0.6
 
+    # ── Auto-Curation Scheduling ──
+    auto_curation_schedule_enabled: bool = False
+    auto_curation_interval_hours: int = 24
+    auto_curation_max_notes_per_run: int = 20
+    auto_curation_last_run: str = ""
+
     # ── User Opsidian Read Access ──
     user_opsidian_index_enabled: bool = False
     user_opsidian_raw_read_enabled: bool = False
@@ -154,6 +160,7 @@ class LTMConfig(BaseConfig):
                     "retrieval": "Retrieval Settings",
                     "curated": "Curated Knowledge",
                     "auto_curation": "Auto-Curation Pipeline",
+                    "auto_curation_schedule": "Curation Schedule",
                     "user_opsidian": "User Opsidian Access",
                 },
                 "fields": {
@@ -221,6 +228,22 @@ class LTMConfig(BaseConfig):
                     "auto_curation_quality_threshold": {
                         "label": "Quality Threshold",
                         "description": "Minimum quality score (0-1) for auto-curation acceptance",
+                    },
+                    "auto_curation_schedule_enabled": {
+                        "label": "Enable Scheduled Curation",
+                        "description": "Run curation automatically on a periodic schedule",
+                    },
+                    "auto_curation_interval_hours": {
+                        "label": "Curation Interval (hours)",
+                        "description": "How often to run automatic curation (in hours)",
+                    },
+                    "auto_curation_max_notes_per_run": {
+                        "label": "Max Notes Per Run",
+                        "description": "Maximum number of notes to curate per scheduled run",
+                    },
+                    "auto_curation_last_run": {
+                        "label": "Last Run",
+                        "description": "Timestamp of the last automatic curation run",
                     },
                     "user_opsidian_index_enabled": {
                         "label": "Opsidian Index Access",
@@ -397,6 +420,44 @@ class LTMConfig(BaseConfig):
                 min_value=0.0,
                 max_value=1.0,
                 group="auto_curation",
+            ),
+
+            # ── Auto-Curation Scheduling ──
+            ConfigField(
+                name="auto_curation_schedule_enabled",
+                field_type=FieldType.BOOLEAN,
+                label="Enable Scheduled Curation",
+                description="Run curation automatically on a periodic schedule",
+                default=False,
+                group="auto_curation_schedule",
+            ),
+            ConfigField(
+                name="auto_curation_interval_hours",
+                field_type=FieldType.NUMBER,
+                label="Interval (hours)",
+                description="How often to run auto-curation",
+                default=24,
+                min_value=1,
+                max_value=168,
+                group="auto_curation_schedule",
+            ),
+            ConfigField(
+                name="auto_curation_max_notes_per_run",
+                field_type=FieldType.NUMBER,
+                label="Max Notes Per Run",
+                description="Cap on notes curated per scheduled run",
+                default=20,
+                min_value=1,
+                max_value=100,
+                group="auto_curation_schedule",
+            ),
+            ConfigField(
+                name="auto_curation_last_run",
+                field_type=FieldType.TEXT,
+                label="Last Run",
+                description="Timestamp of the last automatic curation run (read-only)",
+                default="",
+                group="auto_curation_schedule",
             ),
 
             # ── User Opsidian Access ──

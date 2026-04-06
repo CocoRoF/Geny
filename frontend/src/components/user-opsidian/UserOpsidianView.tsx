@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useUserOpsidianStore } from '@/store/useUserOpsidianStore';
 import { useAuthStore } from '@/store/useAuthStore';
-import { userOpsidianApi } from '@/lib/api';
+import { userOpsidianApi, curatedKnowledgeApi } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { useHubMode } from '@/components/OpsidianHubContext';
 import RightPanel from '../obsidian/RightPanel';
@@ -37,8 +37,11 @@ import {
   Home,
   Edit3,
   Loader2,
+  Sparkles,
+  CheckCircle,
 } from 'lucide-react';
 import UnifiedGraphView from '../knowledge-graph/UnifiedGraphView';
+import CurationSettingsPanel from './CurationSettingsPanel';
 import '../obsidian/obsidian.css';
 
 // ─── Constants ────────────────────────────────────────────────
@@ -149,6 +152,9 @@ export default function UserOpsidianView() {
     }
   }, [hub, loadData]);
 
+  // ─── Curation settings panel ──
+  const [showCurationSettings, setShowCurationSettings] = useState(false);
+
   // ─── Draft note for inline creation ──
   const [draftNote, setDraftNote] = useState<{
     title: string; content: string; category: string;
@@ -223,6 +229,11 @@ export default function UserOpsidianView() {
 
   return (
     <div className="obsidian-root">
+      {/* Curation settings modal */}
+      {showCurationSettings && (
+        <CurationSettingsPanel onClose={() => setShowCurationSettings(false)} />
+      )}
+
       {/* Left sidebar */}
       <Sidebar
         files={files}
@@ -237,6 +248,7 @@ export default function UserOpsidianView() {
         onSetViewMode={setViewMode}
         onRefresh={loadData}
         onNewNote={handleNewNote}
+        onOpenCurationSettings={() => setShowCurationSettings(true)}
       />
 
       {/* Main content */}
@@ -304,6 +316,7 @@ export default function UserOpsidianView() {
 function Sidebar({
   files, selectedFile, sidebarCollapsed, sidebarPanel, viewMode, memoryIndex,
   onSelectFile, onSetSidebarCollapsed, onSetSidebarPanel, onSetViewMode, onRefresh, onNewNote,
+  onOpenCurationSettings,
 }: {
   files: Record<string, import('@/types').MemoryFileInfo>;
   selectedFile: string | null;
@@ -317,6 +330,7 @@ function Sidebar({
   onSetViewMode: (v: 'editor' | 'graph' | 'search') => void;
   onRefresh: () => void;
   onNewNote: () => void;
+  onOpenCurationSettings: () => void;
 }) {
   const { t } = useI18n();
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
@@ -393,6 +407,9 @@ function Sidebar({
         <div className="obs-sb-header-actions">
           <button className="obs-sb-toggle" onClick={onNewNote} title={t('opsidian.createNote')}>
             <Plus size={13} />
+          </button>
+          <button className="obs-sb-toggle" onClick={onOpenCurationSettings} title={t('opsidian.curationSettings')}>
+            <Sparkles size={13} style={{ color: '#f59e0b' }} />
           </button>
           <button className="obs-sb-toggle" onClick={onRefresh} title={t('opsidian.refresh')}>
             <RefreshCw size={13} />
@@ -605,6 +622,39 @@ function NoteEditor({
   const [editImportance, setEditImportance] = useState('');
   const [editTags, setEditTags] = useState('');
   const [saving, setSaving] = useState(false);
+  const [curating, setCurating] = useState(false);
+  const [curateMsg, setCurateMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleCurate = async () => {
+    if (!selectedFile || curating) return;
+    setCurating(true);
+    setCurateMsg(null);
+    try {
+      const result = await curatedKnowledgeApi.curateNote({
+        source_filename: selectedFile,
+        use_llm: true,
+      });
+      if (result.success) {
+        setCurateMsg({
+          type: 'success',
+          text: t('opsidian.curateSuccess'),
+        });
+      } else {
+        setCurateMsg({ type: 'error', text: result.reason || t('opsidian.curateFailed') });
+      }
+    } catch (e: any) {
+      setCurateMsg({ type: 'error', text: e.message || t('opsidian.curateFailed') });
+    } finally {
+      setCurating(false);
+    }
+  };
+
+  useEffect(() => {
+    if (curateMsg) {
+      const timer = setTimeout(() => setCurateMsg(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [curateMsg]);
 
   useEffect(() => {
     if (fileDetail) {
@@ -833,7 +883,35 @@ function NoteEditor({
             <Tag size={9} /> {String(tag)}
           </span>
         ))}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+          {curateMsg && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px',
+              fontSize: 11, borderRadius: 4,
+              background: curateMsg.type === 'success' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+              color: curateMsg.type === 'success' ? '#10b981' : '#ef4444',
+            }}>
+              {curateMsg.type === 'success' && <CheckCircle size={11} />}
+              {curateMsg.text}
+            </span>
+          )}
+          <button
+            onClick={handleCurate}
+            disabled={curating}
+            title={t('opsidian.curateNote')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4, padding: '5px 12px',
+              fontSize: 12, fontWeight: 500,
+              background: curating ? 'rgba(245,158,11,0.05)' : 'rgba(245,158,11,0.1)',
+              color: '#f59e0b',
+              border: '1px solid rgba(245,158,11,0.3)',
+              borderRadius: 5, cursor: curating ? 'not-allowed' : 'pointer',
+              opacity: curating ? 0.7 : 1,
+            }}
+          >
+            {curating ? <Loader2 size={12} className="spin" /> : <Sparkles size={12} />}
+            {curating ? t('opsidian.curating') : t('opsidian.curate')}
+          </button>
           <button
             onClick={handleStartEdit}
             style={{

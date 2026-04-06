@@ -1013,6 +1013,23 @@ export const curatedKnowledgeApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  /** POST /api/curated/curate/all — curate all uncurated user notes */
+  curateAll: (use_llm?: boolean) =>
+    apiCall<{
+      total: number;
+      success_count: number;
+      results: Array<{
+        success: boolean;
+        curated_filename?: string;
+        quality_score?: number;
+        reason?: string;
+      }>;
+      message?: string;
+    }>('/api/curated/curate/all', {
+      method: 'POST',
+      body: JSON.stringify({ use_llm: use_llm ?? true }),
+    }),
 };
 
 // ==================== TTS API ====================

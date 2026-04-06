@@ -289,6 +289,12 @@ async def lifespan(app: FastAPI):
     thinking_trigger.start()
     app.state.thinking_trigger = thinking_trigger
 
+    # ── Curation Scheduler Service ────────────────────────────────────
+    from service.memory.curation_scheduler import get_curation_scheduler
+    curation_scheduler = get_curation_scheduler()
+    curation_scheduler.start()
+    app.state.curation_scheduler = curation_scheduler
+
     # ── Tool Runtime Health Check ──────────────────────────────────────
     # Verify tools actually execute (not just registered) by invoking a
     # read-only tool directly and checking the response.
@@ -346,6 +352,10 @@ async def lifespan(app: FastAPI):
     # Stop thinking trigger service
     if hasattr(app.state, 'thinking_trigger'):
         app.state.thinking_trigger.stop()
+
+    # Stop curation scheduler
+    if hasattr(app.state, 'curation_scheduler'):
+        app.state.curation_scheduler.stop()
 
     # Stop idle monitor
     await agent_manager.stop_idle_monitor()

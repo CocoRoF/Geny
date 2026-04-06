@@ -9,7 +9,7 @@ backend/cache
 __pycache__/
 *.py[cod]
 *$py.class
-
+.claude
 
 # C extensions
 *.so
