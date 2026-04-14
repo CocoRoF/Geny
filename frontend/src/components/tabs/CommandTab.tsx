@@ -349,16 +349,14 @@ export default function CommandTab() {
         statusText: t('commandTab.requestFailed'),
       });
     } finally {
-      // Safety: if SSE stream closed without result/error event, check if
-      // execution might still be running on the backend before marking failed.
+      // Safety: if WebSocket/SSE stream closed without result/error event,
+      // check if execution might still be running on the backend.
       const final = useAppStore.getState().sessionDataCache[selectedSessionId];
       if (final?.status === 'running') {
-        // Try to poll the execution status once before giving up
         try {
-          const holder = await fetch(`/api/agents/${selectedSessionId}/execute/events`);
-          if (holder.ok) {
-            // Execution still active — the reconnect logic in executeStream
-            // exhausted its retries, so mark as connection-lost rather than generic fail
+          const status = await agentApi.getExecutionStatus(selectedSessionId);
+          if (status.active && !status.done) {
+            // Execution still active — connection was lost
             updateSessionData(selectedSessionId, {
               status: 'error',
               statusText: t('commandTab.statusConnectionLost'),

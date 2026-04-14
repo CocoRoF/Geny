@@ -171,7 +171,7 @@ export default function VTuberChatPanel({
           lastMsgIdRef.current = historyResp.messages[historyResp.messages.length - 1].id;
         }
 
-        // Subscribe to SSE for live updates
+        // Subscribe to WebSocket for live updates (falls back to SSE)
         const sub = chatApi.subscribeToRoom(
           roomId,
           lastMsgIdRef.current,

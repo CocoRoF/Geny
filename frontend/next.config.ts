@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
     // Use "fallback" so that App Router Route Handlers (e.g. SSE proxy
     // at /api/chat/rooms/[roomId]/events) are checked FIRST.  Plain
     // array rewrites run before dynamic routes and shadow Route Handlers.
+    // NOTE: WebSocket (/ws/*) is NOT proxied here — Next.js rewrites don't
+    // support WS upgrade. In dev, the frontend connects directly to the
+    // backend port. In production, nginx handles /ws/ routing.
     return {
       fallback: [
         { source: "/api/:path*", destination: `${apiTarget}/api/:path*` },

@@ -49,6 +49,47 @@ function getBackendUrl(): string {
   return `http://localhost:${port}`;
 }
 
+// ==================== WebSocket URL ====================
+// Converts the backend HTTP URL to a WebSocket URL for streaming.
+function getWsUrl(sessionId: string): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (envUrl !== undefined && envUrl !== '') {
+    const wsBase = envUrl.replace(/^http/, 'ws');
+    return `${wsBase}/ws/execute/${sessionId}`;
+  }
+
+  if (typeof window !== 'undefined') {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const backendPort = process.env.NEXT_PUBLIC_BACKEND_PORT;
+    if (backendPort) {
+      return `${proto}//${window.location.hostname}:${backendPort}/ws/execute/${sessionId}`;
+    }
+    // Production: same host (nginx proxy handles /ws/)
+    return `${proto}//${window.location.host}/ws/execute/${sessionId}`;
+  }
+
+  return `ws://localhost:8000/ws/execute/${sessionId}`;
+}
+
+function getChatWsUrl(roomId: string): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (envUrl !== undefined && envUrl !== '') {
+    const wsBase = envUrl.replace(/^http/, 'ws');
+    return `${wsBase}/ws/chat/rooms/${roomId}`;
+  }
+
+  if (typeof window !== 'undefined') {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const backendPort = process.env.NEXT_PUBLIC_BACKEND_PORT;
+    if (backendPort) {
+      return `${proto}//${window.location.hostname}:${backendPort}/ws/chat/rooms/${roomId}`;
+    }
+    return `${proto}//${window.location.host}/ws/chat/rooms/${roomId}`;
+  }
+
+  return `ws://localhost:8000/ws/chat/rooms/${roomId}`;
+}
+
 // ==================== Agent API ====================
 
 import type {
@@ -108,20 +149,76 @@ export const agentApi = {
     }),
 
   /**
-   * Two-step SSE streaming execute.
+   * WebSocket streaming execute.
    *
-   * Step 1: POST /api/agents/{id}/execute/start — starts execution in background.
-   * Step 2: GET  /api/agents/{id}/execute/events — EventSource SSE stream.
+   * Opens a single WebSocket connection to /ws/execute/{id} and sends
+   * the execute command. Events are pushed in real time without polling.
    *
-   * Uses native EventSource (GET-based SSE) which bypasses Next.js proxy
-   * buffering that affects POST-based streams.
+   * Falls back to the legacy SSE two-step pattern if WebSocket fails.
    */
   executeStream: async (
     id: string,
     data: ExecuteRequest,
     onEvent: (eventType: string, eventData: Record<string, unknown>) => void,
   ): Promise<void> => {
-    // Step 1: start execution (returns immediately)
+    const wsUrl = getWsUrl(id);
+
+    return new Promise<void>((resolve, reject) => {
+      const ws = new WebSocket(wsUrl);
+      let resolved = false;
+
+      const finish = () => {
+        if (!resolved) {
+          resolved = true;
+          resolve();
+        }
+      };
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({
+          type: 'execute',
+          prompt: data.prompt,
+          timeout: data.timeout ?? null,
+          system_prompt: data.system_prompt ?? null,
+          max_turns: data.max_turns ?? null,
+        }));
+      };
+
+      ws.onmessage = (ev) => {
+        try {
+          const event = JSON.parse(ev.data);
+          onEvent(event.type, event.data);
+          if (event.type === 'done') {
+            finish();
+          }
+        } catch {
+          // ignore unparseable messages
+        }
+      };
+
+      ws.onerror = () => {
+        if (!resolved) {
+          // WebSocket failed — fall back to legacy SSE
+          resolved = true;
+          agentApi._executeStreamSSE(id, data, onEvent).then(resolve, reject);
+        }
+      };
+
+      ws.onclose = () => {
+        finish();
+      };
+    });
+  },
+
+  /**
+   * Legacy SSE streaming execute (fallback).
+   * Kept for backward compatibility when WebSocket is unavailable.
+   */
+  _executeStreamSSE: async (
+    id: string,
+    data: ExecuteRequest,
+    onEvent: (eventType: string, eventData: Record<string, unknown>) => void,
+  ): Promise<void> => {
     const startRes = await fetch(`/api/agents/${id}/execute/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -141,7 +238,6 @@ export const agentApi = {
       throw new Error(message);
     }
 
-    // Step 2: connect EventSource via unified SSE manager
     const backendUrl = getBackendUrl();
     return new Promise<void>((resolve) => {
       const dispatch = (name: string) => (d: unknown) => onEvent(name, d as Record<string, unknown>);
@@ -161,8 +257,6 @@ export const agentApi = {
           resolve();
         },
       });
-
-      // If SSE never connects and exhausts retries, resolve anyway
       void sub;
     });
   },
@@ -180,32 +274,73 @@ export const agentApi = {
     ),
 
   /**
-   * Reconnect to a running execution's SSE stream.
+   * Reconnect to a running execution via WebSocket.
    *
    * Used when the page reloads or the user returns after locking the phone.
-   * If an execution is still active on the backend, this streams events
-   * from where the backend currently is via GET /execute/events.
+   * Sends a "reconnect" message to resume streaming from the current position.
+   * Falls back to SSE if WebSocket fails to connect.
    */
   reconnectStream: (
     id: string,
     onEvent: (eventType: string, eventData: Record<string, unknown>) => void,
   ): { close: () => void } => {
-    const backendUrl = getBackendUrl();
-    const dispatch = (name: string) => (d: unknown) => onEvent(name, d as Record<string, unknown>);
-    const sub = sseSubscribe({
-      url: `${backendUrl}/api/agents/${id}/execute/events`,
-      events: {
-        log: dispatch('log'),
-        status: dispatch('status'),
-        result: dispatch('result'),
-        heartbeat: dispatch('heartbeat'),
-        error: dispatch('error'),
+    const wsUrl = getWsUrl(id);
+    let ws: WebSocket | null = new WebSocket(wsUrl);
+    let closed = false;
+    let fallbackSub: { close: () => void } | null = null;
+
+    ws.onopen = () => {
+      ws!.send(JSON.stringify({ type: 'reconnect' }));
+    };
+
+    ws.onmessage = (ev) => {
+      try {
+        const event = JSON.parse(ev.data);
+        onEvent(event.type, event.data);
+      } catch {
+        // ignore
+      }
+    };
+
+    ws.onerror = () => {
+      ws = null;
+      if (!closed) {
+        // Fall back to SSE reconnect
+        const backendUrl = getBackendUrl();
+        const dispatch = (name: string) => (d: unknown) => onEvent(name, d as Record<string, unknown>);
+        fallbackSub = sseSubscribe({
+          url: `${backendUrl}/api/agents/${id}/execute/events`,
+          events: {
+            log: dispatch('log'),
+            status: dispatch('status'),
+            result: dispatch('result'),
+            heartbeat: dispatch('heartbeat'),
+            error: dispatch('error'),
+          },
+          reconnect: { maxAttempts: 10, delay: 3_000 },
+          doneEvents: ['done'],
+          onDone: () => onEvent('done', {}),
+        });
+      }
+    };
+
+    ws.onclose = () => {
+      ws = null;
+    };
+
+    return {
+      close: () => {
+        closed = true;
+        if (ws) {
+          ws.close();
+          ws = null;
+        }
+        if (fallbackSub) {
+          fallbackSub.close();
+          fallbackSub = null;
+        }
       },
-      reconnect: { maxAttempts: 10, delay: 3_000 },
-      doneEvents: ['done'],
-      onDone: () => onEvent('done', {}),
-    });
-    return { close: () => sub.close() };
+    };
   },
 
   /** GET /api/agents/{id}/graph — graph structure */
@@ -502,10 +637,10 @@ export const chatApi = {
     ),
 
   /**
-   * Subscribe to SSE events for a chat room.
+   * Subscribe to chat room events via WebSocket.
    *
-   * Connects directly to the backend to avoid Next.js proxy buffering.
-   * Reconnects automatically with the latest message cursor on failure.
+   * Opens a WebSocket connection to /ws/chat/rooms/{roomId} for real-time
+   * push-based event streaming. Falls back to SSE if WebSocket fails.
    */
   subscribeToRoom: (
     roomId: string,
@@ -513,23 +648,90 @@ export const chatApi = {
     onEvent: (eventType: string, eventData: Record<string, unknown>) => void,
     getLatestMsgId?: () => string | null,
   ): { close: () => void } => {
-    const dispatch = (name: string) => (d: unknown) => onEvent(name, d as Record<string, unknown>);
-    const sub = sseSubscribe({
-      url: () => {
+    const wsUrl = getChatWsUrl(roomId);
+    let ws: WebSocket | null = new WebSocket(wsUrl);
+    let closed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
+    const maxAttempts = 20;
+    const reconnectDelay = 3000;
+    let fallbackSub: { close: () => void } | null = null;
+
+    const connect = () => {
+      if (closed) return;
+
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        attempts = 0;
         const currentAfter = getLatestMsgId?.() ?? afterId;
-        const qs = currentAfter ? `?after=${encodeURIComponent(currentAfter)}` : '';
-        return `${getBackendUrl()}/api/chat/rooms/${roomId}/events${qs}`;
+        ws!.send(JSON.stringify({
+          type: 'subscribe',
+          after: currentAfter,
+        }));
+      };
+
+      ws.onmessage = (ev) => {
+        try {
+          const event = JSON.parse(ev.data);
+          onEvent(event.type, event.data);
+        } catch {
+          // ignore
+        }
+      };
+
+      ws.onerror = () => {
+        ws = null;
+        if (!closed && attempts === 0) {
+          // First connection failed — fall back to SSE
+          closed = true;
+          const dispatch = (name: string) => (d: unknown) => onEvent(name, d as Record<string, unknown>);
+          fallbackSub = sseSubscribe({
+            url: () => {
+              const currentAfter = getLatestMsgId?.() ?? afterId;
+              const qs = currentAfter ? `?after=${encodeURIComponent(currentAfter)}` : '';
+              return `${getBackendUrl()}/api/chat/rooms/${roomId}/events${qs}`;
+            },
+            events: {
+              message: dispatch('message'),
+              broadcast_status: dispatch('broadcast_status'),
+              broadcast_done: dispatch('broadcast_done'),
+              agent_progress: dispatch('agent_progress'),
+              heartbeat: dispatch('heartbeat'),
+            },
+            reconnect: { delay: 3_000 },
+          });
+        }
+      };
+
+      ws.onclose = () => {
+        ws = null;
+        if (!closed && attempts < maxAttempts) {
+          attempts++;
+          reconnectTimer = setTimeout(connect, reconnectDelay);
+        }
+      };
+    };
+
+    connect();
+
+    return {
+      close: () => {
+        closed = true;
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+        if (ws) {
+          ws.close();
+          ws = null;
+        }
+        if (fallbackSub) {
+          fallbackSub.close();
+          fallbackSub = null;
+        }
       },
-      events: {
-        message: dispatch('message'),
-        broadcast_status: dispatch('broadcast_status'),
-        broadcast_done: dispatch('broadcast_done'),
-        agent_progress: dispatch('agent_progress'),
-        heartbeat: dispatch('heartbeat'),
-      },
-      reconnect: { delay: 3_000 },
-    });
-    return { close: () => sub.close() };
+    };
   },
 };
 

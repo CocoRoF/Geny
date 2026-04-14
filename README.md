@@ -458,3 +458,7 @@ Geny works on Windows, macOS, and Linux:
 ## License
 
 MIT License
+
+---
+
+> _Last tested: 2026-04-13 — Git workflow verified by Claude Code._
