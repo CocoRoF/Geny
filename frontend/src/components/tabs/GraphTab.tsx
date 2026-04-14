@@ -2,7 +2,6 @@
 
 import { useMemo } from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { useI18n } from '@/lib/i18n';
 import { Layers, Zap, Brain, Shield, Database, Wrench, BarChart3, MessageSquare } from 'lucide-react';
 
 /**
@@ -64,7 +63,6 @@ const PRESET_LABELS: Record<string, { label: string; desc: string }> = {
 
 export default function GraphTab() {
   const { selectedSessionId, sessions } = useAppStore();
-  const { t } = useI18n();
 
   const session = useMemo(
     () => sessions.find(s => s.session_id === selectedSessionId),
@@ -74,7 +72,7 @@ export default function GraphTab() {
   if (!session) {
     return (
       <div className="flex items-center justify-center h-full text-zinc-500">
-        {t('graph.selectSession', 'Select a session to view pipeline')}
+        Select a session to view pipeline
       </div>
     );
   }
