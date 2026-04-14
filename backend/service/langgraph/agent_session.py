@@ -895,18 +895,17 @@ class AgentSession:
                 system_prompt=system_prompt,
             )
         else:
-            # autonomous, optimized-autonomous, ultra-light → worker_full
-            max_turns = self._max_iterations or 50
-            if "optimized" in template_id.lower():
-                max_turns = min(max_turns, 30)
+            # autonomous, optimized-autonomous, ultra-light → worker_adaptive
+            max_turns = self._max_iterations or 30
 
-            self._pipeline = GenyPresets.worker_full(
+            self._pipeline = GenyPresets.worker_adaptive(
                 api_key=api_key,
                 memory_manager=self._memory_manager,
                 model=model,
                 system_prompt=system_prompt,
                 tools=tools,
                 max_turns=max_turns,
+                easy_max_turns=1,
                 curated_knowledge_manager=curated_km,
                 llm_reflect=llm_reflect,
             )
@@ -914,7 +913,7 @@ class AgentSession:
         self._execution_backend = "pipeline"
         self._pipeline_working_dir = working_dir
 
-        preset_name = 'vtuber' if is_vtuber else 'worker_easy' if is_simple else 'worker_full'
+        preset_name = 'vtuber' if is_vtuber else 'worker_easy' if is_simple else 'worker_adaptive'
         logger.info(
             f"[{self._session_id}] Pipeline built: template='{template_id}', "
             f"preset={preset_name}, model={model}, tools={len(tools)}"

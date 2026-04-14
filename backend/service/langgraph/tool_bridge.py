@@ -104,8 +104,16 @@ class _GenyToolAdapter:
     async def execute(
         self, input: Dict[str, Any], context: Any = None
     ) -> Any:
-        """Execute the Geny tool and wrap result as ToolResult."""
+        """Execute the Geny tool and wrap result as ToolResult.
+
+        Automatically injects session_id from ToolContext into the input
+        dict if the tool expects it (many Geny built-in tools require it).
+        """
         from geny_executor.tools.base import ToolResult
+
+        # Auto-inject session_id from Pipeline ToolContext
+        if context and hasattr(context, "session_id") and context.session_id:
+            input.setdefault("session_id", context.session_id)
 
         try:
             # Try async first (arun), fall back to sync (run)
