@@ -31,7 +31,7 @@ dependencies = [
     # Web fetch & browser automation
     "playwright>=1.49.0",
     # geny-executor: Pipeline-based execution engine
-    "geny-executor>=0.8.1",
+    "geny-executor>=0.8.3",
     # MCP (Model Context Protocol)
     "mcp>=1.0.0",
     # Auth
