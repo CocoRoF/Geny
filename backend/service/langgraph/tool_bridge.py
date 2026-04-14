@@ -62,8 +62,10 @@ def build_geny_tool_registry(
 class _GenyToolAdapter:
     """Adapts a Geny BaseTool to geny-executor's Tool interface.
 
-    Duck-typed to match geny-executor's Tool ABC without importing it
-    at class definition time (avoids hard dependency in Geny's codebase).
+    Implements all methods required by geny-executor's Tool ABC:
+    - name, description, input_schema (properties)
+    - execute(input, context) -> ToolResult
+    - to_api_format() -> dict (Anthropic API tool definition)
     """
 
     def __init__(self, geny_tool: Any):
@@ -86,6 +88,18 @@ class _GenyToolAdapter:
     @property
     def input_schema(self) -> Dict[str, Any]:
         return self._parameters
+
+    def to_api_format(self) -> Dict[str, Any]:
+        """Convert to Anthropic API tools parameter format.
+
+        Required by ToolRegistry.to_api_format() which is called
+        by s03_system stage to build the API request tools list.
+        """
+        return {
+            "name": self.name,
+            "description": self.description,
+            "input_schema": self.input_schema,
+        }
 
     async def execute(
         self, input: Dict[str, Any], context: Any = None
