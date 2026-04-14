@@ -647,100 +647,47 @@ class AgentSession:
         return False
 
     async def revive(self) -> bool:
-        """Full async revival of the session.
+        """Revive the session by rebuilding the pipeline.
 
-        Called when the session was idle and the underlying CLI process
-        has died.  Re-initializes the model and rebuilds the graph while
-        preserving the session identity (same session_id, same storage).
-
-        The conversation_id is automatically restored from
-        ``.claude_session.json`` during ClaudeProcess.initialize(),
-        so the next execute() will use ``--resume`` seamlessly.
+        In pipeline mode, there is no subprocess to restart — we just
+        rebuild the pipeline and re-initialize memory if needed.
 
         Returns:
             True on success, False on failure.
         """
-        logger.info(f"[{self._session_id}] Full session revival starting...")
+        logger.info(f"[{self._session_id}] Session revival starting (pipeline mode)...")
 
         try:
             # 1. Reset timestamps
             self._execution_start_time = datetime.now()
             self._error_message = None
 
-            # 2. Clean up dead model (if any)
-            if self._model:
-                try:
-                    await self._model.cleanup()
-                except Exception:
-                    logger.debug(
-                        f"[{self._session_id}] Model cleanup during revive (non-critical)",
-                        exc_info=True,
-                    )
+            # 2. Re-initialize memory manager if needed
+            if not self._memory_manager:
+                self._init_memory()
+                if self._memory_manager:
+                    try:
+                        await self._memory_manager.initialize_vector_memory()
+                    except Exception as ve:
+                        logger.debug(
+                            f"[{self._session_id}] Vector memory init skipped on revive: {ve}"
+                        )
 
-            # 3. Re-create the model (spawns a new ClaudeProcess)
-            self._model = ClaudeCLIChatModel(
-                session_id=self._session_id,
-                session_name=self._session_name,
-                working_dir=self._working_dir,
-                model_name=self._model_name,
-                max_turns=self._max_turns,
-                timeout=self._timeout,
-                system_prompt=self._system_prompt,
-                env_vars=self._env_vars,
-                mcp_config=self._mcp_config,
-            )
-
-            success = await self._model.initialize()
-            if not success:
-                err = (
-                    self._model.process.error_message
-                    if self._model.process
-                    else "Unknown error"
-                )
-                self._error_message = f"Revival failed: {err}"
-                self._status = SessionStatus.ERROR
-                logger.error(
-                    f"[{self._session_id}] Revival failed: model init error: {err}"
-                )
-                return False
-
-            # 4. Re-initialize memory manager
-            self._init_memory()
-
-            # 4b. Initialize vector memory layer (async, non-blocking)
-            if self._memory_manager:
-                try:
-                    await self._memory_manager.initialize_vector_memory()
-                except Exception as ve:
-                    logger.debug(
-                        f"[{self._session_id}] Vector memory init skipped on revive: {ve}"
-                    )
-
-            # 5. Rebuild the graph
+            # 3. Rebuild the pipeline
             self._build_graph()
 
-            # 6. Mark as alive
+            # 4. Mark as alive
             self._initialized = True
             self._status = SessionStatus.RUNNING
             self._needs_process_restart = False
 
-            # Record revival and log success
+            # Record revival
             self._freshness.record_revival()
 
-            # Log restored conversation state (conversation_id is
-            # auto-loaded from .claude_session.json by ClaudeProcess)
-            conv_id = None
-            if self._model and self._model.process:
-                conv_id = self._model.process._conversation_id
             logger.info(
                 f"[{self._session_id}] Session revival successful "
-                f"(revive_count={self._freshness.revive_count}, "
-                f"conversation_id={conv_id or 'none'})"
+                f"(revive_count={self._freshness.revive_count})"
             )
-
-            # Pre-warm first subprocess for always-on sessions (VTuber + linked CLI)
-            if self._is_always_on and self._model and self._model.process:
-                await self._model.process.prewarm_first_process()
 
             return True
 
@@ -755,41 +702,23 @@ class AgentSession:
     async def _ensure_alive(self) -> None:
         """Ensure the session is alive before execution.
 
-        Called at the top of invoke() and astream() after freshness check.
-        If the process needs restart (flagged by _auto_revive), performs
-        full async revival.  If revival fails, raises RuntimeError.
-
-        In pipeline mode, the ClaudeProcess is only used for storage_path
-        infrastructure — LLM calls go through the Anthropic API directly.
-        Skip process liveness checks in pipeline mode.
+        In pipeline mode, the session is always alive as long as the
+        pipeline is initialized. If it somehow got cleared, revive.
         """
-        # Pipeline mode: skip process checks (API calls don't need CLI subprocess)
         if self._pipeline is not None:
             return
 
-        if getattr(self, '_needs_process_restart', False):
-            logger.info(
-                f"[{self._session_id}] Process restart needed — "
-                f"performing full revival..."
+        # Pipeline not set but session was initialized — try to rebuild
+        if self._initialized:
+            logger.warning(
+                f"[{self._session_id}] Pipeline is None but session is "
+                f"initialized — attempting revival..."
             )
             success = await self.revive()
             if not success:
                 raise RuntimeError(
                     f"Session {self._session_id} could not be revived: "
                     f"{self._error_message}"
-                )
-
-        # Also check if process died without freshness flagging it
-        if self._model and self._model.process and not self._model.process.is_alive():
-            logger.warning(
-                f"[{self._session_id}] Process found dead — "
-                f"attempting revival..."
-            )
-            success = await self.revive()
-            if not success:
-                raise RuntimeError(
-                    f"Session {self._session_id} process died and could not "
-                    f"be revived: {self._error_message}"
                 )
 
     def _init_memory(self):
@@ -811,9 +740,8 @@ class AgentSession:
         """Initialize the AgentSession.
 
         Steps:
-            1. Create and initialize ClaudeCLIChatModel (spawns ClaudeProcess).
-            2. Build LangGraph StateGraph with resilience nodes.
-            3. Initialize SessionMemoryManager.
+            1. Initialize SessionMemoryManager.
+            2. Build geny-executor Pipeline (no CLI subprocess).
 
         Returns:
             True on success, False on failure.
@@ -822,34 +750,13 @@ class AgentSession:
             logger.info(f"[{self._session_id}] AgentSession already initialized")
             return True
 
-        logger.info(f"[{self._session_id}] Initializing AgentSession...")
+        logger.info(f"[{self._session_id}] Initializing AgentSession (pipeline mode)...")
 
         try:
-            # 1. Create ClaudeCLIChatModel
-            self._model = ClaudeCLIChatModel(
-                session_id=self._session_id,
-                session_name=self._session_name,
-                working_dir=self._working_dir,
-                model_name=self._model_name,
-                max_turns=self._max_turns,
-                timeout=self._timeout,
-                system_prompt=self._system_prompt,
-                env_vars=self._env_vars,
-                mcp_config=self._mcp_config,
-            )
-
-            # 2. Initialize model (spawns ClaudeProcess)
-            success = await self._model.initialize()
-            if not success:
-                self._error_message = self._model.process.error_message if self._model.process else "Unknown error"
-                self._status = SessionStatus.ERROR
-                logger.error(f"[{self._session_id}] Failed to initialize model: {self._error_message}")
-                return False
-
-            # 3. Initialize memory manager (before graph, so graph can use it)
+            # 1. Initialize memory manager (before pipeline, so pipeline can use it)
             self._init_memory()
 
-            # 3b. Initialize vector memory layer (async, non-blocking)
+            # 1b. Initialize vector memory layer (async, non-blocking)
             if self._memory_manager:
                 try:
                     await self._memory_manager.initialize_vector_memory()
@@ -858,18 +765,13 @@ class AgentSession:
                         f"[{self._session_id}] Vector memory init skipped: {ve}"
                     )
 
-            # 4. Build StateGraph
+            # 2. Build geny-executor Pipeline (no subprocess)
             self._build_graph()
 
             self._initialized = True
             self._status = SessionStatus.RUNNING
 
-            # Always-on sessions (VTuber and its linked CLI) eagerly pre-warm
-            # the first CLI subprocess so the first invoke() skips cold-start.
-            if self._is_always_on and self._model and self._model.process:
-                await self._model.process.prewarm_first_process()
-
-            logger.info(f"[{self._session_id}] AgentSession initialized successfully")
+            logger.info(f"[{self._session_id}] AgentSession initialized successfully (pipeline)")
             return True
 
         except Exception as e:
@@ -879,24 +781,12 @@ class AgentSession:
             return False
 
     def _build_graph(self):
-        """Build the execution backend from the linked WorkflowDefinition.
+        """Build the geny-executor Pipeline execution backend.
 
-        Loads the WorkflowDefinition (from workflow_id or default template),
-        then dispatches to either:
-          - Pipeline mode (geny-executor): for template-based workflows
-          - LangGraph mode (legacy): for custom user-created workflows
-
-        Pipeline mode is default for templates. Set GENY_FORCE_LANGGRAPH=1
-        to force legacy mode for all workflows.
+        All execution goes through the geny-executor Pipeline — there is
+        no LangGraph/CLI fallback. The Pipeline calls the Anthropic API
+        directly (no subprocess).
         """
-        # Checkpointer setup (persistent when storage_path is available)
-        if self._enable_checkpointing:
-            storage = self.storage_path if hasattr(self, 'storage_path') else None
-            self._checkpointer = create_checkpointer(
-                storage_path=storage,
-                persistent=True,
-            )
-
         # Load WorkflowDefinition
         self._workflow = self._load_workflow_definition()
         if not self._workflow:
@@ -909,22 +799,8 @@ class AgentSession:
         if not self._graph_name:
             self._graph_name = self._workflow.name
 
-        # ── Pipeline mode dispatch ──
-        # Template workflows use geny-executor Pipeline by default.
-        # Custom workflows always use LangGraph.
-        use_pipeline = (
-            self._workflow_id
-            and self._workflow_id.startswith("template-")
-            and not os.environ.get("GENY_FORCE_LANGGRAPH")
-        )
-        # Also use pipeline when inferred template (no explicit workflow_id)
-        if not self._workflow_id and self._workflow and getattr(self._workflow, "is_template", False):
-            if not os.environ.get("GENY_FORCE_LANGGRAPH"):
-                use_pipeline = True
-
-        if use_pipeline:
-            self._build_pipeline()
-            return
+        # Always use geny-executor Pipeline
+        self._build_pipeline()
 
         # ── Legacy LangGraph mode ──
 
@@ -1011,123 +887,118 @@ class AgentSession:
     # ========================================================================
 
     def _build_pipeline(self):
-        """Build a geny-executor Pipeline for template-based execution.
+        """Build a geny-executor Pipeline with built-in tools and MCP.
 
         Maps the loaded WorkflowDefinition's template to a GenyPresets
-        method, wiring in memory_manager, tools, and LLM callbacks.
-        """
-        try:
-            from geny_executor.memory import GenyPresets
+        method, wiring in memory_manager, tools (built-in + Geny custom +
+        MCP), and LLM callbacks.
 
-            # Get API key
-            api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        No fallback — if this fails, the session is in error state.
+        """
+        from geny_executor.memory import GenyPresets
+        from geny_executor.tools.registry import ToolRegistry
+        from geny_executor.tools.built_in import (
+            ReadTool, WriteTool, EditTool, BashTool, GlobTool, GrepTool,
+        )
+
+        # Get API key (required — no fallback to CLI)
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        try:
+            from service.config.manager import get_config_manager
+            from service.config.sub_config.general.api_config import APIConfig
+            api_cfg = get_config_manager().load_config(APIConfig)
+            api_key = api_key or api_cfg.anthropic_api_key or ""
+        except Exception:
+            pass
+
+        if not api_key:
+            raise RuntimeError(
+                f"[{self._session_id}] ANTHROPIC_API_KEY is required for "
+                f"geny-executor Pipeline. Set it in environment or config."
+            )
+
+        model = self._model_name or "claude-sonnet-4-20250514"
+        system_prompt = self._system_prompt or ""
+        working_dir = self._working_dir or self.storage_path or ""
+
+        # ── Build unified tool registry ──
+        # 1. Core built-in tools (file I/O, shell, search)
+        tools = ToolRegistry()
+        tools.register(ReadTool())
+        tools.register(WriteTool())
+        tools.register(EditTool())
+        tools.register(BashTool())
+        tools.register(GlobTool())
+        tools.register(GrepTool())
+
+        # 2. Geny custom tools (via tool_bridge adapter)
+        if self._geny_tool_registry:
+            for t in self._geny_tool_registry.list_all():
+                tools.register(t)
+
+        logger.info(
+            f"[{self._session_id}] Tool registry: {tools.list_names()}"
+        )
+
+        # Curated knowledge manager
+        curated_km = None
+        if self._owner_username:
             try:
-                from service.config.manager import get_config_manager
-                from service.config.sub_config.general.api_config import APIConfig
-                api_cfg = get_config_manager().load_config(APIConfig)
-                api_key = api_key or api_cfg.anthropic_api_key or ""
+                from service.memory.curated_knowledge import get_curated_knowledge_manager
+                curated_km = get_curated_knowledge_manager(self._owner_username)
             except Exception:
                 pass
 
-            if not api_key:
-                logger.warning(
-                    f"[{self._session_id}] Pipeline mode: no API key, "
-                    f"falling back to LangGraph"
-                )
-                self._build_graph_langgraph()
-                return
+        # LLM reflect callback (uses Anthropic SDK directly)
+        llm_reflect = self._make_llm_reflect_callback(api_key)
 
-            model = self._model_name or "claude-sonnet-4-20250514"
-            system_prompt = self._system_prompt or ""
+        # Determine preset from template
+        template_id = getattr(self._workflow, "id", "") or self._workflow_id or ""
+        is_vtuber = "vtuber" in template_id.lower()
+        is_simple = "simple" in template_id.lower()
 
-            # Curated knowledge manager
-            curated_km = None
-            if self._owner_username:
-                try:
-                    from service.memory.curated_knowledge import get_curated_knowledge_manager
-                    curated_km = get_curated_knowledge_manager(self._owner_username)
-                except Exception:
-                    pass
+        if is_vtuber:
+            self._pipeline = GenyPresets.vtuber(
+                api_key=api_key,
+                memory_manager=self._memory_manager,
+                model=model,
+                persona_prompt=system_prompt,
+                curated_knowledge_manager=curated_km,
+                llm_reflect=llm_reflect,
+                tools=tools,
+            )
+        elif is_simple:
+            self._pipeline = GenyPresets.worker_easy(
+                api_key=api_key,
+                memory_manager=self._memory_manager,
+                model=model,
+                system_prompt=system_prompt,
+            )
+        else:
+            # autonomous, optimized-autonomous, ultra-light → worker_full
+            max_turns = self._max_iterations or 50
+            if "optimized" in template_id.lower():
+                max_turns = min(max_turns, 30)
 
-            # LLM reflect callback (uses Anthropic SDK directly)
-            llm_reflect = self._make_llm_reflect_callback(api_key)
-
-            # Determine preset from template
-            template_id = getattr(self._workflow, "id", "") or self._workflow_id or ""
-            is_vtuber = "vtuber" in template_id.lower()
-            is_simple = "simple" in template_id.lower()
-
-            if is_vtuber:
-                self._pipeline = GenyPresets.vtuber(
-                    api_key=api_key,
-                    memory_manager=self._memory_manager,
-                    model=model,
-                    persona_prompt=system_prompt,
-                    curated_knowledge_manager=curated_km,
-                    llm_reflect=llm_reflect,
-                    tools=self._geny_tool_registry,
-                )
-            elif is_simple:
-                self._pipeline = GenyPresets.worker_easy(
-                    api_key=api_key,
-                    memory_manager=self._memory_manager,
-                    model=model,
-                    system_prompt=system_prompt,
-                )
-            else:
-                # autonomous, optimized-autonomous, ultra-light → worker_full
-                max_turns = self._max_iterations or 50
-                if "optimized" in template_id.lower():
-                    max_turns = min(max_turns, 30)
-
-                self._pipeline = GenyPresets.worker_full(
-                    api_key=api_key,
-                    memory_manager=self._memory_manager,
-                    model=model,
-                    system_prompt=system_prompt,
-                    tools=self._geny_tool_registry,
-                    max_turns=max_turns,
-                    curated_knowledge_manager=curated_km,
-                    llm_reflect=llm_reflect,
-                )
-
-            self._execution_backend = "pipeline"
-            logger.info(
-                f"[{self._session_id}] Pipeline built from template "
-                f"'{template_id}' (preset={'vtuber' if is_vtuber else 'worker_easy' if is_simple else 'worker_full'})"
+            self._pipeline = GenyPresets.worker_full(
+                api_key=api_key,
+                memory_manager=self._memory_manager,
+                model=model,
+                system_prompt=system_prompt,
+                tools=tools,
+                max_turns=max_turns,
+                curated_knowledge_manager=curated_km,
+                llm_reflect=llm_reflect,
             )
 
-        except ImportError:
-            logger.warning(
-                f"[{self._session_id}] geny-executor not installed, "
-                f"falling back to LangGraph"
-            )
-            self._build_graph_langgraph()
-        except Exception as exc:
-            logger.warning(
-                f"[{self._session_id}] Pipeline build failed ({exc}), "
-                f"falling back to LangGraph"
-            )
-            self._build_graph_langgraph()
+        self._execution_backend = "pipeline"
+        self._pipeline_working_dir = working_dir
 
-    def _build_graph_langgraph(self):
-        """Legacy LangGraph graph compilation (fallback from pipeline failure).
-
-        Re-runs _build_graph() with GENY_FORCE_LANGGRAPH temporarily set
-        so the pipeline dispatch is skipped.
-        """
-        self._execution_backend = "langgraph"
-        self._pipeline = None
-        # Temporarily force LangGraph mode to avoid infinite recursion
-        _prev = os.environ.get("GENY_FORCE_LANGGRAPH")
-        os.environ["GENY_FORCE_LANGGRAPH"] = "1"
-        try:
-            self._build_graph()
-        finally:
-            if _prev is None:
-                os.environ.pop("GENY_FORCE_LANGGRAPH", None)
-            else:
-                os.environ["GENY_FORCE_LANGGRAPH"] = _prev
+        preset_name = 'vtuber' if is_vtuber else 'worker_easy' if is_simple else 'worker_full'
+        logger.info(
+            f"[{self._session_id}] Pipeline built: template='{template_id}', "
+            f"preset={preset_name}, model={model}, tools={len(tools)}"
+        )
 
     @staticmethod
     def _make_llm_reflect_callback(api_key: str):
@@ -1438,7 +1309,7 @@ class AgentSession:
         """
         start_time = time.time()
 
-        if not self._initialized or (not self._graph and not self._pipeline):
+        if not self._initialized or not self._pipeline:
             raise RuntimeError("AgentSession not initialized. Call initialize() first.")
 
         # Freshness check — auto-revive if idle, raise if hard limit
@@ -1456,108 +1327,38 @@ class AgentSession:
 
         session_logger = self._get_logger()
 
-        # Log graph execution start
+        # Log execution start
         if session_logger:
             session_logger.log_graph_execution_start(
                 input_text=input_text,
                 thread_id=thread_id,
                 max_iterations=effective_max_iterations,
-                execution_mode="pipeline" if self._pipeline else "invoke",
+                execution_mode="pipeline",
             )
 
         try:
-            # ── Pipeline mode dispatch ──
-            if self._pipeline is not None:
-                try:
-                    return await self._invoke_pipeline(
-                        input_text, start_time, session_logger, **kwargs
-                    )
-                finally:
-                    self._is_executing = False
-                    self._execution_start_time = datetime.now()
-                    self._freshness.reset_revive_counter()
-
-            config = {"configurable": {"thread_id": thread_id}}
-
-            # Unified initial state — all workflows use AutonomousState
-            # Always include agent identity for relevance gate (chat mode)
-            kwargs.setdefault("agent_name", self._session_name or self._session_id[:8])
-            kwargs.setdefault("agent_role", self._role.value if hasattr(self._role, 'value') else str(self._role))
-            initial_state = make_initial_autonomous_state(
-                input_text,
-                max_iterations=effective_max_iterations,
-                **kwargs,
-            )
-
-            # Record user input to short-term memory
-            if self._memory_manager:
-                try:
-                    self._memory_manager.record_message("user", input_text)
-                except Exception:
-                    logger.debug("Failed to record user message — non-critical", exc_info=True)
-
-            # Execute the compiled graph
-            result = await self._graph.ainvoke(initial_state, config)
-            duration_ms = int((time.time() - start_time) * 1000)
-            self._is_executing = False       # execution complete
-            self._execution_start_time = datetime.now()   # refresh activity timestamp
-            self._status = SessionStatus.RUNNING
-
-            # Successful execution — reset revive counter
-            self._freshness.reset_revive_counter()
-
-            # Extract results — try various output fields
-            final_output = (
-                result.get("final_answer", "")
-                or result.get("answer", "")
-                or result.get("last_output", "")
-            )
-            has_error = bool(result.get("error"))
-            total_iterations = result.get("iteration", 0)
-            total_cost = result.get("total_cost", 0.0) or 0.0
-
-            # Log execution completion
-            if session_logger:
-                session_logger.log_graph_execution_complete(
-                    success=not has_error,
-                    total_iterations=total_iterations,
-                    final_output=final_output[:500] if final_output else None,
-                    total_duration_ms=duration_ms,
-                    stop_reason="completed" if not has_error else result.get("error"),
+            if self._pipeline is None:
+                raise RuntimeError(
+                    f"[{self._session_id}] Pipeline not initialized. "
+                    f"Call initialize() before invoke()."
                 )
-
-            # Record structured execution entry to long-term memory
-            self._execution_count += 1
-            if self._memory_manager:
-                try:
-                    await self._memory_manager.record_execution(
-                        input_text=input_text,
-                        result_state=result,
-                        duration_ms=duration_ms,
-                        execution_number=self._execution_count,
-                        success=not has_error,
-                    )
-                except Exception:
-                    logger.debug(
-                        f"[{self._session_id}] LTM execution record failed (non-critical)",
-                        exc_info=True,
-                    )
-
-            if has_error:
-                self._error_message = result["error"]
-                return {"output": f"Error: {result['error']}", "total_cost": total_cost}
-
-            return {"output": final_output, "total_cost": total_cost}
+            try:
+                return await self._invoke_pipeline(
+                    input_text, start_time, session_logger, **kwargs
+                )
+            finally:
+                self._is_executing = False
+                self._execution_start_time = datetime.now()
+                self._freshness.reset_revive_counter()
 
         except Exception as e:
             duration_ms = int((time.time() - start_time) * 1000)
-            self._is_executing = False       # execution complete (error path)
+            self._is_executing = False
             self._execution_start_time = datetime.now()
             self._status = SessionStatus.RUNNING
             self._error_message = str(e)
             logger.exception(f"[{self._session_id}] Error during invoke: {e}")
 
-            # Log error
             if session_logger:
                 session_logger.log_graph_execution_complete(
                     success=False,
@@ -1589,7 +1390,7 @@ class AgentSession:
         Yields:
             Per-node execution results.
         """
-        if not self._initialized or (not self._graph and not self._pipeline):
+        if not self._initialized or not self._pipeline:
             raise RuntimeError("AgentSession not initialized. Call initialize() first.")
 
         # Freshness check — auto-revive if idle
@@ -1617,155 +1418,27 @@ class AgentSession:
                 input_text=input_text,
                 thread_id=thread_id,
                 max_iterations=effective_max_iterations,
-                execution_mode="pipeline_stream" if self._pipeline else "astream",
+                execution_mode="pipeline_stream",
             )
 
-        # ── Pipeline mode dispatch ──
-        if self._pipeline is not None:
-            try:
-                async for event in self._astream_pipeline(
-                    input_text, start_time, session_logger, **kwargs
-                ):
-                    yield event
-            finally:
-                self._is_executing = False
-                self._execution_start_time = datetime.now()
-                self._freshness.reset_revive_counter()
-            return
+        if self._pipeline is None:
+            raise RuntimeError(
+                f"[{self._session_id}] Pipeline not initialized. "
+                f"Call initialize() before astream()."
+            )
 
         try:
-            config = {"configurable": {"thread_id": thread_id}}
-
-            # Unified initial state — all workflows use AutonomousState
-            # Always include agent identity for relevance gate (chat mode)
-            kwargs.setdefault("agent_name", self._session_name or self._session_id[:8])
-            kwargs.setdefault("agent_role", self._role.value if hasattr(self._role, 'value') else str(self._role))
-            initial_state = make_initial_autonomous_state(
-                input_text,
-                max_iterations=effective_max_iterations,
-                **kwargs,
-            )
-
-            # Record user input to short-term memory
-            if self._memory_manager:
-                try:
-                    self._memory_manager.record_message("user", input_text)
-                except Exception:
-                    logger.debug("Failed to record user message — non-critical", exc_info=True)
-
-            # Accumulate state updates for LTM recording
-            accumulated_state: Dict[str, Any] = {}
-
-            # Stream the compiled graph
-            async for event in self._graph.astream(initial_state, config):
-                event_count += 1
-                last_event = event
-
-                # Accumulate state from node outputs for LTM recording
-                if isinstance(event, dict):
-                    for key, value in event.items():
-                        if key == "__end__":
-                            continue
-                        if isinstance(value, dict):
-                            accumulated_state.update(value)
-
-                # Parse per-node event info from the streamed dict.
-                # LangGraph astream yields dicts like {node_id: state_update}.
-                if session_logger and isinstance(event, dict):
-                    node_names = [k for k in event.keys() if k != "__end__"]
-                    elapsed_ms = int((time.time() - start_time) * 1000)
-
-                    if node_names:
-                        for node_name in node_names:
-                            node_result = event[node_name]
-                            # Build concise preview of what this node produced
-                            preview_parts = []
-                            if isinstance(node_result, dict):
-                                changed = [k for k, v in node_result.items() if v is not None]
-                                if changed:
-                                    preview_parts.append(f"updated: {', '.join(changed[:5])}")
-                            session_logger.log_graph_event(
-                                event_type="node_output",
-                                message=f"NODE OUTPUT: {node_name} [{elapsed_ms}ms]"
-                                + (f" ({'; '.join(preview_parts)})" if preview_parts else ""),
-                                node_name=node_name,
-                                data={
-                                    "event_number": event_count,
-                                    "elapsed_ms": elapsed_ms,
-                                },
-                            )
-                    elif "__end__" in event:
-                        session_logger.log_graph_event(
-                            event_type="graph_end",
-                            message=f"GRAPH END [{elapsed_ms}ms]",
-                            data={
-                                "event_number": event_count,
-                                "elapsed_ms": elapsed_ms,
-                            },
-                        )
-
-                # Heartbeat: refresh activity timestamp on every streamed event
-                # so the idle monitor sees continuous activity during long runs
-                self._execution_start_time = datetime.now()
-
+            async for event in self._astream_pipeline(
+                input_text, start_time, session_logger, **kwargs
+            ):
                 yield event
-
-            self._is_executing = False             # execution complete
-            self._execution_start_time = datetime.now()  # refresh activity timestamp
-            self._status = SessionStatus.RUNNING
-
-            # Successful execution — reset revive counter
-            self._freshness.reset_revive_counter()
-
-            # Log streaming completion
-            duration_ms = int((time.time() - start_time) * 1000)
-            if session_logger:
-                # Try to extract final output from last event
-                final_output = None
-                if last_event and isinstance(last_event, dict):
-                    for key in ["final_answer", "direct_answer", "answer", "process_output", "agent", "__end__"]:
-                        if key in last_event:
-                            node_result = last_event[key]
-                            if isinstance(node_result, dict):
-                                final_output = node_result.get("final_answer") or node_result.get("answer") or node_result.get("last_output")
-                                if final_output:
-                                    break
-
-                session_logger.log_graph_execution_complete(
-                    success=True,
-                    total_iterations=self._current_iteration,
-                    final_output=final_output[:500] if final_output else None,
-                    total_duration_ms=duration_ms,
-                    stop_reason="stream_complete",
-                )
-
-            # Record structured execution entry to long-term memory
-            self._execution_count += 1
-            if self._memory_manager:
-                try:
-                    # Ensure input is in accumulated state
-                    accumulated_state.setdefault("input", input_text)
-                    await self._memory_manager.record_execution(
-                        input_text=input_text,
-                        result_state=accumulated_state,
-                        duration_ms=duration_ms,
-                        execution_number=self._execution_count,
-                        success=True,
-                    )
-                except Exception:
-                    logger.debug(
-                        f"[{self._session_id}] LTM execution record failed (non-critical)",
-                        exc_info=True,
-                    )
-
         except Exception as e:
-            self._is_executing = False             # execution complete (error path)
+            self._is_executing = False
             self._execution_start_time = datetime.now()
             self._status = SessionStatus.RUNNING
             self._error_message = str(e)
             logger.exception(f"[{self._session_id}] Error during astream: {e}")
 
-            # Log error
             duration_ms = int((time.time() - start_time) * 1000)
             if session_logger:
                 session_logger.log_graph_error(
@@ -1868,15 +1541,10 @@ class AgentSession:
     def is_alive(self) -> bool:
         """Check whether the session is operational.
 
-        In pipeline mode, the session is always alive as long as it's initialized
-        (LLM calls go through the Anthropic API, not the CLI subprocess).
-        In LangGraph mode, checks the underlying ClaudeProcess.
+        In pipeline mode, the session is always alive as long as it's
+        initialized (LLM calls go through the Anthropic API directly).
         """
-        if self._pipeline is not None:
-            return self._initialized
-        if self._model and self._model.process:
-            return self._model.process.is_alive()
-        return False
+        return self._initialized and self._pipeline is not None
 
     # ========================================================================
     # SessionInfo Compatibility
