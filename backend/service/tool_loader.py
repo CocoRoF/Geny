@@ -2,8 +2,8 @@
 ToolLoader — Loads and manages all Python-defined tools.
 
 Scans ``tools/built_in/`` and ``tools/custom/`` directories at startup,
-instantiates tool objects, and provides execution dispatch for the
-internal ``/internal/tools/execute`` endpoint.
+instantiates tool objects, and provides them to geny-executor Pipeline
+via tool_bridge adaptation.
 
 Built-in tools are always available; custom tools are controlled
 by Tool Presets on a per-session basis.
