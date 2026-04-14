@@ -1,33 +1,21 @@
-"""AgentSession — CompiledStateGraph-based session management.
+"""AgentSession — geny-executor Pipeline-based session management.
 
-Wraps a CLI session (ClaudeProcess) inside a LangGraph CompiledStateGraph
-to provide state-driven execution with resilience (context guard, model
-fallback, completion detection) and session memory (long-term / short-term).
+Each session runs a geny-executor Pipeline that calls the Anthropic API
+directly (no CLI subprocess). Session creation flow:
 
-Every session is linked to a WorkflowDefinition (either a template or a
-user-created workflow). The WorkflowExecutor compiles it into a
-CompiledStateGraph. There is ONE graph, ONE execution path — no branching
-between "simple" and "autonomous".
-
-Session creation flow:
-    1. Create CLI session (ClaudeProcess via ClaudeCLIChatModel)
-    2. Load WorkflowDefinition (from workflow_id or default template)
-    3. Compile via WorkflowExecutor → CompiledStateGraph
-    4. Initialize SessionMemoryManager for the session storage path
+    1. Load WorkflowDefinition (template_id determines preset)
+    2. Build geny-executor Pipeline via GenyPresets
+    3. Initialize SessionMemoryManager for session storage path
 
 Usage::
-
-    from service.langgraph import AgentSession
 
     agent = await AgentSession.create(
         working_dir="/path/to/project",
         model_name="claude-sonnet-4-20250514",
         session_name="my-agent",
-        workflow_id="template-simple",
+        workflow_id="template-optimized-autonomous",
     )
     result = await agent.invoke("Hello, what can you help me with?")
-    async for event in agent.astream("Build a web app"):
-        print(event)
     await agent.cleanup()
 """
 
@@ -46,27 +34,15 @@ from typing import (
     Optional,
 )
 
-from langgraph.graph.state import CompiledStateGraph
-
-from service.langgraph.checkpointer import create_checkpointer
-
 from service.claude_manager.models import (
     MCPConfig,
     SessionInfo,
     SessionRole,
     SessionStatus,
 )
-from service.claude_manager.process_manager import ClaudeProcess
-from service.langgraph.claude_cli_model import ClaudeCLIChatModel
-from service.langgraph.state import (
-    AutonomousState,
-    make_initial_autonomous_state,
-)
 from service.langgraph.session_freshness import SessionFreshness, FreshnessStatus
 from service.logging.session_logger import get_session_logger, SessionLogger
 from service.workflow.workflow_model import WorkflowDefinition
-from service.workflow.workflow_executor import WorkflowExecutor
-from service.workflow.nodes.base import ExecutionContext
 
 logger = getLogger(__name__)
 
@@ -77,17 +53,12 @@ logger = getLogger(__name__)
 
 
 class AgentSession:
-    """CompiledStateGraph-based agent session.
-
-    Owns a ClaudeProcess (CLI subprocess) wrapped as a LangChain model
-    and orchestrated via a LangGraph state graph with resilience nodes
-    (context guard, completion detection) and session memory.
+    """geny-executor Pipeline-based agent session.
 
     Key architecture:
-        - ClaudeCLIChatModel: wraps ClaudeProcess as a LangChain model
-        - CompiledStateGraph: LangGraph graph executing agent + guard nodes
-        - SessionMemoryManager: long-term / short-term memory in session dir
-        - Checkpointer: persistent (SqliteSaver) or in-memory (MemorySaver)
+        - geny-executor Pipeline: 16-stage execution engine
+        - SessionMemoryManager: long-term / short-term memory
+        - GenyPresets: pre-configured pipeline templates (worker_adaptive, vtuber, worker_easy)
     """
 
     def __init__(
@@ -133,7 +104,7 @@ class AgentSession:
         self._session_name = session_name
         self._created_at = datetime.now()
 
-        # Execution settings (working_dir=None → ClaudeProcess uses storage_path)
+        # Execution settings
         self._working_dir = working_dir
         self._model_name = model_name
         self._max_turns = max_turns
@@ -153,13 +124,12 @@ class AgentSession:
         self._owner_username = owner_username
         self._workflow: Optional[WorkflowDefinition] = None
 
+        # Storage path (set during create())
+        self._storage_path: Optional[str] = None
+
         # Internal components
-        self._model: Optional[ClaudeCLIChatModel] = None
-        self._graph: Optional[CompiledStateGraph] = None
-        self._pipeline: Optional[Any] = None  # geny-executor Pipeline (pipeline mode)
-        self._execution_backend: str = "langgraph"  # "langgraph" | "pipeline"
-        self._checkpointer: Optional[object] = None  # MemorySaver or SqliteSaver
-        self._enable_checkpointing = enable_checkpointing
+        self._pipeline: Optional[Any] = None  # geny-executor Pipeline
+        self._execution_backend: str = "pipeline"
 
         # geny-executor tool registry (set by AgentSessionManager)
         self._geny_tool_registry = geny_tool_registry
@@ -235,101 +205,17 @@ class AgentSession:
             **kwargs,
         )
 
+        # Set storage path
+        from service.claude_manager.platform_utils import DEFAULT_STORAGE_ROOT
+        from pathlib import Path
+        storage = str(Path(DEFAULT_STORAGE_ROOT) / agent._session_id)
+        Path(storage).mkdir(parents=True, exist_ok=True)
+        agent._storage_path = storage
+
         success = await agent.initialize()
         if not success:
             raise RuntimeError(f"Failed to initialize AgentSession: {agent.error_message}")
 
-        return agent
-
-    @classmethod
-    def from_process(
-        cls,
-        process: ClaudeProcess,
-        enable_checkpointing: bool = False,
-        workflow_id: Optional[str] = None,
-        graph_name: Optional[str] = None,
-    ) -> "AgentSession":
-        """Create AgentSession from an existing ClaudeProcess.
-
-        Args:
-            process: Initialized ClaudeProcess instance.
-            enable_checkpointing: Enable LangGraph checkpointing.
-            workflow_id: Optional workflow ID to link.
-            graph_name: Human-readable graph name.
-
-        Returns:
-            AgentSession instance.
-        """
-        agent = cls(
-            session_id=process.session_id,
-            session_name=process.session_name,
-            working_dir=process.working_dir,
-            model_name=process.model,
-            max_turns=process.max_turns,
-            timeout=process.timeout,
-            system_prompt=process.system_prompt,
-            env_vars=process.env_vars or {},
-            mcp_config=process.mcp_config,
-            role=SessionRole(process.role) if process.role else SessionRole.WORKER,
-            enable_checkpointing=enable_checkpointing,
-            workflow_id=workflow_id,
-            graph_name=graph_name,
-        )
-
-        # Wire model, build graph, initialize memory
-        agent._model = ClaudeCLIChatModel.from_process(process)
-        agent._build_graph()
-        agent._init_memory()
-        agent._initialized = True
-        agent._status = SessionStatus.RUNNING
-
-        logger.info(f"[{agent.session_id}] AgentSession created from existing process")
-        return agent
-
-    @classmethod
-    def from_model(
-        cls,
-        model: ClaudeCLIChatModel,
-        enable_checkpointing: bool = False,
-        workflow_id: Optional[str] = None,
-        graph_name: Optional[str] = None,
-    ) -> "AgentSession":
-        """Create AgentSession from an existing ClaudeCLIChatModel.
-
-        Args:
-            model: Initialized ClaudeCLIChatModel instance.
-            enable_checkpointing: Enable LangGraph checkpointing.
-            workflow_id: Optional workflow ID to link.
-            graph_name: Human-readable graph name.
-
-        Returns:
-            AgentSession instance.
-        """
-        if not model.is_initialized:
-            raise ValueError("ClaudeCLIChatModel must be initialized before creating AgentSession")
-
-        agent = cls(
-            session_id=model.session_id,
-            session_name=model.session_name,
-            working_dir=model.working_dir,
-            model_name=model.model_name,
-            max_turns=model.max_turns,
-            timeout=model.timeout,
-            system_prompt=model.system_prompt,
-            env_vars=model.env_vars,
-            mcp_config=model.mcp_config,
-            enable_checkpointing=enable_checkpointing,
-            workflow_id=workflow_id,
-            graph_name=graph_name,
-        )
-
-        agent._model = model
-        agent._build_graph()
-        agent._init_memory()
-        agent._initialized = True
-        agent._status = SessionStatus.RUNNING
-
-        logger.info(f"[{agent.session_id}] AgentSession created from existing model")
         return agent
 
     # ========================================================================
@@ -355,13 +241,6 @@ class AgentSession:
     @property
     def created_at(self) -> datetime:
         return self._created_at
-
-    @property
-    def pid(self) -> Optional[int]:
-        """Process ID from the underlying ClaudeProcess."""
-        if self._model and self._model.process:
-            return self._model.process.pid
-        return None
 
     @property
     def error_message(self) -> Optional[str]:
@@ -406,28 +285,9 @@ class AgentSession:
         return self._initialized
 
     @property
-    def graph(self) -> Optional[CompiledStateGraph]:
-        """Internal CompiledStateGraph."""
-        return self._graph
-
-    @property
-    def model(self) -> Optional[ClaudeCLIChatModel]:
-        """Internal ClaudeCLIChatModel."""
-        return self._model
-
-    @property
-    def process(self) -> Optional[ClaudeProcess]:
-        """Internal ClaudeProcess."""
-        if self._model:
-            return self._model.process
-        return None
-
-    @property
     def storage_path(self) -> Optional[str]:
         """Session storage directory path."""
-        if self._model and self._model.process:
-            return self._model.process.storage_path
-        return None
+        return self._storage_path
 
     @property
     def memory_manager(self) -> Optional["SessionMemoryManager"]:
@@ -576,17 +436,6 @@ class AgentSession:
 
         # Record the revival attempt
         self._freshness.record_revival()
-
-        # Check if the underlying process is still alive
-        if self._model and self._model.process and not self._model.process.is_alive():
-            logger.warning(
-                f"[{self._session_id}] Underlying process died during idle. "
-                f"Async revive() needed."
-            )
-            # Mark that full revival is needed — invoke/astream will handle it
-            self._needs_process_restart = True
-        else:
-            self._needs_process_restart = False
 
         logger.info(
             f"[{self._session_id}] Auto-revive complete "
@@ -1470,50 +1319,6 @@ class AgentSession:
 
             raise
 
-    async def execute(
-        self,
-        prompt: str,
-        timeout: Optional[float] = None,
-        skip_permissions: bool = True,
-        **kwargs,
-    ) -> Dict[str, Any]:
-        """Execute via the legacy ClaudeProcess.execute() interface.
-
-        Provides backward compatibility with controllers that call
-        process.execute() directly.
-
-        Args:
-            prompt: Prompt text to execute.
-            timeout: Override timeout in seconds.
-            skip_permissions: Skip permission prompts.
-            **kwargs: Additional settings.
-
-        Returns:
-            Result dict with output, cost_usd, duration_ms, etc.
-        """
-        if not self._initialized or not self._model or not self._model.process:
-            raise RuntimeError("AgentSession not initialized")
-
-        self._status = SessionStatus.RUNNING
-
-        try:
-            # Delegate to ClaudeProcess.execute() for backward compatibility
-            result = await self._model.process.execute(
-                prompt=prompt,
-                timeout=timeout or self._timeout,
-                skip_permissions=skip_permissions,
-                **kwargs,
-            )
-
-            self._status = SessionStatus.RUNNING
-            return result
-
-        except Exception as e:
-            self._status = SessionStatus.RUNNING
-            self._error_message = str(e)
-            logger.exception(f"[{self._session_id}] Error during execute: {e}")
-            raise
-
     # ========================================================================
     # Lifecycle Methods
     # ========================================================================
@@ -1536,7 +1341,6 @@ class AgentSession:
 
         self._pipeline = None
         self._workflow = None
-        self._checkpointer = None
         self._initialized = False
         self._status = SessionStatus.STOPPED
 
@@ -1578,7 +1382,7 @@ class AgentSession:
         except Exception:
             pass
 
-        # Resolve effective model name (same logic as ClaudeProcess.execute)
+        # Resolve effective model name
         effective_model = self._model_name
         if not effective_model:
             effective_model = os.environ.get('ANTHROPIC_MODEL')
@@ -1600,7 +1404,7 @@ class AgentSession:
             session_name=self._session_name,
             status=self._status,
             created_at=self._created_at,
-            pid=self.pid,
+            pid=None,
             error_message=self._error_message,
             model=effective_model,
             max_turns=self._max_turns,
@@ -1623,76 +1427,6 @@ class AgentSession:
     # ========================================================================
     # Utility Methods
     # ========================================================================
-
-    def get_state(self, thread_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Get current graph state (requires checkpointing).
-
-        Args:
-            thread_id: Thread ID.
-
-        Returns:
-            Current state or None.
-        """
-        if not self._enable_checkpointing or not self._graph:
-            return None
-
-        config = {"configurable": {"thread_id": thread_id or self._current_thread_id}}
-        try:
-            state_snapshot = self._graph.get_state(config)
-            return state_snapshot.values if state_snapshot else None
-        except Exception as e:
-            logger.warning(f"[{self._session_id}] Could not get state: {e}")
-            return None
-
-    def get_history(self, thread_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Get execution history (requires checkpointing).
-
-        Args:
-            thread_id: Thread ID.
-
-        Returns:
-            List of state snapshots.
-        """
-        if not self._enable_checkpointing or not self._graph:
-            return []
-
-        config = {"configurable": {"thread_id": thread_id or self._current_thread_id}}
-        try:
-            history = list(self._graph.get_state_history(config))
-            return [{"config": h.config, "values": h.values} for h in history]
-        except Exception as e:
-            logger.warning(f"[{self._session_id}] Could not get history: {e}")
-            return []
-
-    def visualize(self) -> Optional[bytes]:
-        """Render the compiled graph as a PNG image.
-
-        Returns:
-            PNG image bytes or None.
-        """
-        if not self._graph:
-            return None
-
-        try:
-            return self._graph.get_graph().draw_mermaid_png()
-        except Exception as e:
-            logger.warning(f"[{self._session_id}] Could not visualize graph: {e}")
-            return None
-
-    def get_mermaid_diagram(self) -> Optional[str]:
-        """Return a Mermaid diagram string for the compiled graph.
-
-        Returns:
-            Mermaid diagram string or None.
-        """
-        if not self._graph:
-            return None
-
-        try:
-            return self._graph.get_graph().draw_mermaid()
-        except Exception as e:
-            logger.warning(f"[{self._session_id}] Could not generate mermaid diagram: {e}")
-            return None
 
     def __repr__(self) -> str:
         return (
