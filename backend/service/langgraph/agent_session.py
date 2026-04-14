@@ -40,7 +40,7 @@ from service.claude_manager.models import (
     SessionStatus,
 )
 from service.langgraph.session_freshness import SessionFreshness, FreshnessStatus
-from service.logging.session_logger import get_session_logger, SessionLogger
+from service.logging.session_logger import get_session_logger, SessionLogger, LogLevel
 
 logger = getLogger(__name__)
 
@@ -868,7 +868,7 @@ class AgentSession:
                     accumulated_output += text
                     if session_logger:
                         session_logger.log(
-                            level="STREAM",
+                            level=LogLevel.STREAM_EVENT,
                             message=text,
                             metadata={"type": "text_delta"},
                         )
@@ -996,7 +996,7 @@ class AgentSession:
                     accumulated_output += text
                     if session_logger:
                         session_logger.log(
-                            level="STREAM",
+                            level=LogLevel.STREAM_EVENT,
                             message=text,
                             metadata={"type": "text_delta"},
                         )
