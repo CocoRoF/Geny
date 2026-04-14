@@ -33,7 +33,7 @@ dependencies = [
     # Web fetch & browser automation
     "playwright>=1.49.0",
     # geny-executor: Pipeline-based execution engine (built-in tools, MCP, session persistence)
-    "geny-executor>=0.8.0",
+    "geny-executor>=0.8.1",
     # MCP (Model Context Protocol) — proxy MCP server
     "mcp>=1.0.0",
     "bcrypt>=5.0.0",

@@ -25,7 +25,6 @@ import os
 import time
 import uuid
 from datetime import datetime
-from enum import Enum
 from typing import (
     Any,
     AsyncIterator,
@@ -127,7 +126,6 @@ class AgentSession:
 
         # Internal components
         self._pipeline: Optional[Any] = None  # geny-executor Pipeline
-        self._execution_backend: str = "pipeline"
 
         # geny-executor tool registry (set by AgentSessionManager)
         self._geny_tool_registry = geny_tool_registry
@@ -138,7 +136,6 @@ class AgentSession:
         # Execution state
         self._initialized = False
         self._error_message: Optional[str] = None
-        self._current_thread_id: str = "default"
         self._current_iteration: int = 0
         self._execution_count: int = 0
         self._execution_start_time: Optional[datetime] = None
@@ -148,7 +145,6 @@ class AgentSession:
         self._freshness = SessionFreshness()
 
         # Process revival flag (set by _auto_revive when process is dead)
-        self._needs_process_restart = False
 
         # Dual-agent pairing (VTuber ↔ CLI)
         self._linked_session_id: Optional[str] = None
@@ -386,8 +382,7 @@ class AgentSession:
                     self._error_message = None
 
                 # Flag for full process restart in _ensure_alive()
-                self._needs_process_restart = True
-                logger.info(
+                    logger.info(
                     f"[{self._session_id}] Session clock renewed — "
                     f"full process restart will follow."
                 )
@@ -517,8 +512,7 @@ class AgentSession:
             # 4. Mark as alive
             self._initialized = True
             self._status = SessionStatus.RUNNING
-            self._needs_process_restart = False
-
+    
             # Record revival
             self._freshness.record_revival()
 
@@ -718,6 +712,7 @@ class AgentSession:
                 curated_knowledge_manager=curated_km,
                 llm_reflect=llm_reflect,
                 tools=tools,
+                tool_context=tool_context,
             )
         else:
             max_turns = self._max_iterations or 30
@@ -727,15 +722,13 @@ class AgentSession:
                 model=model,
                 system_prompt=system_prompt,
                 tools=tools,
+                tool_context=tool_context,
                 max_turns=max_turns,
                 easy_max_turns=1,
                 curated_knowledge_manager=curated_km,
                 llm_reflect=llm_reflect,
             )
 
-        # Store context for ToolStage
-        self._tool_context = tool_context
-        self._execution_backend = "pipeline"
 
         logger.info(
             f"[{self._session_id}] Pipeline built: preset={self._preset_name}, "
@@ -1101,7 +1094,7 @@ class AgentSession:
         self._is_executing = True          # guard: prevent idle monitor interference
         self._current_iteration = 0
         self._execution_start_time = datetime.now()
-        thread_id = thread_id or self._current_thread_id
+        thread_id = thread_id or "default"
         effective_max_iterations = max_iterations or self._max_iterations
 
         session_logger = self._get_logger()
@@ -1180,7 +1173,7 @@ class AgentSession:
 
         self._status = SessionStatus.RUNNING
         self._is_executing = True              # guard: prevent idle monitor interference
-        thread_id = thread_id or self._current_thread_id
+        thread_id = thread_id or "default"
 
         # Initialize logging for graph execution
         session_logger = self._get_logger()

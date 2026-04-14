@@ -20,7 +20,7 @@ psycopg-pool>=3.2.0
 ddgs==9.11.4
 playwright>=1.49.0
 # geny-executor: Pipeline-based execution engine
-geny-executor>=0.8.0
+geny-executor>=0.8.1
 # MCP (Model Context Protocol) — needed for proxy MCP server
 mcp>=1.0.0
 # TTS (Text-to-Speech) — Edge TTS engine

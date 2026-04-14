@@ -124,7 +124,7 @@ class _GenyToolAdapter:
                 if asyncio.iscoroutinefunction(run_fn):
                     result = await run_fn(**input)
                 else:
-                    result = await asyncio.to_thread(run_fn, **input)
+                    result = await asyncio.to_thread(lambda: run_fn(**input))
             else:
                 return ToolResult(
                     content=f"Tool '{self._name}' has no run/arun method",
@@ -142,7 +142,7 @@ class _GenyToolAdapter:
             return ToolResult(content=result)
 
         except Exception as exc:
-            logger.warning("tool_bridge: '%s' execution failed: %s", self._name, exc)
+            logger.warning("tool_bridge: '%s' execution failed: %s", self._name, exc, exc_info=True)
             return ToolResult(
                 content=f"Error executing {self._name}: {exc}",
                 is_error=True,
