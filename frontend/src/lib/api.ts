@@ -51,43 +51,30 @@ function getBackendUrl(): string {
 
 // ==================== WebSocket URL ====================
 // Converts the backend HTTP URL to a WebSocket URL for streaming.
-function getWsUrl(sessionId: string): string {
-  const envUrl = process.env.NEXT_PUBLIC_API_URL;
-  if (envUrl !== undefined && envUrl !== '') {
-    const wsBase = envUrl.replace(/^http/, 'ws');
-    return `${wsBase}/ws/execute/${sessionId}`;
-  }
-
-  if (typeof window !== 'undefined') {
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const backendPort = process.env.NEXT_PUBLIC_BACKEND_PORT;
-    if (backendPort) {
-      return `${proto}//${window.location.hostname}:${backendPort}/ws/execute/${sessionId}`;
+/**
+ * Convert the backend HTTP URL to a WebSocket URL.
+ * Uses the SAME logic as getBackendUrl() to ensure consistency —
+ * both HTTP API calls and WebSocket connections go to the same host.
+ */
+function _getWsBase(): string {
+  const httpBase = getBackendUrl();
+  if (!httpBase) {
+    // Production: relative path through nginx
+    if (typeof window !== 'undefined') {
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${proto}//${window.location.host}`;
     }
-    // Production: same host (nginx proxy handles /ws/)
-    return `${proto}//${window.location.host}/ws/execute/${sessionId}`;
+    return 'ws://localhost:8000';
   }
+  return httpBase.replace(/^http/, 'ws');
+}
 
-  return `ws://localhost:8000/ws/execute/${sessionId}`;
+function getWsUrl(sessionId: string): string {
+  return `${_getWsBase()}/ws/execute/${sessionId}`;
 }
 
 function getChatWsUrl(roomId: string): string {
-  const envUrl = process.env.NEXT_PUBLIC_API_URL;
-  if (envUrl !== undefined && envUrl !== '') {
-    const wsBase = envUrl.replace(/^http/, 'ws');
-    return `${wsBase}/ws/chat/rooms/${roomId}`;
-  }
-
-  if (typeof window !== 'undefined') {
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const backendPort = process.env.NEXT_PUBLIC_BACKEND_PORT;
-    if (backendPort) {
-      return `${proto}//${window.location.hostname}:${backendPort}/ws/chat/rooms/${roomId}`;
-    }
-    return `${proto}//${window.location.host}/ws/chat/rooms/${roomId}`;
-  }
-
-  return `ws://localhost:8000/ws/chat/rooms/${roomId}`;
+  return `${_getWsBase()}/ws/chat/rooms/${roomId}`;
 }
 
 // ==================== Agent API ====================
@@ -677,16 +664,16 @@ export const chatApi = {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let attempts = 0;
     const maxAttempts = 30;
+    let fallbackSub: { close: () => void } | null = null;
+    let wsEverConnected = false;
 
-    console.debug(`${_tag} subscribeToRoom called, wsUrl=${wsUrl}, afterId=${afterId}`);
+    console.debug(`${_tag} subscribeToRoom wsUrl=${wsUrl}`);
 
     const connect = () => {
       if (closed) return;
 
-      // Exponential backoff: 500ms, 1s, 2s, 4s... max 10s
       const delay = attempts === 0 ? 0 : Math.min(500 * Math.pow(2, attempts - 1), 10000);
       if (delay > 0) {
-        console.debug(`${_tag} reconnecting in ${delay}ms (attempt=${attempts}/${maxAttempts})`);
         reconnectTimer = setTimeout(_doConnect, delay);
       } else {
         _doConnect();
@@ -698,17 +685,36 @@ export const chatApi = {
       reconnectTimer = null;
 
       console.debug(`${_tag} connecting (attempt=${attempts})...`);
-      ws = new WebSocket(wsUrl);
+
+      try {
+        ws = new WebSocket(wsUrl);
+      } catch {
+        // WebSocket constructor can throw if URL is invalid
+        console.warn(`${_tag} WebSocket constructor failed, using SSE`);
+        _activateSSE();
+        return;
+      }
+
+      const connectTimeout = setTimeout(() => {
+        // If WebSocket hasn't opened in 5s, close and retry
+        if (ws && ws.readyState === WebSocket.CONNECTING) {
+          console.warn(`${_tag} connection timeout, closing`);
+          ws.close();
+        }
+      }, 5000);
 
       ws.onopen = () => {
-        console.debug(`${_tag} connected`);
+        clearTimeout(connectTimeout);
+        wsEverConnected = true;
         attempts = 0;
         const currentAfter = getLatestMsgId?.() ?? afterId;
-        console.debug(`${_tag} sending subscribe after=${currentAfter}`);
-        ws!.send(JSON.stringify({
-          type: 'subscribe',
-          after: currentAfter,
-        }));
+        console.debug(`${_tag} connected, subscribe after=${currentAfter}`);
+        ws!.send(JSON.stringify({ type: 'subscribe', after: currentAfter }));
+        // If SSE fallback was active, close it — WS takes over
+        if (fallbackSub) {
+          fallbackSub.close();
+          fallbackSub = null;
+        }
       };
 
       ws.onmessage = (ev) => {
@@ -719,41 +725,65 @@ export const chatApi = {
           }
           onEvent(event.type, event.data);
         } catch (err) {
-          console.warn(`${_tag} failed to parse WS message:`, ev.data, err);
+          console.warn(`${_tag} parse error:`, err);
         }
       };
 
       ws.onerror = () => {
-        // onerror is always followed by onclose — let onclose handle reconnection
+        clearTimeout(connectTimeout);
         ws = null;
       };
 
-      ws.onclose = (ev) => {
-        console.debug(`${_tag} closed (code=${ev.code}, clean=${ev.wasClean})`);
+      ws.onclose = () => {
+        clearTimeout(connectTimeout);
         ws = null;
-        if (!closed && attempts < maxAttempts) {
+        if (closed) return;
+
+        if (attempts < maxAttempts) {
           attempts++;
+          // If WS never connected, activate SSE as immediate fallback
+          // while continuing WS reconnect attempts in background
+          if (!wsEverConnected && !fallbackSub && attempts >= 2) {
+            _activateSSE();
+          }
           connect();
-        } else if (!closed) {
-          console.error(`${_tag} max reconnect attempts reached, giving up`);
+        } else {
+          // Max attempts reached — ensure SSE is active
+          if (!fallbackSub) _activateSSE();
         }
       };
+    };
+
+    const _activateSSE = () => {
+      if (closed || fallbackSub) return;
+      console.debug(`${_tag} activating SSE fallback`);
+      const backendUrl = getBackendUrl();
+      const dispatch = (name: string) => (d: unknown) => onEvent(name, d as Record<string, unknown>);
+      fallbackSub = sseSubscribe({
+        url: () => {
+          const currentAfter = getLatestMsgId?.() ?? afterId;
+          const qs = currentAfter ? `?after=${encodeURIComponent(currentAfter)}` : '';
+          return `${backendUrl}/api/chat/rooms/${roomId}/events${qs}`;
+        },
+        events: {
+          message: dispatch('message'),
+          broadcast_status: dispatch('broadcast_status'),
+          broadcast_done: dispatch('broadcast_done'),
+          agent_progress: dispatch('agent_progress'),
+          heartbeat: dispatch('heartbeat'),
+        },
+        reconnect: { delay: 3_000 },
+      });
     };
 
     connect();
 
     return {
       close: () => {
-        console.debug(`${_tag} close() called`);
         closed = true;
-        if (reconnectTimer) {
-          clearTimeout(reconnectTimer);
-          reconnectTimer = null;
-        }
-        if (ws) {
-          ws.close();
-          ws = null;
-        }
+        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+        if (ws) { ws.close(); ws = null; }
+        if (fallbackSub) { fallbackSub.close(); fallbackSub = null; }
       },
     };
   },
