@@ -802,86 +802,6 @@ class AgentSession:
         # Always use geny-executor Pipeline
         self._build_pipeline()
 
-        # ── Legacy LangGraph mode ──
-
-        # Create lightweight memory model (ChatAnthropic) if configured
-        memory_chat_model = None
-        memory_model_name = None
-        try:
-            from service.config.manager import get_config_manager
-            from service.config.sub_config.general.api_config import APIConfig
-
-            api_cfg = get_config_manager().load_config(APIConfig)
-            mem_model = api_cfg.memory_model
-            api_key = (
-                api_cfg.anthropic_api_key
-                or os.environ.get("ANTHROPIC_API_KEY", "")
-            )
-
-            if mem_model and api_key:
-                from langchain_anthropic import ChatAnthropic
-
-                memory_chat_model = ChatAnthropic(
-                    model=mem_model,
-                    api_key=api_key,
-                    max_tokens=2048,
-                    timeout=30,
-                )
-                memory_model_name = mem_model
-                logger.info(
-                    f"[{self._session_id}] Memory model created: {mem_model}"
-                )
-        except Exception as e:
-            logger.warning(
-                f"[{self._session_id}] Failed to create memory model, "
-                f"will use main model: {e}"
-            )
-
-        # Create ExecutionContext for the WorkflowExecutor
-        context = ExecutionContext(
-            model=self._model,
-            session_id=self._session_id,
-            memory_manager=self._memory_manager,
-            session_logger=self._get_logger(),
-            context_guard=None,  # Context guard nodes are part of the workflow
-            max_retries=2,
-            model_name=self._model_name,
-            memory_model=memory_chat_model,
-            memory_model_name=memory_model_name,
-            owner_username=self._owner_username,
-        )
-
-        # Wire user-scoped knowledge managers if owner_username is set
-        if self._owner_username:
-            try:
-                from service.memory.curated_knowledge import get_curated_knowledge_manager
-                from service.memory.user_opsidian import get_user_opsidian_manager
-
-                context.curated_knowledge_manager = get_curated_knowledge_manager(
-                    self._owner_username
-                )
-                context.user_opsidian_manager = get_user_opsidian_manager(
-                    self._owner_username
-                )
-                logger.info(
-                    f"[{self._session_id}] Curated knowledge + user opsidian "
-                    f"managers wired for user '{self._owner_username}'"
-                )
-            except Exception as e:
-                logger.warning(
-                    f"[{self._session_id}] Failed to wire user knowledge "
-                    f"managers: {e}"
-                )
-
-        # Compile via WorkflowExecutor
-        executor = WorkflowExecutor(self._workflow, context)
-        self._graph = executor.compile()
-
-        logger.info(
-            f"[{self._session_id}] Graph compiled from workflow "
-            f"'{self._workflow.name}' ({self._workflow.id})"
-        )
-
     # ========================================================================
     # geny-executor Pipeline Mode
     # ========================================================================
@@ -1615,11 +1535,6 @@ class AgentSession:
                 logger.debug("Failed to flush memory — non-critical", exc_info=True)
             self._memory_manager = None
 
-        if self._model:
-            await self._model.cleanup()
-            self._model = None
-
-        self._graph = None
         self._pipeline = None
         self._workflow = None
         self._checkpointer = None
