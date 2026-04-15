@@ -25,9 +25,9 @@ export default function MessengerPage() {
     checkHealth();
     loadUserName();
 
-    // Re-establish SSE if we already have an active room (e.g. after
-    // navigating away and back — SSE was closed on unmount).
-    useMessengerStore.getState()._ensureSSE();
+    // Re-establish WebSocket if we already have an active room (e.g. after
+    // navigating away and back — WS was closed on unmount).
+    useMessengerStore.getState()._ensureWS();
 
     const interval = setInterval(fetchRooms, 30000);
     return () => {

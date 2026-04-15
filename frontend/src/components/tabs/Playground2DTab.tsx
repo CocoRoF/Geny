@@ -4,7 +4,8 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { usePlayground2DStore } from '@/store/usePlayground2DStore';
 import { useI18n } from '@/lib/i18n';
-import { sseSubscribe, type SSESubscription } from '@/lib/sse';
+
+
 import type { WorldState, WorldEvent, GenySessionRole, WorldLayout } from '@/lib/playground2d/types';
 import { ROLE_BUILDING_MAP } from '@/lib/playground2d/types';
 
@@ -97,16 +98,27 @@ function sessionToWorldEvents(
   return events;
 }
 
-// ─── SSE helpers ───
+// ─── WebSocket helpers ───
 
-function getBackendUrl(): string {
+function getWsBase(): string {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
-  if (envUrl !== undefined) return envUrl;
-  const port = process.env.NEXT_PUBLIC_BACKEND_PORT || '8000';
-  if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:${port}`;
+  if (envUrl !== undefined && envUrl !== '') {
+    return envUrl.replace(/^http/, 'ws');
   }
-  return `http://localhost:${port}`;
+  if (typeof window !== 'undefined') {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const backendPort = process.env.NEXT_PUBLIC_BACKEND_PORT;
+    if (backendPort) {
+      return `${proto}//${window.location.hostname}:${backendPort}`;
+    }
+    return `${proto}//${window.location.host}`;
+  }
+  return 'ws://localhost:8000';
+}
+
+/** WebSocket subscription handle */
+interface WsSubscription {
+  close: () => void;
 }
 
 /** Parse an SSE log entry into a WorldEvent, or null if not relevant. */
@@ -600,8 +612,8 @@ export default function Playground2DTab() {
     usePlayground2DStore.getState().setWorldState(nextState);
   }, [sessions, loading]);
 
-  // ─── SSE subscriptions for running sessions (real-time events) ───
-  const sseSubsRef = useRef<Map<string, SSESubscription>>(new Map());
+  // ─── WebSocket subscriptions for running sessions (real-time events) ───
+  const wsSubsRef = useRef<Map<string, WsSubscription>>(new Map());
 
   const applyRealtimeEvent = useCallback((event: WorldEvent) => {
     const map = worldMapRef.current;
@@ -625,8 +637,8 @@ export default function Playground2DTab() {
 
   useEffect(() => {
     if (loading || !applyEventFn) return;
-    const subs = sseSubsRef.current;
-    const backendUrl = getBackendUrl();
+    const subs = wsSubsRef.current;
+    const wsBase = getWsBase();
     const runningSessions = sessions.filter(s => s.status === 'running');
     const runningIds = new Set(runningSessions.map(s => s.session_id));
 
@@ -638,34 +650,42 @@ export default function Playground2DTab() {
       }
     }
 
-    // Open subscriptions for new running sessions
+    // Open WebSocket subscriptions for new running sessions
     for (const s of runningSessions) {
       if (subs.has(s.session_id)) continue;
       const sessionId = s.session_id;
       const sessionName = s.session_name || sessionId.substring(0, 10);
+      const wsUrl = `${wsBase}/ws/execute/${sessionId}`;
+      let ws: WebSocket | null = null;
+      let closed = false;
 
-      const sub = sseSubscribe({
-        url: `${backendUrl}/api/agents/${sessionId}/execute/events`,
-        events: {
-          log: (data) => {
-            const event = parseLogToWorldEvent(sessionId, sessionName, data as Record<string, unknown>);
+      try {
+        ws = new WebSocket(wsUrl);
+      } catch { continue; }
+
+      ws.onopen = () => {
+        ws!.send(JSON.stringify({ type: 'reconnect' }));
+      };
+
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.type === 'log') {
+            const event = parseLogToWorldEvent(sessionId, sessionName, msg.data as Record<string, unknown>);
             if (event) applyRealtimeEvent(event);
-          },
-          status: (data) => {
-            const event = parseStatusToWorldEvent(sessionId, sessionName, data as Record<string, unknown>);
+          } else if (msg.type === 'status') {
+            const event = parseStatusToWorldEvent(sessionId, sessionName, msg.data as Record<string, unknown>);
             if (event) applyRealtimeEvent(event);
-          },
-          heartbeat: () => {}, // keep-alive, no action needed
-          result: () => {},     // final result, handled by status
-          error: () => {},
-        },
-        reconnect: { maxAttempts: 5, delay: 5_000 },
-        doneEvents: ['done'],
-        onDone: () => {
-          subs.delete(sessionId);
-        },
-      });
-      subs.set(sessionId, sub);
+          } else if (msg.type === 'done') {
+            subs.delete(sessionId);
+          }
+        } catch { /* ignore */ }
+      };
+
+      ws.onerror = () => { ws = null; };
+      ws.onclose = () => { ws = null; if (!closed) subs.delete(sessionId); };
+
+      subs.set(sessionId, { close: () => { closed = true; if (ws) { ws.close(); ws = null; } } });
     }
 
     return () => {
@@ -673,13 +693,13 @@ export default function Playground2DTab() {
     };
   }, [sessions, loading, applyRealtimeEvent]);
 
-  // Cleanup all SSE subscriptions on unmount
+  // Cleanup all WebSocket subscriptions on unmount
   useEffect(() => {
     return () => {
-      for (const sub of sseSubsRef.current.values()) {
+      for (const sub of wsSubsRef.current.values()) {
         sub.close();
       }
-      sseSubsRef.current.clear();
+      wsSubsRef.current.clear();
     };
   }, []);
 

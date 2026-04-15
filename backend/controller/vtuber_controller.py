@@ -1,19 +1,19 @@
 """
 VTuber Controller
 
-REST API + SSE endpoints for:
+REST API endpoints for:
 - Live2D model CRUD and listing
 - Agent-model assignment
-- Avatar state queries and SSE streaming
+- Avatar state queries
 - Touch interaction events
 - Manual emotion override (debugging/demo)
+
+Avatar state streaming is handled by ws/avatar_stream.py (WebSocket).
 """
 
-import asyncio
 import json
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 from logging import getLogger
@@ -157,55 +157,6 @@ async def get_avatar_state(session_id: str, request: Request):
     state_manager = request.app.state.avatar_state_manager
     state = state_manager.get_state(session_id)
     return state.to_sse_data()
-
-
-# ── SSE Stream ──────────────────────────────────────────────
-
-
-@router.get("/agents/{session_id}/events")
-async def avatar_events(session_id: str, request: Request):
-    """
-    SSE stream of avatar state changes for a session.
-
-    Events:
-      event: avatar_state  — full state update
-      event: heartbeat     — keepalive (every 30s)
-    """
-    state_manager = request.app.state.avatar_state_manager
-
-    async def event_generator():
-        queue: asyncio.Queue = asyncio.Queue()
-
-        async def on_state_change(state):
-            await queue.put(state)
-
-        state_manager.subscribe(session_id, on_state_change)
-
-        try:
-            # Send initial current state
-            current = state_manager.get_state(session_id)
-            yield f"event: avatar_state\ndata: {json.dumps(current.to_sse_data())}\n\n"
-
-            while True:
-                try:
-                    state = await asyncio.wait_for(queue.get(), timeout=30)
-                    yield f"event: avatar_state\ndata: {json.dumps(state.to_sse_data())}\n\n"
-                except asyncio.TimeoutError:
-                    yield f"event: heartbeat\ndata: {{}}\n\n"
-        except asyncio.CancelledError:
-            pass
-        finally:
-            state_manager.unsubscribe(session_id, on_state_change)
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
 
 
 # ── Touch Interaction ───────────────────────────────────────

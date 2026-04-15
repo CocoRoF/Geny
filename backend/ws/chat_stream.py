@@ -1,13 +1,13 @@
 """
 WebSocket endpoint for real-time chat room event streaming.
 
-Replaces the GET /api/chat/rooms/{room_id}/events SSE endpoint
-with a persistent WebSocket connection that pushes new messages,
+Provides a persistent WebSocket connection that pushes new messages,
 broadcast status, and agent progress in real time.
 
 Protocol:
   Client -> {"type": "subscribe", "after": "msg_id_or_null"}
   Client -> {"type": "ping"}
+  Client -> {"type": "unsubscribe"}
 
   Server -> {"type": "message", "data": {...}}
   Server -> {"type": "broadcast_status", "data": {...}}
@@ -15,6 +15,7 @@ Protocol:
   Server -> {"type": "broadcast_done", "data": {...}}
   Server -> {"type": "heartbeat", "data": {"ts": ...}}
   Server -> {"type": "error", "data": {"error": "..."}}
+  Server -> {"type": "pong", "data": {"ts": ...}}
 """
 
 from __future__ import annotations
@@ -87,7 +88,7 @@ def _get_messages_after(store, room_id: str, after_id: Optional[str]) -> List[di
             room_id[:8], after_id[:8] if after_id else "null", len(all_msgs),
         )
         return all_msgs
-    result = all_msgs[idx + 1 :]
+    result = all_msgs[idx + 1:]
     if result:
         logger.debug(
             "[ChatWS:%s] %d new messages after %s",
@@ -117,7 +118,6 @@ async def ws_chat_room_stream(websocket: WebSocket, room_id: str):
         _get_room_event,
         _build_agent_progress_data,
     )
-    from service.config.sub_config.general.chat_config import ChatConfig
 
     store = get_chat_store()
     room = store.get_room(room_id)
@@ -155,7 +155,7 @@ async def ws_chat_room_stream(websocket: WebSocket, room_id: str):
                     websocket, store, room_id, last_seen_id,
                     _active_broadcasts, _get_room_event, _build_agent_progress_data,
                 )
-                logger.info("[ChatWS:%s] _stream_room_events returned (client disconnected or unsubscribed)", room_id[:8])
+                logger.info("[ChatWS:%s] _stream_room_events returned", room_id[:8])
 
             elif msg_type == "ping":
                 await _send_event(websocket, "pong", {"ts": time.time()}, room_id)
@@ -188,17 +188,16 @@ async def _stream_room_events(
     build_agent_progress_data,
 ) -> None:
     """
-    Push room events over WebSocket until the client disconnects.
+    Push room events over WebSocket until the client disconnects or unsubscribes.
 
-    Mirrors the SSE event_generator in chat_controller.py but uses
-    WebSocket push instead of SSE yield.
+    Uses a dedicated receiver task for client messages to avoid cancelling
+    in-flight receive_text() calls, which can corrupt WebSocket internal state.
     """
     from service.config.sub_config.general.chat_config import ChatConfig
 
     _chat_cfg = ChatConfig.get_default_instance()
     heartbeat_interval = float(_chat_cfg.sse_heartbeat_interval_s)
     room_event = get_room_event(room_id)
-    loop_count = 0
 
     logger.info(
         "[ChatWS:%s] _stream_room_events started, last_seen_id=%s, heartbeat=%ss",
@@ -207,13 +206,12 @@ async def _stream_room_events(
         heartbeat_interval,
     )
 
-    # On initial subscribe: send any messages newer than after
+    # ── Send missed messages on initial subscribe ─────────────────────
     if last_seen_id:
         missed = _get_messages_after(store, room_id, last_seen_id)
         logger.info("[ChatWS:%s] sending %d missed messages", room_id[:8], len(missed))
         for m in missed:
             if not await _send_event(ws, "message", m, room_id):
-                logger.warning("[ChatWS:%s] connection lost while sending missed messages", room_id[:8])
                 return
             last_seen_id = m["id"]
     else:
@@ -225,126 +223,139 @@ async def _stream_room_events(
                 room_id[:8], last_seen_id[:8], len(all_msgs),
             )
 
-    # Send current broadcast status if active
+    # ── Send current broadcast status if active ───────────────────────
     bstate = active_broadcasts.get(room_id)
     if bstate and not bstate.finished:
         logger.info(
-            "[ChatWS:%s] active broadcast found: id=%s, total=%d, completed=%d, responded=%d",
-            room_id[:8], bstate.broadcast_id[:8], bstate.total, bstate.completed, bstate.responded,
+            "[ChatWS:%s] active broadcast found: id=%s, total=%d, completed=%d",
+            room_id[:8], bstate.broadcast_id[:8], bstate.total, bstate.completed,
         )
-        await _send_event(ws, "broadcast_status", {
+        if not await _send_event(ws, "broadcast_status", {
             "broadcast_id": bstate.broadcast_id,
             "total": bstate.total,
             "completed": bstate.completed,
             "responded": bstate.responded,
             "finished": False,
-        }, room_id)
+        }, room_id):
+            return
         if bstate.agent_states:
             agent_progress_list = [
                 build_agent_progress_data(astate)
                 for astate in bstate.agent_states.values()
             ]
-            await _send_event(ws, "agent_progress", {
+            if not await _send_event(ws, "agent_progress", {
                 "broadcast_id": bstate.broadcast_id,
                 "agents": agent_progress_list,
-            }, room_id)
-    else:
-        logger.debug("[ChatWS:%s] no active broadcast on subscribe", room_id[:8])
-
-    # Main loop: wait for new messages or heartbeat
-    while True:
-        room_event.clear()
-        loop_count += 1
-
-        try:
-            # Use asyncio.wait to handle both room events and incoming WS messages
-            done, pending = await asyncio.wait(
-                [
-                    asyncio.create_task(room_event.wait()),
-                    asyncio.create_task(_ws_receive_or_timeout(ws, heartbeat_interval)),
-                ],
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-
-            # Check if we received a client message (e.g., unsubscribe)
-            for task in done:
-                result = task.result()
-                if isinstance(result, dict):
-                    logger.debug("[ChatWS:%s] client message in stream loop: %s", room_id[:8], result)
-                    if result.get("type") == "unsubscribe":
-                        logger.info("[ChatWS:%s] client unsubscribed", room_id[:8])
-                        return
-            # Cancel pending tasks
-            for task in pending:
-                task.cancel()
-
-        except asyncio.CancelledError:
-            logger.info("[ChatWS:%s] stream cancelled", room_id[:8])
-            return
-
-        # Check for new messages
-        if last_seen_id is not None:
-            new_msgs = _get_messages_after(store, room_id, last_seen_id)
-        else:
-            new_msgs = store.get_messages(room_id)
-
-        if new_msgs:
-            logger.debug(
-                "[ChatWS:%s] loop=%d: %d new messages to send",
-                room_id[:8], loop_count, len(new_msgs),
-            )
-
-        for m in new_msgs:
-            if not await _send_event(ws, "message", m, room_id):
-                logger.warning("[ChatWS:%s] connection lost while sending new messages", room_id[:8])
+            }, room_id):
                 return
-            last_seen_id = m["id"]
 
-        # Broadcast status update
-        bstate = active_broadcasts.get(room_id)
-        if bstate:
-            await _send_event(ws, "broadcast_status", {
-                "broadcast_id": bstate.broadcast_id,
-                "total": bstate.total,
-                "completed": bstate.completed,
-                "responded": bstate.responded,
-                "finished": bstate.finished,
-            }, room_id)
+    # ── Dedicated receiver task ───────────────────────────────────────
+    # Instead of using asyncio.wait with competing receive/event tasks
+    # (which can corrupt WebSocket state when the receive is cancelled),
+    # we run a dedicated background task that reads client messages into
+    # a queue. The main loop only waits on room_event + heartbeat timeout.
+    client_queue: asyncio.Queue[dict] = asyncio.Queue()
+    disconnected = asyncio.Event()
 
-            if not bstate.finished and bstate.agent_states:
-                agent_progress_list = [
-                    build_agent_progress_data(astate)
-                    for astate in bstate.agent_states.values()
-                ]
-                await _send_event(ws, "agent_progress", {
-                    "broadcast_id": bstate.broadcast_id,
-                    "agents": agent_progress_list,
-                }, room_id)
+    async def _receiver():
+        """Read client messages in a dedicated task. Never cancelled mid-receive."""
+        try:
+            while True:
+                raw = await ws.receive_text()
+                try:
+                    msg = json.loads(raw)
+                    await client_queue.put(msg)
+                except json.JSONDecodeError:
+                    logger.warning("[ChatWS:%s] invalid JSON in stream: %s", room_id[:8], raw[:100])
+        except WebSocketDisconnect:
+            logger.debug("[ChatWS:%s] receiver: client disconnected", room_id[:8])
+            disconnected.set()
+        except Exception as exc:
+            logger.debug("[ChatWS:%s] receiver: error: %s", room_id[:8], exc)
+            disconnected.set()
 
-            if bstate.finished:
-                logger.info(
-                    "[ChatWS:%s] broadcast %s finished, sending broadcast_done",
-                    room_id[:8], bstate.broadcast_id[:8],
-                )
-                await _send_event(ws, "broadcast_done", {
+    receiver_task = asyncio.create_task(_receiver())
+
+    # ── Main event loop ───────────────────────────────────────────────
+    try:
+        while not disconnected.is_set():
+            # Wait for room notification or heartbeat timeout
+            room_event.clear()
+            try:
+                await asyncio.wait_for(room_event.wait(), timeout=heartbeat_interval)
+            except asyncio.TimeoutError:
+                pass
+
+            if disconnected.is_set():
+                break
+
+            # ── Process any client messages from the queue ────────────
+            while not client_queue.empty():
+                msg = client_queue.get_nowait()
+                msg_type = msg.get("type", "")
+                logger.debug("[ChatWS:%s] client msg in stream: %s", room_id[:8], msg_type)
+                if msg_type == "unsubscribe":
+                    logger.info("[ChatWS:%s] client unsubscribed", room_id[:8])
+                    return
+                elif msg_type == "ping":
+                    if not await _send_event(ws, "pong", {"ts": time.time()}, room_id):
+                        return
+
+            # ── Send new messages ─────────────────────────────────────
+            if last_seen_id is not None:
+                new_msgs = _get_messages_after(store, room_id, last_seen_id)
+            else:
+                new_msgs = store.get_messages(room_id)
+
+            for m in new_msgs:
+                if not await _send_event(ws, "message", m, room_id):
+                    return
+                last_seen_id = m["id"]
+
+            # ── Broadcast status / progress ───────────────────────────
+            bstate = active_broadcasts.get(room_id)
+            if bstate:
+                if not await _send_event(ws, "broadcast_status", {
                     "broadcast_id": bstate.broadcast_id,
                     "total": bstate.total,
+                    "completed": bstate.completed,
                     "responded": bstate.responded,
-                }, room_id)
-        elif not new_msgs:
-            # No active broadcast, no new messages - just heartbeat
-            await _send_event(ws, "heartbeat", {"ts": time.time()}, room_id)
+                    "finished": bstate.finished,
+                }, room_id):
+                    return
 
+                if not bstate.finished and bstate.agent_states:
+                    agent_progress_list = [
+                        build_agent_progress_data(astate)
+                        for astate in bstate.agent_states.values()
+                    ]
+                    if not await _send_event(ws, "agent_progress", {
+                        "broadcast_id": bstate.broadcast_id,
+                        "agents": agent_progress_list,
+                    }, room_id):
+                        return
 
-async def _ws_receive_or_timeout(ws: WebSocket, timeout: float) -> Optional[dict]:
-    """
-    Try to receive a WebSocket message within timeout.
-    Returns the parsed message dict, or None on timeout.
-    """
-    try:
-        raw = await asyncio.wait_for(ws.receive_text(), timeout=timeout)
-        return json.loads(raw)
-    except asyncio.TimeoutError:
-        return None
-    except (json.JSONDecodeError, WebSocketDisconnect):
-        return None
+                if bstate.finished:
+                    logger.info(
+                        "[ChatWS:%s] broadcast %s finished",
+                        room_id[:8], bstate.broadcast_id[:8],
+                    )
+                    if not await _send_event(ws, "broadcast_done", {
+                        "broadcast_id": bstate.broadcast_id,
+                        "total": bstate.total,
+                        "responded": bstate.responded,
+                    }, room_id):
+                        return
+
+            elif not new_msgs:
+                # No broadcast active, no new messages — heartbeat
+                if not await _send_event(ws, "heartbeat", {"ts": time.time()}, room_id):
+                    return
+
+    finally:
+        receiver_task.cancel()
+        try:
+            await receiver_task
+        except asyncio.CancelledError:
+            pass
+        logger.debug("[ChatWS:%s] _stream_room_events cleanup done", room_id[:8])

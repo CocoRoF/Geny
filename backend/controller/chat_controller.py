@@ -19,8 +19,6 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-from starlette.responses import StreamingResponse
-
 from service.chat.conversation_store import get_chat_store
 from service.langgraph import get_agent_session_manager
 from service.execution.agent_executor import (
@@ -357,12 +355,6 @@ async def cleanup_old_messages():
 # ============================================================================
 # Room-Scoped Broadcast Endpoint (Fire-and-Forget)
 # ============================================================================
-
-def _sse_event(event_type: str, data: Any) -> str:
-    """Format a single SSE event."""
-    payload = json.dumps(data, ensure_ascii=False, default=str)
-    return f"event: {event_type}\ndata: {payload}\n\n"
-
 
 @router.post("/rooms/{room_id}/broadcast")
 async def broadcast_to_room(room_id: str, request: RoomBroadcastRequest):
@@ -806,136 +798,9 @@ async def _run_broadcast(
         del _active_broadcasts[room_id]
 
 
-# ============================================================================
-# Reconnectable SSE Event Stream
-# ============================================================================
 
-@router.get("/rooms/{room_id}/events")
-async def room_event_stream(
-    room_id: str,
-    after: Optional[str] = Query(None, description="Last seen message ID; only newer messages will be sent"),
-):
-    """
-    SSE stream of new messages in a room.
-
-    - Reconnectable: pass after=<last_msg_id> to resume from where you left off.
-    - Sends message events for each new message (user, agent, system).
-    - Sends broadcast_status events with progress info.
-    - Sends heartbeat events every 5 seconds to keep the connection alive.
-    - Sends broadcast_done when all agents have finished.
-
-    The stream stays open until the client disconnects.
-    """
-    store = get_chat_store()
-    room = store.get_room(room_id)
-    if not room:
-        raise HTTPException(status_code=404, detail=f"Room not found: {room_id}")
-
-    async def event_generator():
-        last_seen_id = after
-        room_event = _get_room_event(room_id)
-        from service.config.sub_config.general.chat_config import ChatConfig
-        _chat_cfg = ChatConfig.get_default_instance()
-        heartbeat_interval = float(_chat_cfg.sse_heartbeat_interval_s)
-
-        # On initial connect: send any messages newer than after
-        if last_seen_id:
-            missed = _get_messages_after(store, room_id, last_seen_id)
-            for msg in missed:
-                yield _sse_event("message", msg)
-                last_seen_id = msg["id"]
-        else:
-            # No reference point: anchor to the current latest message
-            # so that any messages added after this moment are detected.
-            all_msgs = store.get_messages(room_id)
-            if all_msgs:
-                last_seen_id = all_msgs[-1]["id"]
-
-        # Send current broadcast status if active
-        bstate = _active_broadcasts.get(room_id)
-        if bstate and not bstate.finished:
-            yield _sse_event("broadcast_status", {
-                "broadcast_id": bstate.broadcast_id,
-                "total": bstate.total,
-                "completed": bstate.completed,
-                "responded": bstate.responded,
-                "finished": False,
-            })
-            # Send initial per-agent progress
-            if bstate.agent_states:
-                agent_progress_list = [
-                    _build_agent_progress_data(astate)
-                    for astate in bstate.agent_states.values()
-                ]
-                yield _sse_event("agent_progress", {
-                    "broadcast_id": bstate.broadcast_id,
-                    "agents": agent_progress_list,
-                })
-
-        # Main loop: wait for new messages or heartbeat
-        while True:
-            room_event.clear()
-
-            # Wait for notification or timeout (heartbeat)
-            try:
-                await asyncio.wait_for(room_event.wait(), timeout=heartbeat_interval)
-            except asyncio.TimeoutError:
-                pass
-            except asyncio.CancelledError:
-                return
-
-            # Check for new messages
-            if last_seen_id is not None:
-                new_msgs = _get_messages_after(store, room_id, last_seen_id)
-            else:
-                # No anchor yet (connected to empty room)
-                new_msgs = store.get_messages(room_id)
-            for msg in new_msgs:
-                yield _sse_event("message", msg)
-                last_seen_id = msg["id"]
-
-            # Broadcast status update
-            bstate = _active_broadcasts.get(room_id)
-            if bstate:
-                # Send overall progress
-                yield _sse_event("broadcast_status", {
-                    "broadcast_id": bstate.broadcast_id,
-                    "total": bstate.total,
-                    "completed": bstate.completed,
-                    "responded": bstate.responded,
-                    "finished": bstate.finished,
-                })
-
-                # Send per-agent progress if not finished
-                if not bstate.finished and bstate.agent_states:
-                    agent_progress_list = [
-                        _build_agent_progress_data(astate)
-                        for astate in bstate.agent_states.values()
-                    ]
-                    yield _sse_event("agent_progress", {
-                        "broadcast_id": bstate.broadcast_id,
-                        "agents": agent_progress_list,
-                    })
-
-                if bstate.finished:
-                    yield _sse_event("broadcast_done", {
-                        "broadcast_id": bstate.broadcast_id,
-                        "total": bstate.total,
-                        "responded": bstate.responded,
-                    })
-            elif not new_msgs:
-                # No active broadcast, no new messages -- just heartbeat
-                yield _sse_event("heartbeat", {"ts": time.time()})
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
+# NOTE: SSE endpoint removed — chat room streaming is now handled by
+# ws/chat_stream.py (WebSocket at /ws/chat/rooms/{room_id}).
 
 
 def _get_messages_after(store, room_id: str, after_id: Optional[str]) -> List[dict]:

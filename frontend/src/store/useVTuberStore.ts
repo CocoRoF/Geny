@@ -20,7 +20,7 @@ interface VTuberState {
   // Per-session: log entries
   logs: Record<string, VTuberLogEntry[]>;
 
-  // SSE subscriptions (keyed by session_id)
+  // WebSocket subscriptions (keyed by session_id)
   _subs: Record<string, { close: () => void }>;
 
   // TTS state
@@ -90,7 +90,7 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
         const { [sessionId]: _, ...rest } = s.assignments;
         return { assignments: rest };
       });
-      // Cleanup SSE subscription
+      // Cleanup WebSocket subscription
       get().unsubscribeAvatar(sessionId);
     } catch (err) {
       console.error('[VTuber] Failed to unassign model:', err);
@@ -122,10 +122,10 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
         avatarStates: { ...s.avatarStates, [sessionId]: state },
       }));
       // Log the state change
-      get().addLog(sessionId, 'state', 'SSE', `${state.trigger}: ${state.emotion} (expr=${state.expression_index}, motion=${state.motion_group}[${state.motion_index}])`, state as unknown as Record<string, unknown>);
+      get().addLog(sessionId, 'state', 'WS', `${state.trigger}: ${state.emotion} (expr=${state.expression_index}, motion=${state.motion_group}[${state.motion_index}])`, state as unknown as Record<string, unknown>);
     });
 
-    get().addLog(sessionId, 'info', 'SSE', 'Avatar SSE connected');
+    get().addLog(sessionId, 'info', 'WS', 'Avatar WS connected');
     set((s) => ({
       _subs: { ...s._subs, [sessionId]: sub },
     }));
@@ -134,7 +134,7 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
   unsubscribeAvatar: (sessionId) => {
     const { _subs } = get();
     _subs[sessionId]?.close();
-    get().addLog(sessionId, 'info', 'SSE', 'Avatar SSE disconnected');
+    get().addLog(sessionId, 'info', 'WS', 'Avatar WS disconnected');
     set((s) => {
       const { [sessionId]: _, ...rest } = s._subs;
       return { _subs: rest };

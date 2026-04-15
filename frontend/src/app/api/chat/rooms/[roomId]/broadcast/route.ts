@@ -1,9 +1,8 @@
 /**
  * Broadcast route — simple JSON proxy.
  *
- * Broadcast is now fire-and-forget: the backend returns JSON immediately.
- * SSE streaming has moved to GET /rooms/:id/events which the frontend
- * connects to directly via EventSource (bypassing Next.js).
+ * Broadcast is fire-and-forget: the backend returns JSON immediately.
+ * Real-time events are delivered via WebSocket at /ws/chat/rooms/{roomId}.
  *
  * This Route Handler forwards the POST to the backend and returns the
  * JSON response.  It exists because Next.js Route Handlers take priority

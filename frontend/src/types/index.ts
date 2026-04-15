@@ -118,8 +118,8 @@ export interface ChatRoomBroadcastResponse {
   target_count: number;
 }
 
-// SSE event types from room event stream
-export type ChatSSEEventType =
+// WebSocket event types from room event stream
+export type ChatEventType =
   | 'message'
   | 'broadcast_status'
   | 'broadcast_done'
@@ -162,8 +162,8 @@ export interface AgentProgressEvent {
   agents: AgentProgressState[];
 }
 
-export interface ChatSSEEvent {
-  event: ChatSSEEventType;
+export interface ChatWsEvent {
+  type: ChatEventType;
   data: ChatRoomMessage | BroadcastStatus | AgentProgressEvent | { ts?: number };
 }
 

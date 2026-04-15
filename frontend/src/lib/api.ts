@@ -4,7 +4,6 @@
  */
 
 import { getToken } from '@/lib/authApi';
-import { sseSubscribe } from '@/lib/sse';
 
 // ==================== Base Fetch Wrapper ====================
 
@@ -33,8 +32,6 @@ async function apiCall<T = unknown>(endpoint: string, options: RequestInit = {})
 }
 
 // ==================== Backend Direct URL ====================
-// Next.js rewrites() proxy buffers ALL responses (including SSE streams),
-// so EventSource must connect directly to the backend, bypassing the proxy.
 // In production behind a reverse proxy (nginx), NEXT_PUBLIC_API_URL should be
 // set to '' (empty) so that the browser uses relative paths through nginx.
 function getBackendUrl(): string {
@@ -140,8 +137,6 @@ export const agentApi = {
    *
    * Opens a single WebSocket connection to /ws/execute/{id} and sends
    * the execute command. Events are pushed in real time without polling.
-   *
-   * Falls back to the legacy SSE two-step pattern if WebSocket fails.
    */
   executeStream: async (
     id: string,
@@ -190,12 +185,11 @@ export const agentApi = {
         }
       };
 
-      ws.onerror = (err) => {
-        console.warn(`${_tag} WebSocket error, falling back to SSE:`, err);
+      ws.onerror = () => {
         if (!resolved) {
-          // WebSocket failed — fall back to legacy SSE
           resolved = true;
-          agentApi._executeStreamSSE(id, data, onEvent).then(resolve, reject);
+          onEvent('error', { error: 'WebSocket connection failed' });
+          reject(new Error('WebSocket connection failed'));
         }
       };
 
@@ -203,57 +197,6 @@ export const agentApi = {
         console.debug(`${_tag} WebSocket closed (code=${ev.code}, reason=${ev.reason})`);
         finish();
       };
-    });
-  },
-
-  /**
-   * Legacy SSE streaming execute (fallback).
-   * Kept for backward compatibility when WebSocket is unavailable.
-   */
-  _executeStreamSSE: async (
-    id: string,
-    data: ExecuteRequest,
-    onEvent: (eventType: string, eventData: Record<string, unknown>) => void,
-  ): Promise<void> => {
-    const startRes = await fetch(`/api/agents/${id}/execute/start`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-
-    if (!startRes.ok) {
-      const body = await startRes.text();
-      let message: string;
-      try {
-        const json = JSON.parse(body);
-        const raw = json.detail || json.message || json.error;
-        message = typeof raw === 'string' ? raw : raw ? JSON.stringify(raw) : `HTTP ${startRes.status}`;
-      } catch {
-        message = body || `HTTP ${startRes.status}`;
-      }
-      throw new Error(message);
-    }
-
-    const backendUrl = getBackendUrl();
-    return new Promise<void>((resolve) => {
-      const dispatch = (name: string) => (d: unknown) => onEvent(name, d as Record<string, unknown>);
-      const sub = sseSubscribe({
-        url: `${backendUrl}/api/agents/${id}/execute/events`,
-        events: {
-          log: dispatch('log'),
-          status: dispatch('status'),
-          result: dispatch('result'),
-          heartbeat: dispatch('heartbeat'),
-          error: dispatch('error'),
-        },
-        reconnect: { maxAttempts: 20, delay: 3_000 },
-        doneEvents: ['done'],
-        onDone: () => {
-          onEvent('done', {});
-          resolve();
-        },
-      });
-      void sub;
     });
   },
 
@@ -274,7 +217,6 @@ export const agentApi = {
    *
    * Used when the page reloads or the user returns after locking the phone.
    * Sends a "reconnect" message to resume streaming from the current position.
-   * Falls back to SSE if WebSocket fails to connect.
    */
   reconnectStream: (
     id: string,
@@ -284,8 +226,6 @@ export const agentApi = {
     const _tag = `[ReconnWS:${id.slice(0, 8)}]`;
     console.debug(`${_tag} reconnectStream called, wsUrl=${wsUrl}`);
     let ws: WebSocket | null = new WebSocket(wsUrl);
-    let closed = false;
-    let fallbackSub: { close: () => void } | null = null;
 
     ws.onopen = () => {
       console.debug(`${_tag} connected, sending reconnect`);
@@ -304,32 +244,9 @@ export const agentApi = {
       }
     };
 
-    ws.onerror = (err) => {
-      console.warn(`${_tag} WebSocket error, falling back to SSE:`, err);
+    ws.onerror = () => {
+      onEvent('error', { error: 'WebSocket reconnection failed' });
       ws = null;
-      if (!closed) {
-        // Fall back to SSE reconnect
-        const backendUrl = getBackendUrl();
-        const dispatch = (name: string) => (d: unknown) => {
-          if (name !== 'heartbeat') {
-            console.debug(`${_tag} SSE event: ${name}`, d);
-          }
-          onEvent(name, d as Record<string, unknown>);
-        };
-        fallbackSub = sseSubscribe({
-          url: `${backendUrl}/api/agents/${id}/execute/events`,
-          events: {
-            log: dispatch('log'),
-            status: dispatch('status'),
-            result: dispatch('result'),
-            heartbeat: dispatch('heartbeat'),
-            error: dispatch('error'),
-          },
-          reconnect: { maxAttempts: 10, delay: 3_000 },
-          doneEvents: ['done'],
-          onDone: () => onEvent('done', {}),
-        });
-      }
     };
 
     ws.onclose = (ev) => {
@@ -339,14 +256,9 @@ export const agentApi = {
 
     return {
       close: () => {
-        closed = true;
         if (ws) {
           ws.close();
           ws = null;
-        }
-        if (fallbackSub) {
-          fallbackSub.close();
-          fallbackSub = null;
         }
       },
     };
@@ -649,7 +561,7 @@ export const chatApi = {
    * Subscribe to chat room events via WebSocket.
    *
    * Opens a WebSocket connection to /ws/chat/rooms/{roomId} for real-time
-   * push-based event streaming. Falls back to SSE if WebSocket fails.
+   * push-based event streaming with automatic reconnection.
    */
   subscribeToRoom: (
     roomId: string,
@@ -664,8 +576,6 @@ export const chatApi = {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let attempts = 0;
     const maxAttempts = 30;
-    let fallbackSub: { close: () => void } | null = null;
-    let wsEverConnected = false;
 
     console.debug(`${_tag} subscribeToRoom wsUrl=${wsUrl}`);
 
@@ -689,14 +599,11 @@ export const chatApi = {
       try {
         ws = new WebSocket(wsUrl);
       } catch {
-        // WebSocket constructor can throw if URL is invalid
-        console.warn(`${_tag} WebSocket constructor failed, using SSE`);
-        _activateSSE();
+        console.error(`${_tag} WebSocket constructor failed`);
         return;
       }
 
       const connectTimeout = setTimeout(() => {
-        // If WebSocket hasn't opened in 5s, close and retry
         if (ws && ws.readyState === WebSocket.CONNECTING) {
           console.warn(`${_tag} connection timeout, closing`);
           ws.close();
@@ -705,16 +612,10 @@ export const chatApi = {
 
       ws.onopen = () => {
         clearTimeout(connectTimeout);
-        wsEverConnected = true;
         attempts = 0;
         const currentAfter = getLatestMsgId?.() ?? afterId;
         console.debug(`${_tag} connected, subscribe after=${currentAfter}`);
         ws!.send(JSON.stringify({ type: 'subscribe', after: currentAfter }));
-        // If SSE fallback was active, close it — WS takes over
-        if (fallbackSub) {
-          fallbackSub.close();
-          fallbackSub = null;
-        }
       };
 
       ws.onmessage = (ev) => {
@@ -741,39 +642,11 @@ export const chatApi = {
 
         if (attempts < maxAttempts) {
           attempts++;
-          // If WS never connected, activate SSE as immediate fallback
-          // while continuing WS reconnect attempts in background
-          if (!wsEverConnected && !fallbackSub && attempts >= 2) {
-            _activateSSE();
-          }
           connect();
         } else {
-          // Max attempts reached — ensure SSE is active
-          if (!fallbackSub) _activateSSE();
+          console.error(`${_tag} max reconnect attempts (${maxAttempts}) reached`);
         }
       };
-    };
-
-    const _activateSSE = () => {
-      if (closed || fallbackSub) return;
-      console.debug(`${_tag} activating SSE fallback`);
-      const backendUrl = getBackendUrl();
-      const dispatch = (name: string) => (d: unknown) => onEvent(name, d as Record<string, unknown>);
-      fallbackSub = sseSubscribe({
-        url: () => {
-          const currentAfter = getLatestMsgId?.() ?? afterId;
-          const qs = currentAfter ? `?after=${encodeURIComponent(currentAfter)}` : '';
-          return `${backendUrl}/api/chat/rooms/${roomId}/events${qs}`;
-        },
-        events: {
-          message: dispatch('message'),
-          broadcast_status: dispatch('broadcast_status'),
-          broadcast_done: dispatch('broadcast_done'),
-          agent_progress: dispatch('agent_progress'),
-          heartbeat: dispatch('heartbeat'),
-        },
-        reconnect: { delay: 3_000 },
-      });
     };
 
     connect();
@@ -783,7 +656,6 @@ export const chatApi = {
         closed = true;
         if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
         if (ws) { ws.close(); ws = null; }
-        if (fallbackSub) { fallbackSub.close(); fallbackSub = null; }
       },
     };
   },
@@ -1034,23 +906,78 @@ export const vtuberApi = {
     ),
 
   /**
-   * Subscribe to avatar state SSE events.
-   * Connects directly to backend (bypasses Next.js proxy buffering).
+   * Subscribe to avatar state changes via WebSocket.
    */
   subscribeToAvatarState: (
     sessionId: string,
     onState: (state: AvatarState) => void,
   ): { close: () => void } => {
-    const backendUrl = getBackendUrl();
-    const sub = sseSubscribe({
-      url: `${backendUrl}/api/vtuber/agents/${sessionId}/events`,
-      events: {
-        avatar_state: (d) => onState(d as AvatarState),
-        heartbeat: () => {},
+    const wsBase = _getWsBase();
+    const wsUrl = `${wsBase}/ws/vtuber/agents/${sessionId}/state`;
+    const _tag = `[AvatarWS:${sessionId.slice(0, 8)}]`;
+    let ws: WebSocket | null = null;
+    let closed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
+    const maxAttempts = 15;
+
+    const connect = () => {
+      if (closed) return;
+      const delay = attempts === 0 ? 0 : Math.min(500 * Math.pow(2, attempts - 1), 10000);
+      if (delay > 0) {
+        reconnectTimer = setTimeout(_doConnect, delay);
+      } else {
+        _doConnect();
+      }
+    };
+
+    const _doConnect = () => {
+      if (closed) return;
+      reconnectTimer = null;
+      try {
+        ws = new WebSocket(wsUrl);
+      } catch {
+        console.error(`${_tag} WebSocket constructor failed`);
+        return;
+      }
+
+      ws.onopen = () => {
+        attempts = 0;
+        console.debug(`${_tag} connected, subscribing`);
+        ws!.send(JSON.stringify({ type: 'subscribe' }));
+      };
+
+      ws.onmessage = (ev) => {
+        try {
+          const event = JSON.parse(ev.data);
+          if (event.type === 'avatar_state') {
+            onState(event.data as AvatarState);
+          }
+        } catch {
+          // ignore parse errors
+        }
+      };
+
+      ws.onerror = () => { ws = null; };
+
+      ws.onclose = () => {
+        ws = null;
+        if (!closed && attempts < maxAttempts) {
+          attempts++;
+          connect();
+        }
+      };
+    };
+
+    connect();
+
+    return {
+      close: () => {
+        closed = true;
+        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+        if (ws) { ws.close(); ws = null; }
       },
-      reconnect: { maxAttempts: 10, delay: 3_000 },
-    });
-    return { close: () => sub.close() };
+    };
   },
 };
 

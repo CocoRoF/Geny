@@ -48,7 +48,7 @@ interface MessengerState {
   // Actions - Event stream
   _subscribeToEvents: (roomId: string) => void;
   _unsubscribeEvents: () => void;
-  _ensureSSE: () => void;
+  _ensureWS: () => void;
 
   // Actions - UI
   setCreateModalOpen: (open: boolean) => void;
@@ -183,7 +183,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => ({
             finished: false,
           },
         });
-        // Agent responses and broadcast completion arrive via SSE
+        // Agent responses and broadcast completion arrive via WebSocket
         // (`message`, `broadcast_status`, `broadcast_done` events).
         // No polling needed.
       }
@@ -291,7 +291,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => ({
     }
   },
 
-  _ensureSSE: () => {
+  _ensureWS: () => {
     const { activeRoomId, _eventSub } = get();
     if (activeRoomId && !_eventSub) {
       get()._subscribeToEvents(activeRoomId);

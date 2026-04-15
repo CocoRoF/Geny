@@ -45,6 +45,7 @@ from controller.curated_knowledge_controller import router as curated_knowledge_
 from routers.playground2d import router as playground2d_router
 from ws.execute_stream import router as ws_execute_router
 from ws.chat_stream import router as ws_chat_router
+from ws.avatar_stream import router as ws_avatar_router
 from service.config import get_config_manager
 from service.mcp_loader import MCPLoader, get_global_mcp_config
 import uvicorn
@@ -430,6 +431,7 @@ app.include_router(curated_knowledge_router)  # Curated Knowledge (refined knowl
 app.include_router(playground2d_router)  # Playground 2D world layout & state
 app.include_router(ws_execute_router)   # WebSocket: agent execution streaming
 app.include_router(ws_chat_router)      # WebSocket: chat room event streaming
+app.include_router(ws_avatar_router)    # WebSocket: avatar state streaming
 
 # Mount static files for Web UI Dashboard
 static_dir = Path(__file__).parent / "static"

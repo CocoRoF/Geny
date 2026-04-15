@@ -634,12 +634,9 @@ async def execute_agent_prompt(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── SSE helper ────────────────────────────────────────────────────────────────
-
-def _sse(event_type: str, data: dict) -> str:
-    """Format a single SSE event string."""
-    payload = json.dumps(data, ensure_ascii=False, default=str)
-    return f"event: {event_type}\ndata: {payload}\n\n"
+# NOTE: SSE helpers (_sse, _emit_avatar_state_for_log, _stream_execution_sse)
+# and SSE endpoints (GET /execute/events, POST /execute/stream) have been removed.
+# Execution streaming is now handled by ws/execute_stream.py (WebSocket).
 
 
 async def _emit_avatar_state_for_log(entry_dict: dict, session_id: str, app_state) -> None:
@@ -704,162 +701,8 @@ async def _emit_avatar_state_for_log(entry_dict: dict, session_id: str, app_stat
         pass  # Avatar state is best-effort; never break the SSE stream
 
 
-# ── Shared SSE helpers ────────────────────────────────────────────────────────
-
-
-async def _stream_execution_sse(holder: dict, session_id: str, app_state=None):
-    """Yield SSE events for a running execution.
-
-    Shared by ``/execute/events`` and ``/execute/stream``.
-    Polls the session logger cache every 150ms for new log entries
-    and streams them as ``log`` events until the execution completes.
-
-    A heartbeat is sent every ~15 seconds of inactivity to keep the
-    connection alive and report execution health (elapsed time, activity).
-
-    If ``app_state`` is provided and the session has a Live2D model assigned,
-    avatar state updates are automatically emitted based on log content.
-    """
-    session_logger = get_session_logger(session_id, create_if_missing=False)
-    cache_cursor = holder.get("cache_cursor", 0)
-    heartbeat_interval = 15.0  # seconds
-    last_event_time = time.monotonic()
-    start_time = holder.get("start_time", time.time())
-
-    yield _sse("status", {"status": "running", "message": "Execution started"})
-    last_event_time = time.monotonic()
-
-    def _build_heartbeat() -> dict:
-        """Build heartbeat payload with execution health data."""
-        now = time.time()
-        now_mono = time.monotonic()
-        elapsed_ms = int((now - start_time) * 1000)
-        last_write = session_logger.get_last_write_at() if session_logger else 0
-        last_activity_ms = int((now_mono - last_write) * 1000) if last_write > 0 else elapsed_ms
-        entry_info = session_logger.get_last_entry_info() if session_logger else {}
-        return {
-            "ts": now,
-            "elapsed_ms": elapsed_ms,
-            "last_activity_ms": last_activity_ms,
-            "log_count": cache_cursor,
-            "last_event_level": entry_info.get("level"),
-            "last_tool_name": entry_info.get("tool_name"),
-        }
-
-    try:
-        while not holder.get("done"):
-            had_data = False
-            if session_logger:
-                new_entries, cache_cursor = session_logger.get_cache_entries_since(cache_cursor)
-                for entry in new_entries:
-                    entry_dict = entry.to_dict()
-                    yield _sse("log", entry_dict)
-                    # Emit avatar state change based on log content
-                    if app_state:
-                        await _emit_avatar_state_for_log(entry_dict, session_id, app_state)
-                    had_data = True
-            if had_data:
-                last_event_time = time.monotonic()
-            elif time.monotonic() - last_event_time >= heartbeat_interval:
-                yield _sse("heartbeat", _build_heartbeat())
-                last_event_time = time.monotonic()
-            await asyncio.sleep(0.15)
-
-        # Final drain — pick up entries written during last poll cycle
-        await asyncio.sleep(0.05)
-        if session_logger:
-            final_entries, cache_cursor = session_logger.get_cache_entries_since(cache_cursor)
-            for entry in final_entries:
-                yield _sse("log", entry.to_dict())
-
-    except Exception as e:
-        logger.error(f"SSE stream error: {e}", exc_info=True)
-        yield _sse("error", {"error": str(e)})
-
-    # Emit final result or error
-    if holder.get("error"):
-        yield _sse("status", {"status": "error", "message": holder["error"]})
-        yield _sse("result", holder.get("result", {}))
-    else:
-        yield _sse("status", {"status": "completed", "message": "Execution completed"})
-        yield _sse("result", holder.get("result", {}))
-
-    yield _sse("done", {})
-
-    # Cleanup execution holder
-    cleanup_execution(session_id)
-
 
 # ── Execution endpoints (delegating to agent_executor) ────────────────────────
-
-
-@router.post("/{session_id}/execute/start")
-async def start_agent_execution(
-    session_id: str = Path(..., description="Session ID"),
-    request: ExecuteRequest = ...,
-    auth: dict = Depends(require_auth),
-):
-    """
-    Start prompt execution in the background.
-
-    Returns immediately while the graph runs asynchronously.
-    Use the ``GET /execute/events`` SSE endpoint to stream
-    real-time log events.
-
-    All execution concerns (auto-revival, session logging, cost
-    tracking, double-execution prevention) are handled by
-    ``agent_executor.start_command_background``.
-    """
-    try:
-        await start_command_background(
-            session_id=session_id,
-            prompt=request.prompt,
-            timeout=request.timeout,
-            system_prompt=request.system_prompt,
-            max_turns=request.max_turns,
-        )
-    except AgentNotFoundError:
-        raise HTTPException(status_code=404, detail=f"AgentSession not found: {session_id}")
-    except AgentNotAliveError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except AlreadyExecutingError:
-        raise HTTPException(status_code=409, detail="Execution already in progress")
-
-    return {"session_id": session_id, "status": "started"}
-
-
-@router.get("/{session_id}/execute/events")
-async def stream_execution_events(
-    session_id: str = Path(..., description="Session ID"),
-    request: Request = None,
-):
-    """
-    SSE event stream for a running execution.
-
-    Call ``POST /execute/start`` first, then connect to this endpoint
-    with ``EventSource`` (GET-based SSE).
-
-    SSE event types emitted:
-      - ``log``    : new log entry
-      - ``status`` : execution status update
-      - ``result`` : final execution result
-      - ``done``   : stream complete sentinel
-      - ``error``  : execution error
-    """
-    holder = get_execution_holder(session_id)
-    if not holder:
-        raise HTTPException(status_code=404, detail="No active execution for this session")
-
-    app_state = request.app.state if request else None
-    return StreamingResponse(
-        _stream_execution_sse(holder, session_id, app_state=app_state),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
 
 
 @router.get("/{session_id}/execute/status")
@@ -903,55 +746,6 @@ async def get_execution_status(
         "last_tool_name": entry_info.get("tool_name"),
     }
 
-
-@router.post("/{session_id}/execute/stream")
-async def execute_agent_prompt_stream(
-    session_id: str = Path(..., description="Session ID"),
-    execute_request: ExecuteRequest = ...,
-    http_request: Request = None,
-    auth: dict = Depends(require_auth),
-):
-    """
-    Execute prompt with real-time SSE log streaming.
-
-    Starts execution via ``start_command_background`` and streams
-    log events in real time until completion.
-
-    SSE event types:
-      - log       : a new log entry (same shape as LogEntry)
-      - status    : execution status update (running / completed / error)
-      - result    : final execution result (ExecuteResponse shape)
-      - done      : stream complete sentinel
-      - error     : top-level error
-    """
-    app_state = http_request.app.state if http_request else None
-
-    async def event_stream():
-        try:
-            holder = await start_command_background(
-                session_id=session_id,
-                prompt=execute_request.prompt,
-                timeout=execute_request.timeout,
-                system_prompt=execute_request.system_prompt,
-                max_turns=execute_request.max_turns,
-            )
-        except (AgentNotFoundError, AgentNotAliveError, AlreadyExecutingError) as e:
-            yield _sse("error", {"error": str(e)})
-            yield _sse("done", {})
-            return
-
-        async for event in _stream_execution_sse(holder, session_id, app_state=app_state):
-            yield event
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
 
 
 # ============================================================================
