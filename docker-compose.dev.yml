@@ -4,6 +4,11 @@
 #  소스 코드가 바인드 마운트되어 로컬 편집이 컨테이너에 즉시 반영됩니다.
 #  TTS 로컬 엔진은 --profile tts-local 로 활성화할 수 있습니다.
 #
+#  nginx 리버스 프록시를 통해 단일 포트로 접근합니다.
+#    /api/*  → backend:8000
+#    /ws/*   → backend:8000 (WebSocket)
+#    /*      → frontend:3000 (HMR / Fast Refresh 포함)
+#
 #  - Backend : uvicorn --reload (watchfiles 기반 hot reload)
 #  - Frontend: next dev (HMR / Fast Refresh)
 #
@@ -55,8 +60,8 @@ services:
     container_name: geny-backend-dev
     init: true
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+    expose:
+      - "8000"
     env_file:
       - path: ./backend/.env
         required: false
@@ -96,11 +101,11 @@ services:
     container_name: geny-frontend-dev
     init: true
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
+    expose:
+      - "3000"
     environment:
       - API_URL=http://backend:8000
-      - NEXT_PUBLIC_BACKEND_PORT=${BACKEND_PORT:-8000}
+      - NEXT_PUBLIC_API_URL=
       - NEXT_PUBLIC_GPT_SOVITS_WEBUI_PORT=${GPT_SOVITS_WEBUI_PORT:-9874}
       - PORT=3000
       - HOSTNAME=0.0.0.0
@@ -112,6 +117,24 @@ services:
       - ./frontend/tsconfig.json:/app/tsconfig.json
       - ./frontend/postcss.config.mjs:/app/postcss.config.mjs
     depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - geny-net-dev
+
+  # ── Nginx Reverse Proxy ───────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: geny-nginx-dev
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT:-58443}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      frontend:
+        condition: service_started
       backend:
         condition: service_healthy
     networks:
