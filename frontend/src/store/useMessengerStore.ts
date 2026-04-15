@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { chatApi } from '@/lib/api';
+import { getChatWSManager } from '@/lib/chatWsManager';
 import type { ChatRoom, ChatRoomMessage, BroadcastStatus, AgentProgressState, FileChanges } from '@/types';
 
 interface MessengerState {
@@ -19,6 +20,9 @@ interface MessengerState {
   // Broadcast progress
   broadcastStatus: BroadcastStatus | null;
   agentProgress: AgentProgressState[] | null;  // NEW: per-agent progress
+
+  // WebSocket connection state
+  connectionState: 'connected' | 'reconnecting' | 'disconnected';
 
   // Event subscription (internal)
   _eventSub: { close: () => void } | null;
@@ -76,6 +80,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => ({
   isSending: false,
   broadcastStatus: null,
   agentProgress: null,
+  connectionState: 'disconnected' as const,
   _eventSub: null,
   _lastMsgId: null,
   createModalOpen: false,
@@ -103,7 +108,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => ({
     _unsubscribeEvents();
 
     if (!roomId) {
-      set({ activeRoomId: null, messages: [], mobileSidebarOpen: false, broadcastStatus: null, _lastMsgId: null, hasMoreMessages: false });
+      set({ activeRoomId: null, messages: [], mobileSidebarOpen: false, broadcastStatus: null, _lastMsgId: null, hasMoreMessages: false, connectionState: 'disconnected' });
       return;
     }
     set({ activeRoomId: roomId, loadingMessages: true, mobileSidebarOpen: false, broadcastStatus: null });
@@ -132,7 +137,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => ({
       }
       set(s => ({
         rooms: s.rooms.filter(r => r.id !== roomId),
-        ...(activeRoomId === roomId ? { activeRoomId: null, messages: [], broadcastStatus: null, _lastMsgId: null } : {}),
+        ...(activeRoomId === roomId ? { activeRoomId: null, messages: [], broadcastStatus: null, _lastMsgId: null, connectionState: 'disconnected' as const } : {}),
       }));
     } catch {
       /* ignore */
@@ -240,47 +245,56 @@ export const useMessengerStore = create<MessengerState>((set, get) => ({
     const { _lastMsgId, _unsubscribeEvents } = get();
     _unsubscribeEvents();
 
-    const sub = chatApi.subscribeToRoom(
-      roomId,
-      _lastMsgId,
-      (eventType, eventData) => {
-        const state = get();
-        if (state.activeRoomId !== roomId) return;
+    const handler = (eventType: string, eventData: Record<string, unknown>) => {
+      const state = get();
+      if (state.activeRoomId !== roomId) return;
 
-        switch (eventType) {
-          case 'message': {
-            const msg = eventData as unknown as ChatRoomMessage;
-            set(s => {
-              if (s.messages.some(m => m.id === msg.id)) return {};
-              return {
-                messages: [...s.messages, msg],
-                _lastMsgId: msg.id,
-              };
-            });
-            break;
-          }
-          case 'broadcast_status': {
-            const status = eventData as unknown as BroadcastStatus;
-            set({ broadcastStatus: status });
-            break;
-          }
-          case 'agent_progress': {
-            // Per-agent execution progress with thinking previews
-            const progress = eventData as unknown as { broadcast_id: string; agents: AgentProgressState[] };
-            set({ agentProgress: progress.agents });
-            break;
-          }
-          case 'broadcast_done': {
-            set({ broadcastStatus: null, agentProgress: null });
-            get().fetchRooms();
-            break;
-          }
+      switch (eventType) {
+        case 'message': {
+          const msg = eventData as unknown as ChatRoomMessage;
+          set(s => {
+            if (s.messages.some(m => m.id === msg.id)) return {};
+            return {
+              messages: [...s.messages, msg],
+              _lastMsgId: msg.id,
+            };
+          });
+          break;
         }
-      },
-      () => get()._lastMsgId,
-    );
+        case 'broadcast_status': {
+          const status = eventData as unknown as BroadcastStatus;
+          set({ broadcastStatus: status });
+          break;
+        }
+        case 'agent_progress': {
+          const progress = eventData as unknown as { broadcast_id: string; agents: AgentProgressState[] };
+          set({ agentProgress: progress.agents });
+          break;
+        }
+        case 'broadcast_done': {
+          set({ broadcastStatus: null, agentProgress: null });
+          get().fetchRooms();
+          break;
+        }
+        // WebSocket 연결 상태 이벤트
+        case '_ws_connected': {
+          set({ connectionState: 'connected' });
+          break;
+        }
+        case '_ws_reconnecting': {
+          set({ connectionState: 'reconnecting' });
+          break;
+        }
+        case '_ws_failed': {
+          set({ connectionState: 'disconnected' });
+          break;
+        }
+      }
+    };
 
-    set({ _eventSub: sub });
+    // ChatRoomWSManager를 통해 구독 — roomId당 단일 WS 보장
+    const unsub = getChatWSManager().subscribe(roomId, _lastMsgId, handler, () => get()._lastMsgId);
+    set({ _eventSub: { close: unsub } });
   },
 
   _unsubscribeEvents: () => {

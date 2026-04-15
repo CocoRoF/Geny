@@ -3,12 +3,23 @@
  *
  * 책임:
  *  - AudioContext 초기화 + resume (브라우저 자동재생 정책 대응)
+ *  - TTS 재생 큐: 다중 에이전트 응답을 순차 재생 (이전 재생을 중단하지 않음)
  *  - StreamingResponse → Blob → Audio 재생
  *  - Web Audio API: MediaElementSource → AnalyserNode → GainNode → destination
  *  - 진폭 콜백: requestAnimationFrame 루프에서 RMS 계산 (립싱크용)
  *  - 볼륨 제어: GainNode.gain 조절
- *  - stop / dispose
+ *  - stop / clearQueue / dispose
+ *  - AbortController 지원: 큐 비우기 시 진행 중 TTS fetch 취소
  */
+
+export interface TTSQueueItem {
+  response: Response;
+  sessionId: string;
+  onStart?: () => void;
+  onEnd?: () => void;
+  /** Pre-fetch된 Blob promise (큐 처리 시 다음 아이템 미리 준비) */
+  _prefetchPromise?: Promise<Blob | null>;
+}
 
 export class AudioManager {
   private audioContext: AudioContext | null = null;
@@ -20,6 +31,11 @@ export class AudioManager {
   private animFrameId: number | null = null;
   private _volume: number = 0.7;
 
+  // ── TTS 큐 시스템 ──
+  private _queue: TTSQueueItem[] = [];
+  private _isProcessingQueue = false;
+  private _currentOnEnd: (() => void) | null = null;
+
   /**
    * AudioContext 초기화 (사용자 인터랙션 후 호출 필요)
    */
@@ -28,7 +44,6 @@ export class AudioManager {
     this.audioContext = new AudioContext();
 
     // Chrome/Safari: AudioContext는 suspended 상태로 시작될 수 있음.
-    // 명시적으로 resume해야 오디오 파이프라인이 동작함.
     if (this.audioContext.state === 'suspended') {
       await this.audioContext.resume();
     }
@@ -43,77 +58,188 @@ export class AudioManager {
   }
 
   /**
-   * TTS 스트리밍 오디오 재생
-   * Response body를 Blob으로 변환 → Audio 엘리먼트 재생
+   * TTS 응답을 큐에 추가. 현재 재생 중이면 대기, 아니면 즉시 재생.
+   * 이전 재생을 중단하지 않고 순차적으로 재생한다.
    */
-  async playTTSResponse(
+  async enqueue(
     response: Response,
+    sessionId: string,
     onStart?: () => void,
     onEnd?: () => void,
   ): Promise<void> {
-    await this.init();
-    this.stop(); // 이전 재생 중지
-
-    if (!response.ok || !response.body) {
-      throw new Error(`TTS response error: ${response.status}`);
+    this._queue.push({ response, sessionId, onStart, onEnd });
+    if (!this._isProcessingQueue) {
+      await this._processQueue();
     }
+  }
+
+  /**
+   * 큐에 쌓인 모든 TTS 아이템을 순차 재생.
+   * Pre-fetch: 현재 아이템 재생 중 다음 아이템의 Blob을 미리 준비하여
+   * 연속 재생 시 체감 지연 최소화.
+   */
+  private async _processQueue(): Promise<void> {
+    if (this._isProcessingQueue) return;
+    this._isProcessingQueue = true;
+
+    try {
+      while (this._queue.length > 0) {
+        const item = this._queue.shift()!;
+
+        // Pre-fetch: 다음 아이템이 있으면 Blob 준비를 미리 시작
+        if (this._queue.length > 0 && !this._queue[0]._prefetchPromise) {
+          const next = this._queue[0];
+          next._prefetchPromise = this._fetchBlob(next.response, next.sessionId);
+        }
+
+        await this._playOne(item);
+      }
+    } finally {
+      this._isProcessingQueue = false;
+    }
+  }
+
+  /**
+   * Response body를 Blob으로 변환 (pre-fetch용 분리).
+   */
+  private async _fetchBlob(response: Response, sessionId: string): Promise<Blob | null> {
+    if (!response.ok || !response.body) return null;
+    try {
+      const reader = response.body.getReader();
+      const chunks: BlobPart[] = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+      const contentType = response.headers.get('content-type') || 'audio/mpeg';
+      const blob = new Blob(chunks, { type: contentType });
+      if (blob.size === 0) return null;
+      console.info(`[AudioManager] prefetch ready: ${blob.size} bytes, session=${sessionId.slice(0, 8)}`);
+      return blob;
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return null;
+      console.error('[AudioManager] prefetch error:', err);
+      return null;
+    }
+  }
+
+  /**
+   * 단일 TTS 응답 재생 (내부용).
+   * Pre-fetch된 Blob이 있으면 즉시 사용, 없으면 직접 fetch.
+   * 재생이 완료되거나 에러가 발생하면 resolve.
+   */
+  private async _playOne(item: TTSQueueItem): Promise<void> {
+    await this.init();
+
+    // 이전 재생 중지 (큐 처리 중이므로 이전 아이템이 끝났어야 하지만 안전장치)
+    this._stopCurrent();
 
     // AudioContext가 suspended면 재생 전에 반드시 resume
     if (this.audioContext?.state === 'suspended') {
       await this.audioContext.resume();
     }
 
-    // 스트리밍 바디 → Blob
-    const reader = response.body.getReader();
-    const chunks: BlobPart[] = [];
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
+    try {
+      // Pre-fetch된 Blob이 있으면 사용, 없으면 직접 fetch
+      let blob: Blob | null = null;
+      if (item._prefetchPromise) {
+        blob = await item._prefetchPromise;
+      } else {
+        blob = await this._fetchBlob(item.response, item.sessionId);
+      }
+
+      if (!blob) {
+        console.error('[AudioManager] TTS returned no audio');
+        item.onEnd?.();
+        return;
+      }
+
+      console.info(`[AudioManager] playing: ${blob.size} bytes, session=${item.sessionId.slice(0, 8)}`);
+      await this._playBlob(blob, item.onStart, item.onEnd);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        console.info('[AudioManager] TTS fetch aborted (queue cleared)');
+      } else {
+        console.error('[AudioManager] TTS playback error:', err);
+      }
+      item.onEnd?.();
     }
-    const contentType = response.headers.get('content-type') || 'audio/mpeg';
-    const blob = new Blob(chunks, { type: contentType });
+  }
 
-    // 빈 오디오 검증
-    if (blob.size === 0) {
-      console.error('[AudioManager] TTS returned empty audio (0 bytes)');
-      throw new Error('TTS returned empty audio');
-    }
+  /**
+   * Blob을 Audio 엘리먼트로 재생하고, 완료 시 resolve.
+   */
+  private _playBlob(
+    blob: Blob,
+    onStart?: () => void,
+    onEnd?: () => void,
+  ): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      this.currentAudio = audio;
+      this._currentOnEnd = onEnd ?? null;
 
-    console.info(`[AudioManager] audio ready: ${blob.size} bytes, type=${contentType}`);
+      if (this.audioContext && this.analyser && this.gainNode) {
+        this.sourceNode = this.audioContext.createMediaElementSource(audio);
+        this.sourceNode.connect(this.analyser);
+        this.analyser.connect(this.gainNode);
+        this.startAmplitudeTracking();
+      }
 
-    const url = URL.createObjectURL(blob);
+      const cleanup = () => {
+        this.stopAmplitudeTracking();
+        URL.revokeObjectURL(url);
+        if (this.currentAudio === audio) {
+          this.currentAudio = null;
+          this._currentOnEnd = null;
+        }
+        if (this.sourceNode) {
+          try { this.sourceNode.disconnect(); } catch { /* already disconnected */ }
+          this.sourceNode = null;
+        }
+      };
 
-    // Audio 엘리먼트 생성 및 Web Audio API 연결
-    const audio = new Audio(url);
-    this.currentAudio = audio;
+      audio.onplay = () => {
+        console.info('[AudioManager] playback started');
+        onStart?.();
+      };
 
-    if (this.audioContext && this.analyser && this.gainNode) {
-      this.sourceNode = this.audioContext.createMediaElementSource(audio);
-      this.sourceNode.connect(this.analyser);
-      this.analyser.connect(this.gainNode);
-      this.startAmplitudeTracking();
-    }
+      audio.onended = () => {
+        console.info('[AudioManager] playback ended');
+        cleanup();
+        onEnd?.();
+        resolve();
+      };
 
-    audio.onplay = () => {
-      console.info('[AudioManager] playback started');
-      onStart?.();
-    };
-    audio.onended = () => {
-      console.info('[AudioManager] playback ended');
-      this.stopAmplitudeTracking();
-      onEnd?.();
-      URL.revokeObjectURL(url);
-    };
-    audio.onerror = () => {
-      const err = audio.error;
-      console.error('[AudioManager] audio error:', err?.code, err?.message);
-      this.stopAmplitudeTracking();
-      onEnd?.();
-      URL.revokeObjectURL(url);
-    };
+      audio.onerror = () => {
+        const err = audio.error;
+        console.error('[AudioManager] audio error:', err?.code, err?.message);
+        cleanup();
+        onEnd?.();
+        resolve();
+      };
 
-    await audio.play();
+      audio.play().catch((playErr) => {
+        console.error('[AudioManager] audio.play() rejected:', playErr);
+        cleanup();
+        onEnd?.();
+        resolve();
+      });
+    });
+  }
+
+  /**
+   * TTS 스트리밍 오디오 재생 (하위 호환성 유지).
+   * 내부적으로 enqueue를 사용하므로 큐에 추가된다.
+   */
+  async playTTSResponse(
+    response: Response,
+    onStart?: () => void,
+    onEnd?: () => void,
+  ): Promise<void> {
+    await this.enqueue(response, '', onStart, onEnd);
   }
 
   /**
@@ -174,18 +300,59 @@ export class AudioManager {
     return this.audioContext;
   }
 
-  /** 현재 재생 중지 */
-  stop(): void {
+  /**
+   * 현재 재생만 중지 (큐의 다음 아이템은 유지).
+   * onEnd 콜백을 반드시 호출하여 ttsSpeaking 상태를 정리.
+   */
+  private _stopCurrent(): void {
     this.stopAmplitudeTracking();
+    const pendingOnEnd = this._currentOnEnd;
+    this._currentOnEnd = null;
+
     if (this.currentAudio) {
+      // 이벤트 핸들러 제거하여 중복 호출 방지
+      this.currentAudio.onended = null;
+      this.currentAudio.onerror = null;
+      this.currentAudio.onplay = null;
       this.currentAudio.pause();
       this.currentAudio.src = '';
       this.currentAudio = null;
     }
     if (this.sourceNode) {
-      this.sourceNode.disconnect();
+      try { this.sourceNode.disconnect(); } catch { /* already disconnected */ }
       this.sourceNode = null;
     }
+
+    // onEnd 콜백을 반드시 호출하여 외부 상태(ttsSpeaking 등)를 정리
+    pendingOnEnd?.();
+  }
+
+  /**
+   * 현재 재생 중지 (공개 API).
+   * 큐는 유지됨. 큐까지 비우려면 clearQueue() 사용.
+   */
+  stop(): void {
+    this._stopCurrent();
+  }
+
+  /**
+   * 큐의 모든 대기 아이템을 비우고, 현재 재생도 중지.
+   * 각 대기 아이템의 onEnd를 호출하여 상태 정리.
+   */
+  clearQueue(): void {
+    // 대기 중인 아이템들의 onEnd 콜백 호출
+    const pendingItems = this._queue.splice(0);
+    for (const item of pendingItems) {
+      item.onEnd?.();
+    }
+    // 현재 재생 중지
+    this._stopCurrent();
+    this._isProcessingQueue = false;
+  }
+
+  /** 큐에 대기 중인 아이템 수 */
+  get queueLength(): number {
+    return this._queue.length;
   }
 
   /** 재생 중 여부 */
@@ -195,7 +362,7 @@ export class AudioManager {
 
   /** 정리 */
   dispose(): void {
-    this.stop();
+    this.clearQueue();
     this.audioContext?.close();
     this.audioContext = null;
   }

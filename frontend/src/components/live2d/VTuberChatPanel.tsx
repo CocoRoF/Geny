@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { chatApi } from '@/lib/api';
+import { getChatWSManager } from '@/lib/chatWsManager';
 import { useVTuberStore } from '@/store/useVTuberStore';
 import { useI18n } from '@/lib/i18n';
 import { parseEmotion, EMOTION_COLORS, ChatMarkdown, FileChangeSummary, AgentBadge, ExecutionMeta, MessageBubble } from '@/components/chat';
@@ -125,11 +126,36 @@ export default function VTuberChatPanel({
   const lastMsgIdRef = useRef<string | null>(null);
   const sseRef = useRef<{ close: () => void } | null>(null);
 
+  // 백그라운드 탭 감지: 백그라운드에서 수신된 assistant 메시지는 TTS에 넣지 않고
+  // 마지막 메시지만 기록해두었다가 탭 복귀 시 재생
+  const isTabVisibleRef = useRef(typeof document !== 'undefined' ? !document.hidden : true);
+  const pendingTTSRef = useRef<{ text: string; emotion: string } | null>(null);
+
   // TTS store
   const ttsEnabled = useVTuberStore((s) => s.ttsEnabled);
   const ttsSpeaking = useVTuberStore((s) => s.ttsSpeaking[sessionId] ?? false);
   const speakResponse = useVTuberStore((s) => s.speakResponse);
   const stopSpeaking = useVTuberStore((s) => s.stopSpeaking);
+
+  // 탭 visibility 감지 + 복귀 시 마지막 대기 TTS 재생
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const wasHidden = !isTabVisibleRef.current;
+      isTabVisibleRef.current = !document.hidden;
+
+      // 탭 복귀 시: 백그라운드에서 쌓인 마지막 메시지만 TTS 재생
+      if (wasHidden && isTabVisibleRef.current) {
+        const pending = pendingTTSRef.current;
+        if (pending && useVTuberStore.getState().ttsEnabled) {
+          pendingTTSRef.current = null;
+          useVTuberStore.getState().speakResponse(sessionId, pending.text, pending.emotion);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [sessionId]);
 
   // Convert ChatRoomMessage to display format
   const toDisplayMessage = useCallback((msg: ChatRoomMessage): ChatMessage => {
@@ -172,8 +198,8 @@ export default function VTuberChatPanel({
           lastMsgIdRef.current = historyResp.messages[historyResp.messages.length - 1].id;
         }
 
-        // Subscribe to WebSocket for live updates (falls back to SSE)
-        const sub = chatApi.subscribeToRoom(
+        // Subscribe via ChatRoomWSManager — roomId당 단일 WS 보장
+        const unsub = getChatWSManager().subscribe(
           roomId,
           lastMsgIdRef.current,
           (eventType, eventData) => {
@@ -204,7 +230,13 @@ export default function VTuberChatPanel({
                 if (cleanText.trim()) {
                   const store = useVTuberStore.getState();
                   if (store.ttsEnabled) {
-                    store.speakResponse(sessionId, cleanText, emotion);
+                    if (isTabVisibleRef.current) {
+                      // 탭이 보이면 즉시 TTS 큐에 추가
+                      store.speakResponse(sessionId, cleanText, emotion);
+                    } else {
+                      // 백그라운드 탭: 마지막 메시지만 기록 (탭 복귀 시 재생)
+                      pendingTTSRef.current = { text: cleanText, emotion };
+                    }
                   }
                 }
               }
@@ -236,7 +268,7 @@ export default function VTuberChatPanel({
           () => lastMsgIdRef.current,
         );
 
-        sseRef.current = sub;
+        sseRef.current = { close: unsub };
       } catch (e) {
         console.error('[VTuberChatPanel] Failed to init chat room:', e);
         setHistoryLoaded(true);

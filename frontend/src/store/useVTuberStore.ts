@@ -6,6 +6,9 @@ import type { Live2dModelInfo, AvatarState, VTuberLogEntry } from '@/types';
 const MAX_LOGS = 500;
 let _logIdCounter = 0;
 
+// TTS fetch 취소용 AbortController (세션별)
+const _ttsAbortControllers: Map<string, AbortController> = new Map();
+
 interface VTuberState {
   // Models
   models: Live2dModelInfo[];
@@ -205,18 +208,35 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
     const { ttsEnabled } = get();
     if (!ttsEnabled) return;
 
+    // 이전 TTS fetch가 아직 진행 중이면 abort하여 네트워크 낭비 방지
+    // (큐 시스템은 유지: 이미 큐에 들어간 아이템은 순차 재생)
+    const prevController = _ttsAbortControllers.get(sessionId);
+    if (prevController) {
+      prevController.abort();
+    }
+    const controller = new AbortController();
+    _ttsAbortControllers.set(sessionId, controller);
+
     try {
       set((s) => ({
         ttsSpeaking: { ...s.ttsSpeaking, [sessionId]: true },
       }));
       get().addLog(sessionId, 'info', 'TTS', `Speaking: "${text.slice(0, 50)}..." (${emotion})`);
 
-      const response = await ttsApi.speak(sessionId, text, emotion);
+      const response = await ttsApi.speak(sessionId, text, emotion, undefined, undefined, controller.signal);
+
+      // fetch가 완료되면 AbortController 정리
+      if (_ttsAbortControllers.get(sessionId) === controller) {
+        _ttsAbortControllers.delete(sessionId);
+      }
+
       const audioManager = getAudioManager();
       audioManager.setVolume(get().ttsVolume);
 
-      await audioManager.playTTSResponse(
+      // 큐에 추가 — 이전 재생을 중단하지 않고 순차 재생
+      await audioManager.enqueue(
         response,
+        sessionId,
         () => {
           get().addLog(sessionId, 'debug', 'TTS', 'Audio playback started');
         },
@@ -228,6 +248,11 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
         },
       );
     } catch (err) {
+      // AbortError는 정상적인 취소 — 에러 로그 생략
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        get().addLog(sessionId, 'debug', 'TTS', 'Previous TTS fetch aborted (new request)');
+        return;
+      }
       console.error('[VTuber] TTS speak error:', err);
       set((s) => ({
         ttsSpeaking: { ...s.ttsSpeaking, [sessionId]: false },
@@ -237,10 +262,18 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
   },
 
   stopSpeaking: (sessionId) => {
-    getAudioManager().stop();
+    // 진행 중인 TTS fetch 취소
+    const controller = _ttsAbortControllers.get(sessionId);
+    if (controller) {
+      controller.abort();
+      _ttsAbortControllers.delete(sessionId);
+    }
+    // clearQueue: 큐의 모든 대기 아이템 비우기 + 현재 재생 중지
+    // 각 아이템의 onEnd 콜백이 호출되어 ttsSpeaking 상태가 정리됨
+    getAudioManager().clearQueue();
     set((s) => ({
       ttsSpeaking: { ...s.ttsSpeaking, [sessionId]: false },
     }));
-    get().addLog(sessionId, 'info', 'TTS', 'Playback stopped');
+    get().addLog(sessionId, 'info', 'TTS', 'Playback stopped (queue cleared)');
   },
 }));

@@ -25,6 +25,7 @@ from service.execution.agent_executor import (
     execute_command,
     is_executing,
     get_execution_holder,
+    stop_execution,
     AlreadyExecutingError,
     AgentNotFoundError,
     AgentNotAliveError,
@@ -415,7 +416,35 @@ async def broadcast_to_room(room_id: str, request: RoomBroadcastRequest):
                 "role": a.role.value if hasattr(a.role, "value") else str(a.role),
             }
 
-    # 3. Create broadcast state and launch background processing
+    # 3. Cancel any in-flight broadcast for this room before starting a new one.
+    #    Without this, _active_broadcasts[room_id] would be silently overwritten,
+    #    causing the old broadcast's state to be lost and its broadcast_done event
+    #    to never reach clients.
+    existing_broadcast = _active_broadcasts.get(room_id)
+    if existing_broadcast and not existing_broadcast.finished:
+        logger.warning(
+            "Room %s: cancelling previous broadcast %s (still in-flight) before starting new one",
+            room_id[:8], existing_broadcast.broadcast_id[:8],
+        )
+        existing_broadcast.cancelled = True
+        # Best-effort stop of executing agents from the old broadcast
+        for sid, astate in existing_broadcast.agent_states.items():
+            if astate.status == "executing":
+                try:
+                    stopped = await stop_execution(sid)
+                    if stopped:
+                        astate.status = "cancelled"
+                except Exception as cancel_err:
+                    logger.debug(
+                        "Room %s: failed to stop agent %s during auto-cancel: %s",
+                        room_id[:8], sid[:8], cancel_err,
+                    )
+            elif astate.status in ("pending", "queued"):
+                astate.status = "cancelled"
+        existing_broadcast.finished = True
+        _notify_room(room_id)
+
+    # Create broadcast state and launch background processing
     broadcast_id = str(uuid.uuid4())
 
     # Initialize per-agent states
@@ -477,7 +506,6 @@ async def cancel_broadcast(room_id: str):
     for sid, astate in bstate.agent_states.items():
         if astate.status == "executing":
             try:
-                from service.execution.agent_executor import stop_execution
                 stopped = await stop_execution(sid)
                 if stopped:
                     astate.status = "cancelled"

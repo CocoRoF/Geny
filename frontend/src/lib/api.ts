@@ -570,7 +570,7 @@ export const chatApi = {
     afterId: string | null,
     onEvent: (eventType: string, eventData: Record<string, unknown>) => void,
     getLatestMsgId?: () => string | null,
-  ): { close: () => void } => {
+  ): { close: () => void; reconnect: () => void } => {
     const wsUrl = getChatWsUrl(roomId);
     const _tag = `[ChatWS:${roomId.slice(0, 8)}]`;
     let ws: WebSocket | null = null;
@@ -615,10 +615,13 @@ export const chatApi = {
 
       ws.onopen = () => {
         clearTimeout(connectTimeout);
+        const wasReconnecting = attempts > 0;
         attempts = 0;
         const currentAfter = getLatestMsgId?.() ?? afterId;
         console.info(`${_tag} connected, subscribe after=${currentAfter}`);
         ws!.send(JSON.stringify({ type: 'subscribe', after: currentAfter }));
+        // 연결 상태를 이벤트로 전달
+        onEvent('_ws_connected', { reconnected: wasReconnecting });
       };
 
       ws.onmessage = (ev) => {
@@ -649,9 +652,13 @@ export const chatApi = {
 
         if (attempts < maxAttempts) {
           attempts++;
+          // 재연결 중임을 이벤트로 알림
+          onEvent('_ws_reconnecting', { attempt: attempts, maxAttempts });
           connect();
         } else {
           console.error(`${_tag} max reconnect attempts (${maxAttempts}) reached, url=${wsUrl}`);
+          // 최대 재연결 실패 시 이벤트로 알림 — UI에서 수동 재연결 버튼 표시 가능
+          onEvent('_ws_failed', { attempts: maxAttempts, url: wsUrl });
         }
       };
     };
@@ -663,6 +670,16 @@ export const chatApi = {
         closed = true;
         if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
         if (ws) { ws.close(); ws = null; }
+      },
+      /** 수동 재연결: 최대 시도 횟수 리셋 후 재연결 시작 */
+      reconnect: () => {
+        if (closed) return;
+        // 기존 연결 정리
+        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+        if (ws) { ws.close(); ws = null; }
+        // 카운터 리셋 후 재연결
+        attempts = 0;
+        connect();
       },
     };
   },
@@ -978,6 +995,16 @@ export const vtuberApi = {
         if (!closed && attempts < maxAttempts) {
           attempts++;
           connect();
+        } else if (!closed) {
+          console.error(`${_tag} max reconnect attempts (${maxAttempts}) reached`);
+          // 30초 후 카운터 리셋하여 다시 시도 (영구 연결 끊김 방지)
+          reconnectTimer = setTimeout(() => {
+            if (!closed) {
+              console.info(`${_tag} resetting reconnect counter, retrying`);
+              attempts = 0;
+              connect();
+            }
+          }, 30000);
         }
       };
     };
@@ -1260,12 +1287,14 @@ export const ttsApi = {
     emotion: string = 'neutral',
     language?: string,
     engine?: string,
+    signal?: AbortSignal,
   ): Promise<Response> => {
     const backendUrl = getBackendUrl();
     return fetch(`${backendUrl}/api/tts/agents/${sessionId}/speak`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, emotion, language, engine }),
+      signal,
     });
   },
 

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { chatApi } from '@/lib/api';
+import { getChatWSManager } from '@/lib/chatWsManager';
 import { useI18n } from '@/lib/i18n';
 import {
   Send, Loader2, MessageCircle, Users, Bot, User,
@@ -88,7 +89,7 @@ export default function ChatTab() {
     eventSubRef.current?.close();
     eventSubRef.current = null;
 
-    const sub = chatApi.subscribeToRoom(roomId, lastMsgIdRef.current, (eventType, eventData) => {
+    const unsub = getChatWSManager().subscribe(roomId, lastMsgIdRef.current, (eventType, eventData) => {
       switch (eventType) {
         case 'message': {
           const msg = eventData as unknown as ChatRoomMessage;
@@ -115,7 +116,7 @@ export default function ChatTab() {
         }
       }
     });
-    eventSubRef.current = sub;
+    eventSubRef.current = { close: unsub };
   }, []);
 
   // Cleanup on unmount

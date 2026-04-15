@@ -257,6 +257,39 @@ function ItemRenderer({ item }: { item: ListItem }) {
 
 // ── Main Component ──
 
+function ConnectionBanner() {
+  const connectionState = useMessengerStore((s) => s.connectionState);
+  const ensureWS = useMessengerStore((s) => s._ensureWS);
+  const { t } = useI18n();
+
+  if (connectionState === 'connected') return null;
+
+  return (
+    <div className={`flex items-center justify-center gap-2 px-4 py-1.5 text-[0.75rem] font-medium ${
+      connectionState === 'reconnecting'
+        ? 'bg-yellow-500/10 text-yellow-400'
+        : 'bg-red-500/10 text-red-400'
+    }`}>
+      {connectionState === 'reconnecting' ? (
+        <>
+          <Loader2 size={12} className="animate-spin" />
+          <span>{t('messenger.reconnecting') || 'Reconnecting...'}</span>
+        </>
+      ) : (
+        <>
+          <span>{t('messenger.disconnected') || 'Connection lost'}</span>
+          <button
+            className="underline hover:text-red-300 transition-colors bg-transparent border-none cursor-pointer p-0 text-[0.75rem]"
+            onClick={ensureWS}
+          >
+            {t('messenger.reconnectNow') || 'Reconnect'}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function MessageList() {
   const { messages, loadingMessages, loadingOlderMessages, hasMoreMessages, broadcastStatus, agentProgress, loadOlderMessages, cancelBroadcast } = useMessengerStore();
   const { t } = useI18n();
@@ -328,6 +361,7 @@ export default function MessageList() {
         components={{
           Header: () => (
             <div>
+              <ConnectionBanner />
               <div className="h-4" />
               {loadingOlderMessages && (
                 <div className="flex justify-center py-2">
