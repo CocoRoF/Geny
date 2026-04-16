@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { chatApi } from '@/lib/api';
 import { getChatWSManager } from '@/lib/chatWsManager';
+import { getAudioManager } from '@/lib/audioManager';
 import { useVTuberStore } from '@/store/useVTuberStore';
 import { useI18n } from '@/lib/i18n';
 import { parseEmotion, EMOTION_COLORS, ChatMarkdown, FileChangeSummary, AgentBadge, ExecutionMeta, MessageBubble } from '@/components/chat';
@@ -296,6 +297,12 @@ export default function VTuberChatPanel({
     const text = input.trim();
     if (!text || sending || !roomId) return;
 
+    // iOS WebKit: 채팅 전송은 user gesture이므로 이 시점에 AudioContext를 활성화.
+    // 이후 WebSocket으로 도착하는 응답의 auto-TTS가 재생될 수 있도록 미리 언락.
+    if (useVTuberStore.getState().ttsEnabled) {
+      getAudioManager().ensureResumed();
+    }
+
     setInput('');
     setSending(true);
 
@@ -433,6 +440,8 @@ export default function VTuberChatPanel({
               {!isUser && ttsEnabled && (
                 <button
                   onClick={() => {
+                    // iOS WebKit: user gesture 컨텍스트에서 AudioContext 활성화 보장
+                    getAudioManager().ensureResumed();
                     const [emo, clean] = parseEmotion(msg.content);
                     if (clean.trim()) {
                       if (ttsSpeaking) stopSpeaking(sessionId);
