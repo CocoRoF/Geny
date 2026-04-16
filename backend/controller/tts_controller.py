@@ -20,6 +20,7 @@ REST API endpoints for Text-to-Speech:
 
 import json
 import os
+import re
 import shutil
 from logging import getLogger
 from pathlib import Path
@@ -34,6 +35,51 @@ from service.auth.auth_middleware import require_auth
 logger = getLogger(__name__)
 
 router = APIRouter(prefix="/api/tts", tags=["tts"])
+
+# ── TTS Text Sanitization ────────────────────────────────────────────
+# TTS 엔진에 전달하기 전에 시스템 마커, 감정 태그, think 블록을 제거
+
+# 1. 시스템 프로토콜 마커 ([THINKING_TRIGGER:*], [CLI_RESULT], etc.)
+_SYSTEM_TAG_PATTERN = re.compile(
+    r"\["
+    r"(?:THINKING_TRIGGER(?::\w+)?|"
+    r"autonomous_signal:[^]]*|"
+    r"DELEGATION_REQUEST|"
+    r"DELEGATION_RESULT|"
+    r"CLI_RESULT|"
+    r"ACTIVITY_TRIGGER|"
+    r"SILENT)"
+    r"\]\s*",
+    re.IGNORECASE,
+)
+
+# 2. 감정 태그 ([joy], [sadness], etc.)
+_EMOTION_TAGS = [
+    "neutral", "joy", "anger", "disgust", "fear", "smirk",
+    "sadness", "surprise", "warmth", "curious", "calm",
+    "excited", "shy", "proud", "grateful", "playful",
+    "confident", "thoughtful", "concerned", "amused", "tender",
+]
+_EMOTION_TAG_PATTERN = re.compile(
+    r"\[(" + "|".join(_EMOTION_TAGS) + r")\]\s*",
+    re.IGNORECASE,
+)
+
+# 3. <think>...</think> 블록 (extended thinking 잔존물)
+_THINK_BLOCK_PATTERN = re.compile(r"<think>.*?</think>\s*", re.DOTALL | re.IGNORECASE)
+
+# 4. 닫히지 않은 <think> 블록
+_THINK_OPEN_PATTERN = re.compile(r"<think>.*", re.DOTALL | re.IGNORECASE)
+
+
+def sanitize_tts_text(text: str) -> str:
+    """TTS에 전달할 텍스트에서 시스템 마커, 감정 태그, think 블록을 제거."""
+    text = _THINK_BLOCK_PATTERN.sub("", text)
+    text = _THINK_OPEN_PATTERN.sub("", text)
+    text = _SYSTEM_TAG_PATTERN.sub("", text)
+    text = _EMOTION_TAG_PATTERN.sub("", text)
+    text = re.sub(r"\s{2,}", " ", text).strip()
+    return text
 
 
 class SpeakRequest(BaseModel):
@@ -53,6 +99,11 @@ async def speak(session_id: str, body: SpeakRequest):
     unless overridden by the `engine` field in the request body.
     Uses per-session voice profile if assigned, else global config.
     """
+    # 시스템 마커, 감정 태그, think 블록 제거
+    cleaned_text = sanitize_tts_text(body.text)
+    if not cleaned_text:
+        return JSONResponse(status_code=204, content={"detail": "No speakable text after sanitization"})
+
     from service.vtuber.tts.tts_service import get_tts_service
 
     tts = get_tts_service()
@@ -93,7 +144,7 @@ async def speak(session_id: str, body: SpeakRequest):
         has_data = False
         try:
             async for chunk in tts.speak(
-                text=body.text,
+                text=cleaned_text,
                 emotion=body.emotion,
                 language=body.language or default_language,
                 engine_name=body.engine,
@@ -109,7 +160,7 @@ async def speak(session_id: str, body: SpeakRequest):
 
         if not has_data:
             logger.warning(
-                f"TTS produced no audio for text='{body.text[:50]}...' "
+                f"TTS produced no audio for text='{cleaned_text[:50]}...' "
                 f"engine={current_provider}"
             )
 
