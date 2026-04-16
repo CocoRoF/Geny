@@ -181,11 +181,19 @@ export class AudioManager {
       this.currentAudio = audio;
       this._currentOnEnd = onEnd ?? null;
 
-      if (this.audioContext && this.analyser && this.gainNode) {
-        this.sourceNode = this.audioContext.createMediaElementSource(audio);
-        this.sourceNode.connect(this.analyser);
-        this.analyser.connect(this.gainNode);
-        this.startAmplitudeTracking();
+      // Web Audio API 연결 시도 — 실패해도 HTMLAudioElement 직접 재생으로 fallback
+      try {
+        if (this.audioContext && this.analyser && this.gainNode) {
+          this.sourceNode = this.audioContext.createMediaElementSource(audio);
+          this.sourceNode.connect(this.analyser);
+          this.analyser.connect(this.gainNode);
+          this.startAmplitudeTracking();
+        }
+      } catch (webAudioErr) {
+        // iOS WebKit에서 MediaElementSource 연결 실패 시
+        // 립싱크 없이 직접 재생 (audio.volume으로 볼륨 제어)
+        console.warn('[AudioManager] Web Audio API connection failed, falling back to direct playback:', webAudioErr);
+        audio.volume = this._volume;
       }
 
       const cleanup = () => {
@@ -293,6 +301,31 @@ export class AudioManager {
   /** 현재 볼륨 */
   get volume(): number {
     return this._volume;
+  }
+
+  /**
+   * User gesture 핸들러(onClick/onTouchEnd)에서 동기적으로 호출하여
+   * AudioContext를 생성하고 resume한다.
+   *
+   * iOS/iPadOS WebKit은 user gesture의 직접적인 call stack 내에서만
+   * AudioContext.resume()이 성공하므로, TTS 토글이나 수동 재생 버튼의
+   * onClick에서 반드시 이 메서드를 호출해야 한다.
+   *
+   * Desktop Chrome(Blink)에서는 이미 작동 중이므로 no-op이 된다.
+   */
+  ensureResumed(): void {
+    if (!this.audioContext) {
+      this.audioContext = new AudioContext();
+      this.gainNode = this.audioContext.createGain();
+      this.gainNode.gain.value = this._volume;
+      this.gainNode.connect(this.audioContext.destination);
+      this.analyser = this.audioContext.createAnalyser();
+      this.analyser.fftSize = 256;
+      this.analyser.smoothingTimeConstant = 0.8;
+    }
+    if (this.audioContext.state === 'suspended') {
+      this.audioContext.resume();
+    }
   }
 
   /** AudioContext 접근 (Enhanced LipSync 초기화용) */

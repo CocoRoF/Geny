@@ -195,7 +195,14 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
   // ─── TTS Actions ───
 
   toggleTTS: () => {
-    set((s) => ({ ttsEnabled: !s.ttsEnabled }));
+    const newEnabled = !get().ttsEnabled;
+    set({ ttsEnabled: newEnabled });
+
+    // TTS 켤 때 AudioContext 초기화 — user gesture(onClick) 컨텍스트에서 실행되므로
+    // iOS/iPadOS WebKit에서도 AudioContext.resume()이 성공한다.
+    if (newEnabled) {
+      getAudioManager().ensureResumed();
+    }
   },
 
   setTTSVolume: (vol) => {
