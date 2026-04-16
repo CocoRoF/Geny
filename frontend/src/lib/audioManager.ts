@@ -332,20 +332,36 @@ export class AudioManager {
       this.audioContext.resume();
     }
 
-    // iOS 오디오 언락: 무음 버퍼를 재생하여 오디오 파이프라인을 완전히 활성화.
-    // AudioContext.resume()만으로는 부족한 경우가 있으며, 실제 오디오를
-    // 재생해야 iOS가 오디오 세션을 활성화한다.
-    if (!this._audioUnlocked && this.audioContext.state === 'running') {
-      try {
-        const silentBuffer = this.audioContext.createBuffer(1, 1, 22050);
-        const source = this.audioContext.createBufferSource();
-        source.buffer = silentBuffer;
-        source.connect(this.audioContext.destination);
-        source.start(0);
-        this._audioUnlocked = true;
-      } catch {
-        // 실패해도 무시 — 다음 gesture에서 재시도
+    // iOS 오디오 언락: 두 가지 경로를 모두 언락해야 한다.
+    //
+    // 1. AudioContext 경로: 무음 AudioBuffer 재생
+    //    → createMediaElementSource로 연결된 오디오가 출력되도록 함
+    //
+    // 2. HTMLAudioElement 경로: 무음 Audio 엘리먼트 재생
+    //    → iOS는 AudioContext 언락과 HTMLAudioElement autoplay를 별도로 관리.
+    //    → 이것이 없으면 user gesture 밖의 audio.play()가 차단되어
+    //      auto-TTS(WebSocket 메시지 도착 시)가 무음이 됨.
+    if (!this._audioUnlocked) {
+      // AudioContext 경로 언락
+      if (this.audioContext.state === 'running') {
+        try {
+          const silentBuffer = this.audioContext.createBuffer(1, 1, 22050);
+          const src = this.audioContext.createBufferSource();
+          src.buffer = silentBuffer;
+          src.connect(this.audioContext.destination);
+          src.start(0);
+        } catch { /* 다음 gesture에서 재시도 */ }
       }
+
+      // HTMLAudioElement 경로 언락 — 44바이트 무음 WAV
+      try {
+        const silentWav = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+        const a = new Audio(silentWav);
+        a.volume = 0;
+        a.play().then(() => {
+          this._audioUnlocked = true;
+        }).catch(() => { /* 다음 gesture에서 재시도 */ });
+      } catch { /* 다음 gesture에서 재시도 */ }
     }
 
     // 글로벌 gesture 리스너 등록 — 이후 모든 터치/클릭에서 자동 resume
