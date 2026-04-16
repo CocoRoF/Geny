@@ -20,6 +20,7 @@ REST API endpoints for Text-to-Speech:
 
 import json
 import os
+import re
 import shutil
 from logging import getLogger
 from pathlib import Path
@@ -34,6 +35,56 @@ from service.auth.auth_middleware import require_auth
 logger = getLogger(__name__)
 
 router = APIRouter(prefix="/api/tts", tags=["tts"])
+
+# ── TTS Text Sanitization ────────────────────────────────────────────
+# TTS 엔진에 전달하기 전에 시스템 마커, 감정 태그, think 블록을 제거
+
+_SYSTEM_TAG_PATTERN = re.compile(
+    r"\["
+    r"(?:THINKING_TRIGGER(?::\w+)?|"
+    r"autonomous_signal:[^]]*|"
+    r"DELEGATION_REQUEST|"
+    r"DELEGATION_RESULT|"
+    r"CLI_RESULT|"
+    r"ACTIVITY_TRIGGER|"
+    r"SILENT)"
+    r"\]\s*",
+    re.IGNORECASE,
+)
+
+_EMOTION_TAGS = [
+    "neutral", "joy", "anger", "disgust", "fear", "smirk",
+    "sadness", "surprise", "warmth", "curious", "calm",
+    "excited", "shy", "proud", "grateful", "playful",
+    "confident", "thoughtful", "concerned", "amused", "tender",
+]
+_EMOTION_TAG_PATTERN = re.compile(
+    r"\[(" + "|".join(_EMOTION_TAGS) + r")\]\s*",
+    re.IGNORECASE,
+)
+
+_THINK_BLOCK_PATTERN = re.compile(r"<think>.*?</think>\s*", re.DOTALL | re.IGNORECASE)
+_THINK_OPEN_PATTERN = re.compile(r"<think>.*", re.DOTALL | re.IGNORECASE)
+
+
+def sanitize_tts_text(text: str) -> str:
+    """TTS에 전달할 텍스트에서 시스템 마커, 감정 태그, think 블록을 제거."""
+    text = _THINK_BLOCK_PATTERN.sub("", text)
+    text = _THINK_OPEN_PATTERN.sub("", text)
+    text = _SYSTEM_TAG_PATTERN.sub("", text)
+    text = _EMOTION_TAG_PATTERN.sub("", text)
+    text = re.sub(r"\s{2,}", " ", text).strip()
+    return text
+
+
+def _atomic_write_json(path: Path, data: dict) -> None:
+    """profile.json을 atomic하게 쓰기. tmp 파일에 쓴 후 rename하여 TOCTOU 방지."""
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    os.replace(str(tmp), str(path))
 
 
 class SpeakRequest(BaseModel):
@@ -53,6 +104,11 @@ async def speak(session_id: str, body: SpeakRequest):
     unless overridden by the `engine` field in the request body.
     Uses per-session voice profile if assigned, else global config.
     """
+    # 시스템 마커, 감정 태그, think 블록 제거
+    cleaned_text = sanitize_tts_text(body.text)
+    if not cleaned_text:
+        return JSONResponse(status_code=204, content={"detail": "No speakable text after sanitization"})
+
     from service.vtuber.tts.tts_service import get_tts_service
 
     tts = get_tts_service()
@@ -93,7 +149,7 @@ async def speak(session_id: str, body: SpeakRequest):
         has_data = False
         try:
             async for chunk in tts.speak(
-                text=body.text,
+                text=cleaned_text,
                 emotion=body.emotion,
                 language=body.language or default_language,
                 engine_name=body.engine,
@@ -109,7 +165,7 @@ async def speak(session_id: str, body: SpeakRequest):
 
         if not has_data:
             logger.warning(
-                f"TTS produced no audio for text='{body.text[:50]}...' "
+                f"TTS produced no audio for text='{cleaned_text[:50]}...' "
                 f"engine={current_provider}"
             )
 
@@ -388,10 +444,7 @@ def _ensure_builtin_profiles() -> None:
         profile_json = profile_dir / "profile.json"
         if not profile_json.exists():
             try:
-                profile_json.write_text(
-                    json.dumps(data, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
+                _atomic_write_json(profile_json, data)
                 logger.info(f"Auto-created profile.json for built-in profile: {name}")
             except Exception as e:
                 logger.warning(f"Failed to auto-create profile.json for {name}: {e}")
@@ -564,10 +617,7 @@ async def create_profile(body: CreateProfileRequest, auth: dict = Depends(requir
             "speed_factor": 1.0,
         },
     }
-    (profile_dir / "profile.json").write_text(
-        json.dumps(profile_data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    _atomic_write_json(profile_dir / "profile.json", profile_data)
     return profile_data
 
 
@@ -593,10 +643,7 @@ async def update_profile(name: str, body: UpdateProfileRequest, auth: dict = Dep
     if body.gpt_sovits_settings is not None:
         data["gpt_sovits_settings"] = body.gpt_sovits_settings
 
-    profile_json.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    _atomic_write_json(profile_json, data)
     return data
 
 
@@ -640,10 +687,7 @@ async def upload_reference_audio(
             "prompt_text": text or data["emotion_refs"].get(emotion, {}).get("prompt_text", ""),
             "prompt_lang": lang or data["emotion_refs"].get(emotion, {}).get("prompt_lang", data.get("prompt_lang", "ko")),
         }
-        profile_json.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        _atomic_write_json(profile_json, data)
 
     return {
         "success": True,
@@ -678,10 +722,7 @@ async def delete_reference_audio(name: str, emotion: str, auth: dict = Depends(r
         data = json.loads(profile_json.read_text(encoding="utf-8"))
         if "emotion_refs" in data and emotion in data["emotion_refs"]:
             del data["emotion_refs"][emotion]
-            profile_json.write_text(
-                json.dumps(data, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
+            _atomic_write_json(profile_json, data)
 
     return {"success": True, "profile": name, "emotion": emotion}
 
@@ -726,10 +767,7 @@ async def update_emotion_ref(name: str, emotion: str, body: UpdateEmotionRefRequ
     if body.prompt_lang is not None:
         data["emotion_refs"][emotion]["prompt_lang"] = body.prompt_lang
 
-    profile_json.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    _atomic_write_json(profile_json, data)
     return {"success": True, "profile": name, "emotion": emotion, "ref": data["emotion_refs"][emotion]}
 
 

@@ -132,11 +132,11 @@ class TTSService:
         # Apply emotion parameters
         request = await engine.apply_emotion(request)
 
-        # Cache lookup
+        # Cache lookup — voice_profile을 포함하여 프로필별 캐시 분리
         from service.vtuber.tts.cache import get_tts_cache
 
         cache = get_tts_cache()
-        voice_id = engine.engine_name  # simplified voice key
+        voice_id = f"{engine.engine_name}:{voice_profile or 'default'}"
         cached = cache.get(text, emotion, engine.engine_name, voice_id)
         if cached:
             logger.debug(f"Cache hit for TTS: {text[:30]}...")

@@ -209,7 +209,6 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
     if (!ttsEnabled) return;
 
     // 이전 TTS fetch가 아직 진행 중이면 abort하여 네트워크 낭비 방지
-    // (큐 시스템은 유지: 이미 큐에 들어간 아이템은 순차 재생)
     const prevController = _ttsAbortControllers.get(sessionId);
     if (prevController) {
       prevController.abort();
@@ -225,9 +224,24 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
 
       const response = await ttsApi.speak(sessionId, text, emotion, undefined, undefined, controller.signal);
 
-      // fetch가 완료되면 AbortController 정리
-      if (_ttsAbortControllers.get(sessionId) === controller) {
-        _ttsAbortControllers.delete(sessionId);
+      // Stale 응답 방지: fetch 완료 후 이 controller가 아직 "현재" 요청인지 확인.
+      // 다른 speakResponse가 이미 새 controller를 등록했다면 이 응답은 stale이므로 버림.
+      if (_ttsAbortControllers.get(sessionId) !== controller) {
+        get().addLog(sessionId, 'debug', 'TTS', 'Stale TTS response discarded (newer request in flight)');
+        set((s) => ({
+          ttsSpeaking: { ...s.ttsSpeaking, [sessionId]: false },
+        }));
+        return;
+      }
+      _ttsAbortControllers.delete(sessionId);
+
+      // 204 (sanitize 후 빈 텍스트) 또는 에러 응답 → enqueue 스킵
+      if (response.status === 204 || !response.ok) {
+        get().addLog(sessionId, 'debug', 'TTS', `TTS skipped: status=${response.status}`);
+        set((s) => ({
+          ttsSpeaking: { ...s.ttsSpeaking, [sessionId]: false },
+        }));
+        return;
       }
 
       const audioManager = getAudioManager();
