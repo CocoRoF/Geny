@@ -5,11 +5,20 @@
  *  - AudioContext 초기화 + resume (브라우저 자동재생 정책 대응)
  *  - TTS 재생 큐: 다중 에이전트 응답을 순차 재생 (이전 재생을 중단하지 않음)
  *  - StreamingResponse → Blob → Audio 재생
- *  - Web Audio API: MediaElementSource → AnalyserNode → GainNode → destination
+ *  - Web Audio API: AudioBufferSourceNode → AnalyserNode → GainNode → destination
  *  - 진폭 콜백: requestAnimationFrame 루프에서 RMS 계산 (립싱크용)
  *  - 볼륨 제어: GainNode.gain 조절
  *  - stop / clearQueue / dispose
  *  - AbortController 지원: 큐 비우기 시 진행 중 TTS fetch 취소
+ *  - iOS/iPadOS WebKit 호환: user gesture 기반 AudioContext 활성화,
+ *    decodeAudioData + AudioBufferSourceNode로 HTMLAudioElement 우회
+ *
+ * iOS 재생 전략:
+ *  HTMLAudioElement.play()는 iOS WebKit에서 user gesture 밖에서 차단되므로,
+ *  AudioContext.decodeAudioData() + AudioBufferSourceNode.start()를 사용한다.
+ *  AudioBufferSourceNode는 AudioContext가 running이면 gesture 없이 재생 가능.
+ *  AudioContext.resume()은 ensureResumed()를 통해 user gesture에서 수행된다.
+ *  Desktop Chrome에서도 동일하게 작동하므로 분기 없이 단일 경로로 처리한다.
  */
 
 export interface TTSQueueItem {
@@ -23,13 +32,16 @@ export interface TTSQueueItem {
 
 export class AudioManager {
   private audioContext: AudioContext | null = null;
-  private currentAudio: HTMLAudioElement | null = null;
   private gainNode: GainNode | null = null;
   private analyser: AnalyserNode | null = null;
-  private sourceNode: MediaElementAudioSourceNode | null = null;
   private onAmplitudeChange: ((amplitude: number) => void) | null = null;
   private animFrameId: number | null = null;
   private _volume: number = 0.7;
+
+  // ── 현재 재생 중인 소스 (HTMLAudioElement 또는 AudioBufferSourceNode) ──
+  private currentAudio: HTMLAudioElement | null = null;
+  private _currentBufferSource: AudioBufferSourceNode | null = null;
+  private sourceNode: MediaElementAudioSourceNode | null = null;
 
   // ── TTS 큐 시스템 ──
   private _queue: TTSQueueItem[] = [];
@@ -38,7 +50,6 @@ export class AudioManager {
 
   // ── iOS WebKit user gesture 오디오 언락 ──
   private _gestureListenerAttached = false;
-  private _audioUnlocked = false;
 
   /**
    * AudioContext 초기화 (사용자 인터랙션 후 호출 필요)
@@ -59,6 +70,58 @@ export class AudioManager {
     this.analyser = this.audioContext.createAnalyser();
     this.analyser.fftSize = 256;
     this.analyser.smoothingTimeConstant = 0.8;
+  }
+
+  /**
+   * User gesture 핸들러(onClick/onTouchEnd)에서 동기적으로 호출하여
+   * AudioContext를 생성하고 resume한다.
+   *
+   * iOS/iPadOS WebKit은 user gesture의 직접적인 call stack 내에서만
+   * AudioContext.resume()이 성공한다. AudioContext가 running이면
+   * AudioBufferSourceNode.start()는 gesture 없이도 작동하므로,
+   * 이 메서드를 한 번이라도 gesture에서 호출하면 이후 auto-TTS가 가능하다.
+   *
+   * 추가로, 글로벌 touchend/click 리스너를 등록하여 백그라운드 복귀 후
+   * re-suspend되어도 다음 인터랙션에서 자동 resume.
+   *
+   * Desktop Chrome(Blink)에서는 이미 작동 중이므로 no-op이 된다.
+   */
+  ensureResumed(): void {
+    if (!this.audioContext) {
+      this.audioContext = new AudioContext();
+      this.gainNode = this.audioContext.createGain();
+      this.gainNode.gain.value = this._volume;
+      this.gainNode.connect(this.audioContext.destination);
+      this.analyser = this.audioContext.createAnalyser();
+      this.analyser.fftSize = 256;
+      this.analyser.smoothingTimeConstant = 0.8;
+    }
+    if (this.audioContext.state === 'suspended') {
+      this.audioContext.resume();
+    }
+
+    // 글로벌 gesture 리스너 등록 — 이후 모든 터치/클릭에서 자동 resume
+    this._attachGestureListener();
+  }
+
+  /**
+   * 페이지의 모든 터치/클릭에서 AudioContext를 자동 resume하는 리스너.
+   * iOS는 백그라운드 전환 후 AudioContext를 re-suspend할 수 있으므로,
+   * 유저의 모든 인터랙션에서 resume을 시도해야 한다.
+   */
+  private _attachGestureListener(): void {
+    if (this._gestureListenerAttached) return;
+    this._gestureListenerAttached = true;
+
+    const handler = () => {
+      if (this.audioContext && this.audioContext.state === 'suspended') {
+        this.audioContext.resume();
+      }
+    };
+
+    // touchend가 iOS에서 가장 확실한 gesture 이벤트
+    document.addEventListener('touchend', handler, { passive: true });
+    document.addEventListener('click', handler);
   }
 
   /**
@@ -167,9 +230,82 @@ export class AudioManager {
   }
 
   /**
-   * Blob을 Audio 엘리먼트로 재생하고, 완료 시 resolve.
+   * Blob을 재생하고, 완료 시 resolve.
+   *
+   * 1차: AudioContext.decodeAudioData + AudioBufferSourceNode (iOS 호환)
+   *      → AudioContext가 running이면 gesture 없이도 재생 가능.
+   * 2차: HTMLAudioElement fallback (AudioContext 사용 불가 시)
    */
-  private _playBlob(
+  private async _playBlob(
+    blob: Blob,
+    onStart?: () => void,
+    onEnd?: () => void,
+  ): Promise<void> {
+    // AudioContext가 running이면 decodeAudioData 경로 사용 (iOS 호환)
+    if (this.audioContext && this.audioContext.state === 'running' && this.gainNode) {
+      try {
+        return await this._playViaWebAudio(blob, onStart, onEnd);
+      } catch (err) {
+        console.warn('[AudioManager] Web Audio playback failed, falling back to HTMLAudioElement:', err);
+      }
+    }
+
+    // Fallback: HTMLAudioElement (Desktop에서 AudioContext 없을 때)
+    return this._playViaAudioElement(blob, onStart, onEnd);
+  }
+
+  /**
+   * Web Audio API 경로: decodeAudioData + AudioBufferSourceNode.
+   * AudioContext가 running이면 user gesture 없이도 재생 가능.
+   * 립싱크용 AnalyserNode도 연결된다.
+   */
+  private async _playViaWebAudio(
+    blob: Blob,
+    onStart?: () => void,
+    onEnd?: () => void,
+  ): Promise<void> {
+    const arrayBuffer = await blob.arrayBuffer();
+    const audioBuffer = await this.audioContext!.decodeAudioData(arrayBuffer);
+
+    return new Promise<void>((resolve) => {
+      const source = this.audioContext!.createBufferSource();
+      source.buffer = audioBuffer;
+      this._currentBufferSource = source;
+      this._currentOnEnd = onEnd ?? null;
+
+      // source → analyser → gain → destination
+      if (this.analyser && this.gainNode) {
+        source.connect(this.analyser);
+        this.analyser.connect(this.gainNode);
+      } else {
+        source.connect(this.audioContext!.destination);
+      }
+
+      this.startAmplitudeTracking();
+
+      source.onended = () => {
+        console.info('[AudioManager] playback ended (WebAudio)');
+        this.stopAmplitudeTracking();
+        if (this._currentBufferSource === source) {
+          this._currentBufferSource = null;
+          this._currentOnEnd = null;
+        }
+        try { source.disconnect(); } catch { /* already disconnected */ }
+        onEnd?.();
+        resolve();
+      };
+
+      source.start(0);
+      console.info('[AudioManager] playback started (WebAudio)');
+      onStart?.();
+    });
+  }
+
+  /**
+   * HTMLAudioElement 경로 (fallback).
+   * AudioContext가 사용 불가할 때만 사용.
+   */
+  private _playViaAudioElement(
     blob: Blob,
     onStart?: () => void,
     onEnd?: () => void,
@@ -179,48 +315,23 @@ export class AudioManager {
       const audio = new Audio(url);
       this.currentAudio = audio;
       this._currentOnEnd = onEnd ?? null;
-
-      // Web Audio API 연결 시도 — 실패해도 HTMLAudioElement 직접 재생으로 fallback.
-      // iOS WebKit: AudioContext가 suspended이거나 createMediaElementSource가
-      // 실패할 수 있으므로 방어적으로 처리한다.
-      let webAudioConnected = false;
-      try {
-        if (this.audioContext && this.audioContext.state === 'running' && this.analyser && this.gainNode) {
-          this.sourceNode = this.audioContext.createMediaElementSource(audio);
-          this.sourceNode.connect(this.analyser);
-          this.analyser.connect(this.gainNode);
-          this.startAmplitudeTracking();
-          webAudioConnected = true;
-        }
-      } catch (webAudioErr) {
-        console.warn('[AudioManager] Web Audio API connection failed, falling back to direct playback:', webAudioErr);
-      }
-
-      // Web Audio API 미연결 시 HTMLAudioElement.volume으로 볼륨 제어
-      if (!webAudioConnected) {
-        audio.volume = this._volume;
-      }
+      audio.volume = this._volume;
 
       const cleanup = () => {
-        this.stopAmplitudeTracking();
         URL.revokeObjectURL(url);
         if (this.currentAudio === audio) {
           this.currentAudio = null;
           this._currentOnEnd = null;
         }
-        if (this.sourceNode) {
-          try { this.sourceNode.disconnect(); } catch { /* already disconnected */ }
-          this.sourceNode = null;
-        }
       };
 
       audio.onplay = () => {
-        console.info('[AudioManager] playback started');
+        console.info('[AudioManager] playback started (AudioElement)');
         onStart?.();
       };
 
       audio.onended = () => {
-        console.info('[AudioManager] playback ended');
+        console.info('[AudioManager] playback ended (AudioElement)');
         cleanup();
         onEnd?.();
         resolve();
@@ -308,85 +419,6 @@ export class AudioManager {
     return this._volume;
   }
 
-  /**
-   * User gesture 핸들러(onClick/onTouchEnd)에서 동기적으로 호출하여
-   * AudioContext를 생성하고 resume한다.
-   *
-   * iOS/iPadOS WebKit은 user gesture의 직접적인 call stack 내에서만
-   * AudioContext.resume()이 성공하므로, TTS 토글이나 수동 재생 버튼의
-   * onClick에서 반드시 이 메서드를 호출해야 한다.
-   *
-   * Desktop Chrome(Blink)에서는 이미 작동 중이므로 no-op이 된다.
-   */
-  ensureResumed(): void {
-    if (!this.audioContext) {
-      this.audioContext = new AudioContext();
-      this.gainNode = this.audioContext.createGain();
-      this.gainNode.gain.value = this._volume;
-      this.gainNode.connect(this.audioContext.destination);
-      this.analyser = this.audioContext.createAnalyser();
-      this.analyser.fftSize = 256;
-      this.analyser.smoothingTimeConstant = 0.8;
-    }
-    if (this.audioContext.state === 'suspended') {
-      this.audioContext.resume();
-    }
-
-    // iOS 오디오 언락: 두 가지 경로를 모두 언락해야 한다.
-    //
-    // 1. AudioContext 경로: 무음 AudioBuffer 재생
-    //    → createMediaElementSource로 연결된 오디오가 출력되도록 함
-    //
-    // 2. HTMLAudioElement 경로: 무음 Audio 엘리먼트 재생
-    //    → iOS는 AudioContext 언락과 HTMLAudioElement autoplay를 별도로 관리.
-    //    → 이것이 없으면 user gesture 밖의 audio.play()가 차단되어
-    //      auto-TTS(WebSocket 메시지 도착 시)가 무음이 됨.
-    if (!this._audioUnlocked) {
-      // AudioContext 경로 언락
-      if (this.audioContext.state === 'running') {
-        try {
-          const silentBuffer = this.audioContext.createBuffer(1, 1, 22050);
-          const src = this.audioContext.createBufferSource();
-          src.buffer = silentBuffer;
-          src.connect(this.audioContext.destination);
-          src.start(0);
-        } catch { /* 다음 gesture에서 재시도 */ }
-      }
-
-      // HTMLAudioElement 경로 언락 — 44바이트 무음 WAV
-      try {
-        const silentWav = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-        const a = new Audio(silentWav);
-        a.volume = 0;
-        a.play().then(() => {
-          this._audioUnlocked = true;
-        }).catch(() => { /* 다음 gesture에서 재시도 */ });
-      } catch { /* 다음 gesture에서 재시도 */ }
-    }
-
-    // 글로벌 gesture 리스너 등록 — 이후 모든 터치/클릭에서 자동 resume
-    this._attachGestureListener();
-  }
-
-  /**
-   * 페이지의 모든 터치/클릭에서 AudioContext를 자동 resume하는 리스너.
-   * iOS는 백그라운드 전환 후 AudioContext를 re-suspend할 수 있으므로,
-   * 유저의 모든 인터랙션에서 resume을 시도해야 한다.
-   */
-  private _attachGestureListener(): void {
-    if (this._gestureListenerAttached) return;
-    this._gestureListenerAttached = true;
-
-    const handler = () => {
-      if (this.audioContext && this.audioContext.state === 'suspended') {
-        this.audioContext.resume();
-      }
-    };
-
-    document.addEventListener('touchend', handler, { passive: true });
-    document.addEventListener('click', handler);
-  }
-
   /** AudioContext 접근 (Enhanced LipSync 초기화용) */
   getAudioContext(): AudioContext | null {
     return this.audioContext;
@@ -401,8 +433,18 @@ export class AudioManager {
     const pendingOnEnd = this._currentOnEnd;
     this._currentOnEnd = null;
 
+    // AudioBufferSourceNode 정지
+    if (this._currentBufferSource) {
+      try {
+        this._currentBufferSource.onended = null;
+        this._currentBufferSource.stop();
+        this._currentBufferSource.disconnect();
+      } catch { /* already stopped/disconnected */ }
+      this._currentBufferSource = null;
+    }
+
+    // HTMLAudioElement 정지
     if (this.currentAudio) {
-      // 이벤트 핸들러 제거하여 중복 호출 방지
       this.currentAudio.onended = null;
       this.currentAudio.onerror = null;
       this.currentAudio.onplay = null;
@@ -449,7 +491,7 @@ export class AudioManager {
 
   /** 재생 중 여부 */
   get isPlaying(): boolean {
-    return this.currentAudio !== null && !this.currentAudio.paused;
+    return this._currentBufferSource !== null || (this.currentAudio !== null && !this.currentAudio.paused);
   }
 
   /** 정리 */
