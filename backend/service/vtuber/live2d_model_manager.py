@@ -29,6 +29,7 @@ class Live2dModelInfo:
     emotionMap: Dict[str, int]
     tapMotions: Dict[str, Dict[str, int]]
     emotionMotionMap: Dict[str, str] = field(default_factory=dict)
+    hiddenParts: List[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -44,6 +45,7 @@ class Live2dModelInfo:
             "emotionMap": self.emotionMap,
             "tapMotions": self.tapMotions,
             "emotionMotionMap": self.emotionMotionMap,
+            "hiddenParts": self.hiddenParts,
         }
 
 
@@ -88,6 +90,7 @@ class Live2dModelManager:
                     emotionMap=model_data.get("emotionMap", {"neutral": 0}),
                     tapMotions=model_data.get("tapMotions", {}),
                     emotionMotionMap=model_data.get("emotionMotionMap", {}),
+                    hiddenParts=model_data.get("hiddenParts", []),
                 )
                 self._models[info.name] = info
 

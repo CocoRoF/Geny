@@ -155,7 +155,8 @@
         "joy": 5,
         "disgust": 0
       },
-      "tapMotions": {}
+      "tapMotions": {},
+      "hiddenParts": ["Part17"]
     },
     {
       "name": "changli",
@@ -176,7 +177,8 @@
         "surprise": 0,
         "fear": 1
       },
-      "tapMotions": {}
+      "tapMotions": {},
+      "hiddenParts": ["Part53"]
     }
   ],
   "default_model": "mao_pro",

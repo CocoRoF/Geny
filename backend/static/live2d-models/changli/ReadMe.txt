@@ -39,3 +39,12 @@ Geny에서 이 모델을 공식 아바타로 사용하려면:
     LipSync : ParamMouthOpenY
 - 원본에는 `Motions`이 정의되지 않아 기본 Idle 애니메이션이 없습니다. 향후 추가 가능.
 - `icon.png`는 썸네일로 `model_registry.json`에 참조됨.
+
+=== 워터마크 Part 숨김 처리 ===
+
+- `cdi3.json` 상 `Part53` (Name: "绘制：涉谷芒 建模：苏俩 不可用于直播盈利.png") 이 제작자 서명 이미지 드로어블입니다.
+- Geny는 해당 Part의 opacity를 프레임마다 0으로 덮어쓰는 방식으로 표시를 억제합니다:
+    `model_registry.json` 의 changli 엔트리 `"hiddenParts": ["Part53"]`
+    → `Live2DCanvas.tsx` 에서 `coreModel.setPartOpacityByIndex(Part53, 0)` 을 매 프레임 호출.
+- 텍스처·moc3는 수정하지 않으며, 배포본의 "不可用于直播盈利"(방송 수익화 금지) 조건을 준수합니다.
+  **상업 이용 전에는 반드시 원 배포자로부터 워터마크 없는 라이선스를 구매하거나 별도 허가를 받아야 합니다.**

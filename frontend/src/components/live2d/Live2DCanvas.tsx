@@ -61,6 +61,7 @@ export default function Live2DCanvas({
   const motionPipelineRef = useRef<MotionPipeline | null>(null);
   const expressionControllerRef = useRef<ExpressionController | null>(null);
   const beatSyncRef = useRef<BeatSyncController | null>(null);
+  const hiddenPartIndicesRef = useRef<number[]>([]);
   const configRef = useRef<Live2DEnhancedConfig>({
     ...DEFAULT_ENHANCED_CONFIG,
     ...configOverrides,
@@ -195,6 +196,27 @@ export default function Live2DCanvas({
 
       const internalModel = live2dModel.internalModel;
 
+      // ── Resolve hiddenParts IDs → indices (watermark / unwanted part suppression) ──
+      // Live2D Parts carry opacity per frame; motions may re-enable them, so we zero
+      // opacity each tick (see onTick below).
+      hiddenPartIndicesRef.current = [];
+      if (model.hiddenParts && model.hiddenParts.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const coreModel = internalModel.coreModel as any;
+        for (const partId of model.hiddenParts) {
+          try {
+            const idx = coreModel.getPartIndex?.(partId);
+            if (typeof idx === 'number' && idx >= 0) {
+              hiddenPartIndicesRef.current.push(idx);
+            } else {
+              console.warn(`[Live2DCanvas] hiddenPart "${partId}" not found on model "${model.name}"`);
+            }
+          } catch (err) {
+            console.warn(`[Live2DCanvas] Failed to resolve part "${partId}":`, err);
+          }
+        }
+      }
+
       // ── 1. Enhanced Lip Sync ──
       const lipSync = lipSyncRef.current;
       lipSync.setModel(live2dModel);
@@ -262,6 +284,19 @@ export default function Live2DCanvas({
 
         // Update advanced lip sync (per-frame vowel detection)
         lipSyncRef.current.updateFrame();
+
+        // Force hidden parts to zero opacity (must run AFTER pipeline, since
+        // motions / expressions may restore part opacity each frame).
+        const hiddenIndices = hiddenPartIndicesRef.current;
+        if (hiddenIndices.length > 0) {
+          for (const idx of hiddenIndices) {
+            try {
+              coreModel.setPartOpacityByIndex?.(idx, 0);
+            } catch {
+              // ignore — part index may be invalid after a model swap
+            }
+          }
+        }
       };
 
       app.ticker.add(onTick);
@@ -287,6 +322,7 @@ export default function Live2DCanvas({
       expressionControllerRef.current?.dispose();
       expressionControllerRef.current = null;
       beatSyncRef.current = null;
+      hiddenPartIndicesRef.current = [];
 
       // Remove model from stage FIRST, then destroy model, then app.
       if (modelRef.current) {

@@ -587,6 +587,7 @@ export interface Live2dModelInfo {
   idleMotionGroupName: string;
   emotionMap: Record<string, number>;
   tapMotions: Record<string, Record<string, number>>;
+  hiddenParts?: string[];
 }
 
 export interface AvatarState {
