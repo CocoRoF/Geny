@@ -25,6 +25,9 @@ from service.environment.exceptions import EnvironmentNotFoundError
 from service.environment.schemas import (
     CreateEnvironmentRequest,
     CreateEnvironmentResponse,
+    DiffBulkRequest,
+    DiffBulkResponse,
+    DiffBulkResultEntry,
     DiffEntry,
     DiffEnvironmentsRequest,
     DuplicateEnvironmentRequest,
@@ -410,6 +413,56 @@ async def diff_environments(
         identical=len(entries) == 0,
         entries=entries,
         summary=summary,
+    )
+
+
+@router.post("/diff-bulk", response_model=DiffBulkResponse)
+async def diff_environments_bulk(
+    request: Request,
+    body: DiffBulkRequest,
+    auth: dict = Depends(require_auth),
+):
+    svc = _env_svc(request)
+    results: list[DiffBulkResultEntry] = []
+    ok_count = 0
+    for pair in body.pairs:
+        try:
+            changes = svc.diff(pair.env_id_a, pair.env_id_b)
+        except Exception as exc:
+            logger.warning(
+                "diff-bulk pair failed: %s vs %s: %s",
+                pair.env_id_a,
+                pair.env_id_b,
+                exc,
+            )
+            results.append(
+                DiffBulkResultEntry(
+                    env_id_a=pair.env_id_a,
+                    env_id_b=pair.env_id_b,
+                    ok=False,
+                    error=str(exc),
+                )
+            )
+            continue
+        summary = {"added": 0, "removed": 0, "changed": 0}
+        for c in changes:
+            kind = c.get("change_type", c.get("type", "changed"))
+            summary[kind] = summary.get(kind, 0) + 1
+        results.append(
+            DiffBulkResultEntry(
+                env_id_a=pair.env_id_a,
+                env_id_b=pair.env_id_b,
+                ok=True,
+                identical=len(changes) == 0,
+                summary=summary,
+            )
+        )
+        ok_count += 1
+    return DiffBulkResponse(
+        total=len(body.pairs),
+        ok=ok_count,
+        failed=len(body.pairs) - ok_count,
+        results=results,
     )
 
 

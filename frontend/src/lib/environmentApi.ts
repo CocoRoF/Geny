@@ -11,6 +11,8 @@ import { getToken } from '@/lib/authApi';
 import type {
   CatalogResponse,
   CreateEnvironmentPayload,
+  DiffBulkRequest,
+  DiffBulkResponse,
   EnvironmentDetail,
   EnvironmentDiffResult,
   EnvironmentManifest,
@@ -116,6 +118,12 @@ export const environmentApi = {
     apiCall<EnvironmentDiffResult>('/api/environments/diff', {
       method: 'POST',
       body: JSON.stringify({ env_id_a: envIdA, env_id_b: envIdB }),
+    }),
+
+  diffBulk: (body: DiffBulkRequest) =>
+    apiCall<DiffBulkResponse>('/api/environments/diff-bulk', {
+      method: 'POST',
+      body: JSON.stringify(body),
     }),
 
   markPreset: (envId: string) =>

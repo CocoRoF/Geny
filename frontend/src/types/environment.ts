@@ -119,6 +119,33 @@ export interface EnvironmentDiffResult {
   }>;
 }
 
+// ── Bulk diff (matrix UI) ────────────────────────────────────────
+
+export interface DiffBulkPair {
+  env_id_a: string;
+  env_id_b: string;
+}
+
+export interface DiffBulkRequest {
+  pairs: DiffBulkPair[];
+}
+
+export interface DiffBulkResultEntry {
+  env_id_a: string;
+  env_id_b: string;
+  ok: boolean;
+  identical?: boolean;
+  summary?: { added: number; removed: number; changed: number };
+  error?: string | null;
+}
+
+export interface DiffBulkResponse {
+  total: number;
+  ok: number;
+  failed: number;
+  results: DiffBulkResultEntry[];
+}
+
 // ── Catalog (stage/artifact/strategy introspection) ──────────────
 //
 // Byte-compatible with `backend/service/artifact/schemas.py` — which is in

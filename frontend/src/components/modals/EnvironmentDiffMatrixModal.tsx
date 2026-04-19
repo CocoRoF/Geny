@@ -4,17 +4,12 @@
  * EnvironmentDiffMatrixModal — pairwise diff summary across 3+
  * environments.
  *
- * Given a selection of N env ids, runs `environmentApi.diff(a, b)` for
- * every (i < j) pair with bounded concurrency and renders an N×N grid
+ * Given a selection of N env ids, posts all (i < j) pairs in a single
+ * `/api/environments/diff-bulk` round-trip and renders an N×N grid
  * where each upper-triangle cell shows the per-pair summary
- * (`+A / -R / ~C` or `—` for identical). Clicking a cell hands the pair
- * to the existing `EnvironmentDiffModal` for a full diff view — the
- * matrix stays in a "single pair opened" state underneath.
- *
- * Backend work is one `/api/environments/diff` call per pair. With N
- * envs that is N·(N-1)/2 calls, capped by `CONCURRENCY` = 4 in-flight
- * so a 10-env matrix (45 pairs) settles in a handful of batches without
- * clobbering the server.
+ * (`+A / -R / ~C` or `=` for byte-identical manifests). Clicking a cell
+ * hands the pair to the existing `EnvironmentDiffModal` for a full diff
+ * view — the matrix stays in a "single pair opened" state underneath.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -24,7 +19,6 @@ import { ArrowLeftRight, Loader2, X } from 'lucide-react';
 import { environmentApi } from '@/lib/environmentApi';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
-import type { EnvironmentDiffResult } from '@/types/environment';
 import EnvironmentDiffModal from '@/components/modals/EnvironmentDiffModal';
 
 interface Props {
@@ -39,40 +33,8 @@ type CellState =
   | { status: 'ok'; summary: { added: number; removed: number; changed: number } }
   | { status: 'error'; error: string };
 
-const CONCURRENCY = 4;
-
 function cellKey(a: string, b: string): CellKey {
   return `${a}|${b}`;
-}
-
-async function runWithConcurrency<T>(
-  tasks: Array<() => Promise<T>>,
-  limit: number,
-): Promise<void> {
-  let cursor = 0;
-  const workers = Array.from({ length: Math.min(limit, tasks.length) }, async () => {
-    while (cursor < tasks.length) {
-      const idx = cursor;
-      cursor += 1;
-      const task = tasks[idx];
-      if (!task) return;
-      try {
-        await task();
-      } catch {
-        // Per-task handlers own their own errors — this catch is just to
-        // keep the worker alive for remaining tasks.
-      }
-    }
-  });
-  await Promise.all(workers);
-}
-
-function summarize(r: EnvironmentDiffResult) {
-  return {
-    added: r.added.length,
-    removed: r.removed.length,
-    changed: r.changed.length,
-  };
 }
 
 export default function EnvironmentDiffMatrixModal({ envIds, onClose }: Props) {
@@ -101,31 +63,42 @@ export default function EnvironmentDiffMatrixModal({ envIds, onClose }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    setCells(() => {
-      const next: Record<CellKey, CellState> = {};
-      for (const { a, b } of pairs) next[cellKey(a, b)] = { status: 'pending' };
-      return next;
-    });
-    const tasks = pairs.map(({ a, b }) => async () => {
+    const pending: Record<CellKey, CellState> = {};
+    for (const { a, b } of pairs) pending[cellKey(a, b)] = { status: 'pending' };
+    setCells(pending);
+    if (pairs.length === 0) return;
+    (async () => {
       try {
-        const res = await environmentApi.diff(a, b);
+        const res = await environmentApi.diffBulk({
+          pairs: pairs.map(({ a, b }) => ({ env_id_a: a, env_id_b: b })),
+        });
         if (cancelled) return;
-        setCells(prev => ({
-          ...prev,
-          [cellKey(a, b)]: { status: 'ok', summary: summarize(res) },
-        }));
+        const next: Record<CellKey, CellState> = {};
+        for (const r of res.results) {
+          const key = cellKey(r.env_id_a, r.env_id_b);
+          if (r.ok) {
+            const s = r.summary ?? { added: 0, removed: 0, changed: 0 };
+            next[key] = {
+              status: 'ok',
+              summary: { added: s.added, removed: s.removed, changed: s.changed },
+            };
+          } else {
+            next[key] = { status: 'error', error: r.error ?? 'diff failed' };
+          }
+        }
+        setCells(next);
       } catch (e: unknown) {
         if (cancelled) return;
-        setCells(prev => ({
-          ...prev,
-          [cellKey(a, b)]: {
-            status: 'error',
-            error: e instanceof Error ? e.message : 'diff failed',
-          },
-        }));
+        // Whole-request failure — mark every cell as errored so the UI
+        // surfaces the reason rather than spinning forever.
+        const next: Record<CellKey, CellState> = {};
+        const msg = e instanceof Error ? e.message : 'diff-bulk failed';
+        for (const { a, b } of pairs) {
+          next[cellKey(a, b)] = { status: 'error', error: msg };
+        }
+        setCells(next);
       }
-    });
-    void runWithConcurrency(tasks, CONCURRENCY);
+    })();
     return () => {
       cancelled = true;
     };

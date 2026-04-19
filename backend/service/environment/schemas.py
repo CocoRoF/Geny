@@ -103,6 +103,35 @@ class DiffEnvironmentsRequest(BaseModel):
     env_id_b: str
 
 
+DIFF_BULK_MAX_PAIRS = 500
+
+
+class DiffPairRequest(BaseModel):
+    env_id_a: str
+    env_id_b: str
+
+
+class DiffBulkRequest(BaseModel):
+    """Batch variant of DiffEnvironmentsRequest.
+
+    Used by the frontend diff-matrix UI to fetch summaries for N·(N-1)/2
+    pairs in a single HTTP round-trip instead of fanning out one request
+    per pair. The response only carries per-pair `summary` + `identical`;
+    callers that want full `entries` still use `/diff` for specific pairs.
+    """
+
+    pairs: List[DiffPairRequest]
+
+    @model_validator(mode="after")
+    def _enforce_caps(self) -> "DiffBulkRequest":
+        n = len(self.pairs)
+        if n > DIFF_BULK_MAX_PAIRS:
+            raise ValueError(
+                f"too many pairs: {n} > {DIFF_BULK_MAX_PAIRS}"
+            )
+        return self
+
+
 class ImportEnvironmentRequest(BaseModel):
     data: Dict[str, Any]
 
@@ -213,6 +242,22 @@ class EnvironmentDiffResponse(BaseModel):
     summary: Dict[str, int]
 
 
+class DiffBulkResultEntry(BaseModel):
+    env_id_a: str
+    env_id_b: str
+    ok: bool
+    identical: bool = False
+    summary: Dict[str, int] = {}
+    error: Optional[str] = None
+
+
+class DiffBulkResponse(BaseModel):
+    total: int
+    ok: int
+    failed: int
+    results: List[DiffBulkResultEntry]
+
+
 # ── Share schemas ────────────────────────────────────────
 
 
@@ -280,6 +325,8 @@ __all__ = [
     "UpdateStageTemplateRequest",
     "DuplicateEnvironmentRequest",
     "DiffEnvironmentsRequest",
+    "DiffPairRequest",
+    "DiffBulkRequest",
     "ImportEnvironmentRequest",
     "ImportBulkEntry",
     "ImportEnvironmentsBulkRequest",
@@ -291,6 +338,8 @@ __all__ = [
     "CreateEnvironmentResponse",
     "DiffEntry",
     "EnvironmentDiffResponse",
+    "DiffBulkResultEntry",
+    "DiffBulkResponse",
     "ShareLinkResponse",
     "EnvironmentSessionSummary",
     "EnvironmentSessionsResponse",

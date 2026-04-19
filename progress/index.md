@@ -144,3 +144,6 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
 - [63_phase7-31_diff_matrix.md](63_phase7-31_diff_matrix.md) —
   3 개 이상 선택 시 pairwise diff 매트릭스 모달 (`+A/-R/~C` 셀,
   클릭하면 기존 Diff 모달로 drill-down).
+- [64_phase7-32_diff_bulk_endpoint.md](64_phase7-32_diff_bulk_endpoint.md) —
+  `POST /api/environments/diff-bulk` 신규 엔드포인트 + 매트릭스가
+  N·(N-1)/2 호출 대신 단일 round-trip 으로 전환.
