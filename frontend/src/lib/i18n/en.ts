@@ -526,6 +526,7 @@ const en = {
     bulkSelectAll: 'Select all ({n})',
     bulkClear: 'Clear',
     bulkCompare: 'Compare 2',
+    bulkCompareMatrix: 'Compare {n} (matrix)',
     bulkDelete: 'Delete {n}',
     bulkExport: 'Export {n}',
     bulkDeleteTitle: 'Delete selected environments?',
@@ -559,6 +560,16 @@ const en = {
     after: 'After',
     exportJson: 'Export JSON',
     exportMarkdown: 'Export MD',
+  },
+
+  // ─── Environment Diff Matrix (multi-env pairwise) ───
+  diffMatrix: {
+    title: 'Diff matrix — {n} environments',
+    subtitle: '{pairs} pairs · {done} done · {failed} failed',
+    tooFew: 'Select at least 2 environments to build a diff matrix.',
+    cellTooltip: 'Open diff: {left} ↔ {right}',
+    cornerLabel: 'env',
+    legend: 'Upper triangle is clickable. `+A/-R/~C` = added/removed/changed counts. `=` means identical manifests.',
   },
 
   // ─── Environment Detail Drawer ───

@@ -18,6 +18,7 @@ import type { EnvironmentSummary } from '@/types/environment';
 import CreateEnvironmentModal from '@/components/modals/CreateEnvironmentModal';
 import EnvironmentDetailDrawer from '@/components/EnvironmentDetailDrawer';
 import EnvironmentDiffModal from '@/components/modals/EnvironmentDiffModal';
+import EnvironmentDiffMatrixModal from '@/components/modals/EnvironmentDiffMatrixModal';
 import ImportEnvironmentModal from '@/components/modals/ImportEnvironmentModal';
 import ConfirmModal from '@/components/modals/ConfirmModal';
 
@@ -182,6 +183,7 @@ export default function EnvironmentsTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showDiff, setShowDiff] = useState<{ left?: string; right?: string } | null>(null);
+  const [matrixIds, setMatrixIds] = useState<string[] | null>(null);
   const [openEnvId, setOpenEnvId] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -528,6 +530,16 @@ export default function EnvironmentsTab() {
                   {t('environmentsTab.bulkCompare')}
                 </button>
               )}
+              {selectedIds.size >= 3 && (
+                <button
+                  onClick={() => setMatrixIds(Array.from(selectedIds))}
+                  disabled={bulkBusy}
+                  className="flex items-center gap-1.5 py-1 px-3 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ArrowLeftRight size={12} />
+                  {t('environmentsTab.bulkCompareMatrix', { n: String(selectedIds.size) })}
+                </button>
+              )}
               <button
                 onClick={runBulkExport}
                 disabled={selectedIds.size === 0 || bulkBusy}
@@ -765,6 +777,13 @@ export default function EnvironmentsTab() {
           initialLeft={showDiff.left}
           initialRight={showDiff.right}
           onClose={() => setShowDiff(null)}
+        />
+      )}
+
+      {matrixIds && (
+        <EnvironmentDiffMatrixModal
+          envIds={matrixIds}
+          onClose={() => setMatrixIds(null)}
         />
       )}
 
