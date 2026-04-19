@@ -497,6 +497,27 @@ const en = {
     errorCountTooltip: '{n} session(s) bound to this environment are in error state',
     deletedCountTooltip: '{n} soft-deleted session(s) are still bound to this environment',
     importEnvironment: 'Import…',
+    searchPlaceholder: 'Search name, description, or id…',
+    clearSearch: 'Clear search',
+    clearFilters: 'Clear filters',
+    noFilterMatch: 'No environments match the current filters ({n} total).',
+    tagFilterAll: 'All tags',
+    tagFilterActive: '{n} tag(s)',
+    tagFilterClear: 'Clear tag selection',
+    filterStatus: {
+      all: 'All',
+      has_errors: 'Has errors',
+      has_sessions: 'In use',
+      idle: 'Idle',
+    },
+    sort: {
+      updated_desc: 'Updated ↓',
+      updated_asc: 'Updated ↑',
+      name_asc: 'Name A→Z',
+      name_desc: 'Name Z→A',
+      sessions_desc: 'Most sessions',
+      errors_desc: 'Most errors',
+    },
   },
 
   // ─── Environment Diff Modal ───

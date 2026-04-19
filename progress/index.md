@@ -102,3 +102,5 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
 - [48_phase7-16_card_grid_authoritative_counts.md](48_phase7-16_card_grid_authoritative_counts.md) —
   bulk `GET /api/environments/session-counts` + Environments 카드
   그리드 인원/에러/삭제 카운트 서버 권위화.
+- [49_phase7-17_envs_filter_search_sort.md](49_phase7-17_envs_filter_search_sort.md) —
+  Environments 탭에 검색/상태·태그 필터/정렬 toolbar.
