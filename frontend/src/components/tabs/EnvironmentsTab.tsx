@@ -763,7 +763,59 @@ export default function EnvironmentsTab() {
       {showBulkDeleteConfirm && (
         <ConfirmModal
           title={t('environmentsTab.bulkDeleteTitle')}
-          message={t('environmentsTab.bulkDeleteMessage', { n: String(selectedIds.size) })}
+          message={(() => {
+            const ids = Array.from(selectedIds);
+            let activeSum = 0;
+            let errorSum = 0;
+            const envsWithSessions: { id: string; name: string; active: number; error: number }[] = [];
+            for (const id of ids) {
+              const b = countsPerEnv[id] ?? { active: 0, deleted: 0, error: 0 };
+              activeSum += b.active;
+              errorSum += b.error;
+              if (b.active > 0 || b.error > 0) {
+                const env = environments.find(e => e.id === id);
+                envsWithSessions.push({ id, name: env?.name ?? id, active: b.active, error: b.error });
+              }
+            }
+            return (
+              <div className="flex flex-col gap-2">
+                <div>{t('environmentsTab.bulkDeleteMessage', { n: String(selectedIds.size) })}</div>
+                {(activeSum > 0 || errorSum > 0) && (
+                  <div className="rounded-md border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.06)] px-3 py-2 text-[0.75rem] text-[var(--text-secondary)] flex flex-col gap-1.5">
+                    <div className="flex items-center gap-1.5 font-semibold text-[var(--danger-color)]">
+                      <AlertTriangle size={12} />
+                      {t('environmentsTab.bulkDeleteSessionsSummary', {
+                        envs: String(envsWithSessions.length),
+                        active: String(activeSum),
+                        error: String(errorSum),
+                      })}
+                    </div>
+                    <ul className="list-disc pl-5 text-[0.6875rem] max-h-[120px] overflow-auto">
+                      {envsWithSessions.slice(0, 6).map(e => (
+                        <li key={e.id} className="truncate">
+                          {e.name}
+                          <span className="text-[var(--text-muted)]">
+                            {' · '}
+                            {t('environmentsTab.bulkDeleteSessionsLine', {
+                              active: String(e.active),
+                              error: String(e.error),
+                            })}
+                          </span>
+                        </li>
+                      ))}
+                      {envsWithSessions.length > 6 && (
+                        <li className="text-[var(--text-muted)] list-none">
+                          {t('environmentsTab.bulkDeleteSessionsMore', {
+                            n: String(envsWithSessions.length - 6),
+                          })}
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           note={t('environmentsTab.bulkDeleteNote')}
           confirmLabel={t('environmentsTab.bulkDeleteConfirm')}
           confirmingLabel={t('environmentsTab.bulkDeleting')}

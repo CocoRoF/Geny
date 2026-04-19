@@ -7,9 +7,17 @@ console works against Geny unchanged.
 
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
+
+# Bulk-import caps — keep here so controller stays thin and the
+# values are visible alongside the request schema. Kept generous;
+# not meant as DoS protection, just a guardrail against accidental
+# giant drops (e.g. dragging in a 300-env dump).
+BULK_IMPORT_MAX_ENTRIES = 200
+BULK_IMPORT_MAX_ENTRY_BYTES = 2 * 1024 * 1024  # 2 MiB per entry JSON
 
 
 # ── Requests ─────────────────────────────────────────────
@@ -116,10 +124,31 @@ class ImportEnvironmentsBulkRequest(BaseModel):
 
     Mirrors the client-side export bundle shape:
     `{ version: "1", exports: [{env_id, data}] }`.
+
+    Validation caps (see module-level constants) protect the server
+    from accidentally oversized drops — hit them and the whole batch
+    is rejected with 422 before any entry is processed.
     """
 
     version: Optional[str] = None
     entries: List[ImportBulkEntry]
+
+    @model_validator(mode="after")
+    def _enforce_caps(self) -> "ImportEnvironmentsBulkRequest":
+        n = len(self.entries)
+        if n > BULK_IMPORT_MAX_ENTRIES:
+            raise ValueError(
+                f"too many entries: {n} > {BULK_IMPORT_MAX_ENTRIES}"
+            )
+        for idx, entry in enumerate(self.entries):
+            # Cheap size estimate via JSON round-trip. The payloads
+            # live in memory already, so this is O(N) not an extra IO.
+            size = len(json.dumps(entry.data, ensure_ascii=False).encode("utf-8"))
+            if size > BULK_IMPORT_MAX_ENTRY_BYTES:
+                raise ValueError(
+                    f"entry {idx} too large: {size} > {BULK_IMPORT_MAX_ENTRY_BYTES} bytes"
+                )
+        return self
 
 
 class ImportBulkResultEntry(BaseModel):

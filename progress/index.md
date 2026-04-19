@@ -124,3 +124,6 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
 - [56_phase7-24_import_bulk_endpoint.md](56_phase7-24_import_bulk_endpoint.md) —
   `POST /api/environments/import-bulk` 신규 엔드포인트 + 클라이언트
   bundle 경로 단일 호출 전환.
+- [57_phase7-25_bulk_safety.md](57_phase7-25_bulk_safety.md) —
+  bulk-import 에 entries/size 상한 + bulk delete confirm 에
+  active/error 세션 바인딩 경고 breakdown.
