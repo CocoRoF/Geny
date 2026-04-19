@@ -651,6 +651,10 @@ const ko: Translations = {
     importBundleButton: '환경 {n} 개 가져오기',
     importingBundle: '{n} 개 가져오는 중…',
     bundleReport: '가져오기 완료 — 성공 {ok}, 실패 {fail}.',
+    bundleEntryNameLabel: '{n} 번 항목 이름 변경',
+    bundleResetNames: '이름 초기화',
+    bundleNamesHint: '비워두면 원래 이름이 유지됩니다. 입력한 이름은 새 환경에만 적용되며 번들 파일은 수정되지 않습니다.',
+    bundleOpenEnv: '새 환경 열기',
   },
 
   // ─── Environment Builder Tab ───

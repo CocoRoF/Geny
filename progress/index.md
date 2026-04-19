@@ -127,3 +127,6 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
 - [57_phase7-25_bulk_safety.md](57_phase7-25_bulk_safety.md) —
   bulk-import 에 entries/size 상한 + bulk delete confirm 에
   active/error 세션 바인딩 경고 breakdown.
+- [58_phase7-26_bundle_import_polish.md](58_phase7-26_bundle_import_polish.md) —
+  ImportEnvironmentModal 번들 entry 인라인 이름 편집 + 성공
+  리포트 row 드로어 drill-down.

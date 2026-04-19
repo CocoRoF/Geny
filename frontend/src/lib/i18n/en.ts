@@ -651,6 +651,10 @@ const en = {
     importBundleButton: 'Import {n} environments',
     importingBundle: 'Importing {n}…',
     bundleReport: 'Import finished — {ok} succeeded, {fail} failed.',
+    bundleEntryNameLabel: 'Rename entry {n}',
+    bundleResetNames: 'Reset names',
+    bundleNamesHint: 'Leave blank to keep the original name. Overrides set the new environment\'s name without touching the bundle file.',
+    bundleOpenEnv: 'Open the new environment',
   },
 
   // ─── Environment Builder Tab ───

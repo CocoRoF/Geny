@@ -13,9 +13,9 @@
  * Backend endpoint: `POST /api/environments/import` → returns `{id}`.
  */
 
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, Check, FileUp, Upload, X } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, Check, FileUp, Upload, X } from 'lucide-react';
 
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
@@ -142,6 +142,27 @@ type BundleResult = {
   failures: { env_id?: string; name: string; error: string }[];
 };
 
+function applyNameOverrideToBundleEntry(
+  data: Record<string, unknown>,
+  overrideName: string,
+): Record<string, unknown> {
+  // Mirror the single-env path (sets top-level `name`) and also bubble
+  // into `manifest.metadata.name` so the record as stored looks right
+  // even if the backend prefers the manifest field. One or the other
+  // is authoritative depending on the record shape; both is safe.
+  const next: Record<string, unknown> = { ...data, name: overrideName };
+  const manifest = next.manifest;
+  if (manifest && typeof manifest === 'object' && !Array.isArray(manifest)) {
+    const manifestObj = { ...(manifest as Record<string, unknown>) };
+    const metadata = manifestObj.metadata;
+    if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
+      manifestObj.metadata = { ...(metadata as Record<string, unknown>), name: overrideName };
+    }
+    next.manifest = manifestObj;
+  }
+  return next;
+}
+
 export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
   const { importEnvironment, loadEnvironments, refreshSessionCounts } = useEnvironmentStore();
   const { t } = useI18n();
@@ -154,9 +175,10 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
   const [submitError, setSubmitError] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
   const [bundleResult, setBundleResult] = useState<BundleResult | null>(null);
+  const [bundleNameOverrides, setBundleNameOverrides] = useState<Record<number, string>>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const parsed = (() => {
+  const parsed = useMemo(() => {
     const trimmed = rawText.trim();
     if (!trimmed) return null;
     try {
@@ -164,7 +186,7 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
     } catch (e) {
       return { ok: false as const, error: e instanceof Error ? e.message : 'Invalid JSON' };
     }
-  })();
+  }, [rawText]);
 
   const parseError = parsed && !parsed.ok ? parsed.error : null;
   const ready = parsed && parsed.ok;
@@ -217,9 +239,13 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
         return;
       }
       // Bundle path — one round-trip to the new bulk endpoint.
-      const cleanedEntries = parsed.entries.map(entry => {
-        const payload = { ...entry.data };
+      const cleanedEntries = parsed.entries.map((entry, idx) => {
+        let payload: Record<string, unknown> = { ...entry.data };
         if (regenerateId) delete payload.id;
+        const override = bundleNameOverrides[idx]?.trim();
+        if (override) {
+          payload = applyNameOverrideToBundleEntry(payload, override);
+        }
         return { env_id: entry.env_id, data: payload };
       });
       const response = await environmentApi.importEnvBulk({
@@ -231,7 +257,8 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
       for (let i = 0; i < response.results.length; i += 1) {
         const r = response.results[i];
         const originMeta = parsed.entries[i]?.meta;
-        const displayName = originMeta?.name || r.env_id || '—';
+        const overrideName = bundleNameOverrides[i]?.trim();
+        const displayName = overrideName || originMeta?.name || r.env_id || '—';
         if (r.ok && r.new_id) {
           successes.push({ env_id: r.env_id, new_id: r.new_id, name: displayName });
         } else {
@@ -360,27 +387,55 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
           )}
 
           {parsed && parsed.ok && parsed.kind === 'bundle' && !bundleResult && (
-            <div className="flex flex-col gap-1.5 px-3 py-2 rounded-md bg-[rgba(34,197,94,0.1)] border border-[rgba(34,197,94,0.25)]">
-              <div className="text-[0.75rem] text-[#4ade80] font-medium">
-                {t('importEnvironment.bundleDetected', {
-                  n: String(parsed.entries.length),
-                  version: parsed.bundleVersion,
-                })}
+            <div className="flex flex-col gap-2 px-3 py-2 rounded-md bg-[rgba(34,197,94,0.1)] border border-[rgba(34,197,94,0.25)]">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-[0.75rem] text-[#4ade80] font-medium">
+                  {t('importEnvironment.bundleDetected', {
+                    n: String(parsed.entries.length),
+                    version: parsed.bundleVersion,
+                  })}
+                </div>
+                {Object.values(bundleNameOverrides).some(v => v?.trim()) && (
+                  <button
+                    type="button"
+                    onClick={() => setBundleNameOverrides({})}
+                    className="text-[0.625rem] text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-transparent border-none cursor-pointer"
+                  >
+                    {t('importEnvironment.bundleResetNames')}
+                  </button>
+                )}
               </div>
-              <ul className="flex flex-col gap-0.5 text-[0.6875rem] text-[var(--text-secondary)] max-h-[160px] overflow-y-auto pl-3">
-                {parsed.entries.map((e, i) => (
-                  <li key={e.env_id ?? i} className="flex items-center gap-2 truncate">
-                    <span className="shrink-0 text-[var(--text-muted)] font-mono">
-                      {String(i + 1).padStart(2, '0')}.
-                    </span>
-                    <span className="truncate">{e.meta.name || e.env_id || '—'}</span>
-                    <span className="ml-auto shrink-0 text-[0.625rem] text-[var(--text-muted)]">
-                      {e.meta.mode}
-                      {typeof e.meta.stageCount === 'number' && ` · ${e.meta.stageCount} stage(s)`}
-                    </span>
-                  </li>
-                ))}
+              <ul className="flex flex-col gap-1 text-[0.6875rem] text-[var(--text-secondary)] max-h-[220px] overflow-y-auto">
+                {parsed.entries.map((e, i) => {
+                  const originalName = e.meta.name || e.env_id || '—';
+                  return (
+                    <li key={e.env_id ?? i} className="flex items-center gap-2">
+                      <span className="shrink-0 text-[var(--text-muted)] font-mono w-6 text-right">
+                        {String(i + 1).padStart(2, '0')}.
+                      </span>
+                      <input
+                        type="text"
+                        value={bundleNameOverrides[i] ?? ''}
+                        onChange={ev =>
+                          setBundleNameOverrides(prev => ({ ...prev, [i]: ev.target.value }))
+                        }
+                        placeholder={originalName}
+                        aria-label={t('importEnvironment.bundleEntryNameLabel', {
+                          n: String(i + 1),
+                        })}
+                        className="flex-1 min-w-0 py-1 px-2 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded text-[0.6875rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--primary-color)]"
+                      />
+                      <span className="shrink-0 text-[0.625rem] text-[var(--text-muted)] whitespace-nowrap">
+                        {e.meta.mode}
+                        {typeof e.meta.stageCount === 'number' && ` · ${e.meta.stageCount} stage(s)`}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
+              <p className="text-[0.625rem] text-[var(--text-muted)]">
+                {t('importEnvironment.bundleNamesHint')}
+              </p>
             </div>
           )}
 
@@ -395,12 +450,26 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
               {bundleResult.successes.length > 0 && (
                 <ul className="flex flex-col gap-0.5 text-[0.6875rem] max-h-[120px] overflow-y-auto">
                   {bundleResult.successes.map(s => (
-                    <li key={s.new_id} className="flex items-center gap-2 text-[#4ade80]">
-                      <Check size={10} />
-                      <span className="truncate">{s.name}</span>
-                      <span className="ml-auto shrink-0 font-mono text-[0.625rem] text-[var(--text-muted)]">
-                        {s.new_id}
-                      </span>
+                    <li key={s.new_id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onImported?.(s.new_id);
+                          onClose();
+                        }}
+                        title={t('importEnvironment.bundleOpenEnv')}
+                        className="group w-full flex items-center gap-2 py-0.5 px-1 rounded text-[#4ade80] bg-transparent border-none cursor-pointer text-left hover:bg-[rgba(34,197,94,0.08)]"
+                      >
+                        <Check size={10} className="shrink-0" />
+                        <span className="truncate">{s.name}</span>
+                        <span className="ml-auto shrink-0 font-mono text-[0.625rem] text-[var(--text-muted)]">
+                          {s.new_id}
+                        </span>
+                        <ArrowUpRight
+                          size={10}
+                          className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 text-[var(--text-secondary)]"
+                        />
+                      </button>
                     </li>
                   ))}
                 </ul>
