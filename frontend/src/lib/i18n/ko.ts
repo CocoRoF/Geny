@@ -521,6 +521,7 @@ const ko: Translations = {
     manifestEmpty: 'manifest 가 아직 없습니다.',
     openInBuilder: 'Builder 에서 열기',
     compareWith: '다른 환경과 비교…',
+    importManifest: 'Manifest 가져오기…',
     duplicatePrompt: '복제할 환경의 이름',
     duplicating: '복제 중…',
     duplicateFailed: '환경 복제 실패',
@@ -529,6 +530,23 @@ const ko: Translations = {
     deleteTitle: '환경 삭제',
     deleteConfirm: '"{name}" 을(를) 삭제하시겠습니까? 되돌릴 수 없습니다.',
     deleteNote: '이 환경을 참조 중인 세션은 다음 턴에 기본 파이프라인으로 fallback 합니다.',
+  },
+
+  // ─── Import Manifest Modal ───
+  importManifest: {
+    title: 'Manifest 가져오기',
+    subtitle: '"{name}" 의 manifest 를 JSON 으로 덮어씁니다.',
+    warning: 'Manifest 전체 (stages, tools, pipeline config 포함) 가 교체됩니다. 이 환경을 참조 중인 활성 세션은 다음 턴부터 새 manifest 를 사용합니다. 안전을 위해 먼저 현재 manifest 를 Export 해두는 것을 권장합니다.',
+    dropHint: '내보낸 JSON 파일을 여기에 드롭하거나 아래에서 선택하세요.',
+    chooseFile: '파일 선택',
+    loadedFile: '{name} 을(를) 불러왔습니다',
+    jsonLabel: 'Manifest JSON',
+    jsonPlaceholder: '내보낸 manifest JSON 을 여기에 붙여넣으세요…',
+    jsonHint: '원본 manifest, export envelope (`{manifest: {…}}`), 또는 export 전체 응답 (`{data: {manifest: {…}}}`) 을 모두 허용합니다.',
+    parsedOk: '파싱 완료 — manifest v{version}, stage {count} 개.',
+    overwriteButton: 'Manifest 덮어쓰기',
+    importing: '가져오는 중…',
+    failed: 'Manifest 가져오기에 실패했습니다',
   },
 
   // ─── Environment Builder Tab ───

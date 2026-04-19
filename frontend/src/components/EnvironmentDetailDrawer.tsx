@@ -13,11 +13,12 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeftRight, Copy, Download, Settings2, Tag, Trash2, X } from 'lucide-react';
+import { ArrowLeftRight, Copy, Download, Settings2, Tag, Trash2, Upload, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
 import ConfirmModal from '@/components/modals/ConfirmModal';
+import ImportManifestModal from '@/components/modals/ImportManifestModal';
 
 interface Props {
   envId: string;
@@ -63,6 +64,7 @@ export default function EnvironmentDetailDrawer({ envId, onClose, onCompare }: P
   const [loadError, setLoadError] = useState('');
   const [actionError, setActionError] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showImportManifest, setShowImportManifest] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -291,6 +293,14 @@ export default function EnvironmentDetailDrawer({ envId, onClose, onCompare }: P
               <Download size={12} />
               {exporting ? t('environmentDetail.exporting') : t('common.export')}
             </button>
+            <button
+              onClick={() => setShowImportManifest(true)}
+              disabled={!env}
+              className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Upload size={12} />
+              {t('environmentDetail.importManifest')}
+            </button>
           </div>
         </div>
       </aside>
@@ -302,6 +312,15 @@ export default function EnvironmentDetailDrawer({ envId, onClose, onCompare }: P
           note={t('environmentDetail.deleteNote')}
           onConfirm={handleDelete}
           onClose={() => setShowDeleteConfirm(false)}
+        />
+      )}
+
+      {showImportManifest && (
+        <ImportManifestModal
+          envId={envId}
+          envName={env?.name || envId}
+          onClose={() => setShowImportManifest(false)}
+          onImported={() => loadEnvironment(envId).catch(() => {})}
         />
       )}
     </>,

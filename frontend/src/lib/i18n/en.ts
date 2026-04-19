@@ -521,6 +521,7 @@ const en = {
     manifestEmpty: 'No manifest attached yet.',
     openInBuilder: 'Open in Builder',
     compareWith: 'Compare with…',
+    importManifest: 'Import manifest…',
     duplicatePrompt: 'Name for the duplicated environment',
     duplicating: 'Duplicating…',
     duplicateFailed: 'Failed to duplicate environment',
@@ -529,6 +530,23 @@ const en = {
     deleteTitle: 'Delete environment',
     deleteConfirm: 'Delete "{name}"? This cannot be undone.',
     deleteNote: 'Sessions currently referencing this environment will fall back to the default pipeline on their next turn.',
+  },
+
+  // ─── Import Manifest Modal ───
+  importManifest: {
+    title: 'Import manifest',
+    subtitle: 'Overwrite the manifest on "{name}" with a JSON blob.',
+    warning: 'This replaces the entire manifest — including stages, tools, and pipeline config. Active sessions referencing this environment will pick up the new manifest on their next turn. Consider Exporting the current manifest first as a backup.',
+    dropHint: 'Drop an exported JSON file here, or choose one below.',
+    chooseFile: 'Choose file',
+    loadedFile: 'Loaded {name}',
+    jsonLabel: 'Manifest JSON',
+    jsonPlaceholder: 'Paste the exported manifest JSON here…',
+    jsonHint: 'Accepts the raw manifest, an export envelope (`{manifest: {…}}`), or the full export response (`{data: {manifest: {…}}}`).',
+    parsedOk: 'Parsed OK — manifest v{version}, {count} stage(s).',
+    overwriteButton: 'Overwrite manifest',
+    importing: 'Importing…',
+    failed: 'Failed to import manifest',
   },
 
   // ─── Environment Builder Tab ───
