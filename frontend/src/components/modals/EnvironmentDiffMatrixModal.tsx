@@ -14,7 +14,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeftRight, Loader2, X } from 'lucide-react';
+import { ArrowLeftRight, Download, Loader2, X } from 'lucide-react';
 
 import { environmentApi } from '@/lib/environmentApi';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
@@ -115,6 +115,154 @@ export default function EnvironmentDiffMatrixModal({ envIds, onClose }: Props) {
     }
     return { pending, done, failed, total: pending + done + failed };
   }, [cells]);
+
+  const exportable = stats.pending === 0 && stats.total > 0;
+
+  const downloadBlob = (body: BlobPart, mime: string, filename: string) => {
+    const blob = new Blob([body], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const collectPairs = () =>
+    pairs.map(({ a, b }) => {
+      const cell = cells[cellKey(a, b)];
+      if (cell?.status === 'ok') {
+        const { added, removed, changed } = cell.summary;
+        return {
+          env_id_a: a,
+          env_id_b: b,
+          name_a: nameById.get(a) ?? null,
+          name_b: nameById.get(b) ?? null,
+          ok: true,
+          identical: added === 0 && removed === 0 && changed === 0,
+          summary: { added, removed, changed },
+          error: null as string | null,
+        };
+      }
+      return {
+        env_id_a: a,
+        env_id_b: b,
+        name_a: nameById.get(a) ?? null,
+        name_b: nameById.get(b) ?? null,
+        ok: false,
+        identical: false,
+        summary: null,
+        error: cell?.status === 'error' ? cell.error : 'pending',
+      };
+    });
+
+  const exportMatrixJson = () => {
+    if (!exportable) return;
+    const stamp = new Date().toISOString();
+    const payload = {
+      version: '1',
+      generated_at: stamp,
+      envs: orderedIds.map(id => ({ id, name: nameById.get(id) ?? null })),
+      summary: {
+        pairs: pairs.length,
+        ok: stats.done,
+        failed: stats.failed,
+      },
+      pairs: collectPairs(),
+    };
+    const stampSlug = stamp.replace(/[:.]/g, '-');
+    downloadBlob(
+      JSON.stringify(payload, null, 2),
+      'application/json',
+      `env-diff-matrix-${orderedIds.length}-${stampSlug}.json`,
+    );
+  };
+
+  const exportMatrixMarkdown = () => {
+    if (!exportable) return;
+    const stamp = new Date().toISOString();
+    const lines: string[] = [];
+    lines.push(`# Environment diff matrix`);
+    lines.push('');
+    lines.push(`- **Environments:** ${orderedIds.length}`);
+    lines.push(`- **Pairs:** ${pairs.length} (ok ${stats.done} · failed ${stats.failed})`);
+    lines.push(`- **Generated:** ${stamp}`);
+    lines.push('');
+    // Index table
+    lines.push('## Environments');
+    lines.push('');
+    lines.push('| # | Name | Id |');
+    lines.push('|---|------|----|');
+    orderedIds.forEach((id, i) => {
+      const name = nameById.get(id) ?? '—';
+      lines.push(`| ${i + 1} | ${name} | \`${id}\` |`);
+    });
+    lines.push('');
+    // Matrix table (symmetric, upper + lower filled with same data for
+    // readability in GitHub). Cells = `+A/-R/~C` or `=` or `err`.
+    lines.push('## Summary matrix');
+    lines.push('');
+    const header = ['', ...orderedIds.map((id, i) => `${i + 1}`)];
+    lines.push(`| ${header.join(' | ')} |`);
+    lines.push(`| ${header.map(() => '---').join(' | ')} |`);
+    for (let i = 0; i < orderedIds.length; i += 1) {
+      const row: string[] = [`${i + 1}`];
+      for (let j = 0; j < orderedIds.length; j += 1) {
+        if (i === j) {
+          row.push('—');
+          continue;
+        }
+        const [aIdx, bIdx] = i < j ? [i, j] : [j, i];
+        const cell = cells[cellKey(orderedIds[aIdx], orderedIds[bIdx])];
+        if (!cell || cell.status === 'pending') row.push('…');
+        else if (cell.status === 'error') row.push('err');
+        else {
+          const { added, removed, changed } = cell.summary;
+          row.push(
+            added === 0 && removed === 0 && changed === 0
+              ? '='
+              : `+${added}/-${removed}/~${changed}`,
+          );
+        }
+      }
+      lines.push(`| ${row.join(' | ')} |`);
+    }
+    lines.push('');
+    // Per-pair drill-down (upper triangle only, non-identical first).
+    const nonIdentical = collectPairs().filter(
+      p => p.ok && !p.identical,
+    );
+    if (nonIdentical.length > 0) {
+      lines.push('## Non-identical pairs');
+      lines.push('');
+      for (const p of nonIdentical) {
+        const s = p.summary!;
+        lines.push(
+          `- **${p.name_a ?? p.env_id_a}** ↔ **${p.name_b ?? p.env_id_b}** — +${s.added} / −${s.removed} / ~${s.changed}`,
+        );
+      }
+      lines.push('');
+    }
+    const errored = collectPairs().filter(p => !p.ok);
+    if (errored.length > 0) {
+      lines.push('## Errored pairs');
+      lines.push('');
+      for (const p of errored) {
+        lines.push(
+          `- **${p.name_a ?? p.env_id_a}** ↔ **${p.name_b ?? p.env_id_b}** — \`${p.error ?? 'unknown'}\``,
+        );
+      }
+      lines.push('');
+    }
+    const stampSlug = stamp.replace(/[:.]/g, '-');
+    downloadBlob(
+      lines.join('\n'),
+      'text/markdown',
+      `env-diff-matrix-${orderedIds.length}-${stampSlug}.md`,
+    );
+  };
 
   const renderCell = (rowIdx: number, colIdx: number) => {
     if (rowIdx === colIdx) {
@@ -254,16 +402,36 @@ export default function EnvironmentDiffMatrixModal({ envIds, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="py-2.5 px-5 border-t border-[var(--border-color)] shrink-0 flex items-center justify-between">
-          <div className="text-[0.6875rem] text-[var(--text-muted)]">
+        <div className="py-2.5 px-5 border-t border-[var(--border-color)] shrink-0 flex items-center justify-between gap-2">
+          <div className="text-[0.6875rem] text-[var(--text-muted)] flex-1 min-w-0 truncate">
             {t('diffMatrix.legend')}
           </div>
-          <button
-            onClick={onClose}
-            className="py-1.5 px-3 rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors"
-          >
-            {t('common.close')}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {exportable && (
+              <>
+                <button
+                  onClick={exportMatrixJson}
+                  className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors"
+                >
+                  <Download size={12} />
+                  {t('diffMatrix.exportJson')}
+                </button>
+                <button
+                  onClick={exportMatrixMarkdown}
+                  className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors"
+                >
+                  <Download size={12} />
+                  {t('diffMatrix.exportMarkdown')}
+                </button>
+              </>
+            )}
+            <button
+              onClick={onClose}
+              className="py-1.5 px-3 rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors"
+            >
+              {t('common.close')}
+            </button>
+          </div>
         </div>
       </div>
 

@@ -570,6 +570,8 @@ const ko: Translations = {
     cellTooltip: 'Diff 열기: {left} ↔ {right}',
     cornerLabel: '환경',
     legend: '상단 삼각형이 클릭 가능. `+A/-R/~C` = 추가/제거/변경 개수. `=` 는 동일한 manifest.',
+    exportJson: 'JSON 내보내기',
+    exportMarkdown: 'MD 내보내기',
   },
 
   // ─── Environment Detail Drawer ───

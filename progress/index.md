@@ -147,3 +147,6 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
 - [64_phase7-32_diff_bulk_endpoint.md](64_phase7-32_diff_bulk_endpoint.md) —
   `POST /api/environments/diff-bulk` 신규 엔드포인트 + 매트릭스가
   N·(N-1)/2 호출 대신 단일 round-trip 으로 전환.
+- [65_phase7-33_matrix_export.md](65_phase7-33_matrix_export.md) —
+  Diff 매트릭스 결과를 JSON / Markdown 으로 다운로드 (index table +
+  symmetric matrix + drill-down 섹션).

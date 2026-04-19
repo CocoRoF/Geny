@@ -570,6 +570,8 @@ const en = {
     cellTooltip: 'Open diff: {left} ↔ {right}',
     cornerLabel: 'env',
     legend: 'Upper triangle is clickable. `+A/-R/~C` = added/removed/changed counts. `=` means identical manifests.',
+    exportJson: 'Export JSON',
+    exportMarkdown: 'Export MD',
   },
 
   // ─── Environment Detail Drawer ───
