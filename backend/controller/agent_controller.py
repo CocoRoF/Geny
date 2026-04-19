@@ -69,6 +69,21 @@ class CreateAgentRequest(CreateSessionRequest):
         default=False,
         description="Enable state checkpointing for replay/resume"
     )
+    env_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "EnvironmentManifest id — when set, the pipeline is built from "
+            "the stored manifest instead of the GenyPresets path."
+        ),
+    )
+    memory_config: Optional[dict] = Field(
+        default=None,
+        description=(
+            "Per-session MemoryProvider override (MemoryProviderFactory config "
+            "DSL). Takes precedence over the process default set via "
+            "MEMORY_PROVIDER env."
+        ),
+    )
 
 
 class AgentInvokeRequest(BaseModel):
@@ -143,6 +158,8 @@ async def create_agent_session(request: CreateAgentRequest, auth: dict = Depends
             request=request,
             enable_checkpointing=request.enable_checkpointing,
             owner_username=owner_username,
+            env_id=request.env_id,
+            memory_config=request.memory_config,
         )
 
         session_info = agent.get_session_info()
@@ -151,6 +168,9 @@ async def create_agent_session(request: CreateAgentRequest, auth: dict = Depends
 
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    except LookupError as e:
+        # EnvironmentNotFoundError when env_id references a missing manifest.
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"❌ Failed to create AgentSession: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

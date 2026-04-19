@@ -30,7 +30,7 @@ Usage example:
 """
 
 from logging import getLogger
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 import asyncio
 import os
 import uuid
@@ -90,6 +90,9 @@ class AgentSessionManager(SessionManager):
         # Memory provider registry (Phase 4 attach point; None = legacy path only)
         self._memory_registry = None
 
+        # Environment service (Phase 3 — enables env_id-driven session creation)
+        self._environment_service = None
+
         # ToolLoader reference (for preset-based tool filtering)
         self._tool_loader = None
 
@@ -118,6 +121,16 @@ class AgentSessionManager(SessionManager):
         """
         self._memory_registry = memory_registry
         logger.info("AgentSessionManager: memory_registry set for per-session provider wiring")
+
+    def set_environment_service(self, environment_service) -> None:
+        """Store the EnvironmentService for env_id-driven session creation.
+
+        When set, ``create_agent_session`` will consult the service for any
+        request carrying ``env_id`` and build the Pipeline from the stored
+        manifest instead of the GenyPresets path.
+        """
+        self._environment_service = environment_service
+        logger.info("AgentSessionManager: environment_service set for env_id-driven pipelines")
 
     def set_tool_loader(self, tool_loader) -> None:
         """Store the ToolLoader for preset-based tool filtering.
@@ -288,6 +301,8 @@ class AgentSessionManager(SessionManager):
         enable_checkpointing: bool = False,
         session_id: Optional[str] = None,
         owner_username: Optional[str] = None,
+        env_id: Optional[str] = None,
+        memory_config: Optional[Dict[str, Any]] = None,
     ) -> AgentSession:
         """
         Create a new AgentSession.
@@ -426,6 +441,31 @@ class AgentSessionManager(SessionManager):
             except Exception as e:
                 logger.debug(f"  geny-executor tool registry build skipped: {e}")
 
+        # ── env_id path: pre-build the Pipeline from the stored manifest ──
+        # When env_id is set, skip the GenyPresets branch in _build_pipeline
+        # and hand the session a manifest-backed Pipeline instead.
+        prebuilt_pipeline = None
+        if env_id:
+            if self._environment_service is None:
+                raise ValueError(
+                    "env_id supplied but EnvironmentService is not configured on "
+                    "AgentSessionManager"
+                )
+            try:
+                from service.config.manager import get_config_manager
+                from service.config.sub_config.general.api_config import APIConfig
+                api_key = os.environ.get("ANTHROPIC_API_KEY") or (
+                    get_config_manager().load_config(APIConfig).anthropic_api_key or ""
+                )
+            except Exception:
+                api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+            if not api_key:
+                raise ValueError("ANTHROPIC_API_KEY is required for env_id-based sessions")
+            prebuilt_pipeline = self._environment_service.instantiate_pipeline(
+                env_id, api_key=api_key
+            )
+            logger.info(f"  env_id: {env_id} → manifest-backed pipeline built")
+
         # Create AgentSession
         agent = await AgentSession.create(
             working_dir=request.working_dir,
@@ -445,12 +485,34 @@ class AgentSessionManager(SessionManager):
             tool_preset_id=preset_id,
             owner_username=owner_username,
             geny_tool_registry=geny_tool_registry,
+            env_id=env_id,
+            memory_config=memory_config,
+            prebuilt_pipeline=prebuilt_pipeline,
         )
 
         session_id = agent.session_id
 
         # Register in local store
         self._local_agents[session_id] = agent
+
+        # ── Provision MemoryProvider (Phase 3 wire — attach waits for Phase 4) ──
+        # If a memory_config override is supplied, or a process-wide default
+        # exists (MEMORY_PROVIDER=ephemeral/file/sql), spin up a provider now.
+        # The provider is registered under session_id so REST clients can hit
+        # /api/sessions/{id}/memory immediately. Actual attachment to Stage 2
+        # happens in Phase 4 via registry.attach_to_pipeline().
+        if self._memory_registry is not None:
+            try:
+                provider = self._memory_registry.provision(
+                    session_id, override=memory_config
+                )
+                if provider is not None:
+                    logger.info(
+                        f"[{session_id}] MemoryProvider provisioned "
+                        f"(capabilities={[c.name for c in provider.descriptor.capabilities]})"
+                    )
+            except Exception as e:
+                logger.warning(f"[{session_id}] MemoryProvider provisioning skipped: {e}")
 
         # Wire DB into session memory manager (if available)
         if self._app_db is not None and agent.memory_manager is not None:

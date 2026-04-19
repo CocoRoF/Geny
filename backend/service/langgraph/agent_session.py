@@ -78,6 +78,9 @@ class AgentSession:
         tool_preset_id: Optional[str] = None,
         owner_username: Optional[str] = None,
         geny_tool_registry: Optional[Any] = None,
+        env_id: Optional[str] = None,
+        memory_config: Optional[Dict[str, Any]] = None,
+        prebuilt_pipeline: Optional[Any] = None,
     ):
         """Initialize AgentSession.
 
@@ -126,6 +129,12 @@ class AgentSession:
 
         # Internal components
         self._pipeline: Optional[Any] = None  # geny-executor Pipeline
+
+        # Environment / memory wiring (Phase 3 — env_id pre-builds Pipeline,
+        # memory_config is retained for Phase 4 attachment + observability).
+        self._env_id: Optional[str] = env_id
+        self._memory_config: Optional[Dict[str, Any]] = memory_config
+        self._prebuilt_pipeline: Optional[Any] = prebuilt_pipeline
 
         # geny-executor tool registry (set by AgentSessionManager)
         self._geny_tool_registry = geny_tool_registry
@@ -626,12 +635,25 @@ class AgentSession:
     def _build_pipeline(self):
         """Build a geny-executor Pipeline.
 
-        Two presets only:
-          - vtuber: conversational agent with persona + memory
-          - default (worker_adaptive): full autonomous agent with binary classify
+        Three paths:
+          - ``prebuilt_pipeline`` was injected (env_id flow) → adopt as-is.
+          - ``vtuber``: conversational agent with persona + memory (preset).
+          - ``default`` (worker_adaptive): full autonomous agent with binary
+            classify (preset).
 
         No fallback — if this fails, the session is in error state.
         """
+        # ── env_id path: the manager already built the Pipeline from a
+        # stored EnvironmentManifest. Adopt it and skip the preset branch.
+        if self._prebuilt_pipeline is not None:
+            self._pipeline = self._prebuilt_pipeline
+            self._preset_name = f"env:{self._env_id}" if self._env_id else "env"
+            logger.info(
+                f"[{self._session_id}] Pipeline adopted from manifest: "
+                f"preset={self._preset_name}"
+            )
+            return
+
         from geny_executor.memory import GenyPresets
         from geny_executor.tools.registry import ToolRegistry
         from geny_executor.tools.base import ToolContext

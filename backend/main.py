@@ -300,6 +300,7 @@ async def lifespan(app: FastAPI):
     from service.environment import EnvironmentService
     environment_service = EnvironmentService()
     app.state.environment_service = environment_service
+    agent_manager.set_environment_service(environment_service)
     logger.info(f"   - EnvironmentService: storage={environment_service.storage_path}")
 
     # ── ArtifactService (Phase 3) ───────────────────────────────────────
