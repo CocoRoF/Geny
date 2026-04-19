@@ -5,9 +5,10 @@ import { useAppStore } from '@/store/useAppStore';
 import { agentApi } from '@/lib/api';
 import { twMerge } from 'tailwind-merge';
 import { useI18n } from '@/lib/i18n';
-import { RotateCcw, Trash2, Pencil, Save, X, FileText, Eraser, Link2, Terminal, Brain } from 'lucide-react';
+import { RotateCcw, Trash2, Pencil, Save, X, FileText, Eraser, Link2, Terminal, Brain, ExternalLink } from 'lucide-react';
 import type { SessionInfo } from '@/types';
 import ConfirmModal from '@/components/modals/ConfirmModal';
+import EnvironmentDetailDrawer from '@/components/EnvironmentDetailDrawer';
 
 function cn(...classes: (string | boolean | undefined | null)[]) {
   return twMerge(classes.filter(Boolean).join(' '));
@@ -38,6 +39,7 @@ export default function InfoTab() {
   const [thinkingTriggerInfo, setThinkingTriggerInfo] = useState<{ consecutive_triggers: number; current_threshold_seconds: number } | null>(null);
   const [thinkingTriggerLoading, setThinkingTriggerLoading] = useState(false);
   const [thinkingTriggerMsg, setThinkingTriggerMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [envDrawerId, setEnvDrawerId] = useState<string | null>(null);
 
   const fetchDetail = useCallback(async () => {
     if (!selectedSessionId) { setData(null); return; }
@@ -155,7 +157,8 @@ export default function InfoTab() {
     return parts.join(' · ');
   };
 
-  const fields = [
+  type InfoField = { label: string; value: string | number; onClick?: () => void };
+  const fields: InfoField[] = [
     { label: t('info.fields.sessionId'), value: data.session_id },
     { label: t('info.fields.name'), value: data.session_name || t('info.unnamed') },
     { label: t('info.fields.status'), value: isDeleted ? t('info.deleted') : (data.status || t('info.unknown')) },
@@ -171,7 +174,11 @@ export default function InfoTab() {
     { label: t('info.fields.pid'), value: data.pid || '—' },
     { label: t('info.fields.pod'), value: data.pod_name || '—' },
     { label: t('info.fields.totalCost'), value: data.total_cost != null && data.total_cost > 0 ? `$${data.total_cost.toFixed(6)}` : '$0.000000' },
-    { label: t('info.fields.environment'), value: data.env_id || t('info.environmentNone') },
+    {
+      label: t('info.fields.environment'),
+      value: data.env_id || t('info.environmentNone'),
+      onClick: data.env_id ? () => setEnvDrawerId(data.env_id) : undefined,
+    },
     { label: t('info.fields.memoryProvider'), value: formatMemoryConfig(data.memory_config) },
     ...(data.session_type ? [{ label: t('info.fields.sessionType'), value: data.session_type }] : []),
     ...(data.linked_session_id ? [{ label: t('info.fields.linkedSession'), value: data.linked_session_id }] : []),
@@ -248,7 +255,19 @@ export default function InfoTab() {
         {fields.map(f => (
           <div key={f.label} className="flex flex-col gap-0.5 py-2 px-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)]">
             <span className="text-[10px] font-semibold uppercase tracking-[0.5px] text-[var(--text-muted)]">{f.label}</span>
-            <span className="text-[13px] text-[var(--text-primary)] break-all" style={{ fontFamily: "'SF Mono', 'Fira Code', monospace" }}>{String(f.value)}</span>
+            {f.onClick ? (
+              <button
+                type="button"
+                onClick={f.onClick}
+                className="inline-flex items-center gap-1 text-[13px] text-[var(--primary-color)] hover:underline break-all text-left cursor-pointer"
+                style={{ fontFamily: "'SF Mono', 'Fira Code', monospace" }}
+              >
+                <span>{String(f.value)}</span>
+                <ExternalLink size={11} className="shrink-0 opacity-70" />
+              </button>
+            ) : (
+              <span className="text-[13px] text-[var(--text-primary)] break-all" style={{ fontFamily: "'SF Mono', 'Fira Code', monospace" }}>{String(f.value)}</span>
+            )}
           </div>
         ))}
       </div>
@@ -487,6 +506,12 @@ export default function InfoTab() {
           note={t('confirmModal.permanentDeleteNote')}
           onConfirm={() => permanentDeleteSession(data.session_id)}
           onClose={() => setShowPermanentDeleteModal(false)}
+        />
+      )}
+      {envDrawerId && (
+        <EnvironmentDetailDrawer
+          envId={envDrawerId}
+          onClose={() => setEnvDrawerId(null)}
         />
       )}
     </div>
