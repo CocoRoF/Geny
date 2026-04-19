@@ -56,6 +56,13 @@ export default function CreateSessionModal({ onClose }: Props) {
   const [selectedPreset, setSelectedPreset] = useState('');
   const [selectedCliPreset, setSelectedCliPreset] = useState('');
   const [selectedEnvId, setSelectedEnvId] = useState('');
+  const [memoryProvider, setMemoryProvider] = useState<'' | 'disabled' | 'ephemeral' | 'file' | 'sql'>('');
+  const [memoryRoot, setMemoryRoot] = useState('');
+  const [memoryDsn, setMemoryDsn] = useState('');
+  const [memoryDialect, setMemoryDialect] = useState<'' | 'sqlite' | 'postgres'>('');
+  const [memoryScope, setMemoryScope] = useState('');
+  const [memoryTimezone, setMemoryTimezone] = useState('');
+  const [showMemoryAdvanced, setShowMemoryAdvanced] = useState(false);
   const {
     environments,
     isLoading: environmentsLoading,
@@ -166,6 +173,22 @@ export default function CreateSessionModal({ onClose }: Props) {
       // absent, so empty string = legacy path (unchanged behavior).
       if (selectedEnvId) {
         payload.env_id = selectedEnvId;
+      }
+      // Phase 7-3 — per-session MemoryProvider override. Only send
+      // when the user picked a provider; leaving it blank = process
+      // default (MEMORY_PROVIDER env).
+      if (memoryProvider) {
+        const memCfg: Record<string, unknown> = { provider: memoryProvider };
+        if (memoryProvider === 'file') {
+          if (memoryRoot.trim()) memCfg.root = memoryRoot.trim();
+        }
+        if (memoryProvider === 'sql') {
+          if (memoryDsn.trim()) memCfg.dsn = memoryDsn.trim();
+          if (memoryDialect) memCfg.dialect = memoryDialect;
+        }
+        if (memoryScope.trim()) memCfg.scope = memoryScope.trim();
+        if (memoryTimezone.trim()) memCfg.timezone = memoryTimezone.trim();
+        payload.memory_config = memCfg;
       }
       // CLI-specific settings for VTuber role
       if (formState.role === 'vtuber') {
@@ -371,6 +394,122 @@ export default function CreateSessionModal({ onClose }: Props) {
                 return env?.description || t('createSession.environmentSelected');
               })()}
             </small>
+          </div>
+
+          {/* Memory provider override (advanced, collapsible) */}
+          <div className="flex flex-col gap-1.5">
+            <button
+              type="button"
+              onClick={() => setShowMemoryAdvanced(v => !v)}
+              className="flex items-center justify-between gap-2 py-1 text-left bg-transparent border-none text-[0.8125rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+            >
+              <span className="inline-flex items-center gap-1.5">
+                {t('createSession.memoryOverride')}
+                <InfoTooltip text={t('createSession.memoryOverrideHelp')} />
+              </span>
+              <span className="text-[0.75rem] text-[var(--text-muted)]">
+                {showMemoryAdvanced ? t('createSession.memoryHide') : t('createSession.memoryShow')}
+              </span>
+            </button>
+            {showMemoryAdvanced && (
+              <div className="flex flex-col gap-3 p-3 rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)]">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[0.75rem] font-medium text-[var(--text-secondary)]">
+                    {t('createSession.memoryProvider')}
+                  </label>
+                  <select
+                    className="w-full py-2 px-3 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.8125rem] text-[var(--text-primary)] appearance-none cursor-pointer focus:outline-none focus:border-[var(--primary-color)] pr-8"
+                    style={selectArrow}
+                    value={memoryProvider}
+                    onChange={e => setMemoryProvider(e.target.value as typeof memoryProvider)}
+                  >
+                    <option value="">{t('createSession.memoryProviderDefault')}</option>
+                    <option value="disabled">{t('createSession.memoryProviderDisabled')}</option>
+                    <option value="ephemeral">{t('createSession.memoryProviderEphemeral')}</option>
+                    <option value="file">{t('createSession.memoryProviderFile')}</option>
+                    <option value="sql">{t('createSession.memoryProviderSql')}</option>
+                  </select>
+                </div>
+
+                {memoryProvider === 'file' && (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[0.75rem] font-medium text-[var(--text-secondary)]">
+                      {t('createSession.memoryRoot')}
+                    </label>
+                    <input
+                      className="w-full py-2 px-3 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--primary-color)]"
+                      placeholder="/var/lib/geny/memory"
+                      value={memoryRoot}
+                      onChange={e => setMemoryRoot(e.target.value)}
+                    />
+                    <small className="text-[0.6875rem] text-[var(--text-muted)]">
+                      {t('createSession.memoryRootHelp')}
+                    </small>
+                  </div>
+                )}
+
+                {memoryProvider === 'sql' && (
+                  <>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[0.75rem] font-medium text-[var(--text-secondary)]">
+                        {t('createSession.memoryDsn')}
+                      </label>
+                      <input
+                        className="w-full py-2 px-3 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.8125rem] font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--primary-color)]"
+                        placeholder="sqlite:///./data/memory.db"
+                        value={memoryDsn}
+                        onChange={e => setMemoryDsn(e.target.value)}
+                      />
+                      <small className="text-[0.6875rem] text-[var(--text-muted)]">
+                        {t('createSession.memoryDsnHelp')}
+                      </small>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[0.75rem] font-medium text-[var(--text-secondary)]">
+                        {t('createSession.memoryDialect')}
+                      </label>
+                      <select
+                        className="w-full py-2 px-3 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.8125rem] text-[var(--text-primary)] appearance-none cursor-pointer focus:outline-none focus:border-[var(--primary-color)] pr-8"
+                        style={selectArrow}
+                        value={memoryDialect}
+                        onChange={e => setMemoryDialect(e.target.value as typeof memoryDialect)}
+                      >
+                        <option value="">{t('createSession.memoryDialectAuto')}</option>
+                        <option value="sqlite">sqlite</option>
+                        <option value="postgres">postgres</option>
+                      </select>
+                    </div>
+                  </>
+                )}
+
+                {memoryProvider && memoryProvider !== 'disabled' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[0.75rem] font-medium text-[var(--text-secondary)]">
+                        {t('createSession.memoryScope')}
+                      </label>
+                      <input
+                        className="w-full py-2 px-3 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--primary-color)]"
+                        placeholder="session"
+                        value={memoryScope}
+                        onChange={e => setMemoryScope(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[0.75rem] font-medium text-[var(--text-secondary)]">
+                        {t('createSession.memoryTimezone')}
+                      </label>
+                      <input
+                        className="w-full py-2 px-3 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--primary-color)]"
+                        placeholder="Asia/Seoul"
+                        value={memoryTimezone}
+                        onChange={e => setMemoryTimezone(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* System Prompt — VTuber mode shows dual prompts with template selectors */}
