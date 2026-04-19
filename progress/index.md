@@ -90,3 +90,5 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
   Environments empty state 에 Import 버튼 병치.
 - [43_phase7-11_linked_sessions_breakdown.md](43_phase7-11_linked_sessions_breakdown.md) —
   드로어 Linked sessions 헤더에 running/error/other 브레이크다운.
+- [44_phase7-12_builder_back_breadcrumb.md](44_phase7-12_builder_back_breadcrumb.md) —
+  BuilderTab 헤더에 "Back to Environments" 링크.

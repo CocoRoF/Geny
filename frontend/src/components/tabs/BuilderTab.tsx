@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { Boxes, ChevronRight, Eye, EyeOff, RotateCcw, Save, Wrench, X } from 'lucide-react';
+import { ArrowLeft, Boxes, ChevronRight, Eye, EyeOff, RotateCcw, Save, Wrench, X } from 'lucide-react';
 
 import { catalogApi } from '@/lib/environmentApi';
 import { useAppStore } from '@/store/useAppStore';
@@ -353,6 +353,16 @@ export default function BuilderTab() {
       {/* Header */}
       <header className="shrink-0 flex items-start justify-between gap-3 px-6 py-3 border-b border-[var(--border-color)]">
         <div className="flex flex-col gap-0.5 min-w-0">
+          <button
+            onClick={() => {
+              closeBuilder();
+              setActiveTab('environments');
+            }}
+            className="flex items-center gap-1 text-[0.6875rem] font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-transparent border-none p-0 cursor-pointer self-start"
+          >
+            <ArrowLeft size={10} />
+            {t('builderTab.backToEnvironments')}
+          </button>
           <h2 className="text-[1rem] font-semibold text-[var(--text-primary)] truncate">
             {env?.name ?? t('builderTab.loading')}
           </h2>

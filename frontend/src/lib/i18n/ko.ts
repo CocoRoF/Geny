@@ -605,6 +605,7 @@ const ko: Translations = {
     emptyTitle: '열려 있는 환경이 없습니다',
     emptyHint: 'Environments 탭에서 카드의 "Builder 에서 열기" 를 누르거나, 카드를 눌러 프리뷰한 뒤 여기로 여세요.',
     openEnvironments: 'Environments 탭 열기',
+    backToEnvironments: 'Environments 로 돌아가기',
     loading: '환경을 불러오는 중…',
     loadFailed: '환경을 불러오지 못했습니다',
     closeLabel: '빌더 닫기',

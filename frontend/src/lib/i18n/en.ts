@@ -605,6 +605,7 @@ const en = {
     emptyTitle: 'No environment opened',
     emptyHint: 'Pick one from the Environments tab — each card has an "Open in Builder" action, or click a card to preview it and open it here.',
     openEnvironments: 'Open Environments tab',
+    backToEnvironments: 'Back to Environments',
     loading: 'Loading environment…',
     loadFailed: 'Failed to load environment',
     closeLabel: 'Close builder',
