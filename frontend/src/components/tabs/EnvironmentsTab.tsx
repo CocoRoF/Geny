@@ -9,12 +9,13 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Boxes, Plus, RefreshCw, Tag } from 'lucide-react';
+import { ArrowLeftRight, Boxes, Plus, RefreshCw, Tag } from 'lucide-react';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
 import type { EnvironmentSummary } from '@/types/environment';
 import CreateEnvironmentModal from '@/components/modals/CreateEnvironmentModal';
 import EnvironmentDetailDrawer from '@/components/EnvironmentDetailDrawer';
+import EnvironmentDiffModal from '@/components/modals/EnvironmentDiffModal';
 
 function formatDate(iso: string): string {
   try {
@@ -76,6 +77,7 @@ export default function EnvironmentsTab() {
   const { environments, isLoading, error, loadEnvironments } = useEnvironmentStore();
   const { t } = useI18n();
   const [showCreate, setShowCreate] = useState(false);
+  const [showDiff, setShowDiff] = useState<{ left?: string; right?: string } | null>(null);
   const [openEnvId, setOpenEnvId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -103,6 +105,14 @@ export default function EnvironmentsTab() {
             >
               <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
               {t('common.refresh')}
+            </button>
+            <button
+              onClick={() => setShowDiff({})}
+              disabled={environments.length < 2}
+              className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ArrowLeftRight size={12} />
+              {t('environmentsTab.compare')}
             </button>
             <button
               onClick={() => setShowCreate(true)}
@@ -167,6 +177,18 @@ export default function EnvironmentsTab() {
         <EnvironmentDetailDrawer
           envId={openEnvId}
           onClose={() => setOpenEnvId(null)}
+          onCompare={() => {
+            setShowDiff({ left: openEnvId });
+            setOpenEnvId(null);
+          }}
+        />
+      )}
+
+      {showDiff && (
+        <EnvironmentDiffModal
+          initialLeft={showDiff.left}
+          initialRight={showDiff.right}
+          onClose={() => setShowDiff(null)}
         />
       )}
     </div>

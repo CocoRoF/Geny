@@ -486,6 +486,26 @@ const ko: Translations = {
     updated: '업데이트 {date}',
     newEnvironment: '새 환경',
     createFirst: '첫 환경 만들기',
+    compare: '비교',
+  },
+
+  // ─── Environment Diff Modal ───
+  diff: {
+    title: '환경 비교',
+    subtitle: '두 환경을 골라 manifest 차이를 확인합니다.',
+    left: '왼쪽',
+    right: '오른쪽',
+    pickEnv: '-- 환경 선택 --',
+    compare: '비교',
+    running: '비교 중…',
+    failed: 'Diff 계산 실패',
+    idle: '두 환경을 선택하고 비교 버튼을 누르세요.',
+    noChanges: '차이 없음 — 두 manifest 가 byte-compatible 합니다.',
+    added: '추가됨',
+    removed: '제거됨',
+    changed: '변경됨',
+    before: '이전',
+    after: '이후',
   },
 
   // ─── Environment Detail Drawer ───
@@ -500,6 +520,7 @@ const ko: Translations = {
     manifest: 'Manifest',
     manifestEmpty: 'manifest 가 아직 없습니다.',
     openInBuilder: 'Builder 에서 열기',
+    compareWith: '다른 환경과 비교…',
     duplicatePrompt: '복제할 환경의 이름',
     duplicating: '복제 중…',
     duplicateFailed: '환경 복제 실패',
