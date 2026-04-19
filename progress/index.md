@@ -74,3 +74,5 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
 - [35_rollout_verification_summary.md](35_rollout_verification_summary.md) —
   plan 06 체크리스트 ↔ 실제 출고물 매핑, deferred items, 릴리스 전 체크
   상태.
+- [36_docs_memory_plan_redirect.md](36_docs_memory_plan_redirect.md) —
+  초기 `docs/MEMORY_UPGRADE_PLAN.md` 에 superseded 배너 부착.

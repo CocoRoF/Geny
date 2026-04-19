@@ -1,5 +1,18 @@
 # Memory 시스템 고도화 구현 기획서
 
+> **⚠️ Historical — superseded.**
+> 본 문서는 2026-03-29 작성된 **초기 자체 설계안**이며, 이후
+> `geny-executor>=0.20.0` 의 `MemoryProvider` DSL 이 상위 아키텍처로
+> 채택되면서 실제 구현은 [`plan/03_memory_migration.md`](../plan/03_memory_migration.md)
+> 과 [`plan/06_rollout_and_verification.md`](../plan/06_rollout_and_verification.md)
+> 의 롤아웃을 따랐다. 구현 내역은
+> [`progress/index.md`](../progress/index.md) 의 Phase 2 / Phase 4 /
+> Phase 5 / Phase 7 섹션을 참조.
+>
+> 히스토리컬 기록으로 보존된다 — 현재 시스템의 동작 기준이 아니다.
+
+---
+
 > **작성일**: 2026-03-29
 > **대상 프로젝트**: Geny (AI Agent Orchestration Platform)
 > **목표**: 현재 단순 MD 파일 기반의 메모리 시스템을 Obsidian 수준의 지식 관리 체계로 고도화
