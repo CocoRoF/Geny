@@ -860,6 +860,13 @@ class AgentSession:
                         message=f"✓ {stage_name}",
                         node_name=stage_name,
                     )
+                elif event_type in ("loop.escalate", "loop.error"):
+                    signal = event_data.get("signal") or "unknown"
+                    session_logger.log_graph_event(
+                        event_type="loop_signal",
+                        message=f"{event_type}: {signal}",
+                        node_name="s13_loop",
+                    )
 
             # Accumulate output + log to session_logger for streaming
             if event_type == "text.delta":
@@ -987,6 +994,13 @@ class AgentSession:
                         event_type="node_exit",
                         message=f"✓ {stage_name}",
                         node_name=stage_name,
+                    )
+                elif event_type in ("loop.escalate", "loop.error"):
+                    signal = event_data.get("signal") or "unknown"
+                    session_logger.log_graph_event(
+                        event_type="loop_signal",
+                        message=f"{event_type}: {signal}",
+                        node_name="s13_loop",
                     )
 
             # ── Yield events to caller ──

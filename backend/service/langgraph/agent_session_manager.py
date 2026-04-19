@@ -87,6 +87,9 @@ class AgentSessionManager(SessionManager):
         # Database reference (for per-session memory/log DB wiring)
         self._app_db = None
 
+        # Memory provider registry (Phase 4 attach point; None = legacy path only)
+        self._memory_registry = None
+
         # ToolLoader reference (for preset-based tool filtering)
         self._tool_loader = None
 
@@ -105,6 +108,16 @@ class AgentSessionManager(SessionManager):
         """
         self._app_db = app_db
         logger.info("AgentSessionManager: app_db set for per-session memory DB wiring")
+
+    def set_memory_registry(self, memory_registry) -> None:
+        """Store the MemorySessionRegistry for per-session MemoryProvider wiring.
+
+        Phase 4 attach point: until populated, sessions run on the legacy
+        SessionMemoryManager path only. Once a registry is set, Phase 4 wiring
+        will pull a provider per session and attach it to Stage 2 (Context).
+        """
+        self._memory_registry = memory_registry
+        logger.info("AgentSessionManager: memory_registry set for per-session provider wiring")
 
     def set_tool_loader(self, tool_loader) -> None:
         """Store the ToolLoader for preset-based tool filtering.
