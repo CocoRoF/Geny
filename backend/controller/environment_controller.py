@@ -306,31 +306,45 @@ async def import_environment(
 async def import_environments_bulk(
     request: Request,
     body: ImportEnvironmentsBulkRequest,
+    atomic: bool = False,
     auth: dict = Depends(require_auth),
 ):
     """Import a bundle produced by the Environments tab bulk-export.
 
-    Each entry is imported independently — one bad entry does not
-    abort the batch. Response enumerates per-entry success/failure so
-    the client can render a report.
+    Default mode: each entry is imported independently — one bad entry
+    does not abort the batch. Response enumerates per-entry
+    success/failure so the client can render a report.
+
+    `atomic=true`: stop at the first failure and delete every env
+    that succeeded in this batch so far, effectively rolling back.
+    Response still has shape `ImportEnvironmentsBulkResponse` but
+    `succeeded=0` and each rolled-back entry gets `ok=False` with
+    an `error` naming the rollback cause. Remaining entries that
+    were never attempted are marked `not processed`.
     """
     svc = _env_svc(request)
     results: list[ImportBulkResultEntry] = []
-    succeeded = 0
-    for entry in body.entries:
-        try:
-            new_id = svc.import_json(entry.data)
+    succeeded_ids: list[tuple[int, str]] = []  # (idx, new_id) for rollback
+    fail_cause: str | None = None
+    for idx, entry in enumerate(body.entries):
+        if fail_cause is not None:
+            # atomic mode; short-circuit the rest
             results.append(
                 ImportBulkResultEntry(
                     env_id=entry.env_id,
-                    new_id=new_id,
-                    ok=True,
+                    ok=False,
+                    error="not processed (atomic batch aborted)",
                 )
             )
-            succeeded += 1
+            continue
+        try:
+            new_id = svc.import_json(entry.data)
         except Exception as exc:  # noqa: BLE001 — surface all errors per-entry
             logger.warning(
-                "bulk-import entry failed (env_id=%s): %s", entry.env_id, exc
+                "bulk-import entry %d failed (env_id=%s): %s",
+                idx,
+                entry.env_id,
+                exc,
             )
             results.append(
                 ImportBulkResultEntry(
@@ -339,6 +353,32 @@ async def import_environments_bulk(
                     error=str(exc),
                 )
             )
+            if atomic:
+                fail_cause = f"entry {idx}: {exc}"
+            continue
+        results.append(
+            ImportBulkResultEntry(env_id=entry.env_id, new_id=new_id, ok=True)
+        )
+        succeeded_ids.append((idx, new_id))
+
+    if fail_cause is not None and succeeded_ids:
+        # Roll back: delete the envs that succeeded earlier in this batch
+        # and rewrite their result entries as rolled-back failures.
+        for idx, new_id in succeeded_ids:
+            try:
+                svc.delete(new_id)
+            except Exception as exc:  # noqa: BLE001 — best-effort rollback
+                logger.error(
+                    "bulk-import rollback failed for new_id=%s: %s", new_id, exc
+                )
+            results[idx] = ImportBulkResultEntry(
+                env_id=results[idx].env_id,
+                ok=False,
+                error=f"rolled back ({fail_cause})",
+            )
+        succeeded_ids = []
+
+    succeeded = len(succeeded_ids)
     return ImportEnvironmentsBulkResponse(
         total=len(body.entries),
         succeeded=succeeded,

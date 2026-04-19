@@ -104,11 +104,13 @@ export const environmentApi = {
       body: JSON.stringify({ data }),
     }),
 
-  importEnvBulk: (body: ImportEnvironmentsBulkRequest) =>
-    apiCall<ImportEnvironmentsBulkResponse>('/api/environments/import-bulk', {
+  importEnvBulk: (body: ImportEnvironmentsBulkRequest, opts?: { atomic?: boolean }) => {
+    const q = opts?.atomic ? '?atomic=true' : '';
+    return apiCall<ImportEnvironmentsBulkResponse>(`/api/environments/import-bulk${q}`, {
       method: 'POST',
       body: JSON.stringify(body),
-    }),
+    });
+  },
 
   diff: (envIdA: string, envIdB: string) =>
     apiCall<EnvironmentDiffResult>('/api/environments/diff', {
