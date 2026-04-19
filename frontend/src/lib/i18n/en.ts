@@ -494,6 +494,7 @@ const en = {
     importFirst: 'Import from backup',
     compare: 'Compare',
     sessionCountTooltip: '{n} active session(s) bound to this environment',
+    errorCountTooltip: '{n} session(s) bound to this environment are in error state',
     importEnvironment: 'Import…',
   },
 

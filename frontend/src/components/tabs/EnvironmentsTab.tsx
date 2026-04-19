@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, Boxes, Plus, RefreshCw, Tag, Upload, Users } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, Boxes, Plus, RefreshCw, Tag, Upload, Users } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
@@ -30,10 +30,12 @@ function formatDate(iso: string): string {
 function EnvironmentCard({
   env,
   sessionCount,
+  errorCount,
   onClick,
 }: {
   env: EnvironmentSummary;
   sessionCount: number;
+  errorCount: number;
   onClick: () => void;
 }) {
   const { t } = useI18n();
@@ -51,15 +53,26 @@ function EnvironmentCard({
             {env.name}
           </h4>
         </div>
-        {sessionCount > 0 && (
-          <span
-            className="inline-flex items-center gap-1 py-0.5 px-1.5 rounded-md bg-[rgba(34,197,94,0.1)] text-[10px] font-semibold text-[var(--success-color)] border border-[rgba(34,197,94,0.25)] shrink-0"
-            title={t('environmentsTab.sessionCountTooltip', { n: String(sessionCount) })}
-          >
-            <Users size={9} />
-            {sessionCount}
-          </span>
-        )}
+        <div className="flex items-center gap-1 shrink-0">
+          {errorCount > 0 && (
+            <span
+              className="inline-flex items-center gap-1 py-0.5 px-1.5 rounded-md bg-[rgba(239,68,68,0.12)] text-[10px] font-semibold text-[var(--danger-color)] border border-[rgba(239,68,68,0.25)]"
+              title={t('environmentsTab.errorCountTooltip', { n: String(errorCount) })}
+            >
+              <AlertTriangle size={9} />
+              {errorCount}
+            </span>
+          )}
+          {sessionCount > 0 && (
+            <span
+              className="inline-flex items-center gap-1 py-0.5 px-1.5 rounded-md bg-[rgba(34,197,94,0.1)] text-[10px] font-semibold text-[var(--success-color)] border border-[rgba(34,197,94,0.25)]"
+              title={t('environmentsTab.sessionCountTooltip', { n: String(sessionCount) })}
+            >
+              <Users size={9} />
+              {sessionCount}
+            </span>
+          )}
+        </div>
       </div>
 
       <p className="text-[0.75rem] text-[var(--text-muted)] line-clamp-2 leading-[1.5]">
@@ -110,6 +123,15 @@ export default function EnvironmentsTab() {
     for (const s of sessions) {
       const envId = (s as { env_id?: string | null }).env_id;
       if (envId) counts[envId] = (counts[envId] ?? 0) + 1;
+    }
+    return counts;
+  }, [sessions]);
+
+  const errorsPerEnv = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const s of sessions) {
+      const envId = (s as { env_id?: string | null }).env_id;
+      if (envId && s.status === 'error') counts[envId] = (counts[envId] ?? 0) + 1;
     }
     return counts;
   }, [sessions]);
@@ -206,6 +228,7 @@ export default function EnvironmentsTab() {
                 key={env.id}
                 env={env}
                 sessionCount={sessionsPerEnv[env.id] ?? 0}
+                errorCount={errorsPerEnv[env.id] ?? 0}
                 onClick={() => setOpenEnvId(env.id)}
               />
             ))}

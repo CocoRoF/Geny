@@ -94,3 +94,5 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
   BuilderTab 헤더에 "Back to Environments" 링크.
 - [45_phase7-13_copy_env_id.md](45_phase7-13_copy_env_id.md) —
   EnvironmentDetailDrawer 헤더에 env id copy 버튼.
+- [46_phase7-14_card_error_indicator.md](46_phase7-14_card_error_indicator.md) —
+  Environments 카드에 에러 세션 수 배지 (red tint).

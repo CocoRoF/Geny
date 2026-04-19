@@ -494,6 +494,7 @@ const ko: Translations = {
     importFirst: '백업으로부터 가져오기',
     compare: '비교',
     sessionCountTooltip: '이 환경에 바인딩된 활성 세션 {n} 개',
+    errorCountTooltip: '이 환경에 바인딩된 세션 중 {n} 개가 에러 상태입니다',
     importEnvironment: '가져오기…',
   },
 
