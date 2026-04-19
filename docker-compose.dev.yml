@@ -80,6 +80,8 @@ services:
       - MEMORY_ROOT=${MEMORY_ROOT:-}
       - MEMORY_SCOPE=${MEMORY_SCOPE:-session}
       - MEMORY_TIMEZONE=${MEMORY_TIMEZONE:-}
+      # EnvironmentService (Phase 3)
+      - ENVIRONMENT_STORAGE_PATH=${ENVIRONMENT_STORAGE_PATH:-./data/environments}
     volumes:
       # ── Bind mount: 로컬 소스 ↔ 컨테이너 동기화 ──────────────────
       - ./backend:/app

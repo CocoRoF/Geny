@@ -82,6 +82,8 @@ services:
       - MEMORY_ROOT=${MEMORY_ROOT:-}
       - MEMORY_SCOPE=${MEMORY_SCOPE:-session}
       - MEMORY_TIMEZONE=${MEMORY_TIMEZONE:-}
+      # EnvironmentService (Phase 3)
+      - ENVIRONMENT_STORAGE_PATH=${ENVIRONMENT_STORAGE_PATH:-./data/environments}
     volumes:
       - geny-tts-cache:/app/cache/tts
       - geny-voices:/app/static/voices

@@ -290,6 +290,16 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("   - MemorySessionRegistry: dormant (MEMORY_PROVIDER=disabled or unset)")
 
+    # ── EnvironmentService (Phase 3) ───────────────────────────────────
+    # Persists EnvironmentManifest templates to ./data/environments/*.json
+    # (or ENVIRONMENT_STORAGE_PATH). Routers are wired in the follow-up PRs
+    # (#6 environment_controller, #7 catalog_controller); until then the
+    # service sits on app.state ready for use.
+    from service.environment import EnvironmentService
+    environment_service = EnvironmentService()
+    app.state.environment_service = environment_service
+    logger.info(f"   - EnvironmentService: storage={environment_service.storage_path}")
+
     # ── VTuber Service: Live2D model management + avatar state ─────────
     print_step_banner("VTUBER", "VTUBER SERVICE", "Initializing Live2D model management...")
     from service.vtuber import Live2dModelManager, AvatarStateManager
