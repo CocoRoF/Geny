@@ -17,6 +17,8 @@ import type {
   EnvironmentSessionCountsResponse,
   EnvironmentSessionsResponse,
   EnvironmentSummary,
+  ImportEnvironmentsBulkRequest,
+  ImportEnvironmentsBulkResponse,
   StageArtifactList,
   StageIntrospection,
   StageSummary,
@@ -100,6 +102,12 @@ export const environmentApi = {
     apiCall<{ id: string }>('/api/environments/import', {
       method: 'POST',
       body: JSON.stringify({ data }),
+    }),
+
+  importEnvBulk: (body: ImportEnvironmentsBulkRequest) =>
+    apiCall<ImportEnvironmentsBulkResponse>('/api/environments/import-bulk', {
+      method: 'POST',
+      body: JSON.stringify(body),
     }),
 
   diff: (envIdA: string, envIdB: string) =>

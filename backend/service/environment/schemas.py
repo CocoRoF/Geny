@@ -99,6 +99,43 @@ class ImportEnvironmentRequest(BaseModel):
     data: Dict[str, Any]
 
 
+class ImportBulkEntry(BaseModel):
+    """One entry in the bulk-import payload.
+
+    `env_id` is advisory — the backend regenerates ids for the
+    inserted records. Clients can supply it so the response can be
+    correlated back to the originating env in their UI.
+    """
+
+    env_id: Optional[str] = None
+    data: Dict[str, Any]
+
+
+class ImportEnvironmentsBulkRequest(BaseModel):
+    """Batch variant of ImportEnvironmentRequest.
+
+    Mirrors the client-side export bundle shape:
+    `{ version: "1", exports: [{env_id, data}] }`.
+    """
+
+    version: Optional[str] = None
+    entries: List[ImportBulkEntry]
+
+
+class ImportBulkResultEntry(BaseModel):
+    env_id: Optional[str] = None
+    new_id: Optional[str] = None
+    ok: bool
+    error: Optional[str] = None
+
+
+class ImportEnvironmentsBulkResponse(BaseModel):
+    total: int
+    succeeded: int
+    failed: int
+    results: List[ImportBulkResultEntry]
+
+
 # ── Responses ────────────────────────────────────────────
 
 
@@ -215,6 +252,10 @@ __all__ = [
     "DuplicateEnvironmentRequest",
     "DiffEnvironmentsRequest",
     "ImportEnvironmentRequest",
+    "ImportBulkEntry",
+    "ImportEnvironmentsBulkRequest",
+    "ImportBulkResultEntry",
+    "ImportEnvironmentsBulkResponse",
     "EnvironmentSummaryResponse",
     "EnvironmentDetailResponse",
     "EnvironmentListResponse",

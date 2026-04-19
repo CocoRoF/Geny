@@ -232,3 +232,27 @@ export interface EnvironmentSessionCountEntry {
 export interface EnvironmentSessionCountsResponse {
   counts: EnvironmentSessionCountEntry[];
 }
+
+export interface ImportBulkEntry {
+  env_id?: string;
+  data: Record<string, unknown>;
+}
+
+export interface ImportEnvironmentsBulkRequest {
+  version?: string;
+  entries: ImportBulkEntry[];
+}
+
+export interface ImportBulkResultEntry {
+  env_id?: string;
+  new_id?: string;
+  ok: boolean;
+  error?: string;
+}
+
+export interface ImportEnvironmentsBulkResponse {
+  total: number;
+  succeeded: number;
+  failed: number;
+  results: ImportBulkResultEntry[];
+}
