@@ -82,3 +82,5 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
   Environment 카드에 "N sessions bound" badge.
 - [39_phase7-7_drawer_linked_sessions.md](39_phase7-7_drawer_linked_sessions.md) —
   EnvironmentDetailDrawer 에 "Linked sessions" 섹션 + 세션 drill-down.
+- [40_phase7-8_import_dragover_state.md](40_phase7-8_import_dragover_state.md) —
+  ImportManifestModal 드롭존에 drag-over 시각 피드백.

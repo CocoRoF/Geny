@@ -90,6 +90,7 @@ export default function ImportManifestModal({ envId, envName, onClose, onImporte
   const [showDiff, setShowDiff] = useState(false);
   const [expandedChanged, setExpandedChanged] = useState<Set<string>>(() => new Set());
   const [backupBeforeImport, setBackupBeforeImport] = useState(true);
+  const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const toggleChanged = (path: string) => {
@@ -171,8 +172,21 @@ export default function ImportManifestModal({ envId, envName, onClose, onImporte
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
+    setIsDragOver(false);
     const file = e.dataTransfer.files?.[0];
     if (file) void handleFile(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    // Only unset when the cursor leaves the drop zone itself, not a child
+    if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node | null)) {
+      setIsDragOver(false);
+    }
   };
 
   const handleConfirm = async () => {
@@ -252,8 +266,13 @@ export default function ImportManifestModal({ envId, envName, onClose, onImporte
           {/* Upload / paste row */}
           <div
             onDrop={handleDrop}
-            onDragOver={e => e.preventDefault()}
-            className="flex flex-col items-center justify-center gap-1.5 p-4 rounded-md border border-dashed border-[var(--border-color)] bg-[var(--bg-primary)]"
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            className={`flex flex-col items-center justify-center gap-1.5 p-4 rounded-md border border-dashed transition-colors ${
+              isDragOver
+                ? 'border-[var(--primary-color)] bg-[rgba(99,102,241,0.08)]'
+                : 'border-[var(--border-color)] bg-[var(--bg-primary)]'
+            }`}
           >
             <FileUp size={20} className="text-[var(--text-muted)] opacity-70" />
             <p className="text-[0.75rem] text-[var(--text-secondary)]">
