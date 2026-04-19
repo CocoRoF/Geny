@@ -153,3 +153,6 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
 - [66_phase7-34_diff_bulk_cache.md](66_phase7-34_diff_bulk_cache.md) —
   `/diff-bulk` 에 per-env read cache (N·(N-1) → N fs reads) +
   service 에 `diff_from_raw` / `read_raw` 공개.
+- [67_phase7-35_md_copy_clipboard.md](67_phase7-35_md_copy_clipboard.md) —
+  DiffModal / MatrixModal 에 "Copy MD" 버튼 (navigator.clipboard,
+  1.8 초 라벨 피드백).

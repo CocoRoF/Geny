@@ -560,6 +560,9 @@ const ko: Translations = {
     after: '이후',
     exportJson: 'JSON 내보내기',
     exportMarkdown: 'MD 내보내기',
+    copyMarkdown: 'MD 복사',
+    copied: '복사됨!',
+    copyFailed: '복사 실패',
   },
 
   // ─── Environment Diff Matrix (multi-env pairwise) ───
@@ -572,6 +575,9 @@ const ko: Translations = {
     legend: '상단 삼각형이 클릭 가능. `+A/-R/~C` = 추가/제거/변경 개수. `=` 는 동일한 manifest.',
     exportJson: 'JSON 내보내기',
     exportMarkdown: 'MD 내보내기',
+    copyMarkdown: 'MD 복사',
+    copied: '복사됨!',
+    copyFailed: '복사 실패',
   },
 
   // ─── Environment Detail Drawer ───

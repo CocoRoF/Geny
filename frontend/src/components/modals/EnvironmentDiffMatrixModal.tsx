@@ -12,9 +12,9 @@
  * view — the matrix stays in a "single pair opened" state underneath.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeftRight, Download, Loader2, X } from 'lucide-react';
+import { ArrowLeftRight, Check, Clipboard, Download, Loader2, X } from 'lucide-react';
 
 import { environmentApi } from '@/lib/environmentApi';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
@@ -43,6 +43,8 @@ export default function EnvironmentDiffMatrixModal({ envIds, onClose }: Props) {
 
   const [cells, setCells] = useState<Record<CellKey, CellState>>({});
   const [pair, setPair] = useState<{ left: string; right: string } | null>(null);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const orderedIds = useMemo(() => envIds.filter(Boolean), [envIds]);
   const nameById = useMemo(() => {
@@ -180,9 +182,7 @@ export default function EnvironmentDiffMatrixModal({ envIds, onClose }: Props) {
     );
   };
 
-  const exportMatrixMarkdown = () => {
-    if (!exportable) return;
-    const stamp = new Date().toISOString();
+  const buildMatrixMarkdown = (stamp: string): string => {
     const lines: string[] = [];
     lines.push(`# Environment diff matrix`);
     lines.push('');
@@ -256,13 +256,40 @@ export default function EnvironmentDiffMatrixModal({ envIds, onClose }: Props) {
       }
       lines.push('');
     }
+    return lines.join('\n');
+  };
+
+  const exportMatrixMarkdown = () => {
+    if (!exportable) return;
+    const stamp = new Date().toISOString();
+    const body = buildMatrixMarkdown(stamp);
     const stampSlug = stamp.replace(/[:.]/g, '-');
     downloadBlob(
-      lines.join('\n'),
+      body,
       'text/markdown',
       `env-diff-matrix-${orderedIds.length}-${stampSlug}.md`,
     );
   };
+
+  const copyMatrixMarkdown = async () => {
+    if (!exportable) return;
+    const body = buildMatrixMarkdown(new Date().toISOString());
+    try {
+      if (!navigator?.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(body);
+      setCopyStatus('copied');
+    } catch {
+      setCopyStatus('failed');
+    }
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopyStatus('idle'), 1800);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    };
+  }, []);
 
   const renderCell = (rowIdx: number, colIdx: number) => {
     if (rowIdx === colIdx) {
@@ -422,6 +449,23 @@ export default function EnvironmentDiffMatrixModal({ envIds, onClose }: Props) {
                 >
                   <Download size={12} />
                   {t('diffMatrix.exportMarkdown')}
+                </button>
+                <button
+                  onClick={copyMatrixMarkdown}
+                  className={`flex items-center gap-1.5 py-1.5 px-3 rounded-md border text-[0.75rem] font-medium cursor-pointer transition-colors ${
+                    copyStatus === 'copied'
+                      ? 'bg-[rgba(34,197,94,0.1)] border-[rgba(34,197,94,0.35)] text-[var(--success-color)]'
+                      : copyStatus === 'failed'
+                        ? 'bg-[rgba(239,68,68,0.1)] border-[rgba(239,68,68,0.35)] text-[var(--danger-color)]'
+                        : 'bg-[var(--bg-primary)] border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
+                  }`}
+                >
+                  {copyStatus === 'copied' ? <Check size={12} /> : <Clipboard size={12} />}
+                  {copyStatus === 'copied'
+                    ? t('diffMatrix.copied')
+                    : copyStatus === 'failed'
+                      ? t('diffMatrix.copyFailed')
+                      : t('diffMatrix.copyMarkdown')}
                 </button>
               </>
             )}

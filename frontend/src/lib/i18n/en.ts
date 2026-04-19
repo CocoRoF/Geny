@@ -560,6 +560,9 @@ const en = {
     after: 'After',
     exportJson: 'Export JSON',
     exportMarkdown: 'Export MD',
+    copyMarkdown: 'Copy MD',
+    copied: 'Copied!',
+    copyFailed: 'Copy failed',
   },
 
   // ─── Environment Diff Matrix (multi-env pairwise) ───
@@ -572,6 +575,9 @@ const en = {
     legend: 'Upper triangle is clickable. `+A/-R/~C` = added/removed/changed counts. `=` means identical manifests.',
     exportJson: 'Export JSON',
     exportMarkdown: 'Export MD',
+    copyMarkdown: 'Copy MD',
+    copied: 'Copied!',
+    copyFailed: 'Copy failed',
   },
 
   // ─── Environment Detail Drawer ───

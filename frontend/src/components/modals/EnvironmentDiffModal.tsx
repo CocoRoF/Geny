@@ -11,9 +11,9 @@
  * the backend keeps them stable.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeftRight, Download, Minus, Pencil, Plus, X } from 'lucide-react';
+import { ArrowLeftRight, Check, Clipboard, Download, Minus, Pencil, Plus, X } from 'lucide-react';
 
 import { environmentApi } from '@/lib/environmentApi';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
@@ -46,6 +46,14 @@ export default function EnvironmentDiffModal({ onClose, initialLeft, initialRigh
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<EnvironmentDiffResult | null>(null);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (environments.length === 0) {
@@ -111,13 +119,12 @@ export default function EnvironmentDiffModal({ onClose, initialLeft, initialRigh
     downloadBlob(JSON.stringify(payload, null, 2), 'application/json', filename);
   };
 
-  const exportDiffMarkdown = () => {
-    if (!result) return;
-    const leftEnv = environments.find(e => e.id === leftId);
-    const rightEnv = environments.find(e => e.id === rightId);
-    const leftLabel = leftEnv?.name ?? leftId;
-    const rightLabel = rightEnv?.name ?? rightId;
-    const stamp = new Date().toISOString();
+  const buildDiffMarkdown = (
+    stamp: string,
+    leftLabel: string,
+    rightLabel: string,
+  ): string => {
+    if (!result) return '';
     const lines: string[] = [];
     lines.push(`# Environment diff`);
     lines.push('');
@@ -165,10 +172,39 @@ export default function EnvironmentDiffModal({ onClose, initialLeft, initialRigh
         lines.push('');
       }
     }
+    return lines.join('\n');
+  };
+
+  const exportDiffMarkdown = () => {
+    if (!result) return;
+    const leftEnv = environments.find(e => e.id === leftId);
+    const rightEnv = environments.find(e => e.id === rightId);
+    const leftLabel = leftEnv?.name ?? leftId;
+    const rightLabel = rightEnv?.name ?? rightId;
+    const stamp = new Date().toISOString();
+    const body = buildDiffMarkdown(stamp, leftLabel, rightLabel);
     const stampSlug = stamp.replace(/[:.]/g, '-');
     const slug = (s: string) => s.replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 32);
     const filename = `env-diff-${slug(leftLabel)}__${slug(rightLabel)}-${stampSlug}.md`;
-    downloadBlob(lines.join('\n'), 'text/markdown', filename);
+    downloadBlob(body, 'text/markdown', filename);
+  };
+
+  const copyDiffMarkdown = async () => {
+    if (!result) return;
+    const leftEnv = environments.find(e => e.id === leftId);
+    const rightEnv = environments.find(e => e.id === rightId);
+    const leftLabel = leftEnv?.name ?? leftId;
+    const rightLabel = rightEnv?.name ?? rightId;
+    const body = buildDiffMarkdown(new Date().toISOString(), leftLabel, rightLabel);
+    try {
+      if (!navigator?.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(body);
+      setCopyStatus('copied');
+    } catch {
+      setCopyStatus('failed');
+    }
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopyStatus('idle'), 1800);
   };
 
   const leftName = useMemo(
@@ -404,6 +440,23 @@ export default function EnvironmentDiffModal({ onClose, initialLeft, initialRigh
               >
                 <Download size={12} />
                 {t('diff.exportMarkdown')}
+              </button>
+              <button
+                onClick={copyDiffMarkdown}
+                className={`flex items-center gap-1.5 py-1.5 px-3 rounded-md border text-[0.75rem] font-medium cursor-pointer transition-colors ${
+                  copyStatus === 'copied'
+                    ? 'bg-[rgba(34,197,94,0.1)] border-[rgba(34,197,94,0.35)] text-[var(--success-color)]'
+                    : copyStatus === 'failed'
+                      ? 'bg-[rgba(239,68,68,0.1)] border-[rgba(239,68,68,0.35)] text-[var(--danger-color)]'
+                      : 'bg-[var(--bg-primary)] border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
+                }`}
+              >
+                {copyStatus === 'copied' ? <Check size={12} /> : <Clipboard size={12} />}
+                {copyStatus === 'copied'
+                  ? t('diff.copied')
+                  : copyStatus === 'failed'
+                    ? t('diff.copyFailed')
+                    : t('diff.copyMarkdown')}
               </button>
             </>
           )}
