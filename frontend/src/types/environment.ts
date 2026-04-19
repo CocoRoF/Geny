@@ -120,32 +120,78 @@ export interface EnvironmentDiffResult {
 }
 
 // ── Catalog (stage/artifact/strategy introspection) ──────────────
-
-export interface ArtifactCapability {
-  inputs: string[];
-  outputs: string[];
-  required_strategies: string[];
-  optional_strategies: string[];
-}
+//
+// Byte-compatible with `backend/service/artifact/schemas.py` — which is in
+// turn a port of the executor's `StageIntrospection.to_dict()` shape.
+// Every field matches the Pydantic model so the UI can read backend
+// responses with zero translation.
 
 export interface ArtifactInfo {
-  artifact_id: string;
-  display_name: string;
-  description: string;
-  module: string;
-  capabilities: ArtifactCapability;
-  default_config: Record<string, unknown>;
-  available_strategies: Record<string, string[]>;
+  stage: string;
+  name: string;
+  description?: string;
+  version?: string;
+  stability?: string;
+  requires: string[];
+  is_default: boolean;
+  provides_stage: boolean;
+  extra: Record<string, unknown>;
 }
 
-export interface StageCatalogEntry {
-  stage_order: number;
-  stage_name: string;
+export interface SlotIntrospection {
+  slot_name: string;
+  description?: string;
   required: boolean;
-  artifacts: ArtifactInfo[];
+  current_impl: string;
+  available_impls: string[];
+  impl_schemas: Record<string, Record<string, unknown> | null>;
+  impl_descriptions: Record<string, string>;
 }
 
+export interface ChainIntrospection {
+  chain_name: string;
+  description?: string;
+  current_impls: string[];
+  available_impls: string[];
+  impl_schemas: Record<string, Record<string, unknown> | null>;
+  impl_descriptions: Record<string, string>;
+}
+
+/** Full introspection for one (stage, default-artifact) pair. */
+export interface StageIntrospection {
+  stage: string;
+  artifact: string;
+  order: number;
+  name: string;
+  category?: string;
+  artifact_info: ArtifactInfo;
+  config_schema?: Record<string, unknown> | null;
+  config: Record<string, unknown>;
+  strategy_slots: Record<string, SlotIntrospection>;
+  strategy_chains: Record<string, ChainIntrospection>;
+  tool_binding_supported: boolean;
+  model_override_supported: boolean;
+  required: boolean;
+  extra: Record<string, unknown>;
+}
+
+/** Compact stage row returned by `/api/catalog/stages`. */
+export interface StageSummary {
+  order: number;
+  module: string;
+  name: string;
+  category?: string;
+  default_artifact: string;
+  artifact_count: number;
+}
+
+/** Response of `/api/catalog/full`. */
 export interface CatalogResponse {
-  version: string;
-  stages: StageCatalogEntry[];
+  stages: StageIntrospection[];
+}
+
+/** Response of `/api/catalog/stages/{order}/artifacts`. */
+export interface StageArtifactList {
+  stage: string;
+  artifacts: ArtifactInfo[];
 }
