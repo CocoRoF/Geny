@@ -38,6 +38,7 @@ from controller.docs_controller import router as docs_router
 from controller.memory_controller import router as memory_router
 from controller.memory_controller import global_router as global_memory_router
 from controller.session_memory_controller import router as session_memory_router
+from controller.environment_controller import router as environment_router
 from controller.vtuber_controller import router as vtuber_router
 from controller.tts_controller import router as tts_router
 from controller.auth_controller import router as auth_router
@@ -464,6 +465,7 @@ app.include_router(docs_router)  # Documentation API
 app.include_router(memory_router)  # Memory management API
 app.include_router(global_memory_router)  # Global memory API
 app.include_router(session_memory_router)  # Per-session MemoryProvider API (Phase 2)
+app.include_router(environment_router)  # Environment CRUD API (Phase 3)
 app.include_router(vtuber_router)  # VTuber Live2D API
 app.include_router(tts_router)  # TTS (Text-to-Speech) API
 app.include_router(user_opsidian_router)  # User Opsidian (personal knowledge vault)
