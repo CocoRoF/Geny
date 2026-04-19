@@ -903,7 +903,17 @@ class AgentSession:
                         )
 
             elif event_type == "pipeline.complete":
-                accumulated_output = event_data.get("result", accumulated_output)
+                # `text.delta` events feed `accumulated_output` in real
+                # time and are the source of truth. Older executor
+                # builds (≤ 0.20.0) sent a 500-char preview as
+                # `result`, which would silently truncate long
+                # responses if we trusted it blindly. Only accept
+                # `result` when it is at least as long as what we
+                # already streamed — a safe upgrade once the executor
+                # patch (>= 0.20.1) ships full text.
+                streamed_result = event_data.get("result") or ""
+                if len(streamed_result) >= len(accumulated_output):
+                    accumulated_output = streamed_result
                 total_cost = event_data.get("total_cost_usd", 0.0) or 0.0
                 iterations = event_data.get("iterations", 0)
 
@@ -1047,7 +1057,15 @@ class AgentSession:
                 yield {stage_name: {"status": "exit"}}
 
             elif event_type == "pipeline.complete":
-                result_text = event_data.get("result", accumulated_output)
+                # See _invoke_pipeline for the rationale: prefer the
+                # streaming accumulation over a possibly preview-
+                # truncated `result` field on legacy executor builds.
+                streamed_result = event_data.get("result") or ""
+                result_text = (
+                    streamed_result
+                    if len(streamed_result) >= len(accumulated_output)
+                    else accumulated_output
+                )
                 total_cost = event_data.get("total_cost_usd", 0.0) or 0.0
                 iterations = event_data.get("iterations", 0)
                 yield {
