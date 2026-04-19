@@ -113,6 +113,7 @@ const ko: Translations = {
     create: '생성',
     edit: '편집',
     close: '닫기',
+    done: '완료',
     loading: '로딩 중...',
     refresh: '새로고침',
     yes: '예',
@@ -641,6 +642,10 @@ const ko: Translations = {
     importButton: '가져오기',
     importing: '가져오는 중…',
     failed: '환경 가져오기 실패',
+    bundleDetected: '번들 v{version} 감지 — 환경 {n} 개. 각 항목이 새 레코드로 가져와집니다.',
+    importBundleButton: '환경 {n} 개 가져오기',
+    importingBundle: '{n} 개 가져오는 중…',
+    bundleReport: '가져오기 완료 — 성공 {ok}, 실패 {fail}.',
   },
 
   // ─── Environment Builder Tab ───

@@ -113,6 +113,7 @@ const en = {
     create: 'Create',
     edit: 'Edit',
     close: 'Close',
+    done: 'Done',
     loading: 'Loading...',
     refresh: 'Refresh',
     yes: 'Yes',
@@ -641,6 +642,10 @@ const en = {
     importButton: 'Import',
     importing: 'Importing…',
     failed: 'Failed to import environment',
+    bundleDetected: 'Detected bulk bundle v{version} — {n} environment(s). Each one will be imported as a new record.',
+    importBundleButton: 'Import {n} environments',
+    importingBundle: 'Importing {n}…',
+    bundleReport: 'Import finished — {ok} succeeded, {fail} failed.',
   },
 
   // ─── Environment Builder Tab ───
