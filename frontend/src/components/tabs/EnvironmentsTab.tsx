@@ -8,12 +8,11 @@
  * land in follow-up PRs so this file stays small and easy to diff.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Archive, ArrowDownNarrowWide, ArrowLeftRight, Boxes, Check, FilterX, Plus, RefreshCw, Search, Tag, Upload, Users, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
-import { environmentApi } from '@/lib/environmentApi';
 import type { EnvironmentSummary } from '@/types/environment';
 import CreateEnvironmentModal from '@/components/modals/CreateEnvironmentModal';
 import EnvironmentDetailDrawer from '@/components/EnvironmentDetailDrawer';
@@ -129,14 +128,20 @@ type SortKey =
   | 'errors_desc';
 
 export default function EnvironmentsTab() {
-  const { environments, isLoading, error, loadEnvironments } = useEnvironmentStore();
+  const {
+    environments,
+    isLoading,
+    error,
+    loadEnvironments,
+    sessionCounts: storeCounts,
+    refreshSessionCounts,
+  } = useEnvironmentStore();
   const sessions = useAppStore(s => s.sessions);
   const { t } = useI18n();
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showDiff, setShowDiff] = useState<{ left?: string; right?: string } | null>(null);
   const [openEnvId, setOpenEnvId] = useState<string | null>(null);
-  const [serverCounts, setServerCounts] = useState<Record<string, CountBucket> | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -155,30 +160,13 @@ export default function EnvironmentsTab() {
     return () => document.removeEventListener('mousedown', handler);
   }, [tagMenuOpen]);
 
-  const refreshCounts = useCallback(async () => {
-    try {
-      const res = await environmentApi.sessionCounts();
-      const map: Record<string, CountBucket> = {};
-      for (const c of res.counts) {
-        map[c.env_id] = {
-          active: c.active_count,
-          deleted: c.deleted_count,
-          error: c.error_count,
-        };
-      }
-      setServerCounts(map);
-    } catch {
-      // Leave serverCounts null → client aggregation keeps the card grid usable.
-    }
-  }, []);
-
   useEffect(() => {
     loadEnvironments();
   }, [loadEnvironments]);
 
   useEffect(() => {
-    refreshCounts();
-  }, [refreshCounts]);
+    refreshSessionCounts();
+  }, [refreshSessionCounts]);
 
   const clientCountsPerEnv = useMemo(() => {
     const counts: Record<string, CountBucket> = {};
@@ -193,8 +181,8 @@ export default function EnvironmentsTab() {
   }, [sessions]);
 
   const countsPerEnv = useMemo<Record<string, CountBucket>>(() => {
-    return serverCounts ?? clientCountsPerEnv;
-  }, [serverCounts, clientCountsPerEnv]);
+    return storeCounts ?? clientCountsPerEnv;
+  }, [storeCounts, clientCountsPerEnv]);
 
   const allTags = useMemo(() => {
     const set = new Set<string>();
@@ -295,7 +283,7 @@ export default function EnvironmentsTab() {
             <button
               onClick={() => {
                 loadEnvironments();
-                refreshCounts();
+                refreshSessionCounts();
               }}
               disabled={isLoading}
               className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
