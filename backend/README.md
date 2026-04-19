@@ -197,3 +197,29 @@ Detailed documentation for each system:
 | `GENY_LANGUAGE` | UI language (`en`/`ko`) | `en` |
 | `CLAUDE_MAX_BUDGET_USD` | Max cost per session | `10.0` |
 | `CLAUDE_MAX_TURNS` | Max turns per task | `50` |
+
+### Memory Provider (v0.20.0 integration)
+
+`MemorySessionRegistry` stays **dormant** unless `MEMORY_PROVIDER` is set — the legacy `SessionMemoryManager` owns the path until an operator opts in.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MEMORY_PROVIDER` | Factory key: `ephemeral`, `file`, `sql`, or unset/`disabled` (dormant) | unset |
+| `MEMORY_ROOT` | Filesystem root for `file` provider (required when `MEMORY_PROVIDER=file`) | — |
+| `MEMORY_DSN` | SQLAlchemy DSN for `sql` provider (required when `MEMORY_PROVIDER=sql`) | — |
+| `MEMORY_DIALECT` | Override DSN scheme auto-detect: `sqlite` or `postgres` | auto |
+| `MEMORY_SCOPE` | Provider scope | `session` |
+| `MEMORY_TIMEZONE` | IANA tz name used for provider timestamps | host tz |
+| `MEMORY_PROVIDER_ATTACH` | Attach providers to pipeline Stage 2 (truthy: `1`/`true`/`yes`/`on`) | `false` |
+| `MEMORY_API_PROVIDER` | Route `/api/agents/{id}/memory/*` through provider instead of legacy manager | `false` |
+| `MEMORY_LEGACY_STM` | Keep legacy STM reads/writes active (per-layer rollout flag) | `true` |
+| `MEMORY_LEGACY_LTM` | Keep legacy LTM active | `true` |
+| `MEMORY_LEGACY_NOTES` | Keep legacy notes active | `true` |
+| `MEMORY_LEGACY_VECTOR` | Keep legacy FAISS vector path active | `true` |
+| `MEMORY_LEGACY_CURATED` | Keep legacy curated/global memory active | `true` |
+
+### Environment Service
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ENVIRONMENT_STORAGE_PATH` | Root directory for environment manifests | `./data/environments` |
