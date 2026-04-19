@@ -559,6 +559,8 @@ const ko: Translations = {
     diffChanged: '변경됨',
     diffMore: '…외 {n} 건',
     diffUnavailable: '현재 manifest 를 불러오지 못해 diff 프리뷰를 제공할 수 없습니다.',
+    diffBefore: '이전',
+    diffAfter: '이후',
     backupLabel: '덮어쓰기 전에 현재 manifest 를 백업으로 다운로드',
     backupHelp: '시간이 찍힌 JSON 사본을 로컬로 저장합니다. 이미 Export 했거나, 큰 manifest 를 느린 회선에서 작업할 때만 끄세요.',
     backupFailed: '백업 다운로드에 실패했습니다 — 덮어쓰기를 취소했습니다. ({msg})',

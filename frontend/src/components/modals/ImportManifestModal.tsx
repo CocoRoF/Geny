@@ -88,8 +88,29 @@ export default function ImportManifestModal({ envId, envName, onClose, onImporte
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [showDiff, setShowDiff] = useState(false);
+  const [expandedChanged, setExpandedChanged] = useState<Set<string>>(() => new Set());
   const [backupBeforeImport, setBackupBeforeImport] = useState(true);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const toggleChanged = (path: string) => {
+    setExpandedChanged(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  };
+
+  const formatDiffValue = (v: unknown): string => {
+    if (v === undefined) return '(undefined)';
+    if (v === null) return 'null';
+    if (typeof v === 'string') return v;
+    try {
+      return JSON.stringify(v, null, 2);
+    } catch {
+      return String(v);
+    }
+  };
 
   // Ensure the current manifest is loaded so we can diff against it.
   // The drawer that opens us usually has it cached already, but preview
@@ -365,12 +386,49 @@ export default function ImportManifestModal({ envId, envName, onClose, onImporte
                       <h5 className="flex items-center gap-1 text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wide">
                         <Pencil size={10} /> {t('importManifest.diffChanged')} ({diff.changed.length})
                       </h5>
-                      <ul className="flex flex-col gap-0.5">
-                        {diff.changed.slice(0, 20).map(c => (
-                          <li key={c.path} className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] text-[0.6875rem] font-mono text-[var(--text-primary)] break-all">
-                            {c.path}
-                          </li>
-                        ))}
+                      <ul className="flex flex-col gap-1">
+                        {diff.changed.slice(0, 20).map(c => {
+                          const expanded = expandedChanged.has(c.path);
+                          return (
+                            <li
+                              key={c.path}
+                              className="rounded bg-[var(--bg-secondary)] border border-[var(--border-color)]"
+                            >
+                              <button
+                                type="button"
+                                onClick={() => toggleChanged(c.path)}
+                                className="w-full flex items-center gap-1 px-2 py-0.5 bg-transparent border-none cursor-pointer text-left text-[0.6875rem] font-mono text-[var(--text-primary)] break-all hover:bg-[var(--bg-hover)]"
+                              >
+                                {expanded ? (
+                                  <ChevronDown size={10} className="shrink-0 text-[var(--text-muted)]" />
+                                ) : (
+                                  <ChevronRight size={10} className="shrink-0 text-[var(--text-muted)]" />
+                                )}
+                                <span className="min-w-0 flex-1 break-all">{c.path}</span>
+                              </button>
+                              {expanded && (
+                                <div className="flex flex-col gap-1.5 px-2 py-1.5 border-t border-[var(--border-color)]">
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-[0.625rem] font-semibold text-[var(--danger-color)] uppercase tracking-wide">
+                                      {t('importManifest.diffBefore')}
+                                    </span>
+                                    <pre className="m-0 px-2 py-1 rounded bg-[rgba(239,68,68,0.08)] text-[0.6875rem] font-mono text-[var(--text-primary)] whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
+                                      {formatDiffValue(c.before)}
+                                    </pre>
+                                  </div>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-[0.625rem] font-semibold text-[var(--success-color)] uppercase tracking-wide">
+                                      {t('importManifest.diffAfter')}
+                                    </span>
+                                    <pre className="m-0 px-2 py-1 rounded bg-[rgba(34,197,94,0.08)] text-[0.6875rem] font-mono text-[var(--text-primary)] whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
+                                      {formatDiffValue(c.after)}
+                                    </pre>
+                                  </div>
+                                </div>
+                              )}
+                            </li>
+                          );
+                        })}
                         {diff.changed.length > 20 && (
                           <li className="text-[0.625rem] text-[var(--text-muted)] italic">
                             {t('importManifest.diffMore', { n: String(diff.changed.length - 20) })}

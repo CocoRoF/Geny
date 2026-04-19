@@ -76,3 +76,5 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
   상태.
 - [36_docs_memory_plan_redirect.md](36_docs_memory_plan_redirect.md) —
   초기 `docs/MEMORY_UPGRADE_PLAN.md` 에 superseded 배너 부착.
+- [37_phase6d9-1_changed_expand.md](37_phase6d9-1_changed_expand.md) —
+  Import diff "changed" 항목을 before/after 로 펼치기.
