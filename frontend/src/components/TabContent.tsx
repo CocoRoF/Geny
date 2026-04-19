@@ -19,7 +19,6 @@ const SessionToolsTab = dynamic(() => import('@/components/tabs/SessionToolsTab'
 const ToolSetsTab = dynamic(() => import('@/components/tabs/ToolSetsTab'));
 const MemoryTab = dynamic(() => import('@/components/tabs/MemoryTab'));
 const EnvironmentsTab = dynamic(() => import('@/components/tabs/EnvironmentsTab'));
-const BuilderTab = dynamic(() => import('@/components/tabs/BuilderTab'));
 const VTuberTab = dynamic(() => import('@/components/tabs/VTuberTab'), { ssr: false });
 const Playground2DTab = dynamic(() => import('@/components/tabs/Playground2DTab'), { ssr: false });
 
@@ -39,7 +38,10 @@ const TAB_MAP: Record<string, React.ComponentType> = {
   vtuber: VTuberTab,
   playground2d: Playground2DTab,
   environments: EnvironmentsTab,
-  builder: BuilderTab,
+  // Legacy 'builder' tab merged into Environments — route any stale
+  // activeTab values to the same component, which switches into builder
+  // mode when useEnvironmentStore.builderEnvId is set.
+  builder: EnvironmentsTab,
 };
 
 // Tabs that should stay mounted once activated (KeepAlive)

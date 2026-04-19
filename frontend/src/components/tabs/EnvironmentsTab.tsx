@@ -21,6 +21,7 @@ import EnvironmentDiffModal from '@/components/modals/EnvironmentDiffModal';
 import EnvironmentDiffMatrixModal from '@/components/modals/EnvironmentDiffMatrixModal';
 import ImportEnvironmentModal from '@/components/modals/ImportEnvironmentModal';
 import ConfirmModal from '@/components/modals/ConfirmModal';
+import BuilderTab from '@/components/tabs/BuilderTab';
 
 function formatDate(iso: string): string {
   try {
@@ -184,7 +185,16 @@ export default function EnvironmentsTab() {
     refreshSessionCounts,
     refreshSessionCountsIfStale,
     prefetchDrawerSessions,
+    builderEnvId,
   } = useEnvironmentStore();
+
+  // When an env is "opened in builder", swap the entire tab body for the
+  // builder view. Filters / drawer state are preserved in the parent so
+  // returning to the list keeps the user's context.
+  if (builderEnvId) {
+    return <BuilderTab />;
+  }
+
   const sessions = useAppStore(s => s.sessions);
   const { t } = useI18n();
   const [showCreate, setShowCreate] = useState(false);

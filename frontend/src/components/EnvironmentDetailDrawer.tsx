@@ -488,7 +488,7 @@ export default function EnvironmentDetailDrawer({ envId, onClose, onCompare }: P
             <button
               onClick={() => {
                 openInBuilder(envId);
-                setActiveTab('builder');
+                setActiveTab('environments');
                 onClose();
               }}
               disabled={!env}

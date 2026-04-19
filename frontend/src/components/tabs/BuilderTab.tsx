@@ -14,7 +14,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Boxes, ChevronRight, Eye, EyeOff, RotateCcw, Save, Wrench, X } from 'lucide-react';
 
 import { catalogApi } from '@/lib/environmentApi';
-import { useAppStore } from '@/store/useAppStore';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
 import JsonSchemaForm, {
@@ -91,7 +90,6 @@ export default function BuilderTab() {
     closeBuilder,
     clearSelection,
   } = useEnvironmentStore();
-  const setActiveTab = useAppStore(s => s.setActiveTab);
   const { t } = useI18n();
 
   const [loading, setLoading] = useState(false);
@@ -315,37 +313,13 @@ export default function BuilderTab() {
     }
   };
 
-  // ─── Empty (no env picked) ───
+  // BuilderTab is only mounted when builderEnvId is non-null (the parent
+  // EnvironmentsTab does the gating). The empty-state branch is therefore
+  // dead code and has been removed; if a stale render slips through we
+  // fall back to nothing so the parent can recover by re-rendering its
+  // list view.
   if (!builderEnvId) {
-    return (
-      <div className="flex-1 min-h-0 overflow-auto bg-[var(--bg-primary)]">
-        <div className="max-w-[1200px] mx-auto p-6 flex flex-col gap-6">
-          <header className="flex flex-col gap-1">
-            <h2 className="text-[1.25rem] font-semibold text-[var(--text-primary)]">
-              {t('builderTab.title')}
-            </h2>
-            <p className="text-[0.8125rem] text-[var(--text-muted)] max-w-[720px]">
-              {t('builderTab.subtitle')}
-            </p>
-          </header>
-          <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-            <Boxes size={32} className="text-[var(--text-muted)] opacity-60" />
-            <p className="text-[0.875rem] text-[var(--text-secondary)]">
-              {t('builderTab.emptyTitle')}
-            </p>
-            <p className="text-[0.75rem] text-[var(--text-muted)] max-w-[420px]">
-              {t('builderTab.emptyHint')}
-            </p>
-            <button
-              onClick={() => setActiveTab('environments')}
-              className="mt-3 flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white text-[0.75rem] font-semibold cursor-pointer border-none transition-colors"
-            >
-              {t('builderTab.openEnvironments')}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -354,10 +328,7 @@ export default function BuilderTab() {
       <header className="shrink-0 flex items-start justify-between gap-3 px-6 py-3 border-b border-[var(--border-color)]">
         <div className="flex flex-col gap-0.5 min-w-0">
           <button
-            onClick={() => {
-              closeBuilder();
-              setActiveTab('environments');
-            }}
+            onClick={closeBuilder}
             className="flex items-center gap-1 text-[0.6875rem] font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-transparent border-none p-0 cursor-pointer self-start"
           >
             <ArrowLeft size={10} />
@@ -403,10 +374,7 @@ export default function BuilderTab() {
             {showPreview ? t('builderTab.hidePreview') : t('builderTab.showPreview')}
           </button>
           <button
-            onClick={() => {
-              closeBuilder();
-              setActiveTab('environments');
-            }}
+            onClick={closeBuilder}
             className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-transparent border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors"
           >
             <X size={12} />
