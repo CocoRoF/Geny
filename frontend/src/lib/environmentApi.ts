@@ -15,6 +15,9 @@ import type {
   EnvironmentDiffResult,
   EnvironmentManifest,
   EnvironmentSummary,
+  StageArtifactList,
+  StageIntrospection,
+  StageSummary,
   UpdateEnvironmentPayload,
   UpdateStageTemplatePayload,
 } from '@/types/environment';
@@ -111,20 +114,30 @@ export const environmentApi = {
 };
 
 // ==================== Catalog ====================
+//
+// Endpoints mirror `backend/controller/catalog_controller.py` exactly:
+//   GET /api/catalog/full
+//   GET /api/catalog/stages
+//   GET /api/catalog/stages/{order}                 — StageIntrospection
+//   GET /api/catalog/stages/{order}/artifacts       — StageArtifactList
+//   GET /api/catalog/stages/{order}/artifacts/{name} — StageIntrospection
 
 export const catalogApi = {
-  full: () => apiCall<CatalogResponse>('/api/catalog'),
+  full: () => apiCall<CatalogResponse>('/api/catalog/full'),
 
-  stage: (stageName: string) =>
-    apiCall<unknown>(`/api/catalog/stages/${encodeURIComponent(stageName)}`),
+  stages: async (): Promise<StageSummary[]> => {
+    const res = await apiCall<{ stages: StageSummary[] }>('/api/catalog/stages');
+    return res.stages;
+  },
 
-  artifact: (artifactId: string) =>
-    apiCall<unknown>(`/api/catalog/artifacts/${encodeURIComponent(artifactId)}`),
+  stage: (order: number) =>
+    apiCall<StageIntrospection>(`/api/catalog/stages/${order}`),
 
-  introspection: () => apiCall<unknown>('/api/catalog/introspection'),
+  listArtifacts: (order: number) =>
+    apiCall<StageArtifactList>(`/api/catalog/stages/${order}/artifacts`),
 
-  artifactByStage: (stageName: string, artifactId: string) =>
-    apiCall<unknown>(
-      `/api/catalog/stages/${encodeURIComponent(stageName)}/artifacts/${encodeURIComponent(artifactId)}`,
+  artifactByStage: (order: number, name: string) =>
+    apiCall<StageIntrospection>(
+      `/api/catalog/stages/${order}/artifacts/${encodeURIComponent(name)}`,
     ),
 };
