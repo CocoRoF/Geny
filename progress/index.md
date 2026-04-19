@@ -130,3 +130,6 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
 - [58_phase7-26_bundle_import_polish.md](58_phase7-26_bundle_import_polish.md) —
   ImportEnvironmentModal 번들 entry 인라인 이름 편집 + 성공
   리포트 row 드로어 drill-down.
+- [59_phase7-27_drawer_sessions_sync.md](59_phase7-27_drawer_sessions_sync.md) —
+  drawer linked-sessions hover prefetch + createSession/deleteSession
+  시 drawer cache 즉시 invalidate.

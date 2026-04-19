@@ -38,6 +38,11 @@ function drawerKey(envId: string, includeDeleted: boolean): string {
   return `${envId}:${includeDeleted ? 'all' : 'active'}`;
 }
 
+// Module-scope inflight guard for prefetch — deduplicates rapid hover
+// fire-and-forget calls so a user skimming cards doesn't detonate N
+// parallel requests to the same env.
+const inflightDrawerFetches = new Set<string>();
+
 interface EnvironmentState {
   // Data
   environments: EnvironmentSummary[];
@@ -61,6 +66,7 @@ interface EnvironmentState {
   loadDrawerSessions: (envId: string, includeDeleted: boolean) => Promise<EnvironmentSessionSummary[]>;
   refreshDrawerSessions: (envId: string, includeDeleted: boolean) => Promise<EnvironmentSessionSummary[]>;
   refreshDrawerSessionsIfStale: (envId: string, includeDeleted: boolean, ttlMs: number) => Promise<void>;
+  prefetchDrawerSessions: (envId: string, includeDeleted: boolean) => void;
   invalidateDrawerSessionsForEnv: (envId: string) => void;
 
   // Mutations
@@ -171,6 +177,22 @@ export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
       // Preserve the prior cache; the drawer surfaces its own error
       // message via the imperative fetch path.
     }
+  },
+
+  prefetchDrawerSessions: (envId, includeDeleted) => {
+    const key = drawerKey(envId, includeDeleted);
+    if (get().drawerSessions[key]) return;
+    if (inflightDrawerFetches.has(key)) return;
+    inflightDrawerFetches.add(key);
+    void get()
+      .refreshDrawerSessions(envId, includeDeleted)
+      .catch(() => {
+        // Swallow — prefetch is best-effort. The drawer's imperative
+        // fetch path will surface any real failure when the user opens it.
+      })
+      .finally(() => {
+        inflightDrawerFetches.delete(key);
+      });
   },
 
   invalidateDrawerSessionsForEnv: (envId) =>

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { SessionInfo, PromptInfo } from '@/types';
 import { agentApi, commandApi, healthApi, configApi } from '@/lib/api';
+import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 
 // Session-scoped tab IDs (must match TabNavigation)
 const SESSION_TAB_IDS = new Set(['command', 'logs', 'storage', 'graph', 'info', 'sessionTools', 'memory', 'vtuber']);
@@ -120,21 +121,28 @@ export const useAppStore = create<AppState>((set, get) => ({
   createSession: async (data) => {
     const session = await agentApi.create(data);
     await get().loadSessions();
+    if (session.env_id) {
+      useEnvironmentStore.getState().invalidateDrawerSessionsForEnv(session.env_id);
+    }
     return session;
   },
 
   deleteSession: async (id) => {
-    await agentApi.delete(id);
     const state = get();
+    const priorEnvId = state.sessions.find(s => s.session_id === id)?.env_id;
+    await agentApi.delete(id);
     if (state.selectedSessionId === id) {
       set({ selectedSessionId: null });
     }
-    const { sessionDataCache, ...rest } = state;
+    const { sessionDataCache } = state;
     const newCache = { ...sessionDataCache };
     delete newCache[id];
     set({ sessionDataCache: newCache });
     await state.loadSessions();
     await state.loadDeletedSessions();
+    if (priorEnvId) {
+      useEnvironmentStore.getState().invalidateDrawerSessionsForEnv(priorEnvId);
+    }
   },
 
   permanentDeleteSession: async (id) => {

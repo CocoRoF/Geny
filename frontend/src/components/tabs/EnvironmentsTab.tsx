@@ -37,6 +37,7 @@ function EnvironmentCard({
   selectable,
   selected,
   onClick,
+  onHoverPrefetch,
 }: {
   env: EnvironmentSummary;
   sessionCount: number;
@@ -45,6 +46,7 @@ function EnvironmentCard({
   selectable: boolean;
   selected: boolean;
   onClick: () => void;
+  onHoverPrefetch?: (envId: string) => void;
 }) {
   const { t } = useI18n();
   const borderOverride = selected
@@ -53,6 +55,8 @@ function EnvironmentCard({
   return (
     <div
       onClick={onClick}
+      onMouseEnter={onHoverPrefetch ? () => onHoverPrefetch(env.id) : undefined}
+      onFocus={onHoverPrefetch ? () => onHoverPrefetch(env.id) : undefined}
       className={`group relative flex flex-col gap-2 p-4 rounded-lg border transition-all duration-150 cursor-pointer ${borderOverride}`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -171,6 +175,7 @@ export default function EnvironmentsTab() {
     sessionCounts: storeCounts,
     refreshSessionCounts,
     refreshSessionCountsIfStale,
+    prefetchDrawerSessions,
   } = useEnvironmentStore();
   const sessions = useAppStore(s => s.sessions);
   const { t } = useI18n();
@@ -719,6 +724,9 @@ export default function EnvironmentsTab() {
                   selected={selectedIds.has(env.id)}
                   onClick={() =>
                     selectMode ? toggleSelection(env.id) : setOpenEnvId(env.id)
+                  }
+                  onHoverPrefetch={
+                    selectMode ? undefined : id => prefetchDrawerSessions(id, false)
                   }
                 />
               );
