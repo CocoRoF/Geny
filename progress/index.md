@@ -141,3 +141,6 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
 - [62_phase7-30_md_diff_autosuffix.md](62_phase7-30_md_diff_autosuffix.md) —
   DiffModal 에 Markdown export + Import 충돌 경고에 Auto-suffix 원클릭
   제안.
+- [63_phase7-31_diff_matrix.md](63_phase7-31_diff_matrix.md) —
+  3 개 이상 선택 시 pairwise diff 매트릭스 모달 (`+A/-R/~C` 셀,
+  클릭하면 기존 Diff 모달로 drill-down).

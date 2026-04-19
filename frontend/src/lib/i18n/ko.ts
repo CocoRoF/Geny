@@ -526,6 +526,7 @@ const ko: Translations = {
     bulkSelectAll: '전체 선택 ({n})',
     bulkClear: '해제',
     bulkCompare: '2 개 비교',
+    bulkCompareMatrix: '{n} 개 비교 (매트릭스)',
     bulkDelete: '{n} 개 삭제',
     bulkExport: '{n} 개 내보내기',
     bulkDeleteTitle: '선택한 환경을 삭제할까요?',
@@ -559,6 +560,16 @@ const ko: Translations = {
     after: '이후',
     exportJson: 'JSON 내보내기',
     exportMarkdown: 'MD 내보내기',
+  },
+
+  // ─── Environment Diff Matrix (multi-env pairwise) ───
+  diffMatrix: {
+    title: 'Diff 매트릭스 — 환경 {n} 개',
+    subtitle: '쌍 {pairs} · 완료 {done} · 실패 {failed}',
+    tooFew: '매트릭스를 만들려면 최소 2 개 환경을 선택해야 합니다.',
+    cellTooltip: 'Diff 열기: {left} ↔ {right}',
+    cornerLabel: '환경',
+    legend: '상단 삼각형이 클릭 가능. `+A/-R/~C` = 추가/제거/변경 개수. `=` 는 동일한 manifest.',
   },
 
   // ─── Environment Detail Drawer ───
