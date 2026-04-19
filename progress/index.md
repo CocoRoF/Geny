@@ -112,3 +112,6 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
 - [52_phase7-20_drawer_sessions_store_cache.md](52_phase7-20_drawer_sessions_store_cache.md) —
   드로어 linked-sessions 를 store cache 로 올리고 focus/visibility
   TTL refresh + 수동 Refresh 버튼.
+- [53_phase7-21_envs_bulk_actions.md](53_phase7-21_envs_bulk_actions.md) —
+  Environments 탭에 multi-select + bulk delete/export (단일 JSON
+  번들).

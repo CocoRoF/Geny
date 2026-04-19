@@ -9,15 +9,17 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Archive, ArrowDownNarrowWide, ArrowLeftRight, Boxes, Check, FilterX, Plus, RefreshCw, Search, Tag, Upload, Users, X } from 'lucide-react';
+import { AlertTriangle, Archive, ArrowDownNarrowWide, ArrowLeftRight, Boxes, Check, Download, FilterX, Plus, RefreshCw, Search, SquareCheck, Tag, Trash2, Upload, Users, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
+import { environmentApi } from '@/lib/environmentApi';
 import type { EnvironmentSummary } from '@/types/environment';
 import CreateEnvironmentModal from '@/components/modals/CreateEnvironmentModal';
 import EnvironmentDetailDrawer from '@/components/EnvironmentDetailDrawer';
 import EnvironmentDiffModal from '@/components/modals/EnvironmentDiffModal';
 import ImportEnvironmentModal from '@/components/modals/ImportEnvironmentModal';
+import ConfirmModal from '@/components/modals/ConfirmModal';
 
 function formatDate(iso: string): string {
   try {
@@ -32,25 +34,45 @@ function EnvironmentCard({
   sessionCount,
   errorCount,
   deletedCount,
+  selectable,
+  selected,
   onClick,
 }: {
   env: EnvironmentSummary;
   sessionCount: number;
   errorCount: number;
   deletedCount: number;
+  selectable: boolean;
+  selected: boolean;
   onClick: () => void;
 }) {
   const { t } = useI18n();
+  const borderOverride = selected
+    ? 'border-[var(--primary-color)] bg-[rgba(99,102,241,0.08)] hover:border-[var(--primary-color)]'
+    : 'border-[var(--border-color)] bg-[var(--bg-secondary)] hover:border-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]';
   return (
     <div
       onClick={onClick}
-      className="group relative flex flex-col gap-2 p-4 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] hover:border-[var(--text-muted)] hover:bg-[var(--bg-tertiary)] transition-all duration-150 cursor-pointer"
+      className={`group relative flex flex-col gap-2 p-4 rounded-lg border transition-all duration-150 cursor-pointer ${borderOverride}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center shrink-0">
-            <Boxes size={12} className="text-white" />
-          </div>
+          {selectable ? (
+            <div
+              className={`w-6 h-6 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors ${
+                selected
+                  ? 'bg-[var(--primary-color)] border-[var(--primary-color)] text-white'
+                  : 'bg-[var(--bg-primary)] border-[var(--border-color)] text-transparent'
+              }`}
+              aria-hidden
+            >
+              <Check size={12} />
+            </div>
+          ) : (
+            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center shrink-0">
+              <Boxes size={12} className="text-white" />
+            </div>
+          )}
           <h4 className="text-[0.875rem] font-semibold text-[var(--text-primary)] truncate">
             {env.name}
           </h4>
@@ -127,12 +149,25 @@ type SortKey =
   | 'sessions_desc'
   | 'errors_desc';
 
+function triggerBulkDownload(filename: string, content: string) {
+  const blob = new Blob([content], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export default function EnvironmentsTab() {
   const {
     environments,
     isLoading,
     error,
     loadEnvironments,
+    deleteEnvironment,
     sessionCounts: storeCounts,
     refreshSessionCounts,
     refreshSessionCountsIfStale,
@@ -150,6 +185,12 @@ export default function EnvironmentsTab() {
   const [sortKey, setSortKey] = useState<SortKey>('updated_desc');
   const [tagMenuOpen, setTagMenuOpen] = useState(false);
   const tagMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState('');
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (!tagMenuOpen) return;
@@ -283,6 +324,100 @@ export default function EnvironmentsTab() {
     });
   };
 
+  const enterSelectMode = () => {
+    setSelectMode(true);
+    setBulkError('');
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    setBulkError('');
+  };
+
+  const toggleSelection = (envId: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(envId)) next.delete(envId);
+      else next.add(envId);
+      return next;
+    });
+  };
+
+  const selectAllInView = () => {
+    setSelectedIds(new Set(filteredEnvs.map(e => e.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  const runBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    setBulkError('');
+    const failures: { id: string; msg: string }[] = [];
+    for (const id of ids) {
+      try {
+        await deleteEnvironment(id);
+      } catch (e) {
+        failures.push({ id, msg: e instanceof Error ? e.message : 'delete failed' });
+      }
+    }
+    setBulkBusy(false);
+    if (failures.length > 0) {
+      setBulkError(
+        t('environmentsTab.bulkDeleteFailed', {
+          n: String(failures.length),
+          total: String(ids.length),
+        }),
+      );
+      setSelectedIds(new Set(failures.map(f => f.id)));
+    } else {
+      exitSelectMode();
+    }
+  };
+
+  const runBulkExport = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    setBulkError('');
+    const bundle: { env_id: string; data: unknown }[] = [];
+    const failures: string[] = [];
+    for (const id of ids) {
+      try {
+        const payload = await environmentApi.exportEnv(id);
+        const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
+        bundle.push({ env_id: id, data: parsed });
+      } catch {
+        failures.push(id);
+      }
+    }
+    setBulkBusy(false);
+    if (bundle.length > 0) {
+      const now = new Date().toISOString().replace(/[:.]/g, '-');
+      const body = {
+        version: '1',
+        generated_at: new Date().toISOString(),
+        exports: bundle,
+      };
+      triggerBulkDownload(
+        `envs-bulk-${now}.json`,
+        JSON.stringify(body, null, 2),
+      );
+    }
+    if (failures.length > 0) {
+      setBulkError(
+        t('environmentsTab.bulkExportFailed', {
+          n: String(failures.length),
+          total: String(ids.length),
+        }),
+      );
+    }
+  };
+
   return (
     <div className="flex-1 min-h-0 overflow-auto bg-[var(--bg-primary)]">
       <div className="max-w-[1200px] mx-auto p-6 flex flex-col gap-6">
@@ -317,6 +452,18 @@ export default function EnvironmentsTab() {
               {t('environmentsTab.compare')}
             </button>
             <button
+              onClick={selectMode ? exitSelectMode : enterSelectMode}
+              disabled={environments.length === 0}
+              className={`flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[0.75rem] font-medium cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                selectMode
+                  ? 'bg-[rgba(99,102,241,0.15)] border border-[rgba(99,102,241,0.4)] text-[#a5b4fc]'
+                  : 'bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
+              }`}
+            >
+              <SquareCheck size={12} />
+              {selectMode ? t('environmentsTab.cancelSelect') : t('environmentsTab.select')}
+            </button>
+            <button
               onClick={() => setShowImport(true)}
               className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors"
             >
@@ -337,6 +484,53 @@ export default function EnvironmentsTab() {
         {error && (
           <div className="px-3 py-2 rounded-md bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.3)] text-[0.8125rem] text-[var(--danger-color)]">
             {error}
+          </div>
+        )}
+
+        {/* Bulk selection bar */}
+        {selectMode && (
+          <div className="flex flex-wrap items-center gap-2 px-3 py-2 rounded-md border border-[rgba(99,102,241,0.4)] bg-[rgba(99,102,241,0.08)]">
+            <span className="text-[0.8125rem] font-medium text-[var(--text-primary)]">
+              {t('environmentsTab.bulkSelected', { n: String(selectedIds.size) })}
+            </span>
+            <button
+              onClick={selectAllInView}
+              disabled={filteredEnvs.length === 0 || selectedIds.size === filteredEnvs.length}
+              className="py-1 px-2 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[0.6875rem] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {t('environmentsTab.bulkSelectAll', { n: String(filteredEnvs.length) })}
+            </button>
+            {selectedIds.size > 0 && (
+              <button
+                onClick={clearSelection}
+                className="py-1 px-2 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[0.6875rem] text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+              >
+                {t('environmentsTab.bulkClear')}
+              </button>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={runBulkExport}
+                disabled={selectedIds.size === 0 || bulkBusy}
+                className="flex items-center gap-1.5 py-1 px-3 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Download size={12} />
+                {t('environmentsTab.bulkExport', { n: String(selectedIds.size) })}
+              </button>
+              <button
+                onClick={() => setShowBulkDeleteConfirm(true)}
+                disabled={selectedIds.size === 0 || bulkBusy}
+                className="flex items-center gap-1.5 py-1 px-3 rounded-md bg-transparent border border-[rgba(239,68,68,0.3)] text-[0.75rem] font-medium text-[var(--danger-color)] hover:bg-[rgba(239,68,68,0.08)] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Trash2 size={12} />
+                {t('environmentsTab.bulkDelete', { n: String(selectedIds.size) })}
+              </button>
+            </div>
+            {bulkError && (
+              <div className="w-full text-[0.6875rem] text-[var(--danger-color)]">
+                {bulkError}
+              </div>
+            )}
           </div>
         )}
 
@@ -507,7 +701,11 @@ export default function EnvironmentsTab() {
                   sessionCount={b.active}
                   errorCount={b.error}
                   deletedCount={b.deleted}
-                  onClick={() => setOpenEnvId(env.id)}
+                  selectable={selectMode}
+                  selected={selectedIds.has(env.id)}
+                  onClick={() =>
+                    selectMode ? toggleSelection(env.id) : setOpenEnvId(env.id)
+                  }
                 />
               );
             })}
@@ -545,6 +743,18 @@ export default function EnvironmentsTab() {
           initialLeft={showDiff.left}
           initialRight={showDiff.right}
           onClose={() => setShowDiff(null)}
+        />
+      )}
+
+      {showBulkDeleteConfirm && (
+        <ConfirmModal
+          title={t('environmentsTab.bulkDeleteTitle')}
+          message={t('environmentsTab.bulkDeleteMessage', { n: String(selectedIds.size) })}
+          note={t('environmentsTab.bulkDeleteNote')}
+          confirmLabel={t('environmentsTab.bulkDeleteConfirm')}
+          confirmingLabel={t('environmentsTab.bulkDeleting')}
+          onConfirm={runBulkDelete}
+          onClose={() => setShowBulkDeleteConfirm(false)}
         />
       )}
     </div>
