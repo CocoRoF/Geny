@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, Boxes, Plus, RefreshCw, Tag, Users } from 'lucide-react';
+import { ArrowLeftRight, Boxes, Plus, RefreshCw, Tag, Upload, Users } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
@@ -17,6 +17,7 @@ import type { EnvironmentSummary } from '@/types/environment';
 import CreateEnvironmentModal from '@/components/modals/CreateEnvironmentModal';
 import EnvironmentDetailDrawer from '@/components/EnvironmentDetailDrawer';
 import EnvironmentDiffModal from '@/components/modals/EnvironmentDiffModal';
+import ImportEnvironmentModal from '@/components/modals/ImportEnvironmentModal';
 
 function formatDate(iso: string): string {
   try {
@@ -96,6 +97,7 @@ export default function EnvironmentsTab() {
   const sessions = useAppStore(s => s.sessions);
   const { t } = useI18n();
   const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [showDiff, setShowDiff] = useState<{ left?: string; right?: string } | null>(null);
   const [openEnvId, setOpenEnvId] = useState<string | null>(null);
 
@@ -141,6 +143,13 @@ export default function EnvironmentsTab() {
             >
               <ArrowLeftRight size={12} />
               {t('environmentsTab.compare')}
+            </button>
+            <button
+              onClick={() => setShowImport(true)}
+              className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors"
+            >
+              <Upload size={12} />
+              {t('environmentsTab.importEnvironment')}
             </button>
             <button
               onClick={() => setShowCreate(true)}
@@ -199,6 +208,13 @@ export default function EnvironmentsTab() {
         <CreateEnvironmentModal
           onClose={() => setShowCreate(false)}
           onCreated={id => setOpenEnvId(id)}
+        />
+      )}
+
+      {showImport && (
+        <ImportEnvironmentModal
+          onClose={() => setShowImport(false)}
+          onImported={id => setOpenEnvId(id)}
         />
       )}
 

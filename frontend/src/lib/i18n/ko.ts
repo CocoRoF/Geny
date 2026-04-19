@@ -493,6 +493,7 @@ const ko: Translations = {
     createFirst: '첫 환경 만들기',
     compare: '비교',
     sessionCountTooltip: '이 환경에 바인딩된 활성 세션 {n} 개',
+    importEnvironment: '가져오기…',
   },
 
   // ─── Environment Diff Modal ───
@@ -567,6 +568,27 @@ const ko: Translations = {
     backupLabel: '덮어쓰기 전에 현재 manifest 를 백업으로 다운로드',
     backupHelp: '시간이 찍힌 JSON 사본을 로컬로 저장합니다. 이미 Export 했거나, 큰 manifest 를 느린 회선에서 작업할 때만 끄세요.',
     backupFailed: '백업 다운로드에 실패했습니다 — 덮어쓰기를 취소했습니다. ({msg})',
+  },
+
+  // ─── Import Environment Modal (create new from blob) ───
+  importEnvironment: {
+    title: '환경 가져오기',
+    subtitle: '이전에 내보낸 JSON 블롭으로부터 새 환경을 생성합니다.',
+    dropHint: '내보낸 환경 JSON 파일을 여기에 놓거나 아래에서 선택하세요.',
+    chooseFile: '파일 선택',
+    loadedFile: '{name} 로드됨',
+    jsonLabel: '환경 JSON',
+    jsonPlaceholder: '내보낸 환경 JSON 을 여기 붙여넣으세요…',
+    jsonHint: '전체 export record 또는 export envelope (`{data: {…}}`) 를 받습니다. `manifest` (v2) 또는 `snapshot` (legacy) 필드가 필요합니다.',
+    parsedOk: 'Parse OK — {mode} 모드, v{version}, 스테이지 {count} 개. 이름: "{name}"',
+    nameOverrideLabel: '이름 덮어쓰기 (선택)',
+    nameOverridePlaceholder: '비워두면 가져온 이름을 그대로 사용',
+    nameOverrideHint: '원본과 함께 백업을 가져올 때 이름 충돌을 피하는 용도로 유용합니다.',
+    regenerateIdLabel: '새 id 로 재생성',
+    regenerateIdHint: 'payload 에서 id 를 제거해 백엔드가 새 id 를 부여하게 합니다. 삭제된 동일 id 환경을 복구하려는 경우에만 끄세요.',
+    importButton: '가져오기',
+    importing: '가져오는 중…',
+    failed: '환경 가져오기 실패',
   },
 
   // ─── Environment Builder Tab ───

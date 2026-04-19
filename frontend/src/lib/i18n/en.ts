@@ -493,6 +493,7 @@ const en = {
     createFirst: 'Create your first environment',
     compare: 'Compare',
     sessionCountTooltip: '{n} active session(s) bound to this environment',
+    importEnvironment: 'Import…',
   },
 
   // ─── Environment Diff Modal ───
@@ -567,6 +568,27 @@ const en = {
     backupLabel: 'Download current manifest as backup before overwrite',
     backupHelp: 'Saves a timestamped JSON copy to your machine. Disable if you have already exported, or for large manifests on slow connections.',
     backupFailed: 'Backup download failed — overwrite cancelled. ({msg})',
+  },
+
+  // ─── Import Environment Modal (create new from blob) ───
+  importEnvironment: {
+    title: 'Import environment',
+    subtitle: 'Create a new environment from a previously exported JSON blob.',
+    dropHint: 'Drop an exported environment JSON here, or choose one below.',
+    chooseFile: 'Choose file',
+    loadedFile: 'Loaded {name}',
+    jsonLabel: 'Environment JSON',
+    jsonPlaceholder: 'Paste the exported environment JSON here…',
+    jsonHint: 'Accepts the full export record or an export envelope (`{data: {…}}`). Must contain `manifest` (v2) or `snapshot` (legacy).',
+    parsedOk: 'Parsed OK — {mode} mode, v{version}, {count} stage(s). Name: "{name}"',
+    nameOverrideLabel: 'Name override (optional)',
+    nameOverridePlaceholder: 'Leave blank to keep imported name',
+    nameOverrideHint: 'Handy when importing a backup alongside the original — gives you a non-colliding display name.',
+    regenerateIdLabel: 'Generate new id',
+    regenerateIdHint: 'Strips the id from the payload so the backend assigns a fresh one. Disable only if you intend to restore-over a deleted env with the same id.',
+    importButton: 'Import',
+    importing: 'Importing…',
+    failed: 'Failed to import environment',
   },
 
   // ─── Environment Builder Tab ───
