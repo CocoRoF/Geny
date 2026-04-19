@@ -566,6 +566,7 @@ const en = {
     copyMarkdown: 'Copy MD',
     copied: 'Copied!',
     copyFailed: 'Copy failed',
+    copyFailedHint: 'Clipboard access was blocked. This usually means the page is on http:// or the browser denied permission — try Export MD as a fallback.',
   },
 
   // ─── Environment Diff Matrix (multi-env pairwise) ───
@@ -581,6 +582,7 @@ const en = {
     copyMarkdown: 'Copy MD',
     copied: 'Copied!',
     copyFailed: 'Copy failed',
+    copyFailedHint: 'Clipboard access was blocked. This usually means the page is on http:// or the browser denied permission — try Export MD as a fallback.',
     topPairBadge: 'Most different: {left} ↔ {right} · {score} changes',
     topPairTooltip: 'Largest diff in this matrix: {left} ↔ {right} · {score} changes',
   },

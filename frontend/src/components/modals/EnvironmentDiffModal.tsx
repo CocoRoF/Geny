@@ -443,6 +443,7 @@ export default function EnvironmentDiffModal({ onClose, initialLeft, initialRigh
               </button>
               <button
                 onClick={copyDiffMarkdown}
+                title={copyStatus === 'failed' ? t('diff.copyFailedHint') : undefined}
                 className={`flex items-center gap-1.5 py-1.5 px-3 rounded-md border text-[0.75rem] font-medium cursor-pointer transition-colors ${
                   copyStatus === 'copied'
                     ? 'bg-[rgba(34,197,94,0.1)] border-[rgba(34,197,94,0.35)] text-[var(--success-color)]'

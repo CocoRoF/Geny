@@ -166,3 +166,5 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
 - [71_phase7-39_atomic_retry_notice.md](71_phase7-39_atomic_retry_notice.md) —
   ImportEnvironmentModal 에 "Atomic 이 이번 재시도만 꺼졌다" 배너
   (4.5 초 auto-dismiss).
+- [72_phase7-40_clipboard_hint.md](72_phase7-40_clipboard_hint.md) —
+  Copy MD 실패 시 원인/우회 툴팁 (Diff/Matrix modal 공통).

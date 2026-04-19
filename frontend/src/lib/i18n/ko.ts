@@ -566,6 +566,7 @@ const ko: Translations = {
     copyMarkdown: 'MD 복사',
     copied: '복사됨!',
     copyFailed: '복사 실패',
+    copyFailedHint: '클립보드 접근이 차단되었습니다. http:// 에서 접속 중이거나 브라우저 권한이 막힌 경우일 수 있어요 — MD 내보내기를 사용해 주세요.',
   },
 
   // ─── Environment Diff Matrix (multi-env pairwise) ───
@@ -581,6 +582,7 @@ const ko: Translations = {
     copyMarkdown: 'MD 복사',
     copied: '복사됨!',
     copyFailed: '복사 실패',
+    copyFailedHint: '클립보드 접근이 차단되었습니다. http:// 에서 접속 중이거나 브라우저 권한이 막힌 경우일 수 있어요 — MD 내보내기를 사용해 주세요.',
     topPairBadge: '가장 많이 다름: {left} ↔ {right} · 변경 {score}',
     topPairTooltip: '이 매트릭스에서 가장 큰 diff: {left} ↔ {right} · 변경 {score}',
   },
