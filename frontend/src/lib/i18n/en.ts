@@ -552,6 +552,13 @@ const en = {
     overwriteButton: 'Overwrite manifest',
     importing: 'Importing…',
     failed: 'Failed to import manifest',
+    diffTitle: 'Changes vs current manifest',
+    diffIdentical: 'Incoming manifest is identical to the current one.',
+    diffAdded: 'Added',
+    diffRemoved: 'Removed',
+    diffChanged: 'Changed',
+    diffMore: '…and {n} more',
+    diffUnavailable: 'Current manifest not loaded — diff preview unavailable.',
   },
 
   // ─── Environment Builder Tab ───

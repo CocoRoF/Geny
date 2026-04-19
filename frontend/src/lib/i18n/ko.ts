@@ -552,6 +552,13 @@ const ko: Translations = {
     overwriteButton: 'Manifest 덮어쓰기',
     importing: '가져오는 중…',
     failed: 'Manifest 가져오기에 실패했습니다',
+    diffTitle: '현재 manifest 와의 차이',
+    diffIdentical: '불러온 manifest 는 현재 manifest 와 동일합니다.',
+    diffAdded: '추가됨',
+    diffRemoved: '제거됨',
+    diffChanged: '변경됨',
+    diffMore: '…외 {n} 건',
+    diffUnavailable: '현재 manifest 를 불러오지 못해 diff 프리뷰를 제공할 수 없습니다.',
   },
 
   // ─── Environment Builder Tab ───

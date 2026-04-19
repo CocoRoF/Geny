@@ -16,12 +16,13 @@
  * `replaceManifest(envId, parsed)`.
  */
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, FileUp, Upload, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, FileUp, Minus, Pencil, Plus, Upload, X } from 'lucide-react';
 
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
+import { diffManifests } from '@/lib/environmentDiff';
 import type { EnvironmentManifest } from '@/types/environment';
 
 interface Props {
@@ -66,14 +67,29 @@ function extractManifest(parsed: unknown): ParseResult {
 }
 
 export default function ImportManifestModal({ envId, envName, onClose, onImported }: Props) {
-  const { replaceManifest } = useEnvironmentStore();
+  const { replaceManifest, selectedEnvironment, loadEnvironment } = useEnvironmentStore();
   const { t } = useI18n();
 
   const [rawText, setRawText] = useState('');
   const [fileName, setFileName] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [showDiff, setShowDiff] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Ensure the current manifest is loaded so we can diff against it.
+  // The drawer that opens us usually has it cached already, but preview
+  // should work even if invoked standalone later.
+  useEffect(() => {
+    if (!selectedEnvironment || selectedEnvironment.id !== envId) {
+      loadEnvironment(envId).catch(() => {});
+    }
+  }, [envId, selectedEnvironment, loadEnvironment]);
+
+  const currentManifest =
+    selectedEnvironment && selectedEnvironment.id === envId
+      ? selectedEnvironment.manifest ?? null
+      : null;
 
   const parsed = useMemo<ParseResult | null>(() => {
     const trimmed = rawText.trim();
@@ -93,6 +109,15 @@ export default function ImportManifestModal({ envId, envName, onClose, onImporte
   const parseError = parsed && !parsed.ok ? parsed.error : null;
 
   const stageCount = manifest?.stages.length ?? 0;
+
+  const diff = useMemo(() => {
+    if (!manifest || !currentManifest) return null;
+    return diffManifests(currentManifest, manifest);
+  }, [manifest, currentManifest]);
+
+  const diffTotal = diff
+    ? diff.added.length + diff.removed.length + diff.changed.length
+    : 0;
 
   const handleFile = async (file: File) => {
     setFileName(file.name);
@@ -237,6 +262,99 @@ export default function ImportManifestModal({ envId, envName, onClose, onImporte
               </small>
             )}
           </div>
+
+          {/* Diff preview — current vs incoming */}
+          {manifest && diff && (
+            <div className="flex flex-col gap-2 px-3 py-2.5 rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)]">
+              <button
+                type="button"
+                onClick={() => setShowDiff(v => !v)}
+                className="flex items-center justify-between gap-2 bg-transparent border-none p-0 cursor-pointer text-left"
+              >
+                <span className="flex items-center gap-1.5 text-[0.75rem] font-semibold text-[var(--text-secondary)]">
+                  {showDiff ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                  {t('importManifest.diffTitle')}
+                </span>
+                <span className="flex items-center gap-2 text-[0.6875rem] font-mono">
+                  <span className="text-[var(--success-color)]">+{diff.added.length}</span>
+                  <span className="text-[var(--danger-color)]">−{diff.removed.length}</span>
+                  <span className="text-[var(--text-muted)]">~{diff.changed.length}</span>
+                </span>
+              </button>
+              {diffTotal === 0 && (
+                <p className="text-[0.6875rem] text-[var(--success-color)]">
+                  {t('importManifest.diffIdentical')}
+                </p>
+              )}
+              {showDiff && diffTotal > 0 && (
+                <div className="flex flex-col gap-2 mt-1 pt-2 border-t border-[var(--border-color)]">
+                  {diff.added.length > 0 && (
+                    <section className="flex flex-col gap-1">
+                      <h5 className="flex items-center gap-1 text-[0.6875rem] font-semibold text-[var(--success-color)] uppercase tracking-wide">
+                        <Plus size={10} /> {t('importManifest.diffAdded')} ({diff.added.length})
+                      </h5>
+                      <ul className="flex flex-col gap-0.5">
+                        {diff.added.slice(0, 20).map(p => (
+                          <li key={p} className="px-2 py-0.5 rounded bg-[rgba(34,197,94,0.08)] text-[0.6875rem] font-mono text-[var(--text-primary)] break-all">
+                            {p}
+                          </li>
+                        ))}
+                        {diff.added.length > 20 && (
+                          <li className="text-[0.625rem] text-[var(--text-muted)] italic">
+                            {t('importManifest.diffMore', { n: String(diff.added.length - 20) })}
+                          </li>
+                        )}
+                      </ul>
+                    </section>
+                  )}
+                  {diff.removed.length > 0 && (
+                    <section className="flex flex-col gap-1">
+                      <h5 className="flex items-center gap-1 text-[0.6875rem] font-semibold text-[var(--danger-color)] uppercase tracking-wide">
+                        <Minus size={10} /> {t('importManifest.diffRemoved')} ({diff.removed.length})
+                      </h5>
+                      <ul className="flex flex-col gap-0.5">
+                        {diff.removed.slice(0, 20).map(p => (
+                          <li key={p} className="px-2 py-0.5 rounded bg-[rgba(239,68,68,0.08)] text-[0.6875rem] font-mono text-[var(--text-primary)] break-all">
+                            {p}
+                          </li>
+                        ))}
+                        {diff.removed.length > 20 && (
+                          <li className="text-[0.625rem] text-[var(--text-muted)] italic">
+                            {t('importManifest.diffMore', { n: String(diff.removed.length - 20) })}
+                          </li>
+                        )}
+                      </ul>
+                    </section>
+                  )}
+                  {diff.changed.length > 0 && (
+                    <section className="flex flex-col gap-1">
+                      <h5 className="flex items-center gap-1 text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wide">
+                        <Pencil size={10} /> {t('importManifest.diffChanged')} ({diff.changed.length})
+                      </h5>
+                      <ul className="flex flex-col gap-0.5">
+                        {diff.changed.slice(0, 20).map(c => (
+                          <li key={c.path} className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] text-[0.6875rem] font-mono text-[var(--text-primary)] break-all">
+                            {c.path}
+                          </li>
+                        ))}
+                        {diff.changed.length > 20 && (
+                          <li className="text-[0.625rem] text-[var(--text-muted)] italic">
+                            {t('importManifest.diffMore', { n: String(diff.changed.length - 20) })}
+                          </li>
+                        )}
+                      </ul>
+                    </section>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {manifest && !currentManifest && (
+            <p className="text-[0.6875rem] text-[var(--text-muted)] italic">
+              {t('importManifest.diffUnavailable')}
+            </p>
+          )}
 
           {submitError && (
             <div className="px-3 py-2 rounded-md bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.3)] text-[0.75rem] text-[var(--danger-color)]">
