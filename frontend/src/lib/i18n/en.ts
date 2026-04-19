@@ -537,6 +537,7 @@ const en = {
     bulkDeleteSessionsSummary: '{envs} of these have active bindings — {active} active, {error} in error',
     bulkDeleteSessionsLine: '{active} active / {error} error',
     bulkDeleteSessionsMore: '…and {n} more',
+    bulkDeleteDrillTooltip: 'Open {name} to inspect bindings',
     bulkDeleteConfirm: 'Delete all',
     bulkDeleting: 'Deleting…',
     bulkDeleteFailed: '{n} of {total} environment(s) could not be deleted. Failed items remain selected.',

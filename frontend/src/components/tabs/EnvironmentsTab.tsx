@@ -840,7 +840,17 @@ export default function EnvironmentsTab() {
                     <ul className="list-disc pl-5 text-[0.6875rem] max-h-[120px] overflow-auto">
                       {envsWithSessions.slice(0, 6).map(e => (
                         <li key={e.id} className="truncate">
-                          {e.name}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowBulkDeleteConfirm(false);
+                              setOpenEnvId(e.id);
+                            }}
+                            title={t('environmentsTab.bulkDeleteDrillTooltip', { name: e.name })}
+                            className="bg-transparent border-none p-0 text-[0.6875rem] font-medium text-[var(--primary-color)] hover:underline cursor-pointer"
+                          >
+                            {e.name}
+                          </button>
                           <span className="text-[var(--text-muted)]">
                             {' · '}
                             {t('environmentsTab.bulkDeleteSessionsLine', {

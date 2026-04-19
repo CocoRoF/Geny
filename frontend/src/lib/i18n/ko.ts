@@ -537,6 +537,7 @@ const ko: Translations = {
     bulkDeleteSessionsSummary: '이 중 {envs} 개가 바인딩된 세션을 가집니다 — active {active}, error {error}',
     bulkDeleteSessionsLine: 'active {active} / error {error}',
     bulkDeleteSessionsMore: '... 외 {n} 개',
+    bulkDeleteDrillTooltip: '{name} 열어서 바인딩 확인',
     bulkDeleteConfirm: '모두 삭제',
     bulkDeleting: '삭제 중…',
     bulkDeleteFailed: '{total} 개 중 {n} 개 환경 삭제 실패. 실패 항목은 선택된 상태로 남습니다.',

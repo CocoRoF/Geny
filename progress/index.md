@@ -161,3 +161,5 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
   export 에 top_pair 필드.
 - [69_phase7-37_meta_filters.md](69_phase7-37_meta_filters.md) —
   Environments 필터 바에 "Has preset" / "Has tags" 메타 필터 2 종.
+- [70_phase7-38_bulk_delete_drill.md](70_phase7-38_bulk_delete_drill.md) —
+  Bulk-delete confirm 의 env 이름을 클릭 가능한 drill-down 링크로.
