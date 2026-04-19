@@ -15,7 +15,7 @@
 
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, FileUp, Upload, X } from 'lucide-react';
+import { AlertTriangle, Check, FileUp, Upload, X } from 'lucide-react';
 
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
@@ -25,15 +25,97 @@ interface Props {
   onImported?: (id: string) => void;
 }
 
+type SingleMeta = { name?: string; stageCount?: number; version?: string; mode: 'manifest' | 'snapshot' };
+type BundleEntry = { env_id?: string; data: Record<string, unknown>; meta: SingleMeta };
 type ParseResult =
-  | { ok: true; data: Record<string, unknown>; meta: { name?: string; stageCount?: number; version?: string; mode: 'manifest' | 'snapshot' } }
+  | { ok: true; kind: 'single'; data: Record<string, unknown>; meta: SingleMeta }
+  | { ok: true; kind: 'bundle'; entries: BundleEntry[]; bundleVersion: string }
   | { ok: false; error: string };
+
+function classifySingleEnv(
+  c: Record<string, unknown>,
+): { data: Record<string, unknown>; meta: SingleMeta } | null {
+  const manifest = c.manifest as Record<string, unknown> | undefined;
+  const snapshot = c.snapshot as Record<string, unknown> | undefined;
+  if (manifest && typeof manifest === 'object' && !Array.isArray(manifest)) {
+    const stages = Array.isArray(manifest.stages) ? manifest.stages.length : undefined;
+    return {
+      data: c,
+      meta: {
+        name: typeof c.name === 'string' ? c.name : undefined,
+        stageCount: stages,
+        version: typeof manifest.version === 'string' ? manifest.version : undefined,
+        mode: 'manifest',
+      },
+    };
+  }
+  if (snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)) {
+    return {
+      data: c,
+      meta: {
+        name: typeof c.name === 'string' ? c.name : undefined,
+        mode: 'snapshot',
+      },
+    };
+  }
+  return null;
+}
 
 function extractEnvPayload(parsed: unknown): ParseResult {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return { ok: false, error: 'Root must be a JSON object' };
   }
   const obj = parsed as Record<string, unknown>;
+
+  // Bundle format produced by the Environments tab bulk export:
+  //   { version: "1", generated_at, exports: [{env_id, data}] }
+  if (
+    Array.isArray(obj.exports) &&
+    (typeof obj.version === 'string' || obj.version === undefined)
+  ) {
+    const exports = obj.exports as unknown[];
+    const entries: BundleEntry[] = [];
+    for (let i = 0; i < exports.length; i += 1) {
+      const item = exports[i];
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        return {
+          ok: false,
+          error: `Bundle entry #${i + 1} is not an object`,
+        };
+      }
+      const rec = item as Record<string, unknown>;
+      const rawData = rec.data && typeof rec.data === 'object' && !Array.isArray(rec.data)
+        ? (rec.data as Record<string, unknown>)
+        : null;
+      if (!rawData) {
+        return {
+          ok: false,
+          error: `Bundle entry #${i + 1} is missing a \`data\` object`,
+        };
+      }
+      const classified = classifySingleEnv(rawData);
+      if (!classified) {
+        return {
+          ok: false,
+          error: `Bundle entry #${i + 1} missing \`manifest\` or \`snapshot\``,
+        };
+      }
+      entries.push({
+        env_id: typeof rec.env_id === 'string' ? rec.env_id : undefined,
+        data: classified.data,
+        meta: classified.meta,
+      });
+    }
+    if (entries.length === 0) {
+      return { ok: false, error: 'Bundle contains 0 entries' };
+    }
+    return {
+      ok: true,
+      kind: 'bundle',
+      entries,
+      bundleVersion: typeof obj.version === 'string' ? obj.version : '1',
+    };
+  }
 
   // Accept: raw env object OR { data: {...} } export envelope.
   const candidates: Record<string, unknown>[] = [obj];
@@ -42,30 +124,9 @@ function extractEnvPayload(parsed: unknown): ParseResult {
   }
 
   for (const c of candidates) {
-    const manifest = c.manifest as Record<string, unknown> | undefined;
-    const snapshot = c.snapshot as Record<string, unknown> | undefined;
-    if (manifest && typeof manifest === 'object' && !Array.isArray(manifest)) {
-      const stages = Array.isArray(manifest.stages) ? manifest.stages.length : undefined;
-      return {
-        ok: true,
-        data: c,
-        meta: {
-          name: typeof c.name === 'string' ? c.name : undefined,
-          stageCount: stages,
-          version: typeof manifest.version === 'string' ? manifest.version : undefined,
-          mode: 'manifest',
-        },
-      };
-    }
-    if (snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)) {
-      return {
-        ok: true,
-        data: c,
-        meta: {
-          name: typeof c.name === 'string' ? c.name : undefined,
-          mode: 'snapshot',
-        },
-      };
+    const classified = classifySingleEnv(c);
+    if (classified) {
+      return { ok: true, kind: 'single', ...classified };
     }
   }
 
@@ -74,6 +135,11 @@ function extractEnvPayload(parsed: unknown): ParseResult {
     error: 'Missing environment body (expected `manifest` or `snapshot`)',
   };
 }
+
+type BundleResult = {
+  successes: { env_id?: string; new_id: string; name: string }[];
+  failures: { env_id?: string; name: string; error: string }[];
+};
 
 export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
   const { importEnvironment } = useEnvironmentStore();
@@ -86,6 +152,7 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
+  const [bundleResult, setBundleResult] = useState<BundleResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const parsed = (() => {
@@ -138,13 +205,38 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
     setSubmitting(true);
     setSubmitError('');
     try {
-      const payload = { ...parsed.data };
-      if (regenerateId) delete payload.id;
-      const trimmed = nameOverride.trim();
-      if (trimmed) payload.name = trimmed;
-      const result = await importEnvironment(payload);
-      onImported?.(result.id);
-      onClose();
+      if (parsed.kind === 'single') {
+        const payload = { ...parsed.data };
+        if (regenerateId) delete payload.id;
+        const trimmed = nameOverride.trim();
+        if (trimmed) payload.name = trimmed;
+        const result = await importEnvironment(payload);
+        onImported?.(result.id);
+        onClose();
+        return;
+      }
+      // Bundle path
+      const successes: BundleResult['successes'] = [];
+      const failures: BundleResult['failures'] = [];
+      for (const entry of parsed.entries) {
+        const payload = { ...entry.data };
+        if (regenerateId) delete payload.id;
+        const displayName = entry.meta.name || entry.env_id || '—';
+        try {
+          const { id: newId } = await importEnvironment(payload);
+          successes.push({ env_id: entry.env_id, new_id: newId, name: displayName });
+        } catch (e) {
+          failures.push({
+            env_id: entry.env_id,
+            name: displayName,
+            error: e instanceof Error ? e.message : 'import failed',
+          });
+        }
+      }
+      setBundleResult({ successes, failures });
+      if (failures.length === 0 && successes.length > 0) {
+        onImported?.(successes[0].new_id);
+      }
     } catch (e: unknown) {
       setSubmitError(e instanceof Error ? e.message : t('importEnvironment.failed'));
     } finally {
@@ -243,7 +335,7 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
             </div>
           )}
 
-          {parsed && parsed.ok && (
+          {parsed && parsed.ok && parsed.kind === 'single' && (
             <div className="px-3 py-2 rounded-md bg-[rgba(34,197,94,0.1)] border border-[rgba(34,197,94,0.25)] text-[0.75rem] text-[#4ade80]">
               {t('importEnvironment.parsedOk', {
                 mode: parsed.meta.mode,
@@ -254,22 +346,86 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
             </div>
           )}
 
-          {/* Name override */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[0.75rem] font-medium text-[var(--text-secondary)]">
-              {t('importEnvironment.nameOverrideLabel')}
-            </label>
-            <input
-              type="text"
-              value={nameOverride}
-              onChange={e => setNameOverride(e.target.value)}
-              placeholder={parsed?.ok && parsed.meta.name ? parsed.meta.name : t('importEnvironment.nameOverridePlaceholder')}
-              className="w-full py-2 px-2.5 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-md text-[0.8125rem] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]"
-            />
-            <p className="text-[0.6875rem] text-[var(--text-muted)]">
-              {t('importEnvironment.nameOverrideHint')}
-            </p>
-          </div>
+          {parsed && parsed.ok && parsed.kind === 'bundle' && !bundleResult && (
+            <div className="flex flex-col gap-1.5 px-3 py-2 rounded-md bg-[rgba(34,197,94,0.1)] border border-[rgba(34,197,94,0.25)]">
+              <div className="text-[0.75rem] text-[#4ade80] font-medium">
+                {t('importEnvironment.bundleDetected', {
+                  n: String(parsed.entries.length),
+                  version: parsed.bundleVersion,
+                })}
+              </div>
+              <ul className="flex flex-col gap-0.5 text-[0.6875rem] text-[var(--text-secondary)] max-h-[160px] overflow-y-auto pl-3">
+                {parsed.entries.map((e, i) => (
+                  <li key={e.env_id ?? i} className="flex items-center gap-2 truncate">
+                    <span className="shrink-0 text-[var(--text-muted)] font-mono">
+                      {String(i + 1).padStart(2, '0')}.
+                    </span>
+                    <span className="truncate">{e.meta.name || e.env_id || '—'}</span>
+                    <span className="ml-auto shrink-0 text-[0.625rem] text-[var(--text-muted)]">
+                      {e.meta.mode}
+                      {typeof e.meta.stageCount === 'number' && ` · ${e.meta.stageCount} stage(s)`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {bundleResult && (
+            <div className="flex flex-col gap-1.5 px-3 py-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)]">
+              <div className="text-[0.75rem] font-medium text-[var(--text-primary)]">
+                {t('importEnvironment.bundleReport', {
+                  ok: String(bundleResult.successes.length),
+                  fail: String(bundleResult.failures.length),
+                })}
+              </div>
+              {bundleResult.successes.length > 0 && (
+                <ul className="flex flex-col gap-0.5 text-[0.6875rem] max-h-[120px] overflow-y-auto">
+                  {bundleResult.successes.map(s => (
+                    <li key={s.new_id} className="flex items-center gap-2 text-[#4ade80]">
+                      <Check size={10} />
+                      <span className="truncate">{s.name}</span>
+                      <span className="ml-auto shrink-0 font-mono text-[0.625rem] text-[var(--text-muted)]">
+                        {s.new_id}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {bundleResult.failures.length > 0 && (
+                <ul className="flex flex-col gap-0.5 text-[0.6875rem] max-h-[120px] overflow-y-auto">
+                  {bundleResult.failures.map((f, i) => (
+                    <li key={i} className="flex items-start gap-2 text-[var(--danger-color)]">
+                      <AlertTriangle size={10} className="mt-0.5 shrink-0" />
+                      <div className="flex flex-col min-w-0">
+                        <span className="truncate">{f.name}</span>
+                        <span className="text-[var(--text-muted)] truncate">{f.error}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {/* Name override (single-env only) */}
+          {(!parsed || !parsed.ok || parsed.kind === 'single') && (
+            <div className="flex flex-col gap-1">
+              <label className="text-[0.75rem] font-medium text-[var(--text-secondary)]">
+                {t('importEnvironment.nameOverrideLabel')}
+              </label>
+              <input
+                type="text"
+                value={nameOverride}
+                onChange={e => setNameOverride(e.target.value)}
+                placeholder={parsed?.ok && parsed.kind === 'single' && parsed.meta.name ? parsed.meta.name : t('importEnvironment.nameOverridePlaceholder')}
+                className="w-full py-2 px-2.5 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-md text-[0.8125rem] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]"
+              />
+              <p className="text-[0.6875rem] text-[var(--text-muted)]">
+                {t('importEnvironment.nameOverrideHint')}
+              </p>
+            </div>
+          )}
 
           {/* Regenerate id toggle */}
           <label className="flex items-start gap-2 cursor-pointer">
@@ -306,13 +462,28 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
           >
             {t('common.cancel')}
           </button>
-          <button
-            onClick={handleConfirm}
-            disabled={!ready || submitting}
-            className="py-1.5 px-3 rounded-md bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white text-[0.75rem] font-semibold cursor-pointer border-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {submitting ? t('importEnvironment.importing') : t('importEnvironment.importButton')}
-          </button>
+          {bundleResult ? (
+            <button
+              onClick={onClose}
+              className="py-1.5 px-3 rounded-md bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white text-[0.75rem] font-semibold cursor-pointer border-none transition-colors"
+            >
+              {t('common.done')}
+            </button>
+          ) : (
+            <button
+              onClick={handleConfirm}
+              disabled={!ready || submitting}
+              className="py-1.5 px-3 rounded-md bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white text-[0.75rem] font-semibold cursor-pointer border-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {submitting
+                ? parsed && parsed.ok && parsed.kind === 'bundle'
+                  ? t('importEnvironment.importingBundle', { n: String(parsed.entries.length) })
+                  : t('importEnvironment.importing')
+                : parsed && parsed.ok && parsed.kind === 'bundle'
+                  ? t('importEnvironment.importBundleButton', { n: String(parsed.entries.length) })
+                  : t('importEnvironment.importButton')}
+            </button>
+          )}
         </div>
       </div>
     </div>,

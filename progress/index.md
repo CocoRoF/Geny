@@ -115,3 +115,6 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
 - [53_phase7-21_envs_bulk_actions.md](53_phase7-21_envs_bulk_actions.md) —
   Environments 탭에 multi-select + bulk delete/export (단일 JSON
   번들).
+- [54_phase7-22_bulk_import_bundle.md](54_phase7-22_bulk_import_bundle.md) —
+  ImportEnvironmentModal 이 번들 포맷 자동 감지 + 순차 import +
+  per-entry 결과 리포트.
