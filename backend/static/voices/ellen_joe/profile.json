@@ -1,0 +1,20 @@
+{
+  "name": "ellen_joe",
+  "display_name": "엘렌 조 (한국어)",
+  "language": "ko",
+  "is_template": true,
+  "prompt_text": "단거를 먹으면 체력이 보충되거든요, 하지만 몸무게가 쉽게 늘죠",
+  "prompt_lang": "ko",
+  "emotion_refs": {
+    "neutral": {
+      "file": "ref_neutral.wav",
+      "prompt_text": "단거를 먹으면 체력이 보충되거든요, 하지만 몸무게가 쉽게 늘죠",
+      "prompt_lang": "ko"
+    },
+    "anger": {
+      "file": "ref_anger.wav",
+      "prompt_text": "저기요, 소리내서 말하지 말아요. 왜 그런 눈으로 보는거죠? 어딜보는거에요",
+      "prompt_lang": "ko"
+    }
+  }
+}
