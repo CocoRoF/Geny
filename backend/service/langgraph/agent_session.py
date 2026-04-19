@@ -1378,6 +1378,8 @@ class AgentSession:
             linked_session_id=self._linked_session_id,
             session_type=self._session_type,
             chat_room_id=self._chat_room_id,
+            env_id=self._env_id,
+            memory_config=self._memory_config,
         )
 
     # ========================================================================

@@ -305,7 +305,12 @@ const ko: Translations = {
       sessionType: '세션 타입',
       linkedSession: '연결된 세션',
       chatRoom: '채팅방',
+      environment: '환경',
+      memoryProvider: '메모리 프로바이더',
     },
+    environmentNone: '레거시 프리셋',
+    memoryProviderDefault: '기본값 (서버)',
+    memoryProviderDisabled: '비활성화 (이 세션)',
     systemPrompt: {
       title: '시스템 프롬프트',
       empty: '설정된 시스템 프롬프트가 없습니다',

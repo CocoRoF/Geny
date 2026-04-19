@@ -305,7 +305,12 @@ const en = {
       sessionType: 'Session Type',
       linkedSession: 'Linked Session',
       chatRoom: 'Chat Room',
+      environment: 'Environment',
+      memoryProvider: 'Memory Provider',
     },
+    environmentNone: 'Legacy preset',
+    memoryProviderDefault: 'Default (server)',
+    memoryProviderDisabled: 'Disabled (this session)',
     systemPrompt: {
       title: 'System Prompt',
       empty: 'No system prompt configured',
