@@ -578,6 +578,8 @@ const ko: Translations = {
     copyMarkdown: 'MD 복사',
     copied: '복사됨!',
     copyFailed: '복사 실패',
+    topPairBadge: '가장 많이 다름: {left} ↔ {right} · 변경 {score}',
+    topPairTooltip: '이 매트릭스에서 가장 큰 diff: {left} ↔ {right} · 변경 {score}',
   },
 
   // ─── Environment Detail Drawer ───

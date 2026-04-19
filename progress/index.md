@@ -156,3 +156,6 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
 - [67_phase7-35_md_copy_clipboard.md](67_phase7-35_md_copy_clipboard.md) —
   DiffModal / MatrixModal 에 "Copy MD" 버튼 (navigator.clipboard,
   1.8 초 라벨 피드백).
+- [68_phase7-36_matrix_top_pair.md](68_phase7-36_matrix_top_pair.md) —
+  매트릭스 "Most different pair" 하이라이트 + 헤더 배지 + MD/JSON
+  export 에 top_pair 필드.
