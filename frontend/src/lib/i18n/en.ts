@@ -559,6 +559,9 @@ const en = {
     diffChanged: 'Changed',
     diffMore: '…and {n} more',
     diffUnavailable: 'Current manifest not loaded — diff preview unavailable.',
+    backupLabel: 'Download current manifest as backup before overwrite',
+    backupHelp: 'Saves a timestamped JSON copy to your machine. Disable if you have already exported, or for large manifests on slow connections.',
+    backupFailed: 'Backup download failed — overwrite cancelled. ({msg})',
   },
 
   // ─── Environment Builder Tab ───

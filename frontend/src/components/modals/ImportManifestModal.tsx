@@ -18,12 +18,24 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, ChevronDown, ChevronRight, FileUp, Minus, Pencil, Plus, Upload, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Download, FileUp, Minus, Pencil, Plus, Upload, X } from 'lucide-react';
 
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
 import { diffManifests } from '@/lib/environmentDiff';
 import type { EnvironmentManifest } from '@/types/environment';
+
+function triggerDownload(filename: string, content: string) {
+  const blob = new Blob([content], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 interface Props {
   envId: string;
@@ -67,7 +79,8 @@ function extractManifest(parsed: unknown): ParseResult {
 }
 
 export default function ImportManifestModal({ envId, envName, onClose, onImported }: Props) {
-  const { replaceManifest, selectedEnvironment, loadEnvironment } = useEnvironmentStore();
+  const { replaceManifest, selectedEnvironment, loadEnvironment, exportEnvironment } =
+    useEnvironmentStore();
   const { t } = useI18n();
 
   const [rawText, setRawText] = useState('');
@@ -75,6 +88,7 @@ export default function ImportManifestModal({ envId, envName, onClose, onImporte
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [showDiff, setShowDiff] = useState(false);
+  const [backupBeforeImport, setBackupBeforeImport] = useState(true);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Ensure the current manifest is loaded so we can diff against it.
@@ -145,6 +159,26 @@ export default function ImportManifestModal({ envId, envName, onClose, onImporte
     setSubmitting(true);
     setSubmitError('');
     try {
+      if (backupBeforeImport) {
+        try {
+          const payload = await exportEnvironment(envId);
+          const serialized =
+            typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+          const safeName = (envName || envId).replace(/[^a-zA-Z0-9_-]+/g, '_');
+          const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+          triggerDownload(`env-${safeName}-backup-${stamp}.json`, serialized);
+        } catch (backupErr) {
+          // Don't block overwrite on a backup failure — surface inline so
+          // the operator can decide whether to retry or proceed anyway.
+          setSubmitError(
+            t('importManifest.backupFailed', {
+              msg: backupErr instanceof Error ? backupErr.message : String(backupErr),
+            }),
+          );
+          setSubmitting(false);
+          return;
+        }
+      }
       await replaceManifest(envId, manifest);
       onImported?.();
       onClose();
@@ -355,6 +389,25 @@ export default function ImportManifestModal({ envId, envName, onClose, onImporte
               {t('importManifest.diffUnavailable')}
             </p>
           )}
+
+          {/* Backup toggle */}
+          <label className="flex items-start gap-2 px-3 py-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={backupBeforeImport}
+              onChange={e => setBackupBeforeImport(e.target.checked)}
+              className="mt-0.5 cursor-pointer"
+            />
+            <span className="flex flex-col gap-0.5">
+              <span className="flex items-center gap-1.5 text-[0.75rem] font-semibold text-[var(--text-secondary)]">
+                <Download size={11} />
+                {t('importManifest.backupLabel')}
+              </span>
+              <span className="text-[0.6875rem] text-[var(--text-muted)]">
+                {t('importManifest.backupHelp')}
+              </span>
+            </span>
+          </label>
 
           {submitError && (
             <div className="px-3 py-2 rounded-md bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.3)] text-[0.75rem] text-[var(--danger-color)]">
