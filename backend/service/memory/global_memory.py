@@ -183,6 +183,21 @@ class GlobalMemoryManager:
         source: str = "global",
         source_session_id: Optional[str] = None,
     ) -> Optional[str]:
+        try:
+            from service.memory_provider.adapters.curated_adapter import (
+                try_global_write_note,
+            )
+            result = try_global_write_note(
+                title, content,
+                category=category, tags=tags, importance=importance,
+                source=source, source_session_id=source_session_id,
+            )
+            if result is not None:
+                return result
+        except Exception as exc:
+            logger.warning(
+                f"Global provider adapter failed, using legacy path: {exc}"
+            )
         if self._writer is None:
             return None
         return self._writer.write_note(
@@ -202,6 +217,19 @@ class GlobalMemoryManager:
         tags: Optional[List[str]] = None,
         importance: Optional[str] = None,
     ) -> bool:
+        try:
+            from service.memory_provider.adapters.curated_adapter import (
+                try_global_update_note,
+            )
+            result = try_global_update_note(
+                filename, body=body, tags=tags, importance=importance,
+            )
+            if result is not None:
+                return result
+        except Exception as exc:
+            logger.warning(
+                f"Global provider adapter failed, using legacy path: {exc}"
+            )
         if self._writer is None:
             return False
         return self._writer.update_note(
@@ -209,6 +237,17 @@ class GlobalMemoryManager:
         )
 
     def delete_note(self, filename: str) -> bool:
+        try:
+            from service.memory_provider.adapters.curated_adapter import (
+                try_global_delete_note,
+            )
+            result = try_global_delete_note(filename)
+            if result is not None:
+                return result
+        except Exception as exc:
+            logger.warning(
+                f"Global provider adapter failed, using legacy path: {exc}"
+            )
         if self._writer is None:
             return False
         return self._writer.delete_note(filename)
