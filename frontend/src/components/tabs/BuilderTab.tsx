@@ -17,8 +17,12 @@ import { catalogApi } from '@/lib/environmentApi';
 import { useAppStore } from '@/store/useAppStore';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
+import JsonSchemaForm, {
+  type JsonSchema,
+} from '@/components/environment/JsonSchemaForm';
 import type {
   ArtifactInfo,
+  StageIntrospection,
   StageManifestEntry,
 } from '@/types/environment';
 
@@ -74,7 +78,11 @@ export default function BuilderTab() {
   const [artifactsByOrder, setArtifactsByOrder] = useState<
     Record<number, ArtifactInfo[] | 'loading' | 'error'>
   >({});
+  const [schemaByKey, setSchemaByKey] = useState<
+    Record<string, StageIntrospection | 'loading' | 'error'>
+  >({});
   const [showPreview, setShowPreview] = useState(true);
+  const [configMode, setConfigMode] = useState<'form' | 'json'>('form');
 
   // Load env whenever builderEnvId changes
   useEffect(() => {
@@ -142,6 +150,31 @@ export default function BuilderTab() {
   const artifactsForSelected = selectedOrder !== null ? artifactsByOrder[selectedOrder] : undefined;
   const configParse = draft ? tryParseJson(draft.configText) : null;
   const configInvalid = configParse && !configParse.ok;
+
+  // Fetch schema for the currently drafted (order, artifact) combo lazily
+  const schemaKey = selectedOrder !== null && draft ? `${selectedOrder}:${draft.artifact}` : null;
+  useEffect(() => {
+    if (!schemaKey || selectedOrder === null || !draft) return;
+    if (schemaByKey[schemaKey]) return;
+    setSchemaByKey(prev => ({ ...prev, [schemaKey]: 'loading' }));
+    catalogApi
+      .artifactByStage(selectedOrder, draft.artifact)
+      .then(res => {
+        setSchemaByKey(prev => ({ ...prev, [schemaKey]: res }));
+      })
+      .catch(() => {
+        setSchemaByKey(prev => ({ ...prev, [schemaKey]: 'error' }));
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schemaKey]);
+
+  const activeIntrospection = schemaKey ? schemaByKey[schemaKey] : undefined;
+  const configSchema: JsonSchema | null =
+    activeIntrospection && typeof activeIntrospection === 'object' && activeIntrospection !== null
+      ? ((activeIntrospection as StageIntrospection).config_schema as JsonSchema | null) ?? null
+      : null;
+  const schemaAvailable = !!configSchema && typeof configSchema === 'object';
+  const effectiveConfigMode: 'form' | 'json' = schemaAvailable ? configMode : 'json';
 
   const isDirty = useMemo(() => {
     if (!selectedStage || !draft) return false;
@@ -387,29 +420,86 @@ export default function BuilderTab() {
                   </small>
                 </div>
 
-                {/* Config JSON */}
+                {/* Config editor — form or JSON */}
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wide">
-                    {t('builderTab.config')}
-                  </label>
-                  <textarea
-                    value={draft.configText}
-                    onChange={e => setDraft({ ...draft, configText: e.target.value })}
-                    rows={14}
-                    spellCheck={false}
-                    className={`py-2 px-3 rounded-md bg-[var(--bg-primary)] border font-mono text-[0.75rem] leading-[1.5] text-[var(--text-primary)] focus:outline-none focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] resize-y ${
-                      configInvalid
-                        ? 'border-[var(--danger-color)] focus:border-[var(--danger-color)]'
-                        : 'border-[var(--border-color)] focus:border-[var(--primary-color)]'
-                    }`}
-                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wide">
+                      {t('builderTab.config')}
+                    </label>
+                    {schemaAvailable ? (
+                      <div className="inline-flex rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] p-0.5">
+                        <button
+                          onClick={() => setConfigMode('form')}
+                          className={`px-2 py-0.5 rounded text-[0.6875rem] font-medium cursor-pointer transition-colors ${
+                            effectiveConfigMode === 'form'
+                              ? 'bg-[var(--primary-color)] text-white'
+                              : 'bg-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                          }`}
+                        >
+                          {t('builderTab.configForm')}
+                        </button>
+                        <button
+                          onClick={() => setConfigMode('json')}
+                          className={`px-2 py-0.5 rounded text-[0.6875rem] font-medium cursor-pointer transition-colors ${
+                            effectiveConfigMode === 'json'
+                              ? 'bg-[var(--primary-color)] text-white'
+                              : 'bg-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                          }`}
+                        >
+                          {t('builderTab.configJson')}
+                        </button>
+                      </div>
+                    ) : activeIntrospection === 'loading' ? (
+                      <span className="text-[0.625rem] text-[var(--text-muted)] italic">
+                        {t('builderTab.schemaLoading')}
+                      </span>
+                    ) : activeIntrospection === 'error' ? (
+                      <span className="text-[0.625rem] text-[var(--danger-color)]">
+                        {t('builderTab.schemaFailed')}
+                      </span>
+                    ) : (
+                      <span className="text-[0.625rem] text-[var(--text-muted)] italic">
+                        {t('builderTab.schemaNone')}
+                      </span>
+                    )}
+                  </div>
+
+                  {effectiveConfigMode === 'form' && configSchema && configParse?.ok ? (
+                    <div className="p-3 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-color)]">
+                      <JsonSchemaForm
+                        schema={configSchema}
+                        value={configParse.value}
+                        onChange={next => {
+                          setDraft({
+                            ...draft,
+                            configText: JSON.stringify(next, null, 2),
+                          });
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <textarea
+                      value={draft.configText}
+                      onChange={e => setDraft({ ...draft, configText: e.target.value })}
+                      rows={14}
+                      spellCheck={false}
+                      className={`py-2 px-3 rounded-md bg-[var(--bg-primary)] border font-mono text-[0.75rem] leading-[1.5] text-[var(--text-primary)] focus:outline-none focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] resize-y ${
+                        configInvalid
+                          ? 'border-[var(--danger-color)] focus:border-[var(--danger-color)]'
+                          : 'border-[var(--border-color)] focus:border-[var(--primary-color)]'
+                      }`}
+                    />
+                  )}
+
                   {configInvalid ? (
                     <small className="text-[0.6875rem] text-[var(--danger-color)]">
                       {t('builderTab.configInvalid')} ({configParse!.error})
                     </small>
                   ) : (
                     <small className="text-[0.6875rem] text-[var(--text-muted)]">
-                      {t('builderTab.configHint')}
+                      {schemaAvailable && effectiveConfigMode === 'form'
+                        ? t('builderTab.configFormHint')
+                        : t('builderTab.configHint')}
                     </small>
                   )}
                 </div>
