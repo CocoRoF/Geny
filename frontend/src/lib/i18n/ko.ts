@@ -491,6 +491,7 @@ const ko: Translations = {
     updated: '업데이트 {date}',
     newEnvironment: '새 환경',
     createFirst: '첫 환경 만들기',
+    importFirst: '백업으로부터 가져오기',
     compare: '비교',
     sessionCountTooltip: '이 환경에 바인딩된 활성 세션 {n} 개',
     importEnvironment: '가져오기…',

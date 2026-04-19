@@ -86,3 +86,5 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
   ImportManifestModal 드롭존에 drag-over 시각 피드백.
 - [41_phase7-9_import_environment_modal.md](41_phase7-9_import_environment_modal.md) —
   ImportEnvironmentModal 신설 — 백업 JSON 으로 새 환경 생성.
+- [42_phase7-10_empty_state_import.md](42_phase7-10_empty_state_import.md) —
+  Environments empty state 에 Import 버튼 병치.

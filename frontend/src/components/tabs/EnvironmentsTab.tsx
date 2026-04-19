@@ -182,13 +182,22 @@ export default function EnvironmentsTab() {
             <p className="text-[0.75rem] text-[var(--text-muted)] max-w-[420px]">
               {t('environmentsTab.emptyHint')}
             </p>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="mt-3 flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white text-[0.75rem] font-semibold cursor-pointer border-none transition-colors"
-            >
-              <Plus size={12} />
-              {t('environmentsTab.createFirst')}
-            </button>
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                onClick={() => setShowCreate(true)}
+                className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white text-[0.75rem] font-semibold cursor-pointer border-none transition-colors"
+              >
+                <Plus size={12} />
+                {t('environmentsTab.createFirst')}
+              </button>
+              <button
+                onClick={() => setShowImport(true)}
+                className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors"
+              >
+                <Upload size={12} />
+                {t('environmentsTab.importFirst')}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">

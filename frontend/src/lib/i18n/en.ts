@@ -491,6 +491,7 @@ const en = {
     updated: 'Updated {date}',
     newEnvironment: 'New Environment',
     createFirst: 'Create your first environment',
+    importFirst: 'Import from backup',
     compare: 'Compare',
     sessionCountTooltip: '{n} active session(s) bound to this environment',
     importEnvironment: 'Import…',
