@@ -292,6 +292,14 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("   - MemorySessionRegistry: dormant (MEMORY_PROVIDER=disabled or unset)")
 
+    # ── Phase 5 legacy-layer flag snapshot ─────────────────────────────
+    from service.memory_provider.flags import snapshot as _mem_flag_snapshot
+    _flags = _mem_flag_snapshot()
+    logger.info(
+        "   - MEMORY_LEGACY_* flags: "
+        + " ".join(f"{k}={'on' if v else 'off'}" for k, v in _flags.items())
+    )
+
     # ── EnvironmentService (Phase 3) ───────────────────────────────────
     # Persists EnvironmentManifest templates to ./data/environments/*.json
     # (or ENVIRONMENT_STORAGE_PATH). Routers are wired in the follow-up PRs

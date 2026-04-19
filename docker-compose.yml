@@ -84,6 +84,13 @@ services:
       - MEMORY_TIMEZONE=${MEMORY_TIMEZONE:-}
       # Phase 4 attach flag (false keeps legacy SessionMemoryManager authoritative).
       - MEMORY_PROVIDER_ATTACH=${MEMORY_PROVIDER_ATTACH:-false}
+      # Phase 5 per-layer legacy/provider routing — flip to `false` per layer
+      # as its Phase 5 PR (stm/ltm/notes/vector/curated) lands and is verified.
+      - MEMORY_LEGACY_STM=${MEMORY_LEGACY_STM:-true}
+      - MEMORY_LEGACY_LTM=${MEMORY_LEGACY_LTM:-true}
+      - MEMORY_LEGACY_NOTES=${MEMORY_LEGACY_NOTES:-true}
+      - MEMORY_LEGACY_VECTOR=${MEMORY_LEGACY_VECTOR:-true}
+      - MEMORY_LEGACY_CURATED=${MEMORY_LEGACY_CURATED:-true}
       # EnvironmentService (Phase 3)
       - ENVIRONMENT_STORAGE_PATH=${ENVIRONMENT_STORAGE_PATH:-./data/environments}
     volumes:
