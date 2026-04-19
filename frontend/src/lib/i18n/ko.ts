@@ -510,6 +510,8 @@ const ko: Translations = {
       has_sessions: '사용 중',
       has_deleted: '삭제 포함',
       idle: '미사용',
+      has_preset: '프리셋 유래',
+      has_tags: '태그 있음',
     },
     sort: {
       updated_desc: '최근 수정 ↓',

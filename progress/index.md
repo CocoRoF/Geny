@@ -159,3 +159,5 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
 - [68_phase7-36_matrix_top_pair.md](68_phase7-36_matrix_top_pair.md) —
   매트릭스 "Most different pair" 하이라이트 + 헤더 배지 + MD/JSON
   export 에 top_pair 필드.
+- [69_phase7-37_meta_filters.md](69_phase7-37_meta_filters.md) —
+  Environments 필터 바에 "Has preset" / "Has tags" 메타 필터 2 종.

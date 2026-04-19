@@ -511,6 +511,8 @@ const en = {
       has_sessions: 'In use',
       has_deleted: 'Has deleted',
       idle: 'Idle',
+      has_preset: 'Has preset',
+      has_tags: 'Has tags',
     },
     sort: {
       updated_desc: 'Updated ↓',

@@ -145,7 +145,14 @@ function EnvironmentCard({
 
 type CountBucket = { active: number; deleted: number; error: number };
 
-type StatusFilter = 'all' | 'has_errors' | 'has_sessions' | 'has_deleted' | 'idle';
+type StatusFilter =
+  | 'all'
+  | 'has_errors'
+  | 'has_sessions'
+  | 'has_deleted'
+  | 'idle'
+  | 'has_preset'
+  | 'has_tags';
 type SortKey =
   | 'updated_desc'
   | 'updated_asc'
@@ -276,6 +283,9 @@ export default function EnvironmentsTab() {
         if (statusFilter === 'has_sessions' && b.active === 0) return false;
         if (statusFilter === 'has_deleted' && b.deleted === 0) return false;
         if (statusFilter === 'idle' && b.active > 0) return false;
+        if (statusFilter === 'has_preset' && !(env.base_preset && env.base_preset.length > 0))
+          return false;
+        if (statusFilter === 'has_tags' && env.tags.length === 0) return false;
       }
       return true;
     });
@@ -592,7 +602,17 @@ export default function EnvironmentsTab() {
             </div>
 
             <div className="flex items-center gap-1 text-[0.75rem]">
-              {(['all', 'has_errors', 'has_sessions', 'has_deleted', 'idle'] as StatusFilter[]).map(v => (
+              {(
+                [
+                  'all',
+                  'has_errors',
+                  'has_sessions',
+                  'has_deleted',
+                  'idle',
+                  'has_preset',
+                  'has_tags',
+                ] as StatusFilter[]
+              ).map(v => (
                 <button
                   key={v}
                   onClick={() => setStatusFilter(v)}

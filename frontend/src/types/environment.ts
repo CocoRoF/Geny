@@ -102,6 +102,7 @@ export interface EnvironmentSummary {
   tags: string[];
   created_at: string;
   updated_at: string;
+  base_preset?: string;
 }
 
 export interface EnvironmentDetail extends EnvironmentSummary {
