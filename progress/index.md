@@ -168,3 +168,6 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
   (4.5 초 auto-dismiss).
 - [72_phase7-40_clipboard_hint.md](72_phase7-40_clipboard_hint.md) —
   Copy MD 실패 시 원인/우회 툴팁 (Diff/Matrix modal 공통).
+- [73_phase7-41_plan06_docs_closure.md](73_phase7-41_plan06_docs_closure.md) —
+  Plan 06 문서 마감 (backend README env vars + 35_… 롤아웃
+  요약 38–72 PR 반영).
