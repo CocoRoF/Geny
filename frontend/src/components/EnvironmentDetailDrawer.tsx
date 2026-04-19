@@ -13,7 +13,8 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Copy, Download, Tag, Trash2, X } from 'lucide-react';
+import { Copy, Download, Settings2, Tag, Trash2, X } from 'lucide-react';
+import { useAppStore } from '@/store/useAppStore';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
 import ConfirmModal from '@/components/modals/ConfirmModal';
@@ -52,7 +53,9 @@ export default function EnvironmentDetailDrawer({ envId, onClose }: Props) {
     deleteEnvironment,
     duplicateEnvironment,
     exportEnvironment,
+    openInBuilder,
   } = useEnvironmentStore();
+  const setActiveTab = useAppStore(s => s.setActiveTab);
   const { t } = useI18n();
 
   const [loading, setLoading] = useState(false);
@@ -249,6 +252,18 @@ export default function EnvironmentDetailDrawer({ envId, onClose }: Props) {
             {t('common.delete')}
           </button>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                openInBuilder(envId);
+                setActiveTab('builder');
+                onClose();
+              }}
+              disabled={!env}
+              className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white text-[0.75rem] font-semibold cursor-pointer border-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Settings2 size={12} />
+              {t('environmentDetail.openInBuilder')}
+            </button>
             <button
               onClick={handleDuplicate}
               disabled={!env || duplicating}

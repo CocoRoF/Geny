@@ -86,9 +86,9 @@ export const environmentApi = {
       body: JSON.stringify({ manifest }),
     }),
 
-  updateStage: (envId: string, stageName: string, payload: UpdateStageTemplatePayload) =>
+  updateStage: (envId: string, order: number, payload: UpdateStageTemplatePayload) =>
     apiCall<EnvironmentDetail>(
-      `/api/environments/${envId}/stages/${encodeURIComponent(stageName)}`,
+      `/api/environments/${envId}/stages/${order}`,
       { method: 'PATCH', body: JSON.stringify(payload) },
     ),
 

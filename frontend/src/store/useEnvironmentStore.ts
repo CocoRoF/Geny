@@ -44,9 +44,14 @@ interface EnvironmentState {
   replaceManifest: (envId: string, manifest: EnvironmentManifest) => Promise<void>;
   updateStage: (
     envId: string,
-    stageName: string,
+    order: number,
     payload: UpdateStageTemplatePayload,
   ) => Promise<void>;
+
+  // Builder tab routing
+  builderEnvId: string | null;
+  openInBuilder: (envId: string) => void;
+  closeBuilder: () => void;
   exportEnvironment: (envId: string) => Promise<string>;
   importEnvironment: (data: Record<string, unknown>) => Promise<{ id: string }>;
   markPreset: (envId: string) => Promise<void>;
@@ -119,6 +124,7 @@ export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
         s.selectedEnvironment && s.selectedEnvironment.id === envId
           ? null
           : s.selectedEnvironment,
+      builderEnvId: s.builderEnvId === envId ? null : s.builderEnvId,
     }));
   },
 
@@ -138,8 +144,8 @@ export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
     }));
   },
 
-  updateStage: async (envId, stageName, payload) => {
-    const updated = await environmentApi.updateStage(envId, stageName, payload);
+  updateStage: async (envId, order, payload) => {
+    const updated = await environmentApi.updateStage(envId, order, payload);
     set((s) => ({
       selectedEnvironment:
         s.selectedEnvironment && s.selectedEnvironment.id === envId
@@ -147,6 +153,10 @@ export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
           : s.selectedEnvironment,
     }));
   },
+
+  builderEnvId: null,
+  openInBuilder: (envId) => set({ builderEnvId: envId }),
+  closeBuilder: () => set({ builderEnvId: null }),
 
   exportEnvironment: (envId) => environmentApi.exportEnv(envId),
 
