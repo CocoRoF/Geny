@@ -34,6 +34,7 @@ interface EnvironmentState {
   selectedEnvironment: EnvironmentDetail | null;
   catalog: CatalogResponse | null;
   sessionCounts: Record<string, EnvSessionCountBucket> | null;
+  sessionCountsFetchedAt: number | null;
   isLoading: boolean;
   isLoadingCatalog: boolean;
   error: string | null;
@@ -43,6 +44,7 @@ interface EnvironmentState {
   loadEnvironment: (envId: string) => Promise<EnvironmentDetail>;
   clearSelection: () => void;
   refreshSessionCounts: () => Promise<void>;
+  refreshSessionCountsIfStale: (ttlMs: number) => Promise<void>;
 
   // Mutations
   createEnvironment: (payload: CreateEnvironmentPayload) => Promise<{ id: string }>;
@@ -78,6 +80,7 @@ export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
   selectedEnvironment: null,
   catalog: null,
   sessionCounts: null,
+  sessionCountsFetchedAt: null,
   isLoading: false,
   isLoadingCatalog: false,
   error: null,
@@ -103,11 +106,22 @@ export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
           error: c.error_count,
         };
       }
-      set({ sessionCounts: map });
+      set({ sessionCounts: map, sessionCountsFetchedAt: Date.now() });
     } catch {
       // Leave the existing value in place; consumers fall back to
       // client-side aggregation when the map is null.
     }
+  },
+
+  refreshSessionCountsIfStale: async (ttlMs) => {
+    const { sessionCountsFetchedAt } = get();
+    if (
+      sessionCountsFetchedAt !== null &&
+      Date.now() - sessionCountsFetchedAt < ttlMs
+    ) {
+      return;
+    }
+    await get().refreshSessionCounts();
   },
 
   loadEnvironment: async (envId) => {

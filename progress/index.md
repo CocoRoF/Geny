@@ -107,3 +107,5 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
 - [50_phase7-18_env_store_session_counts.md](50_phase7-18_env_store_session_counts.md) —
   bulk session-counts 를 `useEnvironmentStore` 로 올리고
   create/delete/duplicate/import 시 자동 재조회.
+- [51_phase7-19_env_counts_focus_refresh.md](51_phase7-19_env_counts_focus_refresh.md) —
+  visibility/focus 전환 시 10 초 TTL 게이트로 카운트 자동 재조회.

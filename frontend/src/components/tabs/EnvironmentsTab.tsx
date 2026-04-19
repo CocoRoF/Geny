@@ -135,6 +135,7 @@ export default function EnvironmentsTab() {
     loadEnvironments,
     sessionCounts: storeCounts,
     refreshSessionCounts,
+    refreshSessionCountsIfStale,
   } = useEnvironmentStore();
   const sessions = useAppStore(s => s.sessions);
   const { t } = useI18n();
@@ -167,6 +168,22 @@ export default function EnvironmentsTab() {
   useEffect(() => {
     refreshSessionCounts();
   }, [refreshSessionCounts]);
+
+  useEffect(() => {
+    const STALE_MS = 10_000;
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        refreshSessionCountsIfStale(STALE_MS);
+      }
+    };
+    const onFocus = () => refreshSessionCountsIfStale(STALE_MS);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [refreshSessionCountsIfStale]);
 
   const clientCountsPerEnv = useMemo(() => {
     const counts: Record<string, CountBucket> = {};
