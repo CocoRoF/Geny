@@ -325,6 +325,18 @@ class SessionInfo(BaseModel):
         description="Chat room ID auto-created for VTuber sessions"
     )
 
+    # Environment / memory — surfaced read-only for operator visibility.
+    # Populated by AgentSession.get_session_info from the values captured
+    # at session creation; see CreateAgentRequest for the write path.
+    env_id: Optional[str] = Field(
+        default=None,
+        description="EnvironmentManifest id bound at session creation, or None for legacy preset path"
+    )
+    memory_config: Optional[dict] = Field(
+        default=None,
+        description="Per-session MemoryProvider override config, or None when the process default is used"
+    )
+
 
 class ExecuteRequest(BaseModel):
     """

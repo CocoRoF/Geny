@@ -21,6 +21,8 @@ export interface SessionInfo {
   graph_name: string | null;
   tool_preset_id: string | null;
   total_cost: number | null;
+  env_id?: string | null;
+  memory_config?: Record<string, unknown> | null;
   is_deleted?: boolean;
   deleted_at?: string | null;
 }

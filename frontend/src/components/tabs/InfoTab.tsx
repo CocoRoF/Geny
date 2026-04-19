@@ -140,6 +140,21 @@ export default function InfoTab() {
     return { background: 'rgba(107, 114, 128, 0.15)', color: 'var(--text-muted)' };
   };
 
+  const formatMemoryConfig = (cfg: Record<string, unknown> | null | undefined): string => {
+    if (!cfg || typeof cfg !== 'object') return t('info.memoryProviderDefault');
+    const provider = typeof cfg.provider === 'string' ? cfg.provider : '';
+    if (!provider) return t('info.memoryProviderDefault');
+    if (provider === 'disabled') return t('info.memoryProviderDisabled');
+    const parts: string[] = [provider];
+    if (provider === 'file' && typeof cfg.root === 'string' && cfg.root) parts.push(cfg.root);
+    if (provider === 'sql') {
+      if (typeof cfg.dialect === 'string' && cfg.dialect) parts[0] = `sql (${cfg.dialect})`;
+      if (typeof cfg.dsn === 'string' && cfg.dsn) parts.push(cfg.dsn);
+    }
+    if (typeof cfg.scope === 'string' && cfg.scope) parts.push(`scope=${cfg.scope}`);
+    return parts.join(' · ');
+  };
+
   const fields = [
     { label: t('info.fields.sessionId'), value: data.session_id },
     { label: t('info.fields.name'), value: data.session_name || t('info.unnamed') },
@@ -156,6 +171,8 @@ export default function InfoTab() {
     { label: t('info.fields.pid'), value: data.pid || '—' },
     { label: t('info.fields.pod'), value: data.pod_name || '—' },
     { label: t('info.fields.totalCost'), value: data.total_cost != null && data.total_cost > 0 ? `$${data.total_cost.toFixed(6)}` : '$0.000000' },
+    { label: t('info.fields.environment'), value: data.env_id || t('info.environmentNone') },
+    { label: t('info.fields.memoryProvider'), value: formatMemoryConfig(data.memory_config) },
     ...(data.session_type ? [{ label: t('info.fields.sessionType'), value: data.session_type }] : []),
     ...(data.linked_session_id ? [{ label: t('info.fields.linkedSession'), value: data.linked_session_id }] : []),
     ...(data.chat_room_id ? [{ label: t('info.fields.chatRoom'), value: data.chat_room_id }] : []),
