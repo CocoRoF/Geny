@@ -486,6 +486,26 @@ const en = {
     updated: 'Updated {date}',
     newEnvironment: 'New Environment',
     createFirst: 'Create your first environment',
+    compare: 'Compare',
+  },
+
+  // ─── Environment Diff Modal ───
+  diff: {
+    title: 'Compare environments',
+    subtitle: 'Pick two environments to see what differs between their manifests.',
+    left: 'Left',
+    right: 'Right',
+    pickEnv: '-- Select an environment --',
+    compare: 'Compare',
+    running: 'Diffing…',
+    failed: 'Failed to compute diff',
+    idle: 'Pick two environments and press Compare.',
+    noChanges: 'No changes — the two manifests are byte-compatible.',
+    added: 'Added',
+    removed: 'Removed',
+    changed: 'Changed',
+    before: 'Before',
+    after: 'After',
   },
 
   // ─── Environment Detail Drawer ───
@@ -500,6 +520,7 @@ const en = {
     manifest: 'Manifest',
     manifestEmpty: 'No manifest attached yet.',
     openInBuilder: 'Open in Builder',
+    compareWith: 'Compare with…',
     duplicatePrompt: 'Name for the duplicated environment',
     duplicating: 'Duplicating…',
     duplicateFailed: 'Failed to duplicate environment',

@@ -13,7 +13,7 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Copy, Download, Settings2, Tag, Trash2, X } from 'lucide-react';
+import { ArrowLeftRight, Copy, Download, Settings2, Tag, Trash2, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
@@ -22,6 +22,7 @@ import ConfirmModal from '@/components/modals/ConfirmModal';
 interface Props {
   envId: string;
   onClose: () => void;
+  onCompare?: () => void;
 }
 
 function triggerDownload(filename: string, content: string) {
@@ -45,7 +46,7 @@ function formatDate(iso: string | undefined): string {
   }
 }
 
-export default function EnvironmentDetailDrawer({ envId, onClose }: Props) {
+export default function EnvironmentDetailDrawer({ envId, onClose, onCompare }: Props) {
   const {
     selectedEnvironment,
     loadEnvironment,
@@ -264,6 +265,16 @@ export default function EnvironmentDetailDrawer({ envId, onClose }: Props) {
               <Settings2 size={12} />
               {t('environmentDetail.openInBuilder')}
             </button>
+            {onCompare && (
+              <button
+                onClick={onCompare}
+                disabled={!env}
+                className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ArrowLeftRight size={12} />
+                {t('environmentDetail.compareWith')}
+              </button>
+            )}
             <button
               onClick={handleDuplicate}
               disabled={!env || duplicating}
