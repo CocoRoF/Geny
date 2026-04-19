@@ -85,6 +85,14 @@ interface EnvironmentState {
   builderEnvId: string | null;
   openInBuilder: (envId: string) => void;
   closeBuilder: () => void;
+
+  // External-tab drawer trigger. GraphTab (and any other surface that
+  // wants to deep-link into an env detail drawer) writes here, then
+  // navigates to the Environments tab. EnvironmentsTab consumes the
+  // value on mount/update and clears it.
+  pendingDrawerEnvId: string | null;
+  requestOpenEnvDrawer: (envId: string) => void;
+  consumePendingDrawerEnvId: () => string | null;
   exportEnvironment: (envId: string) => Promise<string>;
   importEnvironment: (data: Record<string, unknown>) => Promise<{ id: string }>;
   markPreset: (envId: string) => Promise<void>;
@@ -301,6 +309,14 @@ export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
   builderEnvId: null,
   openInBuilder: (envId) => set({ builderEnvId: envId }),
   closeBuilder: () => set({ builderEnvId: null }),
+
+  pendingDrawerEnvId: null,
+  requestOpenEnvDrawer: (envId) => set({ pendingDrawerEnvId: envId }),
+  consumePendingDrawerEnvId: () => {
+    const id = get().pendingDrawerEnvId;
+    if (id !== null) set({ pendingDrawerEnvId: null });
+    return id;
+  },
 
   exportEnvironment: (envId) => environmentApi.exportEnv(envId),
 

@@ -1,8 +1,10 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { Layers, Zap, Brain, Shield, Database, Wrench, BarChart3, MessageSquare } from 'lucide-react';
+import { useEnvironmentStore } from '@/store/useEnvironmentStore';
+import { useI18n } from '@/lib/i18n';
+import { AlertTriangle, BarChart3, Boxes, Brain, Database, ExternalLink, Layers, MessageSquare, Shield, Wrench, Zap } from 'lucide-react';
 
 /**
  * Pipeline Visualization Tab
@@ -62,12 +64,27 @@ const PRESET_LABELS: Record<string, { label: string; desc: string }> = {
 };
 
 export default function GraphTab() {
-  const { selectedSessionId, sessions } = useAppStore();
+  const { selectedSessionId, sessions, setActiveTab } = useAppStore();
+  const environments = useEnvironmentStore(s => s.environments);
+  const loadEnvironments = useEnvironmentStore(s => s.loadEnvironments);
+  const requestOpenEnvDrawer = useEnvironmentStore(s => s.requestOpenEnvDrawer);
+  const { t } = useI18n();
 
   const session = useMemo(
     () => sessions.find(s => s.session_id === selectedSessionId),
     [sessions, selectedSessionId],
   );
+
+  // The store may not have been hydrated yet (user landed on this tab
+  // before opening Environments). Pull the list once so the badge can
+  // resolve a name; harmless if already loaded thanks to the
+  // store-side isLoading guard.
+  const sessionEnvId = session?.env_id ?? null;
+  useEffect(() => {
+    if (sessionEnvId && environments.length === 0) {
+      void loadEnvironments();
+    }
+  }, [sessionEnvId, environments.length, loadEnvironments]);
 
   if (!session) {
     return (
@@ -84,6 +101,16 @@ export default function GraphTab() {
   else if (workflowId.includes('simple')) presetKey = 'worker_easy';
 
   const preset = PRESET_LABELS[presetKey] || PRESET_LABELS['worker_adaptive'];
+  const envSummary = sessionEnvId
+    ? environments.find(e => e.id === sessionEnvId) ?? null
+    : null;
+  const envMissing = !!sessionEnvId && environments.length > 0 && envSummary === null;
+
+  const openEnvInDrawer = () => {
+    if (!sessionEnvId) return;
+    requestOpenEnvDrawer(sessionEnvId);
+    setActiveTab('environments');
+  };
 
   return (
     <div className="h-full flex flex-col p-4 overflow-auto">
@@ -97,6 +124,36 @@ export default function GraphTab() {
         <p className="text-xs text-zinc-500 mt-1">
           Session: {session.session_name || session.session_id.slice(0, 8)} | Model: {session.model || 'default'}
         </p>
+
+        {/* Environment / preset linkage badge */}
+        <div className="mt-2">
+          {sessionEnvId ? (
+            envMissing ? (
+              <span className="inline-flex items-center gap-1.5 py-1 px-2 rounded-md border border-red-500/40 bg-red-500/10 text-red-300 text-[0.6875rem] font-medium">
+                <AlertTriangle className="w-3 h-3" />
+                {t('graphTab.envMissing')}
+                <span className="font-mono opacity-70">{sessionEnvId.slice(0, 8)}</span>
+              </span>
+            ) : (
+              <button
+                onClick={openEnvInDrawer}
+                className="inline-flex items-center gap-1.5 py-1 px-2 rounded-md border border-indigo-500/40 bg-indigo-500/10 text-indigo-300 text-[0.6875rem] font-medium hover:bg-indigo-500/20 hover:border-indigo-500/60 cursor-pointer transition-colors"
+                title={sessionEnvId}
+              >
+                <Boxes className="w-3 h-3" />
+                <span className="opacity-70">{t('graphTab.environment')}:</span>
+                <span>{envSummary?.name ?? t('graphTab.envLoading')}</span>
+                <ExternalLink className="w-3 h-3 opacity-60" />
+              </button>
+            )
+          ) : (
+            <span className="inline-flex items-center gap-1.5 py-1 px-2 rounded-md border border-zinc-700 bg-zinc-800/50 text-zinc-400 text-[0.6875rem] font-medium">
+              <Layers className="w-3 h-3" />
+              <span className="opacity-70">{t('graphTab.preset')}:</span>
+              <span>{preset.label}</span>
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Pipeline Stages */}

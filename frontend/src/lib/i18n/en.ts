@@ -399,6 +399,10 @@ const en = {
 
   // ─── Graph Tab ───
   graphTab: {
+    environment: 'Environment',
+    envLoading: 'Loading…',
+    envMissing: 'Environment unavailable',
+    preset: 'Preset',
     selectSession: 'Select a Session',
     selectSessionDesc: 'Choose a session to view its graph, or go to ',
     workflowsLink: 'Workflows',

@@ -230,6 +230,18 @@ export default function EnvironmentsTab() {
     loadEnvironments();
   }, [loadEnvironments]);
 
+  // External callers (e.g. GraphTab "Open in Environments" badge) hand
+  // us an envId to drill into via useEnvironmentStore.requestOpenEnvDrawer.
+  // Consume it once on mount/update so the drawer pops automatically.
+  const consumePendingDrawerEnvId = useEnvironmentStore(s => s.consumePendingDrawerEnvId);
+  const pendingDrawerEnvId = useEnvironmentStore(s => s.pendingDrawerEnvId);
+  useEffect(() => {
+    if (pendingDrawerEnvId) {
+      const id = consumePendingDrawerEnvId();
+      if (id) setOpenEnvId(id);
+    }
+  }, [pendingDrawerEnvId, consumePendingDrawerEnvId]);
+
   useEffect(() => {
     refreshSessionCounts();
   }, [refreshSessionCounts]);

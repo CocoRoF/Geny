@@ -399,6 +399,10 @@ const ko: Translations = {
 
   // ─── Graph Tab ───
   graphTab: {
+    environment: '환경',
+    envLoading: '로딩 중…',
+    envMissing: '환경을 찾을 수 없음',
+    preset: '프리셋',
     selectSession: '세션을 선택하세요',
     selectSessionDesc: '그래프를 볼 세션을 선택하거나 ',
     workflowsLink: '워크플로우',
