@@ -20,6 +20,10 @@ import { useI18n } from '@/lib/i18n';
 import JsonSchemaForm, {
   type JsonSchema,
 } from '@/components/environment/JsonSchemaForm';
+import {
+  ChainsEditor,
+  StrategiesEditor,
+} from '@/components/environment/StrategyEditors';
 import type {
   ArtifactInfo,
   StageIntrospection,
@@ -30,6 +34,9 @@ interface StageDraft {
   artifact: string;
   active: boolean;
   configText: string;
+  strategies: Record<string, string>;
+  strategyConfigs: Record<string, Record<string, unknown>>;
+  chainOrder: Record<string, string[]>;
 }
 
 function stageDraftFromEntry(entry: StageManifestEntry): StageDraft {
@@ -37,6 +44,16 @@ function stageDraftFromEntry(entry: StageManifestEntry): StageDraft {
     artifact: entry.artifact,
     active: entry.active,
     configText: JSON.stringify(entry.config ?? {}, null, 2),
+    strategies: { ...(entry.strategies ?? {}) },
+    strategyConfigs: Object.fromEntries(
+      Object.entries(entry.strategy_configs ?? {}).map(([k, v]) => [
+        k,
+        { ...(v as Record<string, unknown>) },
+      ]),
+    ),
+    chainOrder: Object.fromEntries(
+      Object.entries(entry.chain_order ?? {}).map(([k, v]) => [k, [...v]]),
+    ),
   };
 }
 
@@ -181,7 +198,23 @@ export default function BuilderTab() {
     if (draft.artifact !== selectedStage.artifact) return true;
     if (draft.active !== selectedStage.active) return true;
     const original = JSON.stringify(selectedStage.config ?? {}, null, 2);
-    return draft.configText.trim() !== original.trim();
+    if (draft.configText.trim() !== original.trim()) return true;
+    if (
+      JSON.stringify(draft.strategies) !==
+      JSON.stringify(selectedStage.strategies ?? {})
+    )
+      return true;
+    if (
+      JSON.stringify(draft.strategyConfigs) !==
+      JSON.stringify(selectedStage.strategy_configs ?? {})
+    )
+      return true;
+    if (
+      JSON.stringify(draft.chainOrder) !==
+      JSON.stringify(selectedStage.chain_order ?? {})
+    )
+      return true;
+    return false;
   }, [draft, selectedStage]);
 
   const handleRevert = () => {
@@ -205,6 +238,9 @@ export default function BuilderTab() {
         artifact: draft.artifact,
         active: draft.active,
         config: parsed,
+        strategies: draft.strategies,
+        strategy_configs: draft.strategyConfigs,
+        chain_order: draft.chainOrder,
       });
       setSavedFlash(true);
     } catch (e: unknown) {
@@ -504,27 +540,51 @@ export default function BuilderTab() {
                   )}
                 </div>
 
-                {/* Strategies / chains (read-only for now) */}
-                {Object.keys(selectedStage.strategies || {}).length > 0 && (
+                {/* Strategies */}
+                {activeIntrospection &&
+                typeof activeIntrospection === 'object' &&
+                activeIntrospection !== null &&
+                Object.keys(
+                  (activeIntrospection as StageIntrospection).strategy_slots || {},
+                ).length > 0 ? (
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wide">
                       {t('builderTab.strategies')}
                     </label>
-                    <pre className="p-2.5 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[0.6875rem] leading-[1.5] font-mono text-[var(--text-secondary)] whitespace-pre-wrap">
-                      {JSON.stringify(selectedStage.strategies, null, 2)}
-                    </pre>
+                    <StrategiesEditor
+                      slots={(activeIntrospection as StageIntrospection).strategy_slots}
+                      strategies={draft.strategies}
+                      strategyConfigs={draft.strategyConfigs}
+                      onChangeStrategies={next =>
+                        setDraft({ ...draft, strategies: next })
+                      }
+                      onChangeStrategyConfigs={next =>
+                        setDraft({ ...draft, strategyConfigs: next })
+                      }
+                    />
                   </div>
-                )}
-                {Object.keys(selectedStage.chain_order || {}).length > 0 && (
+                ) : null}
+
+                {/* Chains */}
+                {activeIntrospection &&
+                typeof activeIntrospection === 'object' &&
+                activeIntrospection !== null &&
+                Object.keys(
+                  (activeIntrospection as StageIntrospection).strategy_chains || {},
+                ).length > 0 ? (
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wide">
                       {t('builderTab.chains')}
                     </label>
-                    <pre className="p-2.5 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[0.6875rem] leading-[1.5] font-mono text-[var(--text-secondary)] whitespace-pre-wrap">
-                      {JSON.stringify(selectedStage.chain_order, null, 2)}
-                    </pre>
+                    <ChainsEditor
+                      chains={(activeIntrospection as StageIntrospection).strategy_chains}
+                      chainOrder={draft.chainOrder}
+                      onChangeChainOrder={next =>
+                        setDraft({ ...draft, chainOrder: next })
+                      }
+                    />
                   </div>
-                )}
+                ) : null}
 
                 {/* Error / saved flash */}
                 {saveError && (

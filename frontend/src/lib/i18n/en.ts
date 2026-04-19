@@ -551,6 +551,8 @@ const en = {
     strategiesEmpty: 'No strategy slots for this artifact.',
     chains: 'Strategy Chains',
     chainsEmpty: 'No strategy chains for this artifact.',
+    chainEmpty: '(empty chain)',
+    chainAddPick: '+ add implementation',
   },
 
   // ─── Create Environment Modal ───
