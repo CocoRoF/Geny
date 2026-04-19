@@ -350,6 +350,22 @@ class CuratedKnowledgeManager:
             links_to: Filenames to wikilink to.
             source_filename: Original filename if curated from User Opsidian.
         """
+        try:
+            from service.memory_provider.adapters.curated_adapter import (
+                try_curated_write_note,
+            )
+            result = try_curated_write_note(
+                self.username, title, content,
+                category=category, tags=tags, importance=importance,
+                source=source, links_to=links_to,
+                source_filename=source_filename,
+            )
+            if result is not None:
+                return result
+        except Exception as exc:
+            logger.warning(
+                f"Curated provider adapter failed, using legacy path: {exc}"
+            )
         if self._writer is None:
             return None
 
@@ -386,6 +402,20 @@ class CuratedKnowledgeManager:
         importance: Optional[str] = None,
         category: Optional[str] = None,
     ) -> bool:
+        try:
+            from service.memory_provider.adapters.curated_adapter import (
+                try_curated_update_note,
+            )
+            result = try_curated_update_note(
+                self.username, filename,
+                body=body, tags=tags, importance=importance, category=category,
+            )
+            if result is not None:
+                return result
+        except Exception as exc:
+            logger.warning(
+                f"Curated provider adapter failed, using legacy path: {exc}"
+            )
         if self._writer is None:
             return False
         return self._writer.update_note(
@@ -393,6 +423,17 @@ class CuratedKnowledgeManager:
         )
 
     def delete_note(self, filename: str) -> bool:
+        try:
+            from service.memory_provider.adapters.curated_adapter import (
+                try_curated_delete_note,
+            )
+            result = try_curated_delete_note(self.username, filename)
+            if result is not None:
+                return result
+        except Exception as exc:
+            logger.warning(
+                f"Curated provider adapter failed, using legacy path: {exc}"
+            )
         if self._writer is None:
             return False
         return self._writer.delete_note(filename)
