@@ -575,7 +575,20 @@ class SessionMemoryManager:
                 try:
                     date_str = datetime.now(_get_tz()).strftime("%Y-%m-%d")
                     source = f"memory/{date_str}.md"
-                    await self._vmm.index_text(entry, source)
+                    handled = False
+                    try:
+                        from service.memory_provider.adapters.vector_adapter import (
+                            try_index_text,
+                        )
+                        result = await try_index_text(self._session_id, entry, source)
+                        if result is not None:
+                            handled = True
+                    except Exception as exc:
+                        logger.warning(
+                            f"Vector provider adapter failed, using legacy path: {exc}"
+                        )
+                    if not handled:
+                        await self._vmm.index_text(entry, source)
                 except Exception:
                     logger.debug(
                         "record_execution: vector indexing failed (non-critical)",
