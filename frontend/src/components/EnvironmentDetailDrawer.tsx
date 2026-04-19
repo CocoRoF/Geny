@@ -13,10 +13,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeftRight, Check, Copy, Download, Link2, Settings2, Tag, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeftRight, Check, Copy, Download, Link2, RefreshCw, Settings2, Tag, Trash2, Upload, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
+import { environmentApi } from '@/lib/environmentApi';
+import type { EnvironmentSessionSummary } from '@/types/environment';
 import ConfirmModal from '@/components/modals/ConfirmModal';
 import ImportManifestModal from '@/components/modals/ImportManifestModal';
 
@@ -62,21 +64,23 @@ export default function EnvironmentDetailDrawer({ envId, onClose, onCompare }: P
   const selectSession = useAppStore(s => s.selectSession);
   const { t } = useI18n();
 
-  const linkedSessions = useMemo(
+  const clientLinkedSessions = useMemo(
     () =>
-      sessions.filter(s => (s as { env_id?: string | null }).env_id === envId),
+      sessions
+        .filter(s => (s as { env_id?: string | null }).env_id === envId)
+        .map<EnvironmentSessionSummary>(s => ({
+          session_id: s.session_id,
+          session_name: s.session_name ?? null,
+          status: s.status ?? null,
+          role: (s as { role?: string | null }).role ?? null,
+          env_id: envId,
+          created_at: (s as { created_at?: string | null }).created_at ?? null,
+          is_deleted: false,
+          deleted_at: null,
+          error_message: null,
+        })),
     [sessions, envId],
   );
-
-  const linkedBreakdown = useMemo(() => {
-    const counts = { running: 0, error: 0, other: 0 };
-    for (const s of linkedSessions) {
-      if (s.status === 'running') counts.running += 1;
-      else if (s.status === 'error') counts.error += 1;
-      else counts.other += 1;
-    }
-    return counts;
-  }, [linkedSessions]);
 
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -86,6 +90,48 @@ export default function EnvironmentDetailDrawer({ envId, onClose, onCompare }: P
   const [duplicating, setDuplicating] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [serverSessions, setServerSessions] = useState<EnvironmentSessionSummary[] | null>(null);
+  const [sessionsFetching, setSessionsFetching] = useState(false);
+  const [sessionsError, setSessionsError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setSessionsFetching(true);
+    setSessionsError('');
+    environmentApi
+      .linkedSessions(envId, showDeleted)
+      .then(res => {
+        if (cancelled) return;
+        setServerSessions(res.sessions);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setSessionsError(e instanceof Error ? e.message : 'fetch failed');
+      })
+      .finally(() => {
+        if (!cancelled) setSessionsFetching(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [envId, showDeleted]);
+
+  const linkedSessions = useMemo<EnvironmentSessionSummary[]>(() => {
+    if (serverSessions !== null) return serverSessions;
+    return clientLinkedSessions;
+  }, [serverSessions, clientLinkedSessions]);
+
+  const linkedBreakdown = useMemo(() => {
+    const counts = { running: 0, error: 0, other: 0, deleted: 0 };
+    for (const s of linkedSessions) {
+      if (s.is_deleted) counts.deleted += 1;
+      else if (s.status === 'running') counts.running += 1;
+      else if (s.status === 'error') counts.error += 1;
+      else counts.other += 1;
+    }
+    return counts;
+  }, [linkedSessions]);
 
   const handleCopyId = async () => {
     try {
@@ -269,6 +315,9 @@ export default function EnvironmentDetailDrawer({ envId, onClose, onCompare }: P
                   <h4 className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wide flex items-center gap-1.5">
                     <Link2 size={11} />
                     {t('environmentDetail.linkedSessions', { n: linkedSessions.length })}
+                    {sessionsFetching && (
+                      <RefreshCw size={10} className="animate-spin opacity-60" />
+                    )}
                   </h4>
                   {linkedSessions.length > 0 && (
                     <div className="flex items-center gap-1 text-[0.625rem]">
@@ -296,9 +345,31 @@ export default function EnvironmentDetailDrawer({ envId, onClose, onCompare }: P
                           {linkedBreakdown.other} {t('environmentDetail.statusOther')}
                         </span>
                       )}
+                      {linkedBreakdown.deleted > 0 && (
+                        <span
+                          className="inline-flex items-center gap-0.5 py-0.5 px-1.5 rounded-md bg-[rgba(148,163,184,0.12)] text-[var(--text-muted)] border border-[rgba(148,163,184,0.25)]"
+                          title={t('environmentDetail.breakdownDeleted', { n: linkedBreakdown.deleted })}
+                        >
+                          {linkedBreakdown.deleted} {t('environmentDetail.statusDeleted')}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
+                <label className="flex items-center gap-1.5 text-[0.6875rem] text-[var(--text-muted)] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showDeleted}
+                    onChange={e => setShowDeleted(e.target.checked)}
+                    className="accent-[var(--primary-color)] w-3 h-3"
+                  />
+                  {t('environmentDetail.showDeleted')}
+                </label>
+                {sessionsError && (
+                  <p className="text-[0.6875rem] text-[var(--danger-color)]">
+                    {t('environmentDetail.linkedSessionsFallback')}
+                  </p>
+                )}
                 {linkedSessions.length === 0 ? (
                   <p className="text-[0.75rem] text-[var(--text-muted)] italic">
                     {t('environmentDetail.linkedSessionsEmpty')}
@@ -309,13 +380,24 @@ export default function EnvironmentDetailDrawer({ envId, onClose, onCompare }: P
                       <button
                         key={s.session_id}
                         onClick={() => {
+                          if (s.is_deleted) return;
                           selectSession(s.session_id);
                           onClose();
                         }}
-                        className="flex items-center justify-between gap-2 py-1.5 px-2 rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] hover:bg-[var(--bg-tertiary)] hover:border-[var(--primary-color)] cursor-pointer transition-colors text-left"
+                        disabled={s.is_deleted}
+                        title={s.is_deleted ? t('environmentDetail.sessionDeletedHint') : undefined}
+                        className={`flex items-center justify-between gap-2 py-1.5 px-2 rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-left transition-colors ${
+                          s.is_deleted
+                            ? 'opacity-60 cursor-not-allowed'
+                            : 'hover:bg-[var(--bg-tertiary)] hover:border-[var(--primary-color)] cursor-pointer'
+                        }`}
                       >
                         <div className="flex flex-col min-w-0 flex-1">
-                          <span className="text-[0.8125rem] font-medium text-[var(--text-primary)] truncate">
+                          <span className={`text-[0.8125rem] font-medium truncate ${
+                            s.is_deleted
+                              ? 'text-[var(--text-muted)] line-through'
+                              : 'text-[var(--text-primary)]'
+                          }`}>
                             {s.session_name || s.session_id.slice(0, 8)}
                           </span>
                           <span className="text-[0.6875rem] text-[var(--text-muted)] font-mono truncate">
@@ -324,14 +406,16 @@ export default function EnvironmentDetailDrawer({ envId, onClose, onCompare }: P
                         </div>
                         <span
                           className={`shrink-0 text-[0.625rem] font-semibold uppercase py-0.5 px-1.5 rounded-md ${
-                            s.status === 'running'
-                              ? 'bg-[rgba(34,197,94,0.12)] text-[#4ade80] border border-[rgba(34,197,94,0.25)]'
-                              : s.status === 'error'
-                                ? 'bg-[rgba(239,68,68,0.12)] text-[var(--danger-color)] border border-[rgba(239,68,68,0.25)]'
-                                : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] border border-[var(--border-color)]'
+                            s.is_deleted
+                              ? 'bg-[rgba(148,163,184,0.12)] text-[var(--text-muted)] border border-[rgba(148,163,184,0.25)]'
+                              : s.status === 'running'
+                                ? 'bg-[rgba(34,197,94,0.12)] text-[#4ade80] border border-[rgba(34,197,94,0.25)]'
+                                : s.status === 'error'
+                                  ? 'bg-[rgba(239,68,68,0.12)] text-[var(--danger-color)] border border-[rgba(239,68,68,0.25)]'
+                                  : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] border border-[var(--border-color)]'
                           }`}
                         >
-                          {s.status}
+                          {s.is_deleted ? t('environmentDetail.statusDeleted') : (s.status ?? '—')}
                         </span>
                       </button>
                     ))}

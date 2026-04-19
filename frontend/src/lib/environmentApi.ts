@@ -14,6 +14,7 @@ import type {
   EnvironmentDetail,
   EnvironmentDiffResult,
   EnvironmentManifest,
+  EnvironmentSessionsResponse,
   EnvironmentSummary,
   StageArtifactList,
   StageIntrospection,
@@ -111,6 +112,11 @@ export const environmentApi = {
 
   unmarkPreset: (envId: string) =>
     apiCall<void>(`/api/environments/${envId}/preset`, { method: 'DELETE' }),
+
+  linkedSessions: (envId: string, includeDeleted = false) =>
+    apiCall<EnvironmentSessionsResponse>(
+      `/api/environments/${envId}/sessions?include_deleted=${includeDeleted ? 'true' : 'false'}`,
+    ),
 };
 
 // ==================== Catalog ====================

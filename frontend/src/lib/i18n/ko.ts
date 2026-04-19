@@ -549,6 +549,11 @@ const ko: Translations = {
     breakdownRunning: '실행중 세션 {n} 개',
     breakdownError: '에러 세션 {n} 개',
     breakdownOther: '대기/중지 세션 {n} 개',
+    breakdownDeleted: '삭제된 세션 {n} 개',
+    statusDeleted: '삭제됨',
+    showDeleted: '삭제된 세션 포함',
+    sessionDeletedHint: '삭제된 세션입니다. 열 수 없습니다.',
+    linkedSessionsFallback: '서버 조회 실패 — 메모리의 세션만 표시합니다.',
   },
 
   // ─── Import Manifest Modal ───

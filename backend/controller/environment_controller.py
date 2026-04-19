@@ -31,6 +31,8 @@ from service.environment.schemas import (
     EnvironmentDetailResponse,
     EnvironmentDiffResponse,
     EnvironmentListResponse,
+    EnvironmentSessionSummary,
+    EnvironmentSessionsResponse,
     EnvironmentSummaryResponse,
     ImportEnvironmentRequest,
     SaveEnvironmentRequest,
@@ -323,3 +325,56 @@ async def share_environment(
     base_url = str(request.base_url).rstrip("/")
     url = f"{base_url}/api/environments/{env_id}/export"
     return ShareLinkResponse(url=url)
+
+
+# ── Reverse-lookup: sessions bound to this environment ──
+
+
+@router.get("/{env_id}/sessions", response_model=EnvironmentSessionsResponse)
+async def list_environment_sessions(
+    request: Request,
+    env_id: str,
+    include_deleted: bool = False,
+    auth: dict = Depends(require_auth),
+):
+    """Return every session currently bound to ``env_id``.
+
+    Authoritative reverse-lookup over SessionStore — unlike the client-side
+    aggregation over ``useAppStore.sessions`` this can include soft-deleted
+    records when ``include_deleted=true``.
+    """
+    if _env_svc(request).load(env_id) is None:
+        raise HTTPException(404, "Environment not found")
+
+    from service.claude_manager.session_store import get_session_store
+
+    store = get_session_store()
+    records = store.list_all() if include_deleted else store.list_active()
+    matching = [r for r in records if r.get("env_id") == env_id]
+
+    summaries = [
+        EnvironmentSessionSummary(
+            session_id=r.get("session_id", ""),
+            session_name=r.get("session_name"),
+            status=r.get("status"),
+            role=r.get("role"),
+            env_id=r.get("env_id"),
+            created_at=r.get("created_at") or r.get("registered_at"),
+            is_deleted=bool(r.get("is_deleted", False)),
+            deleted_at=r.get("deleted_at"),
+            error_message=r.get("error_message"),
+        )
+        for r in matching
+    ]
+
+    active_count = sum(1 for s in summaries if not s.is_deleted)
+    deleted_count = sum(1 for s in summaries if s.is_deleted)
+    error_count = sum(1 for s in summaries if (s.status or "") == "error")
+
+    return EnvironmentSessionsResponse(
+        env_id=env_id,
+        sessions=summaries,
+        active_count=active_count,
+        deleted_count=deleted_count,
+        error_count=error_count,
+    )

@@ -154,6 +154,38 @@ class ShareLinkResponse(BaseModel):
     url: str
 
 
+# ── Reverse-lookup: sessions bound to an environment ─────
+
+
+class EnvironmentSessionSummary(BaseModel):
+    """Per-session snippet surfaced in the env → sessions reverse lookup."""
+
+    session_id: str
+    session_name: Optional[str] = None
+    status: Optional[str] = None
+    role: Optional[str] = None
+    env_id: Optional[str] = None
+    created_at: Optional[str] = None
+    is_deleted: bool = False
+    deleted_at: Optional[str] = None
+    error_message: Optional[str] = None
+
+
+class EnvironmentSessionsResponse(BaseModel):
+    """Response for ``GET /api/environments/{id}/sessions``.
+
+    Sourced authoritatively from SessionStore; unlike the client-side
+    aggregation over ``useAppStore.sessions`` it can include soft-deleted
+    records (via ``include_deleted=true``).
+    """
+
+    env_id: str
+    sessions: List[EnvironmentSessionSummary]
+    active_count: int
+    deleted_count: int
+    error_count: int
+
+
 __all__ = [
     "SaveEnvironmentRequest",
     "CreateEnvironmentRequest",
@@ -170,4 +202,6 @@ __all__ = [
     "DiffEntry",
     "EnvironmentDiffResponse",
     "ShareLinkResponse",
+    "EnvironmentSessionSummary",
+    "EnvironmentSessionsResponse",
 ]

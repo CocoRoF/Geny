@@ -195,3 +195,27 @@ export interface StageArtifactList {
   stage: string;
   artifacts: ArtifactInfo[];
 }
+
+// ── Reverse-lookup: sessions bound to an environment ─────
+
+/** Per-session snippet returned by `/api/environments/{id}/sessions`. */
+export interface EnvironmentSessionSummary {
+  session_id: string;
+  session_name?: string | null;
+  status?: string | null;
+  role?: string | null;
+  env_id?: string | null;
+  created_at?: string | null;
+  is_deleted: boolean;
+  deleted_at?: string | null;
+  error_message?: string | null;
+}
+
+/** Response of `/api/environments/{id}/sessions`. */
+export interface EnvironmentSessionsResponse {
+  env_id: string;
+  sessions: EnvironmentSessionSummary[];
+  active_count: number;
+  deleted_count: number;
+  error_count: number;
+}

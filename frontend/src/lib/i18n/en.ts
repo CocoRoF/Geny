@@ -549,6 +549,11 @@ const en = {
     breakdownRunning: '{n} running session(s)',
     breakdownError: '{n} errored session(s)',
     breakdownOther: '{n} idle/stopped session(s)',
+    breakdownDeleted: '{n} soft-deleted session(s)',
+    statusDeleted: 'deleted',
+    showDeleted: 'Include soft-deleted sessions',
+    sessionDeletedHint: 'This session was soft-deleted; it cannot be opened.',
+    linkedSessionsFallback: 'Live lookup failed — showing in-memory sessions only.',
   },
 
   // ─── Import Manifest Modal ───
