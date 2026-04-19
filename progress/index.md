@@ -80,3 +80,5 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
   Import diff "changed" 항목을 before/after 로 펼치기.
 - [38_phase7-6_env_session_count_badge.md](38_phase7-6_env_session_count_badge.md) —
   Environment 카드에 "N sessions bound" badge.
+- [39_phase7-7_drawer_linked_sessions.md](39_phase7-7_drawer_linked_sessions.md) —
+  EnvironmentDetailDrawer 에 "Linked sessions" 섹션 + 세션 drill-down.

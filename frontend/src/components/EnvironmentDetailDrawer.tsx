@@ -11,9 +11,9 @@
  * flows can ship without waiting on the stage editor UX.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeftRight, Copy, Download, Settings2, Tag, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeftRight, Copy, Download, Link2, Settings2, Tag, Trash2, Upload, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
@@ -58,7 +58,15 @@ export default function EnvironmentDetailDrawer({ envId, onClose, onCompare }: P
     openInBuilder,
   } = useEnvironmentStore();
   const setActiveTab = useAppStore(s => s.setActiveTab);
+  const sessions = useAppStore(s => s.sessions);
+  const selectSession = useAppStore(s => s.selectSession);
   const { t } = useI18n();
+
+  const linkedSessions = useMemo(
+    () =>
+      sessions.filter(s => (s as { env_id?: string | null }).env_id === envId),
+    [sessions, envId],
+  );
 
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -223,6 +231,52 @@ export default function EnvironmentDetailDrawer({ envId, onClose, onCompare }: P
                   </div>
                   <div className="text-[var(--text-secondary)]">{formatDate(env.updated_at)}</div>
                 </div>
+              </section>
+
+              {/* Linked sessions */}
+              <section className="flex flex-col gap-1.5">
+                <h4 className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wide flex items-center gap-1.5">
+                  <Link2 size={11} />
+                  {t('environmentDetail.linkedSessions', { n: linkedSessions.length })}
+                </h4>
+                {linkedSessions.length === 0 ? (
+                  <p className="text-[0.75rem] text-[var(--text-muted)] italic">
+                    {t('environmentDetail.linkedSessionsEmpty')}
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    {linkedSessions.map(s => (
+                      <button
+                        key={s.session_id}
+                        onClick={() => {
+                          selectSession(s.session_id);
+                          onClose();
+                        }}
+                        className="flex items-center justify-between gap-2 py-1.5 px-2 rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] hover:bg-[var(--bg-tertiary)] hover:border-[var(--primary-color)] cursor-pointer transition-colors text-left"
+                      >
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <span className="text-[0.8125rem] font-medium text-[var(--text-primary)] truncate">
+                            {s.session_name || s.session_id.slice(0, 8)}
+                          </span>
+                          <span className="text-[0.6875rem] text-[var(--text-muted)] font-mono truncate">
+                            {s.session_id}
+                          </span>
+                        </div>
+                        <span
+                          className={`shrink-0 text-[0.625rem] font-semibold uppercase py-0.5 px-1.5 rounded-md ${
+                            s.status === 'running'
+                              ? 'bg-[rgba(34,197,94,0.12)] text-[#4ade80] border border-[rgba(34,197,94,0.25)]'
+                              : s.status === 'error'
+                                ? 'bg-[rgba(239,68,68,0.12)] text-[var(--danger-color)] border border-[rgba(239,68,68,0.25)]'
+                                : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] border border-[var(--border-color)]'
+                          }`}
+                        >
+                          {s.status}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </section>
 
               {/* Manifest preview */}
