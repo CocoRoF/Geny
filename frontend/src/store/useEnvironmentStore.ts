@@ -22,11 +22,18 @@ import type {
   UpdateStageTemplatePayload,
 } from '@/types/environment';
 
+export type EnvSessionCountBucket = {
+  active: number;
+  deleted: number;
+  error: number;
+};
+
 interface EnvironmentState {
   // Data
   environments: EnvironmentSummary[];
   selectedEnvironment: EnvironmentDetail | null;
   catalog: CatalogResponse | null;
+  sessionCounts: Record<string, EnvSessionCountBucket> | null;
   isLoading: boolean;
   isLoadingCatalog: boolean;
   error: string | null;
@@ -35,6 +42,7 @@ interface EnvironmentState {
   loadEnvironments: () => Promise<void>;
   loadEnvironment: (envId: string) => Promise<EnvironmentDetail>;
   clearSelection: () => void;
+  refreshSessionCounts: () => Promise<void>;
 
   // Mutations
   createEnvironment: (payload: CreateEnvironmentPayload) => Promise<{ id: string }>;
@@ -69,6 +77,7 @@ export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
   environments: [],
   selectedEnvironment: null,
   catalog: null,
+  sessionCounts: null,
   isLoading: false,
   isLoadingCatalog: false,
   error: null,
@@ -80,6 +89,24 @@ export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
       set({ environments: list, isLoading: false });
     } catch (e) {
       set({ error: _msg(e, 'Failed to load environments'), isLoading: false });
+    }
+  },
+
+  refreshSessionCounts: async () => {
+    try {
+      const res = await environmentApi.sessionCounts();
+      const map: Record<string, EnvSessionCountBucket> = {};
+      for (const c of res.counts) {
+        map[c.env_id] = {
+          active: c.active_count,
+          deleted: c.deleted_count,
+          error: c.error_count,
+        };
+      }
+      set({ sessionCounts: map });
+    } catch {
+      // Leave the existing value in place; consumers fall back to
+      // client-side aggregation when the map is null.
     }
   },
 
@@ -100,6 +127,7 @@ export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
   createEnvironment: async (payload) => {
     const result = await environmentApi.create(payload);
     await get().loadEnvironments();
+    void get().refreshSessionCounts();
     return result;
   },
 
@@ -118,19 +146,29 @@ export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
 
   deleteEnvironment: async (envId) => {
     await environmentApi.delete(envId);
-    set((s) => ({
-      environments: s.environments.filter((e) => e.id !== envId),
-      selectedEnvironment:
-        s.selectedEnvironment && s.selectedEnvironment.id === envId
-          ? null
-          : s.selectedEnvironment,
-      builderEnvId: s.builderEnvId === envId ? null : s.builderEnvId,
-    }));
+    set((s) => {
+      const next: Partial<EnvironmentState> = {
+        environments: s.environments.filter((e) => e.id !== envId),
+        selectedEnvironment:
+          s.selectedEnvironment && s.selectedEnvironment.id === envId
+            ? null
+            : s.selectedEnvironment,
+        builderEnvId: s.builderEnvId === envId ? null : s.builderEnvId,
+      };
+      if (s.sessionCounts && envId in s.sessionCounts) {
+        const { [envId]: _dropped, ...rest } = s.sessionCounts;
+        void _dropped;
+        next.sessionCounts = rest;
+      }
+      return next as EnvironmentState;
+    });
+    void get().refreshSessionCounts();
   },
 
   duplicateEnvironment: async (envId, newName) => {
     const result = await environmentApi.duplicate(envId, newName);
     await get().loadEnvironments();
+    void get().refreshSessionCounts();
     return result;
   },
 
@@ -163,6 +201,7 @@ export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
   importEnvironment: async (data) => {
     const result = await environmentApi.importEnv(data);
     await get().loadEnvironments();
+    void get().refreshSessionCounts();
     return result;
   },
 

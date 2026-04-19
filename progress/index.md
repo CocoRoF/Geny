@@ -104,3 +104,6 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
   그리드 인원/에러/삭제 카운트 서버 권위화.
 - [49_phase7-17_envs_filter_search_sort.md](49_phase7-17_envs_filter_search_sort.md) —
   Environments 탭에 검색/상태·태그 필터/정렬 toolbar.
+- [50_phase7-18_env_store_session_counts.md](50_phase7-18_env_store_session_counts.md) —
+  bulk session-counts 를 `useEnvironmentStore` 로 올리고
+  create/delete/duplicate/import 시 자동 재조회.
