@@ -8,11 +8,12 @@
  * land in follow-up PRs so this file stays small and easy to diff.
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowLeftRight, Boxes, Plus, RefreshCw, Tag, Upload, Users } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Archive, ArrowLeftRight, Boxes, Plus, RefreshCw, Tag, Upload, Users } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
+import { environmentApi } from '@/lib/environmentApi';
 import type { EnvironmentSummary } from '@/types/environment';
 import CreateEnvironmentModal from '@/components/modals/CreateEnvironmentModal';
 import EnvironmentDetailDrawer from '@/components/EnvironmentDetailDrawer';
@@ -31,11 +32,13 @@ function EnvironmentCard({
   env,
   sessionCount,
   errorCount,
+  deletedCount,
   onClick,
 }: {
   env: EnvironmentSummary;
   sessionCount: number;
   errorCount: number;
+  deletedCount: number;
   onClick: () => void;
 }) {
   const { t } = useI18n();
@@ -72,6 +75,15 @@ function EnvironmentCard({
               {sessionCount}
             </span>
           )}
+          {deletedCount > 0 && (
+            <span
+              className="inline-flex items-center gap-1 py-0.5 px-1.5 rounded-md bg-[rgba(148,163,184,0.12)] text-[10px] font-semibold text-[var(--text-muted)] border border-[rgba(148,163,184,0.25)]"
+              title={t('environmentsTab.deletedCountTooltip', { n: String(deletedCount) })}
+            >
+              <Archive size={9} />
+              {deletedCount}
+            </span>
+          )}
         </div>
       </div>
 
@@ -105,6 +117,8 @@ function EnvironmentCard({
   );
 }
 
+type CountBucket = { active: number; deleted: number; error: number };
+
 export default function EnvironmentsTab() {
   const { environments, isLoading, error, loadEnvironments } = useEnvironmentStore();
   const sessions = useAppStore(s => s.sessions);
@@ -113,28 +127,48 @@ export default function EnvironmentsTab() {
   const [showImport, setShowImport] = useState(false);
   const [showDiff, setShowDiff] = useState<{ left?: string; right?: string } | null>(null);
   const [openEnvId, setOpenEnvId] = useState<string | null>(null);
+  const [serverCounts, setServerCounts] = useState<Record<string, CountBucket> | null>(null);
+
+  const refreshCounts = useCallback(async () => {
+    try {
+      const res = await environmentApi.sessionCounts();
+      const map: Record<string, CountBucket> = {};
+      for (const c of res.counts) {
+        map[c.env_id] = {
+          active: c.active_count,
+          deleted: c.deleted_count,
+          error: c.error_count,
+        };
+      }
+      setServerCounts(map);
+    } catch {
+      // Leave serverCounts null → client aggregation keeps the card grid usable.
+    }
+  }, []);
 
   useEffect(() => {
     loadEnvironments();
   }, [loadEnvironments]);
 
-  const sessionsPerEnv = useMemo(() => {
-    const counts: Record<string, number> = {};
+  useEffect(() => {
+    refreshCounts();
+  }, [refreshCounts]);
+
+  const clientCountsPerEnv = useMemo(() => {
+    const counts: Record<string, CountBucket> = {};
     for (const s of sessions) {
       const envId = (s as { env_id?: string | null }).env_id;
-      if (envId) counts[envId] = (counts[envId] ?? 0) + 1;
+      if (!envId) continue;
+      const b = (counts[envId] ??= { active: 0, deleted: 0, error: 0 });
+      b.active += 1;
+      if (s.status === 'error') b.error += 1;
     }
     return counts;
   }, [sessions]);
 
-  const errorsPerEnv = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const s of sessions) {
-      const envId = (s as { env_id?: string | null }).env_id;
-      if (envId && s.status === 'error') counts[envId] = (counts[envId] ?? 0) + 1;
-    }
-    return counts;
-  }, [sessions]);
+  const countsPerEnv = useMemo<Record<string, CountBucket>>(() => {
+    return serverCounts ?? clientCountsPerEnv;
+  }, [serverCounts, clientCountsPerEnv]);
 
   return (
     <div className="flex-1 min-h-0 overflow-auto bg-[var(--bg-primary)]">
@@ -151,7 +185,10 @@ export default function EnvironmentsTab() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => loadEnvironments()}
+              onClick={() => {
+                loadEnvironments();
+                refreshCounts();
+              }}
               disabled={isLoading}
               className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -223,15 +260,19 @@ export default function EnvironmentsTab() {
           </div>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
-            {environments.map(env => (
-              <EnvironmentCard
-                key={env.id}
-                env={env}
-                sessionCount={sessionsPerEnv[env.id] ?? 0}
-                errorCount={errorsPerEnv[env.id] ?? 0}
-                onClick={() => setOpenEnvId(env.id)}
-              />
-            ))}
+            {environments.map(env => {
+              const b = countsPerEnv[env.id] ?? { active: 0, deleted: 0, error: 0 };
+              return (
+                <EnvironmentCard
+                  key={env.id}
+                  env={env}
+                  sessionCount={b.active}
+                  errorCount={b.error}
+                  deletedCount={b.deleted}
+                  onClick={() => setOpenEnvId(env.id)}
+                />
+              );
+            })}
           </div>
         )}
       </div>

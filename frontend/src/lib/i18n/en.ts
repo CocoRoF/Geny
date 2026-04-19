@@ -495,6 +495,7 @@ const en = {
     compare: 'Compare',
     sessionCountTooltip: '{n} active session(s) bound to this environment',
     errorCountTooltip: '{n} session(s) bound to this environment are in error state',
+    deletedCountTooltip: '{n} soft-deleted session(s) are still bound to this environment',
     importEnvironment: 'Import…',
   },
 

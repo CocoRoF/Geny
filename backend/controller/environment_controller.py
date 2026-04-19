@@ -31,6 +31,8 @@ from service.environment.schemas import (
     EnvironmentDetailResponse,
     EnvironmentDiffResponse,
     EnvironmentListResponse,
+    EnvironmentSessionCountEntry,
+    EnvironmentSessionCountsResponse,
     EnvironmentSessionSummary,
     EnvironmentSessionsResponse,
     EnvironmentSummaryResponse,
@@ -97,6 +99,50 @@ async def list_environments(request: Request, auth: dict = Depends(require_auth)
     return EnvironmentListResponse(
         environments=[EnvironmentSummaryResponse(**e) for e in envs]
     )
+
+
+@router.get("/session-counts", response_model=EnvironmentSessionCountsResponse)
+async def list_environment_session_counts(
+    request: Request,
+    auth: dict = Depends(require_auth),
+):
+    """Return per-environment session counts in a single pass.
+
+    Designed for the Environments tab card grid so it can render
+    authoritative active/deleted/error counts without firing one
+    RTT per card. Soft-deleted rows are always included in the
+    ``deleted_count`` bucket.
+    """
+    from service.claude_manager.session_store import get_session_store
+
+    store = get_session_store()
+    records = store.list_all()
+
+    buckets: dict[str, dict[str, int]] = {}
+    for r in records:
+        env_id = r.get("env_id")
+        if not env_id:
+            continue
+        b = buckets.setdefault(
+            env_id, {"active": 0, "deleted": 0, "error": 0}
+        )
+        if r.get("is_deleted"):
+            b["deleted"] += 1
+        else:
+            b["active"] += 1
+            if (r.get("status") or "") == "error":
+                b["error"] += 1
+
+    entries = [
+        EnvironmentSessionCountEntry(
+            env_id=eid,
+            active_count=b["active"],
+            deleted_count=b["deleted"],
+            error_count=b["error"],
+        )
+        for eid, b in buckets.items()
+    ]
+    return EnvironmentSessionCountsResponse(counts=entries)
 
 
 @router.post("", response_model=CreateEnvironmentResponse)

@@ -219,3 +219,16 @@ export interface EnvironmentSessionsResponse {
   deleted_count: number;
   error_count: number;
 }
+
+/** One entry in the bulk `/api/environments/session-counts` response. */
+export interface EnvironmentSessionCountEntry {
+  env_id: string;
+  active_count: number;
+  deleted_count: number;
+  error_count: number;
+}
+
+/** Response of `/api/environments/session-counts`. */
+export interface EnvironmentSessionCountsResponse {
+  counts: EnvironmentSessionCountEntry[];
+}

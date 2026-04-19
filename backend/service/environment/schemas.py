@@ -186,6 +186,26 @@ class EnvironmentSessionsResponse(BaseModel):
     error_count: int
 
 
+class EnvironmentSessionCountEntry(BaseModel):
+    """Per-env count snapshot used by the Environments tab card grid."""
+
+    env_id: str
+    active_count: int
+    deleted_count: int
+    error_count: int
+
+
+class EnvironmentSessionCountsResponse(BaseModel):
+    """Response for ``GET /api/environments/session-counts``.
+
+    One pass over SessionStore, bucketed by env_id — avoids the
+    N-card × one-RTT explosion the single-env endpoint would cause
+    when rendering many environment cards.
+    """
+
+    counts: List[EnvironmentSessionCountEntry]
+
+
 __all__ = [
     "SaveEnvironmentRequest",
     "CreateEnvironmentRequest",
@@ -204,4 +224,6 @@ __all__ = [
     "ShareLinkResponse",
     "EnvironmentSessionSummary",
     "EnvironmentSessionsResponse",
+    "EnvironmentSessionCountEntry",
+    "EnvironmentSessionCountsResponse",
 ]

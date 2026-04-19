@@ -99,3 +99,6 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
 - [47_phase7-15_env_sessions_endpoint.md](47_phase7-15_env_sessions_endpoint.md) —
   `GET /api/environments/{id}/sessions` reverse-lookup + 드로어에
   "Include soft-deleted" 토글.
+- [48_phase7-16_card_grid_authoritative_counts.md](48_phase7-16_card_grid_authoritative_counts.md) —
+  bulk `GET /api/environments/session-counts` + Environments 카드
+  그리드 인원/에러/삭제 카운트 서버 권위화.

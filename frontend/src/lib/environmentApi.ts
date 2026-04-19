@@ -14,6 +14,7 @@ import type {
   EnvironmentDetail,
   EnvironmentDiffResult,
   EnvironmentManifest,
+  EnvironmentSessionCountsResponse,
   EnvironmentSessionsResponse,
   EnvironmentSummary,
   StageArtifactList,
@@ -117,6 +118,9 @@ export const environmentApi = {
     apiCall<EnvironmentSessionsResponse>(
       `/api/environments/${envId}/sessions?include_deleted=${includeDeleted ? 'true' : 'false'}`,
     ),
+
+  sessionCounts: () =>
+    apiCall<EnvironmentSessionCountsResponse>('/api/environments/session-counts'),
 };
 
 // ==================== Catalog ====================
