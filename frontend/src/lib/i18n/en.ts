@@ -578,6 +578,8 @@ const en = {
     copyMarkdown: 'Copy MD',
     copied: 'Copied!',
     copyFailed: 'Copy failed',
+    topPairBadge: 'Most different: {left} ↔ {right} · {score} changes',
+    topPairTooltip: 'Largest diff in this matrix: {left} ↔ {right} · {score} changes',
   },
 
   // ─── Environment Detail Drawer ───

@@ -120,6 +120,43 @@ export default function EnvironmentDiffMatrixModal({ envIds, onClose }: Props) {
 
   const exportable = stats.pending === 0 && stats.total > 0;
 
+  // Upper-triangle cell with the largest diff (added+removed+changed).
+  // Highlighted so a large matrix (10+ envs) makes the "most divergent
+  // pair" pop out without scanning every cell. Only set when at least
+  // one pair has non-zero changes — an all-identical matrix has no
+  // meaningful "top" pair, and a single non-zero pair highlighting itself
+  // is noisy.
+  const topPair = useMemo(() => {
+    let bestKey: CellKey | null = null;
+    let bestScore = 0;
+    for (const { a, b } of pairs) {
+      const cell = cells[cellKey(a, b)];
+      if (cell?.status !== 'ok') continue;
+      const { added, removed, changed } = cell.summary;
+      const score = added + removed + changed;
+      if (score > bestScore) {
+        bestScore = score;
+        bestKey = cellKey(a, b);
+      }
+    }
+    return bestScore > 0 ? bestKey : null;
+  }, [cells, pairs]);
+
+  const topPairLabel = useMemo(() => {
+    if (!topPair) return null;
+    const [a, b] = topPair.split('|');
+    const cell = cells[topPair];
+    if (cell?.status !== 'ok') return null;
+    const { added, removed, changed } = cell.summary;
+    return {
+      a,
+      b,
+      nameA: nameById.get(a) ?? a,
+      nameB: nameById.get(b) ?? b,
+      score: added + removed + changed,
+    };
+  }, [topPair, cells, nameById]);
+
   const downloadBlob = (body: BlobPart, mime: string, filename: string) => {
     const blob = new Blob([body], { type: mime });
     const url = URL.createObjectURL(blob);
@@ -172,6 +209,15 @@ export default function EnvironmentDiffMatrixModal({ envIds, onClose }: Props) {
         ok: stats.done,
         failed: stats.failed,
       },
+      top_pair: topPairLabel
+        ? {
+            env_id_a: topPairLabel.a,
+            env_id_b: topPairLabel.b,
+            name_a: topPairLabel.nameA,
+            name_b: topPairLabel.nameB,
+            score: topPairLabel.score,
+          }
+        : null,
       pairs: collectPairs(),
     };
     const stampSlug = stamp.replace(/[:.]/g, '-');
@@ -189,6 +235,11 @@ export default function EnvironmentDiffMatrixModal({ envIds, onClose }: Props) {
     lines.push(`- **Environments:** ${orderedIds.length}`);
     lines.push(`- **Pairs:** ${pairs.length} (ok ${stats.done} · failed ${stats.failed})`);
     lines.push(`- **Generated:** ${stamp}`);
+    if (topPairLabel) {
+      lines.push(
+        `- **Most different:** ${topPairLabel.nameA} ↔ ${topPairLabel.nameB} (${topPairLabel.score} changes)`,
+      );
+    }
     lines.push('');
     // Index table
     lines.push('## Environments');
@@ -333,18 +384,29 @@ export default function EnvironmentDiffMatrixModal({ envIds, onClose }: Props) {
         </div>
       );
     }
+    const isTop = topPair === cellKey(a, b);
     return (
       <button
         type="button"
         onClick={() => setPair({ left: a, right: b })}
-        title={t('diffMatrix.cellTooltip', {
-          left: nameById.get(a) ?? a,
-          right: nameById.get(b) ?? b,
-        })}
+        title={
+          isTop
+            ? t('diffMatrix.topPairTooltip', {
+                left: nameById.get(a) ?? a,
+                right: nameById.get(b) ?? b,
+                score: String(added + removed + changed),
+              })
+            : t('diffMatrix.cellTooltip', {
+                left: nameById.get(a) ?? a,
+                right: nameById.get(b) ?? b,
+              })
+        }
         className={`w-full h-full flex items-center justify-center text-[0.6875rem] font-mono cursor-pointer bg-transparent border-none transition-colors ${
-          identical
-            ? 'text-[var(--success-color)] hover:bg-[rgba(34,197,94,0.08)]'
-            : 'text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
+          isTop
+            ? 'text-[var(--primary-color)] font-semibold bg-[rgba(59,130,246,0.12)] hover:bg-[rgba(59,130,246,0.2)] ring-1 ring-inset ring-[rgba(59,130,246,0.45)]'
+            : identical
+              ? 'text-[var(--success-color)] hover:bg-[rgba(34,197,94,0.08)]'
+              : 'text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
         }`}
       >
         {identical ? '=' : `+${added}/-${removed}/~${changed}`}
@@ -377,6 +439,19 @@ export default function EnvironmentDiffMatrixModal({ envIds, onClose }: Props) {
                 failed: String(stats.failed),
               })}
             </p>
+            {topPairLabel && (
+              <button
+                type="button"
+                onClick={() => setPair({ left: topPairLabel.a, right: topPairLabel.b })}
+                className="mt-0.5 self-start inline-flex items-center gap-1 py-0.5 px-1.5 rounded-md bg-[rgba(59,130,246,0.12)] border border-[rgba(59,130,246,0.35)] text-[0.6875rem] text-[var(--primary-color)] font-medium cursor-pointer hover:bg-[rgba(59,130,246,0.2)] transition-colors"
+              >
+                {t('diffMatrix.topPairBadge', {
+                  left: topPairLabel.nameA,
+                  right: topPairLabel.nameB,
+                  score: String(topPairLabel.score),
+                })}
+              </button>
+            )}
           </div>
           <button
             onClick={onClose}
