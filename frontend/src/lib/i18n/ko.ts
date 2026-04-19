@@ -551,6 +551,8 @@ const ko: Translations = {
     strategiesEmpty: '이 artifact 에는 전략 슬롯이 없습니다.',
     chains: '전략 체인',
     chainsEmpty: '이 artifact 에는 전략 체인이 없습니다.',
+    chainEmpty: '(비어 있음)',
+    chainAddPick: '+ 구현 추가',
   },
 
   // ─── Create Environment Modal ───
