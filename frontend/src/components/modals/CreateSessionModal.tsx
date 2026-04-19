@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useAppStore } from '@/store/useAppStore';
+import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { agentApi, ttsApi, type VoiceProfile } from '@/lib/api';
 // workflowApi removed — pipeline presets replace workflow selection
 import { toolPresetApi } from '@/lib/toolApi';
@@ -54,6 +55,12 @@ export default function CreateSessionModal({ onClose }: Props) {
   const [toolPresets, setToolPresets] = useState<ToolPresetDefinition[]>([]);
   const [selectedPreset, setSelectedPreset] = useState('');
   const [selectedCliPreset, setSelectedCliPreset] = useState('');
+  const [selectedEnvId, setSelectedEnvId] = useState('');
+  const {
+    environments,
+    isLoading: environmentsLoading,
+    loadEnvironments,
+  } = useEnvironmentStore();
   const [selectedAvatar, setSelectedAvatar] = useState('');
   const [selectedTtsProfile, setSelectedTtsProfile] = useState('');
   const [ttsProfiles, setTtsProfiles] = useState<VoiceProfile[]>([]);
@@ -97,6 +104,11 @@ export default function CreateSessionModal({ onClose }: Props) {
       setToolPresets(presetRes.presets || []);
     });
   }, []);
+
+  // Load environments for the Phase 6e env_id selector
+  useEffect(() => {
+    loadEnvironments();
+  }, [loadEnvironments]);
 
   const handlePromptChange = async (name: string) => {
     setSelectedPrompt(name);
@@ -148,6 +160,12 @@ export default function CreateSessionModal({ onClose }: Props) {
       // Send tool preset if explicitly selected
       if (selectedPreset) {
         payload.tool_preset_id = selectedPreset;
+      }
+      // Phase 6e — attach EnvironmentManifest if selected. Backend
+      // falls back to the role-based preset pipeline when env_id is
+      // absent, so empty string = legacy path (unchanged behavior).
+      if (selectedEnvId) {
+        payload.env_id = selectedEnvId;
       }
       // CLI-specific settings for VTuber role
       if (formState.role === 'vtuber') {
@@ -317,6 +335,40 @@ export default function CreateSessionModal({ onClose }: Props) {
                 if (!selectedPreset) return 'Automatically selects the best preset for the chosen role.';
                 const p = toolPresets.find(tp => tp.id === selectedPreset);
                 return p?.description || '';
+              })()}
+            </small>
+          </div>
+
+          {/* Environment (v2 EnvironmentManifest) — optional. When set,
+              backend swaps the legacy preset pipeline for the manifest's
+              Pipeline + tools snapshot. */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">
+              {t('createSession.environment')}
+              <InfoTooltip text={t('createSession.environmentHelp')} />
+            </label>
+            <select
+              className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8"
+              style={selectArrow}
+              value={selectedEnvId}
+              onChange={e => setSelectedEnvId(e.target.value)}
+            >
+              <option value="">
+                {environmentsLoading && environments.length === 0
+                  ? t('createSession.environmentLoading')
+                  : t('createSession.environmentNone')}
+              </option>
+              {environments.map(env => (
+                <option key={env.id} value={env.id}>
+                  {env.name}
+                </option>
+              ))}
+            </select>
+            <small className="text-[0.75rem] text-[var(--text-muted)] mt-0.5">
+              {(() => {
+                if (!selectedEnvId) return t('createSession.environmentLegacy');
+                const env = environments.find(e => e.id === selectedEnvId);
+                return env?.description || t('createSession.environmentSelected');
               })()}
             </small>
           </div>
