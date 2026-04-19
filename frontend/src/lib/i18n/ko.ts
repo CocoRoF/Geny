@@ -689,6 +689,7 @@ const ko: Translations = {
     retryWithoutAtomic: 'Atomic 없이 다시 시도',
     retryingWithoutAtomic: 'Atomic 없이 다시 시도 중…',
     autoSuffix: '자동 이름 붙이기',
+    atomicDisabledNotice: 'Atomic 롤백이 이번 재시도에서만 꺼집니다. 일부 성공을 허용 — 뒤 entry 가 실패해도 먼저 성공한 것은 유지됩니다.',
   },
 
   // ─── Environment Builder Tab ───

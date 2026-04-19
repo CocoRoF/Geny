@@ -689,6 +689,7 @@ const en = {
     retryWithoutAtomic: 'Retry without atomic',
     retryingWithoutAtomic: 'Retrying without atomic…',
     autoSuffix: 'Auto-suffix',
+    atomicDisabledNotice: 'Atomic rollback is off for this retry. Partial success is allowed — successful entries stay even if later ones fail.',
   },
 
   // ─── Environment Builder Tab ───

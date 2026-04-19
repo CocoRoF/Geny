@@ -163,3 +163,6 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
   Environments 필터 바에 "Has preset" / "Has tags" 메타 필터 2 종.
 - [70_phase7-38_bulk_delete_drill.md](70_phase7-38_bulk_delete_drill.md) —
   Bulk-delete confirm 의 env 이름을 클릭 가능한 drill-down 링크로.
+- [71_phase7-39_atomic_retry_notice.md](71_phase7-39_atomic_retry_notice.md) —
+  ImportEnvironmentModal 에 "Atomic 이 이번 재시도만 꺼졌다" 배너
+  (4.5 초 auto-dismiss).

@@ -13,7 +13,7 @@
  * Backend endpoint: `POST /api/environments/import` → returns `{id}`.
  */
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, ArrowUpRight, Check, FileUp, Upload, X } from 'lucide-react';
 
@@ -182,6 +182,8 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
   const [bundleResult, setBundleResult] = useState<BundleResult | null>(null);
   const [bundleNameOverrides, setBundleNameOverrides] = useState<Record<number, string>>({});
   const [atomic, setAtomic] = useState(false);
+  const [atomicNotice, setAtomicNotice] = useState(false);
+  const atomicNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const parsed = useMemo(() => {
@@ -384,9 +386,18 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
     setAtomic(false);
     setBundleResult(null);
     setSubmitError('');
+    setAtomicNotice(true);
+    if (atomicNoticeTimer.current) clearTimeout(atomicNoticeTimer.current);
+    atomicNoticeTimer.current = setTimeout(() => setAtomicNotice(false), 4500);
     // Pass the override explicitly — state updates haven't committed yet.
     void handleConfirm(false);
   };
+
+  useEffect(() => {
+    return () => {
+      if (atomicNoticeTimer.current) clearTimeout(atomicNoticeTimer.current);
+    };
+  }, []);
 
   if (typeof document === 'undefined') return null;
 
@@ -696,6 +707,16 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
                 </span>
               </div>
             </label>
+          )}
+
+          {/* Atomic auto-disabled notice */}
+          {atomicNotice && (
+            <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.35)]">
+              <AlertTriangle size={14} className="text-[var(--warning-color)] mt-0.5 shrink-0" />
+              <div className="text-[0.75rem] text-[var(--warning-color)]">
+                {t('importEnvironment.atomicDisabledNotice')}
+              </div>
+            </div>
           )}
 
           {/* Submit feedback */}
