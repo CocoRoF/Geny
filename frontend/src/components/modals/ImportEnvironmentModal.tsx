@@ -227,6 +227,50 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
     return nameOverride.trim() || parsed.meta.name || '';
   }, [parsed, nameOverride]);
 
+  // Given a base name and a set of taken names, return base, or the first
+  // "base (2)", "base (3)", … that isn't taken. Taken-set is expected to
+  // be lowercased; the returned suggestion preserves the original casing.
+  const pickUniqueName = (base: string, taken: Set<string>): string => {
+    const baseLower = base.toLowerCase();
+    if (!taken.has(baseLower)) return base;
+    for (let i = 2; i < 1000; i += 1) {
+      const candidate = `${base} (${i})`;
+      if (!taken.has(candidate.toLowerCase())) return candidate;
+    }
+    return `${base} (copy)`;
+  };
+
+  const suggestSingleName = () => {
+    if (!parsed || !parsed.ok || parsed.kind !== 'single') return;
+    const base = nameOverride.trim() || parsed.meta.name || '';
+    if (!base) return;
+    setNameOverride(pickUniqueName(base, existingNames));
+  };
+
+  const autoSuffixBundle = () => {
+    if (!parsed || !parsed.ok || parsed.kind !== 'bundle' || !bundleConflicts) return;
+    // Track running "taken" set so two entries suggesting the same base
+    // don't collapse to the same suffix.
+    const taken = new Set(existingNames);
+    // Reserve non-conflicting entry names (their actual names or overrides)
+    // so auto-suffix doesn't collide with them either.
+    parsed.entries.forEach((e, i) => {
+      if (bundleConflicts.conflicts[i]) return;
+      const name = (bundleNameOverrides[i]?.trim() || e.meta.name || '').toLowerCase();
+      if (name) taken.add(name);
+    });
+    const next = { ...bundleNameOverrides };
+    parsed.entries.forEach((e, i) => {
+      if (!bundleConflicts.conflicts[i]) return;
+      const base = bundleNameOverrides[i]?.trim() || e.meta.name || '';
+      if (!base) return;
+      const picked = pickUniqueName(base, taken);
+      next[i] = picked;
+      taken.add(picked.toLowerCase());
+    });
+    setBundleNameOverrides(next);
+  };
+
   // A bundleResult is an atomic rollback when every entry failed with a
   // "rolled back" or "not processed" marker. In that case the user can
   // retry without atomic in one click.
@@ -512,11 +556,18 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
               {bundleConflicts && bundleConflicts.count > 0 && (
                 <div className="flex items-start gap-2 px-2 py-1.5 rounded bg-[rgba(234,179,8,0.1)] border border-[rgba(234,179,8,0.3)]">
                   <AlertTriangle size={12} className="text-[#eab308] mt-0.5 shrink-0" />
-                  <div className="text-[0.6875rem] text-[#eab308]">
+                  <div className="flex-1 min-w-0 text-[0.6875rem] text-[#eab308]">
                     {t('importEnvironment.conflictBannerBundle', {
                       count: String(bundleConflicts.count),
                     })}
                   </div>
+                  <button
+                    type="button"
+                    onClick={autoSuffixBundle}
+                    className="shrink-0 text-[0.625rem] font-medium text-[#eab308] hover:text-[#facc15] bg-transparent border border-[rgba(234,179,8,0.4)] rounded px-1.5 py-0.5 cursor-pointer"
+                  >
+                    {t('importEnvironment.autoSuffix')}
+                  </button>
                 </div>
               )}
             </div>
@@ -592,11 +643,18 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
               {singleConflict && (
                 <div className="flex items-start gap-2 px-2 py-1.5 mt-1 rounded bg-[rgba(234,179,8,0.1)] border border-[rgba(234,179,8,0.3)]">
                   <AlertTriangle size={12} className="text-[#eab308] mt-0.5 shrink-0" />
-                  <div className="text-[0.6875rem] text-[#eab308]">
+                  <div className="flex-1 min-w-0 text-[0.6875rem] text-[#eab308]">
                     {t('importEnvironment.conflictBannerSingle', {
                       name: singleConflictName,
                     })}
                   </div>
+                  <button
+                    type="button"
+                    onClick={suggestSingleName}
+                    className="shrink-0 text-[0.625rem] font-medium text-[#eab308] hover:text-[#facc15] bg-transparent border border-[rgba(234,179,8,0.4)] rounded px-1.5 py-0.5 cursor-pointer"
+                  >
+                    {t('importEnvironment.autoSuffix')}
+                  </button>
                 </div>
               )}
             </div>

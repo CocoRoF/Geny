@@ -75,6 +75,18 @@ export default function EnvironmentDiffModal({ onClose, initialLeft, initialRigh
     setRightId(leftId);
   };
 
+  const downloadBlob = (body: BlobPart, mime: string, filename: string) => {
+    const blob = new Blob([body], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const exportDiff = () => {
     if (!result) return;
     const leftEnv = environments.find(e => e.id === leftId);
@@ -93,19 +105,70 @@ export default function EnvironmentDiffModal({ onClose, initialLeft, initialRigh
       removed: result.removed,
       changed: result.changed,
     };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: 'application/json',
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const slug = (s: string) => s.replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 32);
-    a.href = url;
-    a.download = `env-diff-${slug(leftEnv?.name ?? leftId)}__${slug(rightEnv?.name ?? rightId)}-${stamp}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const filename = `env-diff-${slug(leftEnv?.name ?? leftId)}__${slug(rightEnv?.name ?? rightId)}-${stamp}.json`;
+    downloadBlob(JSON.stringify(payload, null, 2), 'application/json', filename);
+  };
+
+  const exportDiffMarkdown = () => {
+    if (!result) return;
+    const leftEnv = environments.find(e => e.id === leftId);
+    const rightEnv = environments.find(e => e.id === rightId);
+    const leftLabel = leftEnv?.name ?? leftId;
+    const rightLabel = rightEnv?.name ?? rightId;
+    const stamp = new Date().toISOString();
+    const lines: string[] = [];
+    lines.push(`# Environment diff`);
+    lines.push('');
+    lines.push(`- **Left:** ${leftLabel} \`(${leftId})\``);
+    lines.push(`- **Right:** ${rightLabel} \`(${rightId})\``);
+    lines.push(`- **Generated:** ${stamp}`);
+    lines.push(`- **Summary:** +${result.added.length} / −${result.removed.length} / ~${result.changed.length}`);
+    lines.push('');
+    if (
+      result.added.length === 0 &&
+      result.removed.length === 0 &&
+      result.changed.length === 0
+    ) {
+      lines.push('_No differences._');
+    }
+    if (result.added.length > 0) {
+      lines.push(`## Added (${result.added.length})`);
+      lines.push('');
+      for (const p of result.added) lines.push(`- \`${p}\``);
+      lines.push('');
+    }
+    if (result.removed.length > 0) {
+      lines.push(`## Removed (${result.removed.length})`);
+      lines.push('');
+      for (const p of result.removed) lines.push(`- \`${p}\``);
+      lines.push('');
+    }
+    if (result.changed.length > 0) {
+      lines.push(`## Changed (${result.changed.length})`);
+      lines.push('');
+      for (const entry of result.changed) {
+        lines.push(`### \`${entry.path}\``);
+        lines.push('');
+        lines.push('**Before**');
+        lines.push('');
+        lines.push('```');
+        lines.push(formatValue(entry.before));
+        lines.push('```');
+        lines.push('');
+        lines.push('**After**');
+        lines.push('');
+        lines.push('```');
+        lines.push(formatValue(entry.after));
+        lines.push('```');
+        lines.push('');
+      }
+    }
+    const stampSlug = stamp.replace(/[:.]/g, '-');
+    const slug = (s: string) => s.replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 32);
+    const filename = `env-diff-${slug(leftLabel)}__${slug(rightLabel)}-${stampSlug}.md`;
+    downloadBlob(lines.join('\n'), 'text/markdown', filename);
   };
 
   const leftName = useMemo(
@@ -327,13 +390,22 @@ export default function EnvironmentDiffModal({ onClose, initialLeft, initialRigh
         {/* Footer */}
         <div className="py-2.5 px-5 border-t border-[var(--border-color)] shrink-0 flex items-center justify-end gap-2">
           {result && (
-            <button
-              onClick={exportDiff}
-              className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors"
-            >
-              <Download size={12} />
-              {t('diff.exportJson')}
-            </button>
+            <>
+              <button
+                onClick={exportDiff}
+                className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors"
+              >
+                <Download size={12} />
+                {t('diff.exportJson')}
+              </button>
+              <button
+                onClick={exportDiffMarkdown}
+                className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors"
+              >
+                <Download size={12} />
+                {t('diff.exportMarkdown')}
+              </button>
+            </>
           )}
           <button
             onClick={onClose}

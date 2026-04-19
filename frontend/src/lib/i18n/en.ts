@@ -558,6 +558,7 @@ const en = {
     before: 'Before',
     after: 'After',
     exportJson: 'Export JSON',
+    exportMarkdown: 'Export MD',
   },
 
   // ─── Environment Detail Drawer ───
@@ -663,6 +664,7 @@ const en = {
     conflictBannerBundle: '{count} entry(ies) clash with existing environment names. Rename them above or continue to create duplicates.',
     retryWithoutAtomic: 'Retry without atomic',
     retryingWithoutAtomic: 'Retrying without atomic…',
+    autoSuffix: 'Auto-suffix',
   },
 
   // ─── Environment Builder Tab ───

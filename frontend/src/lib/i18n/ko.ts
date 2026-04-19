@@ -558,6 +558,7 @@ const ko: Translations = {
     before: '이전',
     after: '이후',
     exportJson: 'JSON 내보내기',
+    exportMarkdown: 'MD 내보내기',
   },
 
   // ─── Environment Detail Drawer ───
@@ -663,6 +664,7 @@ const ko: Translations = {
     conflictBannerBundle: '기존 환경 이름과 겹치는 entry 가 {count} 개 있습니다. 위에서 이름을 바꾸거나, 그대로 진행하면 중복된 이름으로 생성됩니다.',
     retryWithoutAtomic: 'Atomic 없이 다시 시도',
     retryingWithoutAtomic: 'Atomic 없이 다시 시도 중…',
+    autoSuffix: '자동 이름 붙이기',
   },
 
   // ─── Environment Builder Tab ───

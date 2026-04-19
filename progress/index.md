@@ -138,3 +138,6 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
 - [61_phase7-29_import_conflict_retry.md](61_phase7-29_import_conflict_retry.md) —
   ImportEnvironmentModal 에 이름 충돌 경고 + atomic 롤백 후 "Retry
   without atomic" 원클릭 재시도.
+- [62_phase7-30_md_diff_autosuffix.md](62_phase7-30_md_diff_autosuffix.md) —
+  DiffModal 에 Markdown export + Import 충돌 경고에 Auto-suffix 원클릭
+  제안.
