@@ -14,15 +14,16 @@
    Environment/Manifest/Preset/Resolver 파이프라인을 Geny 에도 동일 형태로
    실장한다.
 
-> **주의**: 본 폴더 트리 (`analysis/`, `plan/`, `progress/`) 는 "분석 → 계획 →
-> 진행" 3단계 작업 흐름을 그대로 반영한다. 사용자의 검토 전에는 구현 코드를
-> 작성하지 않는다.
+> **주의**: v0.20.0 통합 사이클 (2026-04-19 까지) 의 `plan/` 과 `progress/`
+> 는 `dev_docs/20260419/` 로 이관되었다. 이후 작업은 `dev_docs/YYYYMMDD/`
+> 단위로 분리된다.
 
 ## 폴더
 
-- [analysis/](analysis/index.md) — 현재 시스템 사실 수집
-- [plan/](plan/index.md) — 단계별 마이그레이션 계획
-- [progress/](progress/index.md) — 실제 작업 기록 (구현 단계 진입 이후)
+- [dev_docs/20260419/analysis/](dev_docs/20260419/analysis/index.md) — 현재 시스템 사실 수집 (v0.20.0 통합 시 작성)
+- [dev_docs/20260419/plan/](dev_docs/20260419/plan/index.md) — v0.20.0 통합 마이그레이션 계획
+- [dev_docs/20260419/progress/](dev_docs/20260419/progress/index.md) — v0.20.0 통합 PR 단위 기록
+- [dev_docs/20260420/](dev_docs/20260420/) — post-v0.20.0 추가 작업 (탭 통합, 세션 그래프 env 표시, VTuber 챗 버그 등)
 
 ## 참조
 

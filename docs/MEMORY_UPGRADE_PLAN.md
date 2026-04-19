@@ -3,10 +3,10 @@
 > **⚠️ Historical — superseded.**
 > 본 문서는 2026-03-29 작성된 **초기 자체 설계안**이며, 이후
 > `geny-executor>=0.20.0` 의 `MemoryProvider` DSL 이 상위 아키텍처로
-> 채택되면서 실제 구현은 [`plan/03_memory_migration.md`](../plan/03_memory_migration.md)
-> 과 [`plan/06_rollout_and_verification.md`](../plan/06_rollout_and_verification.md)
+> 채택되면서 실제 구현은 [`dev_docs/20260419/plan/03_memory_migration.md`](../dev_docs/20260419/plan/03_memory_migration.md)
+> 과 [`dev_docs/20260419/plan/06_rollout_and_verification.md`](../dev_docs/20260419/plan/06_rollout_and_verification.md)
 > 의 롤아웃을 따랐다. 구현 내역은
-> [`progress/index.md`](../progress/index.md) 의 Phase 2 / Phase 4 /
+> [`dev_docs/20260419/progress/index.md`](../dev_docs/20260419/progress/index.md) 의 Phase 2 / Phase 4 /
 > Phase 5 / Phase 7 섹션을 참조.
 >
 > 히스토리컬 기록으로 보존된다 — 현재 시스템의 동작 기준이 아니다.
