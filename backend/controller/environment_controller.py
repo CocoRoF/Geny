@@ -36,7 +36,10 @@ from service.environment.schemas import (
     EnvironmentSessionSummary,
     EnvironmentSessionsResponse,
     EnvironmentSummaryResponse,
+    ImportBulkResultEntry,
     ImportEnvironmentRequest,
+    ImportEnvironmentsBulkRequest,
+    ImportEnvironmentsBulkResponse,
     SaveEnvironmentRequest,
     ShareLinkResponse,
     UpdateEnvironmentRequest,
@@ -297,6 +300,51 @@ async def import_environment(
 ):
     env_id = _env_svc(request).import_json(body.data)
     return CreateEnvironmentResponse(id=env_id)
+
+
+@router.post("/import-bulk", response_model=ImportEnvironmentsBulkResponse)
+async def import_environments_bulk(
+    request: Request,
+    body: ImportEnvironmentsBulkRequest,
+    auth: dict = Depends(require_auth),
+):
+    """Import a bundle produced by the Environments tab bulk-export.
+
+    Each entry is imported independently — one bad entry does not
+    abort the batch. Response enumerates per-entry success/failure so
+    the client can render a report.
+    """
+    svc = _env_svc(request)
+    results: list[ImportBulkResultEntry] = []
+    succeeded = 0
+    for entry in body.entries:
+        try:
+            new_id = svc.import_json(entry.data)
+            results.append(
+                ImportBulkResultEntry(
+                    env_id=entry.env_id,
+                    new_id=new_id,
+                    ok=True,
+                )
+            )
+            succeeded += 1
+        except Exception as exc:  # noqa: BLE001 — surface all errors per-entry
+            logger.warning(
+                "bulk-import entry failed (env_id=%s): %s", entry.env_id, exc
+            )
+            results.append(
+                ImportBulkResultEntry(
+                    env_id=entry.env_id,
+                    ok=False,
+                    error=str(exc),
+                )
+            )
+    return ImportEnvironmentsBulkResponse(
+        total=len(body.entries),
+        succeeded=succeeded,
+        failed=len(body.entries) - succeeded,
+        results=results,
+    )
 
 
 @router.post("/diff", response_model=EnvironmentDiffResponse)

@@ -121,3 +121,6 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
 - [55_phase7-23_bulk_compare_deleted_filter.md](55_phase7-23_bulk_compare_deleted_filter.md) —
   Bulk-select 에 "Compare 2" 액션 추가 + 필터 바에 "Has deleted"
   옵션.
+- [56_phase7-24_import_bulk_endpoint.md](56_phase7-24_import_bulk_endpoint.md) —
+  `POST /api/environments/import-bulk` 신규 엔드포인트 + 클라이언트
+  bundle 경로 단일 호출 전환.

@@ -19,6 +19,7 @@ import { AlertTriangle, Check, FileUp, Upload, X } from 'lucide-react';
 
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
+import { environmentApi } from '@/lib/environmentApi';
 
 interface Props {
   onClose: () => void;
@@ -142,7 +143,7 @@ type BundleResult = {
 };
 
 export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
-  const { importEnvironment } = useEnvironmentStore();
+  const { importEnvironment, loadEnvironments, refreshSessionCounts } = useEnvironmentStore();
   const { t } = useI18n();
 
   const [rawText, setRawText] = useState('');
@@ -215,25 +216,37 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
         onClose();
         return;
       }
-      // Bundle path
-      const successes: BundleResult['successes'] = [];
-      const failures: BundleResult['failures'] = [];
-      for (const entry of parsed.entries) {
+      // Bundle path — one round-trip to the new bulk endpoint.
+      const cleanedEntries = parsed.entries.map(entry => {
         const payload = { ...entry.data };
         if (regenerateId) delete payload.id;
-        const displayName = entry.meta.name || entry.env_id || '—';
-        try {
-          const { id: newId } = await importEnvironment(payload);
-          successes.push({ env_id: entry.env_id, new_id: newId, name: displayName });
-        } catch (e) {
+        return { env_id: entry.env_id, data: payload };
+      });
+      const response = await environmentApi.importEnvBulk({
+        version: parsed.bundleVersion,
+        entries: cleanedEntries,
+      });
+      const successes: BundleResult['successes'] = [];
+      const failures: BundleResult['failures'] = [];
+      for (let i = 0; i < response.results.length; i += 1) {
+        const r = response.results[i];
+        const originMeta = parsed.entries[i]?.meta;
+        const displayName = originMeta?.name || r.env_id || '—';
+        if (r.ok && r.new_id) {
+          successes.push({ env_id: r.env_id, new_id: r.new_id, name: displayName });
+        } else {
           failures.push({
-            env_id: entry.env_id,
+            env_id: r.env_id,
             name: displayName,
-            error: e instanceof Error ? e.message : 'import failed',
+            error: r.error ?? 'import failed',
           });
         }
       }
       setBundleResult({ successes, failures });
+      if (successes.length > 0) {
+        await loadEnvironments();
+        void refreshSessionCounts();
+      }
       if (failures.length === 0 && successes.length > 0) {
         onImported?.(successes[0].new_id);
       }
