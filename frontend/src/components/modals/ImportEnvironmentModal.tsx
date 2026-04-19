@@ -176,6 +176,7 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [bundleResult, setBundleResult] = useState<BundleResult | null>(null);
   const [bundleNameOverrides, setBundleNameOverrides] = useState<Record<number, string>>({});
+  const [atomic, setAtomic] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const parsed = useMemo(() => {
@@ -248,10 +249,13 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
         }
         return { env_id: entry.env_id, data: payload };
       });
-      const response = await environmentApi.importEnvBulk({
-        version: parsed.bundleVersion,
-        entries: cleanedEntries,
-      });
+      const response = await environmentApi.importEnvBulk(
+        {
+          version: parsed.bundleVersion,
+          entries: cleanedEntries,
+        },
+        { atomic },
+      );
       const successes: BundleResult['successes'] = [];
       const failures: BundleResult['failures'] = [];
       for (let i = 0; i < response.results.length; i += 1) {
@@ -526,6 +530,26 @@ export default function ImportEnvironmentModal({ onClose, onImported }: Props) {
               </span>
             </div>
           </label>
+
+          {/* Atomic toggle (bundle only) */}
+          {parsed && parsed.ok && parsed.kind === 'bundle' && !bundleResult && (
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={atomic}
+                onChange={e => setAtomic(e.target.checked)}
+                className="mt-0.5"
+              />
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[0.75rem] font-medium text-[var(--text-secondary)]">
+                  {t('importEnvironment.atomicLabel')}
+                </span>
+                <span className="text-[0.6875rem] text-[var(--text-muted)]">
+                  {t('importEnvironment.atomicHint')}
+                </span>
+              </div>
+            </label>
+          )}
 
           {/* Submit feedback */}
           {submitError && (

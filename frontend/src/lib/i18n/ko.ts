@@ -557,6 +557,7 @@ const ko: Translations = {
     changed: '변경됨',
     before: '이전',
     after: '이후',
+    exportJson: 'JSON 내보내기',
   },
 
   // ─── Environment Detail Drawer ───
@@ -655,6 +656,8 @@ const ko: Translations = {
     bundleResetNames: '이름 초기화',
     bundleNamesHint: '비워두면 원래 이름이 유지됩니다. 입력한 이름은 새 환경에만 적용되며 번들 파일은 수정되지 않습니다.',
     bundleOpenEnv: '새 환경 열기',
+    atomicLabel: 'Atomic 모드 — 하나라도 실패하면 전체 롤백',
+    atomicHint: '실패한 entry 가 있으면 배치 중 이미 생성된 env 를 서버가 삭제합니다. 안전하지만 하나의 malformed entry 가 전체 import 를 중단시킵니다.',
   },
 
   // ─── Environment Builder Tab ───

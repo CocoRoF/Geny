@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeftRight, Minus, Pencil, Plus, X } from 'lucide-react';
+import { ArrowLeftRight, Download, Minus, Pencil, Plus, X } from 'lucide-react';
 
 import { environmentApi } from '@/lib/environmentApi';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
@@ -73,6 +73,39 @@ export default function EnvironmentDiffModal({ onClose, initialLeft, initialRigh
   const swap = () => {
     setLeftId(rightId);
     setRightId(leftId);
+  };
+
+  const exportDiff = () => {
+    if (!result) return;
+    const leftEnv = environments.find(e => e.id === leftId);
+    const rightEnv = environments.find(e => e.id === rightId);
+    const payload = {
+      version: '1',
+      generated_at: new Date().toISOString(),
+      left: { id: leftId, name: leftEnv?.name ?? null },
+      right: { id: rightId, name: rightEnv?.name ?? null },
+      summary: {
+        added: result.added.length,
+        removed: result.removed.length,
+        changed: result.changed.length,
+      },
+      added: result.added,
+      removed: result.removed,
+      changed: result.changed,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const slug = (s: string) => s.replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 32);
+    a.href = url;
+    a.download = `env-diff-${slug(leftEnv?.name ?? leftId)}__${slug(rightEnv?.name ?? rightId)}-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const leftName = useMemo(
@@ -292,7 +325,16 @@ export default function EnvironmentDiffModal({ onClose, initialLeft, initialRigh
         </div>
 
         {/* Footer */}
-        <div className="py-2.5 px-5 border-t border-[var(--border-color)] shrink-0 flex justify-end">
+        <div className="py-2.5 px-5 border-t border-[var(--border-color)] shrink-0 flex items-center justify-end gap-2">
+          {result && (
+            <button
+              onClick={exportDiff}
+              className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors"
+            >
+              <Download size={12} />
+              {t('diff.exportJson')}
+            </button>
+          )}
           <button
             onClick={onClose}
             className="py-1.5 px-3 rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors"

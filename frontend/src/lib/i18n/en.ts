@@ -557,6 +557,7 @@ const en = {
     changed: 'Changed',
     before: 'Before',
     after: 'After',
+    exportJson: 'Export JSON',
   },
 
   // ─── Environment Detail Drawer ───
@@ -655,6 +656,8 @@ const en = {
     bundleResetNames: 'Reset names',
     bundleNamesHint: 'Leave blank to keep the original name. Overrides set the new environment\'s name without touching the bundle file.',
     bundleOpenEnv: 'Open the new environment',
+    atomicLabel: 'Atomic batch — roll back on any failure',
+    atomicHint: 'If any entry fails the server deletes envs created earlier in this batch. Safer but a single malformed entry aborts the whole import.',
   },
 
   // ─── Environment Builder Tab ───
