@@ -8,11 +8,12 @@
  * land in follow-up PRs so this file stays small and easy to diff.
  */
 
-import { useEffect } from 'react';
-import { Boxes, RefreshCw, Tag } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Boxes, Plus, RefreshCw, Tag } from 'lucide-react';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
 import type { EnvironmentSummary } from '@/types/environment';
+import CreateEnvironmentModal from '@/components/modals/CreateEnvironmentModal';
 
 function formatDate(iso: string): string {
   try {
@@ -70,6 +71,7 @@ function EnvironmentCard({ env }: { env: EnvironmentSummary }) {
 export default function EnvironmentsTab() {
   const { environments, isLoading, error, loadEnvironments } = useEnvironmentStore();
   const { t } = useI18n();
+  const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
     loadEnvironments();
@@ -88,14 +90,23 @@ export default function EnvironmentsTab() {
               {t('environmentsTab.subtitle')}
             </p>
           </div>
-          <button
-            onClick={() => loadEnvironments()}
-            disabled={isLoading}
-            className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
-            {t('common.refresh')}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => loadEnvironments()}
+              disabled={isLoading}
+              className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
+              {t('common.refresh')}
+            </button>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white text-[0.75rem] font-semibold cursor-pointer border-none transition-colors"
+            >
+              <Plus size={12} />
+              {t('environmentsTab.newEnvironment')}
+            </button>
+          </div>
         </div>
 
         {/* Error banner */}
@@ -119,6 +130,13 @@ export default function EnvironmentsTab() {
             <p className="text-[0.75rem] text-[var(--text-muted)] max-w-[420px]">
               {t('environmentsTab.emptyHint')}
             </p>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="mt-3 flex items-center gap-1.5 py-1.5 px-3 rounded-md bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white text-[0.75rem] font-semibold cursor-pointer border-none transition-colors"
+            >
+              <Plus size={12} />
+              {t('environmentsTab.createFirst')}
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
@@ -128,6 +146,10 @@ export default function EnvironmentsTab() {
           </div>
         )}
       </div>
+
+      {showCreate && (
+        <CreateEnvironmentModal onClose={() => setShowCreate(false)} />
+      )}
     </div>
   );
 }
