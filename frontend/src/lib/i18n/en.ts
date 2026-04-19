@@ -538,6 +538,8 @@ const en = {
     deleteTitle: 'Delete environment',
     deleteConfirm: 'Delete "{name}"? This cannot be undone.',
     deleteNote: 'Sessions currently referencing this environment will fall back to the default pipeline on their next turn.',
+    copyId: 'Copy environment id',
+    idCopied: 'Copied!',
     linkedSessions: 'Linked sessions ({n})',
     linkedSessionsEmpty: 'No active sessions are bound to this environment.',
     statusRunning: 'running',

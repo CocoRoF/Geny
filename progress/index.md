@@ -92,3 +92,5 @@ plan 06 체크리스트 vs 실제 출고물의 매핑.
   드로어 Linked sessions 헤더에 running/error/other 브레이크다운.
 - [44_phase7-12_builder_back_breadcrumb.md](44_phase7-12_builder_back_breadcrumb.md) —
   BuilderTab 헤더에 "Back to Environments" 링크.
+- [45_phase7-13_copy_env_id.md](45_phase7-13_copy_env_id.md) —
+  EnvironmentDetailDrawer 헤더에 env id copy 버튼.

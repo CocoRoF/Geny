@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeftRight, Copy, Download, Link2, Settings2, Tag, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeftRight, Check, Copy, Download, Link2, Settings2, Tag, Trash2, Upload, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
@@ -85,6 +85,17 @@ export default function EnvironmentDetailDrawer({ envId, onClose, onCompare }: P
   const [showImportManifest, setShowImportManifest] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
+
+  const handleCopyId = async () => {
+    try {
+      await navigator.clipboard.writeText(envId);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 1200);
+    } catch {
+      // Clipboard API denied — swallow silently; user can still select the id
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -163,9 +174,18 @@ export default function EnvironmentDetailDrawer({ envId, onClose, onCompare }: P
             <h3 className="text-[1rem] font-semibold text-[var(--text-primary)] truncate">
               {env?.name || t('environmentDetail.title')}
             </h3>
-            <span className="text-[0.6875rem] text-[var(--text-muted)] font-mono truncate">
-              {envId}
-            </span>
+            <button
+              onClick={handleCopyId}
+              title={copiedId ? t('environmentDetail.idCopied') : t('environmentDetail.copyId')}
+              className="flex items-center gap-1 text-[0.6875rem] text-[var(--text-muted)] font-mono truncate bg-transparent border-none p-0 cursor-pointer hover:text-[var(--text-primary)] text-left"
+            >
+              <span className="truncate">{envId}</span>
+              {copiedId ? (
+                <Check size={10} className="shrink-0 text-[var(--success-color)]" />
+              ) : (
+                <Copy size={10} className="shrink-0 opacity-60" />
+              )}
+            </button>
           </div>
           <button
             className="flex items-center justify-center w-8 h-8 rounded-md bg-transparent border-none text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] cursor-pointer shrink-0"

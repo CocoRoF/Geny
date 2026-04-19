@@ -538,6 +538,8 @@ const ko: Translations = {
     deleteTitle: '환경 삭제',
     deleteConfirm: '"{name}" 을(를) 삭제하시겠습니까? 되돌릴 수 없습니다.',
     deleteNote: '이 환경을 참조 중인 세션은 다음 턴에 기본 파이프라인으로 fallback 합니다.',
+    copyId: '환경 id 복사',
+    idCopied: '복사됨!',
     linkedSessions: '연결된 세션 ({n})',
     linkedSessionsEmpty: '이 환경을 사용 중인 활성 세션이 없습니다.',
     statusRunning: '실행중',
