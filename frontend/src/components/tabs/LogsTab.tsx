@@ -104,6 +104,12 @@ export default function LogsTab() {
     return linkedSubWorkerSession?.session_id ?? selectedSessionId;
   }, [hasDualView, viewMode, selectedSessionId, linkedSubWorkerSession]);
 
+  // Context for the sticky header — which session's env/role/type we're looking at.
+  const contextSession = useMemo(() => {
+    if (!targetSessionId) return null;
+    return sessions.find(s => s.session_id === targetSessionId) ?? null;
+  }, [sessions, targetSessionId]);
+
   // Reset viewMode when session changes
   useEffect(() => { setViewMode('vtuber'); }, [selectedSessionId]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -313,6 +319,42 @@ export default function LogsTab() {
           )}
         </div>
       </div>
+
+      {/* ── Context band: env / role / session_type for the target session ── */}
+      {contextSession && (
+        <div className="shrink-0 flex flex-wrap items-center gap-1.5 px-3 md:px-4 py-1.5 border-b border-[var(--border-color)] bg-[var(--bg-primary)]">
+          {contextSession.env_id && (
+            <span
+              className="inline-flex items-center gap-1 px-1.5 py-[1px] rounded border border-[var(--border-color)] bg-[var(--bg-tertiary)] text-[10px] font-medium text-[var(--text-secondary)]"
+              title={contextSession.env_id}
+            >
+              <span className="text-[var(--text-muted)]">{t('logsTab.contextEnv')}</span>
+              <span className="font-mono text-[var(--text-primary)] max-w-[180px] truncate">{contextSession.env_id}</span>
+            </span>
+          )}
+          {contextSession.role && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-[1px] rounded border border-[var(--border-color)] bg-[var(--bg-tertiary)] text-[10px] font-medium text-[var(--text-secondary)]">
+              <span className="text-[var(--text-muted)]">{t('logsTab.contextRole')}</span>
+              <span className="font-mono text-[var(--text-primary)]">{contextSession.role}</span>
+            </span>
+          )}
+          {contextSession.session_type && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-[1px] rounded border border-[var(--border-color)] bg-[var(--bg-tertiary)] text-[10px] font-medium text-[var(--text-secondary)]">
+              <span className="text-[var(--text-muted)]">{t('logsTab.contextSessionType')}</span>
+              <span className="font-mono text-[var(--text-primary)]">{contextSession.session_type}</span>
+            </span>
+          )}
+          {contextSession.linked_session_id && (
+            <span
+              className="inline-flex items-center gap-1 px-1.5 py-[1px] rounded border border-[var(--border-color)] bg-[var(--bg-tertiary)] text-[10px] font-medium text-[var(--text-secondary)]"
+              title={contextSession.linked_session_id}
+            >
+              <span className="text-[var(--text-muted)]">{t('logsTab.contextLinked')}</span>
+              <span className="font-mono text-[var(--text-primary)] max-w-[140px] truncate">{contextSession.linked_session_id}</span>
+            </span>
+          )}
+        </div>
+      )}
 
       {/* ── Main content: Split pane ── */}
       <div className="flex-1 flex min-h-0 relative">

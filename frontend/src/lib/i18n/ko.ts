@@ -369,6 +369,10 @@ const ko: Translations = {
     groupDetailDesc: '그래프 실행 흐름',
     groupAll: '전체',
     groupAllDesc: '모든 로그 (디버그 포함)',
+    contextEnv: '환경',
+    contextRole: '역할',
+    contextSessionType: '유형',
+    contextLinked: '연결',
   },
 
   // ─── Storage Tab ───

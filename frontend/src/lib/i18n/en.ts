@@ -369,6 +369,10 @@ const en = {
     groupDetailDesc: 'Graph execution flow',
     groupAll: 'All',
     groupAllDesc: 'Everything (incl. debug)',
+    contextEnv: 'Env',
+    contextRole: 'Role',
+    contextSessionType: 'Type',
+    contextLinked: 'Linked',
   },
 
   // ─── Storage Tab ───
