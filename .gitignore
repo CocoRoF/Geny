@@ -228,6 +228,7 @@ backup
 CLAUDE.md
 GEMINI.md
 tests/
+!backend/tests/
 
 docker-compose.yaml
 
