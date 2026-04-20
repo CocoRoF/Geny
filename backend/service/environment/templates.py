@@ -47,6 +47,47 @@ WORKER_ENV_ID = "template-worker-env"
 VTUBER_ENV_ID = "template-vtuber-env"
 
 
+# Custom tools the VTuber persona should keep access to. Distinct
+# from platform-layer builtins (``geny_*``, ``memory_*``,
+# ``knowledge_*``, ``opsidian_*``) which the VTuber always gets —
+# this whitelist only controls which *custom* (``tools/custom/``)
+# tools make it through. Excludes ``browser_*`` on purpose: the
+# conversational persona shouldn't spawn a playwright browser on
+# casual questions. Matches ``backend/tool_presets/template-vtuber-tools.json``.
+_VTUBER_CUSTOM_TOOL_WHITELIST = frozenset(
+    {"web_search", "news_search", "web_fetch"}
+)
+
+
+# Prefix set identifying Geny-platform builtins. Any tool name
+# starting with one of these is treated as platform-layer and
+# always included in both worker and VTuber rosters — the VTuber
+# filter only gates custom tools. Keeping this as a prefix check
+# (not a hardcoded allowlist) means new platform tools added under
+# ``backend/tools/built_in/*.py`` are picked up automatically.
+_PLATFORM_TOOL_PREFIXES = ("geny_", "memory_", "knowledge_", "opsidian_")
+
+
+def _vtuber_tool_roster(all_tool_names: List[str]) -> List[str]:
+    """Filter *all_tool_names* down to the set the VTuber should see.
+
+    Every platform-layer builtin (by prefix) plus the three
+    conversational web tools from
+    :data:`_VTUBER_CUSTOM_TOOL_WHITELIST`. Anything else — notably
+    ``browser_*`` — is excluded.
+
+    Order is preserved from the input so the manifest's external
+    list is stable across boots (helps diff-based review of the
+    written ``.json`` seed).
+    """
+    return [
+        name
+        for name in all_tool_names
+        if name.startswith(_PLATFORM_TOOL_PREFIXES)
+        or name in _VTUBER_CUSTOM_TOOL_WHITELIST
+    ]
+
+
 def create_worker_env(
     external_tool_names: Optional[List[str]] = None,
 ) -> EnvironmentManifest:
@@ -78,17 +119,37 @@ def create_worker_env(
     return manifest
 
 
-def create_vtuber_env() -> EnvironmentManifest:
+def create_vtuber_env(
+    all_tool_names: Optional[List[str]] = None,
+) -> EnvironmentManifest:
     """Default VTuber environment manifest.
 
-    Uses the ``vtuber`` stage chain — no Stage 8 (Think), ``system_cache``,
-    ``signal_based`` evaluation, ``max_turns=10``. Binds to the three
-    conversation-oriented custom tools (``web_search``, ``news_search``,
-    ``web_fetch``) that ``template-vtuber-tools`` whitelists.
+    Uses the ``vtuber`` stage chain — no Stage 8 (Think),
+    ``system_cache``, ``signal_based`` evaluation, ``max_turns=10``.
+
+    *all_tool_names* is the full roster the boot-time
+    :class:`ToolLoader` knows about (builtin + custom). The VTuber
+    filter (:func:`_vtuber_tool_roster`) narrows that to platform-
+    layer tools plus the three conversational web tools. When
+    *all_tool_names* is omitted (e.g. tests) the factory falls back
+    to the legacy three-web-tool roster, preserving prior
+    behaviour for any caller that hasn't yet switched to the new
+    signature.
+
+    Platform tools (``geny_send_direct_message`` etc.) must reach
+    the VTuber: without them the VTuber cannot DM its Sub-Worker,
+    read its inbox, store memories, or consult curated knowledge —
+    every piece of functionality the VTuber↔Sub-Worker delegation
+    relies on.
     """
+    if all_tool_names:
+        external = _vtuber_tool_roster(all_tool_names)
+    else:
+        external = ["web_search", "news_search", "web_fetch"]
+
     manifest = build_default_manifest(
         preset="vtuber",
-        external_tool_names=["web_search", "news_search", "web_fetch"],
+        external_tool_names=external,
     )
     manifest.metadata.id = VTUBER_ENV_ID
     manifest.metadata.name = "VTuber Environment"
@@ -124,9 +185,10 @@ def install_environment_templates(
     Returns the number of environment files written (always equal to
     the seed count after the write loop completes).
     """
+    all_names = list(external_tool_names or [])
     seeds: List[EnvironmentManifest] = [
-        create_worker_env(external_tool_names=external_tool_names),
-        create_vtuber_env(),
+        create_worker_env(external_tool_names=all_names),
+        create_vtuber_env(all_tool_names=all_names),
     ]
     for manifest in seeds:
         env_id = manifest.metadata.id
