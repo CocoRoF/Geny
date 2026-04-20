@@ -267,13 +267,22 @@ class AgentSessionManager(SessionManager):
         if memory_context:
             prompt = prompt + "\n\n" + memory_context
 
-        # Append VTuber-specific context (linked CLI session info)
+        # Append VTuber-specific context (bound Worker session info).
+        # Fires only when the VTuber was reconstituted with a
+        # pre-existing linked_session_id (e.g. warm restart). The
+        # initial-create path builds the Bound Worker *after* this
+        # method and injects the block directly on the agent.
         if role == "vtuber" and request.linked_session_id:
             vtuber_ctx = (
-                f"\n\n## Paired CLI Agent\n"
-                f"Session ID: `{request.linked_session_id}`\n"
-                f"Delegate complex tasks via `geny_send_direct_message`.\n"
-                f"Results will arrive in your inbox when the CLI agent finishes."
+                f"\n\n## Bound Worker Agent\n"
+                f"You have a Worker agent bound to you: "
+                f"session_id=`{request.linked_session_id}`.\n"
+                f"For complex tasks (coding, research, multi-step "
+                f"execution), delegate to the Worker via the "
+                f"`geny_send_direct_message` tool with "
+                f"target_session_id=`{request.linked_session_id}`. "
+                f"The Worker's reply will arrive in your inbox; read "
+                f"it with `geny_read_inbox` and summarize for the user."
             )
             prompt = prompt + vtuber_ctx
 
@@ -582,57 +591,77 @@ class AgentSessionManager(SessionManager):
 
         logger.info(f"[{session_id}] ✅ AgentSession created successfully")
 
-        # ── Auto-create paired CLI session for VTuber agents ───────────
+        # ── Auto-create bound Worker for VTuber agents ─────────────────
+        # Recursion guard: a VTuber request with session_type="bound"
+        # is a caller bug (bound sessions are always workers). The
+        # implicit guard was `not request.linked_session_id` — that
+        # worked because spawned requests carry linked_session_id, but
+        # the invariant we actually want is "don't double-spawn." Make
+        # it explicit on session_type.
         if (
             request.role == SessionRole.VTUBER
-            and not request.linked_session_id  # Avoid recursion: CLI request already has linked_id
+            and request.session_type != "bound"
+            and not request.linked_session_id
         ):
             try:
-                cli_name = f"{request.session_name or 'vtuber'}_cli"
+                worker_name = f"{request.session_name or 'vtuber'}_worker"
                 # Share the VTuber's actual storage path so memory is shared
                 shared_dir = (
                     request.working_dir
                     or (agent.storage_path if hasattr(agent, 'storage_path') else None)
                 )
-                cli_request = CreateSessionRequest(
-                    session_name=cli_name,
-                    working_dir=shared_dir,  # Share same working dir for memory sharing
-                    model=request.bound_worker_model if request.bound_worker_model else None,
+                # Let resolve_env_id(role=WORKER, explicit=bound_worker_env_id)
+                # pick template-worker-env by default, or honor an
+                # explicit override. workflow_id/graph_name/tool_preset_id
+                # are left as Pydantic defaults — the manifest path (PR 15)
+                # owns stage layout and tool registration now.
+                worker_request = CreateSessionRequest(
+                    session_name=worker_name,
+                    working_dir=shared_dir,
+                    model=request.bound_worker_model or None,
                     max_turns=request.max_turns or 50,
                     timeout=request.timeout or 1800.0,
                     max_iterations=request.max_iterations or 50,
                     role=SessionRole.WORKER,
                     system_prompt=request.bound_worker_system_prompt,
-                    workflow_id="template-optimized-autonomous",
-                    graph_name="Optimized Autonomous",
-                    tool_preset_id=None,
-                    linked_session_id=session_id,  # Link back to VTuber
+                    env_id=request.bound_worker_env_id,
+                    linked_session_id=session_id,
                     session_type="bound",
                     env_vars=request.env_vars,
                 )
-                cli_agent = await self.create_agent_session(cli_request)
-                cli_id = cli_agent.session_id
+                worker_agent = await self.create_agent_session(worker_request)
+                worker_session_id = worker_agent.session_id
 
-                # Back-link: update VTuber session with CLI session ID
+                # Back-link: update VTuber session with bound-Worker ID
                 self._store.update(session_id, {
-                    "linked_session_id": cli_id,
+                    "linked_session_id": worker_session_id,
                     "session_type": "vtuber",
                 })
 
-                agent._linked_session_id = cli_id
+                agent._linked_session_id = worker_session_id
                 agent._session_type = "vtuber"
 
-                # Rebuild system prompt with CLI session ID injected
+                # Inject the Bound Worker delegation block into the
+                # VTuber's system prompt. The final-newline-bounded
+                # marker lets prompts/vtuber.md (plan PR 22) reference
+                # the section by header in the persona base prompt.
                 vtuber_ctx = (
-                    f"\n\n## Paired CLI Agent\n"
-                    f"Session ID: `{cli_id}`\n"
-                    f"Delegate complex tasks via `geny_send_direct_message`.\n"
-                    f"Results will arrive in your inbox when the CLI agent finishes."
+                    f"\n\n## Bound Worker Agent\n"
+                    f"You have a Worker agent bound to you: "
+                    f"session_id=`{worker_session_id}`.\n"
+                    f"For complex tasks (coding, research, multi-step "
+                    f"execution), delegate to the Worker via the "
+                    f"`geny_send_direct_message` tool with "
+                    f"target_session_id=`{worker_session_id}`. The "
+                    f"Worker's reply will arrive in your inbox; read "
+                    f"it with `geny_read_inbox` and summarize for "
+                    f"the user."
                 )
-                agent._system_prompt = agent._system_prompt + vtuber_ctx
+                agent._system_prompt = (agent._system_prompt or "") + vtuber_ctx
 
                 logger.info(
-                    f"[{session_id}] 🔗 Paired CLI session created: {cli_id} ({cli_name})"
+                    f"[{session_id}] 🔗 Bound Worker created: "
+                    f"{worker_session_id} ({worker_name})"
                 )
 
                 # ── Auto-create chat room for VTuber session ───────────
@@ -657,7 +686,7 @@ class AgentSessionManager(SessionManager):
                     pass  # best-effort
 
             except Exception as e:
-                logger.error(f"[{session_id}] Failed to create paired CLI session: {e}", exc_info=True)
+                logger.error(f"[{session_id}] Failed to create bound Worker: {e}", exc_info=True)
 
         return agent
 
