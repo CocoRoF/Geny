@@ -81,7 +81,8 @@ export default function StageDetailPanel({
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop — always a dark scrim so the slide-in panel has
+          separation from the canvas even in light mode. */}
       <div
         className="fixed inset-0 z-40"
         style={{ background: 'rgba(0,0,0,0.4)' }}
@@ -94,7 +95,7 @@ export default function StageDetailPanel({
         style={{
           background: 'var(--pipe-bg-secondary)',
           borderLeft: '1px solid var(--pipe-border)',
-          boxShadow: '-8px 0 40px rgba(0,0,0,0.5)',
+          boxShadow: 'var(--shadow-lg)',
         }}
       >
         {/* Header */}
@@ -163,7 +164,7 @@ export default function StageDetailPanel({
               }
               bg={
                 isPresent && isActive
-                  ? 'rgba(91,186,111,0.12)'
+                  ? 'color-mix(in srgb, var(--pipe-green) 14%, transparent)'
                   : 'var(--pipe-bg-tertiary)'
               }
             />
@@ -178,7 +179,7 @@ export default function StageDetailPanel({
                   <Badge
                     label={t('sessionEnvironmentTab.pipeline.bypassable')}
                     accent="var(--pipe-cyan)"
-                    bg="rgba(91,186,186,0.1)"
+                    bg="color-mix(in srgb, var(--pipe-cyan) 12%, transparent)"
                   />
                 )}
               </>
@@ -217,8 +218,10 @@ export default function StageDetailPanel({
               <div
                 className="mt-3 rounded-lg px-3 py-2 text-[11px]"
                 style={{
-                  background: 'rgba(91,186,186,0.06)',
-                  border: '1px solid rgba(91,186,186,0.15)',
+                  background:
+                    'color-mix(in srgb, var(--pipe-cyan) 7%, transparent)',
+                  border:
+                    '1px solid color-mix(in srgb, var(--pipe-cyan) 18%, transparent)',
                   color: 'var(--pipe-cyan)',
                 }}
               >
@@ -301,7 +304,7 @@ export default function StageDetailPanel({
                                     className="text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider"
                                     style={{
                                       background: catColor.accent,
-                                      color: 'var(--pipe-bg-primary)',
+                                      color: '#ffffff',
                                     }}
                                   >
                                     {t('sessionEnvironmentTab.pipeline.inUse')}

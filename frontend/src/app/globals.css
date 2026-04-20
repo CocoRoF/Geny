@@ -543,34 +543,74 @@ html.light ::-webkit-scrollbar-thumb:hover {
 
 /* ========================================
    Session Environment — Pipeline View
-   Mirrors geny-executor-web's pipeline aesthetic:
-   dark minimalist, gold accent, serif headings,
-   radial-gradient stage circles with category glow.
-   All styles are scoped behind `.pipeline-scope` so
-   they do not leak into the rest of the Geny app.
+   Keeps geny-executor-web's *structural* aesthetic (radial-gradient
+   stage circles, U-turn/loop-back SVG paths, phase labels, dashed
+   flow animation) but maps all colors onto Geny's theme tokens so
+   the view follows the global light/dark switch. All styles are
+   scoped behind `.pipeline-scope` so they don't leak outward.
    ======================================== */
 .pipeline-scope {
-	--pipe-bg-primary: #0c0c0c;
-	--pipe-bg-secondary: #141414;
-	--pipe-bg-tertiary: #1c1c1c;
-	--pipe-bg-card: #181818;
-	--pipe-border: #232323;
-	--pipe-border-hover: #333333;
-	--pipe-text-primary: #edeae5;
-	--pipe-text-secondary: #b0aaa2;
-	--pipe-text-muted: #7a746e;
-	--pipe-accent: #c8a45c;
-	--pipe-accent-dim: rgba(200, 164, 92, 0.1);
-	--pipe-accent-glow: rgba(200, 164, 92, 0.25);
-	--pipe-blue: #5b8cd4;
-	--pipe-green: #5bba6f;
-	--pipe-red: #d45b5b;
-	--pipe-purple: #9b7bd4;
-	--pipe-cyan: #5bbaba;
+	/* Bridge Geny's theme tokens into pipeline-local names. Every
+	   --pipe-* below resolves via Geny's html.dark / html.light blocks
+	   at the top of this file — no hard-coded hex values. */
+	--pipe-bg-primary: var(--bg-primary);
+	--pipe-bg-secondary: var(--bg-secondary);
+	--pipe-bg-tertiary: var(--bg-tertiary);
+	--pipe-bg-card: var(--bg-card);
+	--pipe-border: var(--border-color);
+	--pipe-border-hover: var(--border-subtle);
+	--pipe-text-primary: var(--text-primary);
+	--pipe-text-secondary: var(--text-secondary);
+	--pipe-text-muted: var(--text-muted);
+	--pipe-accent: var(--primary-color);
+	--pipe-accent-dim: var(--primary-subtle);
+	/* Category colors reuse Geny's semantic tokens where possible.
+	   --pipe-amber and --pipe-purple/cyan are the two that have no
+	   direct Geny equivalent; they're overridden per-theme below. */
+	--pipe-blue: var(--primary-color);
+	--pipe-green: var(--success-color);
+	--pipe-red: var(--danger-color);
+	--pipe-amber: var(--warning-color);
+	--pipe-purple: #a855f7;
+	--pipe-cyan: #06b6d4;
+	/* Fallbacks — overridden per-theme below, but resolve even if
+	   neither html.dark nor html.light is set (e.g. during very early
+	   paint before the theme-init script runs). */
+	--pipe-accent-tint: color-mix(in srgb, var(--primary-color) 12%, transparent);
+	--pipe-accent-glow: color-mix(in srgb, var(--primary-color) 26%, transparent);
+	--pipe-accent-glow-soft: color-mix(in srgb, var(--primary-color) 10%, transparent);
+	--pipe-circle-shadow: 0 2px 8px rgba(0, 0, 0, 0.20);
+	--pipe-circle-shadow-hover: 0 4px 18px rgba(0, 0, 0, 0.28);
+	--pipe-inactive-opacity: 0.5;
 
 	background: var(--pipe-bg-primary);
 	color: var(--pipe-text-primary);
 	font-family: var(--font-inter, 'Inter'), system-ui, sans-serif;
+}
+
+/* Dark-specific tweaks: richer glow, darker ambient shadow on the circles. */
+html.dark .pipeline-scope {
+	--pipe-accent-tint: color-mix(in srgb, var(--primary-color) 14%, transparent);
+	--pipe-accent-glow: color-mix(in srgb, var(--primary-color) 32%, transparent);
+	--pipe-accent-glow-soft: color-mix(in srgb, var(--primary-color) 10%, transparent);
+	--pipe-purple: #a855f7;
+	--pipe-cyan: #22d3ee;
+	--pipe-circle-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+	--pipe-circle-shadow-hover: 0 4px 24px rgba(0, 0, 0, 0.55);
+	--pipe-inactive-opacity: 0.42;
+}
+
+/* Light-specific tweaks: paler tint, softer shadow so circles don't
+   feel heavy on a white canvas. */
+html.light .pipeline-scope {
+	--pipe-accent-tint: color-mix(in srgb, var(--primary-color) 10%, transparent);
+	--pipe-accent-glow: color-mix(in srgb, var(--primary-color) 22%, transparent);
+	--pipe-accent-glow-soft: color-mix(in srgb, var(--primary-color) 8%, transparent);
+	--pipe-purple: #7c3aed;
+	--pipe-cyan: #0891b2;
+	--pipe-circle-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+	--pipe-circle-shadow-hover: 0 4px 14px rgba(15, 23, 42, 0.10);
+	--pipe-inactive-opacity: 0.6;
 }
 
 .pipeline-scope .pipe-serif {
@@ -598,36 +638,36 @@ html.light ::-webkit-scrollbar-thumb:hover {
 	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	position: relative;
 	z-index: 2;
-	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+	box-shadow: var(--pipe-circle-shadow);
 }
 .pipeline-scope .stage-circle:hover {
 	border-color: var(--pipe-text-secondary);
 	color: var(--pipe-text-primary);
 	transform: scale(1.12);
-	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+	box-shadow: var(--pipe-circle-shadow-hover);
 }
 .pipeline-scope .stage-circle.active {
 	border-color: var(--pipe-accent);
 	color: var(--pipe-accent);
-	background: radial-gradient(ellipse at 35% 30%, rgba(200, 164, 92, 0.12), var(--pipe-bg-secondary));
+	background: radial-gradient(ellipse at 35% 30%, var(--pipe-accent-tint), var(--pipe-bg-secondary));
 	box-shadow:
 		0 0 24px var(--pipe-accent-glow),
-		0 0 60px rgba(200, 164, 92, 0.06),
-		inset 0 0 12px rgba(200, 164, 92, 0.04);
+		0 0 60px var(--pipe-accent-glow-soft),
+		inset 0 0 12px var(--pipe-accent-glow-soft);
 }
 .pipeline-scope .stage-circle.inactive {
 	border-color: var(--pipe-border);
 	color: var(--pipe-text-muted);
 	background: var(--pipe-bg-secondary);
-	opacity: 0.38;
+	opacity: var(--pipe-inactive-opacity);
 	box-shadow: none;
 }
 .pipeline-scope .stage-circle.inactive:hover {
-	opacity: 0.7;
+	opacity: calc(var(--pipe-inactive-opacity) + 0.3);
 	border-color: var(--pipe-text-muted);
 	color: var(--pipe-text-secondary);
 	transform: scale(1.06);
-	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+	box-shadow: var(--pipe-circle-shadow);
 }
 .pipeline-scope .stage-circle.selected {
 	border-color: var(--pipe-accent);
