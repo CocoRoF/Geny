@@ -62,7 +62,7 @@ export default function CodeViewModal({
         style={{
           background: 'var(--pipe-bg-secondary)',
           border: '1px solid var(--pipe-border)',
-          boxShadow: '0 20px 80px rgba(0,0,0,0.6)',
+          boxShadow: 'var(--shadow-lg)',
         }}
         onClick={(e) => e.stopPropagation()}
       >

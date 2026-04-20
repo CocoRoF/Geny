@@ -1175,20 +1175,39 @@ export function getAllStageMeta(locale: Locale): StageMetaLocalized[] {
   return STAGES_EN.map((s) => getStageMetaByOrder(s.order, locale)!);
 }
 
-/** Category colors — scoped to the pipeline view via CSS vars. */
+/**
+ * Category colors — theme-aware, scoped to the pipeline view.
+ *
+ * `accent` resolves to one of Geny's semantic CSS vars (primary / success /
+ * warning / danger / …), so it flips with the global light/dark switch.
+ * `bg` and `border` are derived via `color-mix` so we don't hard-code
+ * rgba values tied to a specific palette.
+ */
 export function getCategoryColor(category: string): {
   accent: string;
   bg: string;
   border: string;
 } {
+  const tint = (cssVar: string, bgPct: number, borderPct: number) => ({
+    accent: cssVar,
+    bg: `color-mix(in srgb, ${cssVar} ${bgPct}%, transparent)`,
+    border: `color-mix(in srgb, ${cssVar} ${borderPct}%, transparent)`,
+  });
+
   const map: Record<string, { accent: string; bg: string; border: string }> = {
-    ingress: { accent: 'var(--pipe-blue)', bg: 'rgba(91,140,212,0.08)', border: 'rgba(91,140,212,0.25)' },
-    pre_flight: { accent: 'var(--pipe-accent)', bg: 'var(--pipe-accent-dim)', border: 'var(--pipe-accent-glow)' },
-    execution: { accent: 'var(--pipe-purple)', bg: 'rgba(155,123,212,0.08)', border: 'rgba(155,123,212,0.25)' },
-    decision: { accent: 'var(--pipe-green)', bg: 'rgba(91,186,111,0.08)', border: 'rgba(91,186,111,0.25)' },
-    egress: { accent: 'var(--pipe-red)', bg: 'rgba(212,91,91,0.08)', border: 'rgba(212,91,91,0.25)' },
+    ingress: tint('var(--pipe-blue)', 10, 28),
+    pre_flight: tint('var(--pipe-amber)', 10, 28),
+    execution: tint('var(--pipe-purple)', 10, 28),
+    decision: tint('var(--pipe-green)', 10, 28),
+    egress: tint('var(--pipe-red)', 10, 28),
   };
-  return map[category] ?? { accent: 'var(--pipe-text-secondary)', bg: 'var(--pipe-bg-tertiary)', border: 'var(--pipe-border)' };
+  return (
+    map[category] ?? {
+      accent: 'var(--pipe-text-secondary)',
+      bg: 'var(--pipe-bg-tertiary)',
+      border: 'var(--pipe-border)',
+    }
+  );
 }
 
 /**

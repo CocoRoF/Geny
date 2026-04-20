@@ -286,7 +286,7 @@ export default function SessionEnvironmentTab() {
                 className="flex items-center gap-1.5 py-1 px-3 rounded-md cursor-pointer text-[10px] font-semibold transition-colors hover:brightness-125"
                 style={{
                   background: 'var(--pipe-accent)',
-                  color: 'var(--pipe-bg-primary)',
+                  color: '#ffffff',
                   border: '1px solid var(--pipe-accent)',
                 }}
               >
@@ -380,7 +380,7 @@ function UnboundState({
         className="mt-1 flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[0.75rem] font-semibold cursor-pointer transition-colors hover:brightness-125"
         style={{
           background: 'var(--pipe-accent)',
-          color: 'var(--pipe-bg-primary)',
+          color: '#ffffff',
           border: '1px solid var(--pipe-accent)',
         }}
       >
