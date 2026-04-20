@@ -311,6 +311,19 @@ async def lifespan(app: FastAPI):
     agent_manager.set_environment_service(environment_service)
     logger.info(f"   - EnvironmentService: storage={environment_service.storage_path}")
 
+    # Seed default environment manifests (WORKER + VTUBER). Mirrors the
+    # tool_preset install_templates step above; runs only on first boot
+    # thanks to the per-env "exists?" check inside the installer. The
+    # worker env binds to every custom tool the loader knows about, so
+    # its "All Tools" sensibility tracks what the user actually has.
+    from service.environment.templates import install_environment_templates
+    env_templates_installed = install_environment_templates(
+        environment_service,
+        external_tool_names=tool_loader.get_custom_names(),
+    )
+    logger.info(f"   - Environment templates installed: {env_templates_installed}")
+    logger.info(f"   - Total environments: {len(environment_service.list_all())}")
+
     # ── ArtifactService (Phase 3) ───────────────────────────────────────
     # Session-less catalog of executor stage/artifact introspection.
     # Caches are lazy + process-wide; first call warms them.
