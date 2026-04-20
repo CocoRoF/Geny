@@ -540,3 +540,144 @@ html.light ::-webkit-scrollbar-thumb:hover {
 .file-viewer-lines > div:last-child > div:first-child {
 	padding-bottom: 4px;
 }
+
+/* ========================================
+   Session Environment — Pipeline View
+   Mirrors geny-executor-web's pipeline aesthetic:
+   dark minimalist, gold accent, serif headings,
+   radial-gradient stage circles with category glow.
+   All styles are scoped behind `.pipeline-scope` so
+   they do not leak into the rest of the Geny app.
+   ======================================== */
+.pipeline-scope {
+	--pipe-bg-primary: #0c0c0c;
+	--pipe-bg-secondary: #141414;
+	--pipe-bg-tertiary: #1c1c1c;
+	--pipe-bg-card: #181818;
+	--pipe-border: #232323;
+	--pipe-border-hover: #333333;
+	--pipe-text-primary: #edeae5;
+	--pipe-text-secondary: #b0aaa2;
+	--pipe-text-muted: #7a746e;
+	--pipe-accent: #c8a45c;
+	--pipe-accent-dim: rgba(200, 164, 92, 0.1);
+	--pipe-accent-glow: rgba(200, 164, 92, 0.25);
+	--pipe-blue: #5b8cd4;
+	--pipe-green: #5bba6f;
+	--pipe-red: #d45b5b;
+	--pipe-purple: #9b7bd4;
+	--pipe-cyan: #5bbaba;
+
+	background: var(--pipe-bg-primary);
+	color: var(--pipe-text-primary);
+	font-family: var(--font-inter, 'Inter'), system-ui, sans-serif;
+}
+
+.pipeline-scope .pipe-serif {
+	font-family: var(--font-playfair, 'Playfair Display'), serif;
+}
+.pipeline-scope .pipe-mono {
+	font-family: var(--font-jetbrains-mono, 'JetBrains Mono'), monospace;
+}
+
+/* ── Stage Circle ───────────────────────────────────── */
+.pipeline-scope .stage-circle {
+	width: 54px;
+	height: 54px;
+	border-radius: 50%;
+	border: 1.5px solid var(--pipe-border-hover);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 14px;
+	font-weight: 600;
+	font-family: var(--font-jetbrains-mono, 'JetBrains Mono'), monospace;
+	color: var(--pipe-text-secondary);
+	background: radial-gradient(ellipse at 35% 30%, var(--pipe-bg-tertiary), var(--pipe-bg-secondary));
+	cursor: pointer;
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	position: relative;
+	z-index: 2;
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+.pipeline-scope .stage-circle:hover {
+	border-color: var(--pipe-text-secondary);
+	color: var(--pipe-text-primary);
+	transform: scale(1.12);
+	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+.pipeline-scope .stage-circle.active {
+	border-color: var(--pipe-accent);
+	color: var(--pipe-accent);
+	background: radial-gradient(ellipse at 35% 30%, rgba(200, 164, 92, 0.12), var(--pipe-bg-secondary));
+	box-shadow:
+		0 0 24px var(--pipe-accent-glow),
+		0 0 60px rgba(200, 164, 92, 0.06),
+		inset 0 0 12px rgba(200, 164, 92, 0.04);
+}
+.pipeline-scope .stage-circle.inactive {
+	border-color: var(--pipe-border);
+	color: var(--pipe-text-muted);
+	background: var(--pipe-bg-secondary);
+	opacity: 0.38;
+	box-shadow: none;
+}
+.pipeline-scope .stage-circle.inactive:hover {
+	opacity: 0.7;
+	border-color: var(--pipe-text-muted);
+	color: var(--pipe-text-secondary);
+	transform: scale(1.06);
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+.pipeline-scope .stage-circle.selected {
+	border-color: var(--pipe-accent);
+	color: var(--pipe-accent);
+	box-shadow: 0 0 18px var(--pipe-accent-glow);
+}
+
+/* ── Dash flow animation (loop-back path) ──────────── */
+@keyframes pipe-dash-flow {
+	to {
+		stroke-dashoffset: -18;
+	}
+}
+.pipeline-scope .pipe-dash-flow {
+	animation: pipe-dash-flow 1.2s linear infinite;
+}
+
+/* ── Panel slide-in ────────────────────────────────── */
+@keyframes pipe-slide-in-right {
+	from {
+		transform: translateX(100%);
+		opacity: 0.8;
+	}
+	to {
+		transform: translateX(0);
+		opacity: 1;
+	}
+}
+.pipeline-scope .pipe-slide-in {
+	animation: pipe-slide-in-right 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Selection (scoped) ─────────────────────────────── */
+.pipeline-scope ::selection {
+	background: var(--pipe-accent-dim);
+	color: var(--pipe-accent);
+}
+
+/* ── Scoped scrollbar within the pipeline ──────────── */
+.pipeline-scope ::-webkit-scrollbar {
+	width: 5px;
+	height: 5px;
+}
+.pipeline-scope ::-webkit-scrollbar-track {
+	background: transparent;
+}
+.pipeline-scope ::-webkit-scrollbar-thumb {
+	background: var(--pipe-border);
+	border-radius: 3px;
+}
+.pipeline-scope ::-webkit-scrollbar-thumb:hover {
+	background: var(--pipe-border-hover);
+}
