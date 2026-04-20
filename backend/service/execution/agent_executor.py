@@ -151,8 +151,8 @@ async def _notify_linked_vtuber(session_id: str, result: 'ExecutionResult') -> N
         if not agent:
             return
 
-        # Only CLI workers with a linked VTuber should notify
-        if getattr(agent, '_session_type', None) != 'cli':
+        # Only bound Workers with a linked VTuber should notify
+        if getattr(agent, '_session_type', None) != 'bound':
             return
         linked_id = getattr(agent, 'linked_session_id', None)
         if not linked_id:
@@ -244,7 +244,7 @@ async def _notify_vtuber_cli_progress(session_id: str, status: str) -> None:
         agent = manager.get_agent(session_id)
         if not agent:
             return
-        if getattr(agent, '_session_type', None) != 'cli':
+        if getattr(agent, '_session_type', None) != 'bound':
             return
         linked_id = getattr(agent, 'linked_session_id', None)
         if not linked_id:

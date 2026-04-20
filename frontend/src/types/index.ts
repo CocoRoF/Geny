@@ -40,11 +40,9 @@ export interface CreateAgentRequest {
   workflow_id?: string;
   graph_name?: string;
   tool_preset_id?: string;
-  cli_system_prompt?: string;
-  cli_model?: string;
-  cli_workflow_id?: string;
-  cli_graph_name?: string;
-  cli_tool_preset_id?: string;
+  bound_worker_system_prompt?: string;
+  bound_worker_model?: string;
+  bound_worker_env_id?: string;
   // Phase 6 — adopt EnvironmentManifest pipeline at session creation,
   // and override the per-session MemoryProvider config. Backend treats
   // both as optional; legacy preset path runs when env_id is absent.

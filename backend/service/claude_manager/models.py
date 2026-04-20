@@ -194,38 +194,30 @@ class CreateSessionRequest(BaseModel):
                     "If None, the default preset for the session role is used."
     )
 
-    # Dual-agent pairing (VTuber ↔ CLI)
+    # Dual-agent pairing (VTuber ↔ bound Worker)
     linked_session_id: Optional[str] = Field(
         default=None,
-        description="Linked session ID for VTuber↔CLI dual-agent pairing"
+        description="Linked session ID for VTuber ↔ bound Worker pairing"
     )
     session_type: Optional[str] = Field(
         default=None,
-        description="Session type: 'vtuber' or 'cli' (None defaults to standard CLI)"
+        description="Session type: 'vtuber' (persona layer), 'bound' (Worker bound to a VTuber), "
+                    "or 'solo' / None (standalone Worker)"
     )
 
-    # VTuber-specific: separate prompt/model for the internal CLI agent
-    cli_system_prompt: Optional[str] = Field(
+    # VTuber-specific: overrides for the bound Worker session
+    bound_worker_system_prompt: Optional[str] = Field(
         default=None,
-        description="System prompt for the internal CLI agent (VTuber role only)"
+        description="System prompt override for the bound Worker (VTuber role only)"
     )
-    cli_model: Optional[str] = Field(
+    bound_worker_model: Optional[str] = Field(
         default=None,
-        description="Model override for the internal CLI agent (VTuber role only)"
+        description="Model override for the bound Worker (VTuber role only)"
     )
-    cli_workflow_id: Optional[str] = Field(
+    bound_worker_env_id: Optional[str] = Field(
         default=None,
-        description="Workflow (graph) ID for the internal CLI agent (VTuber role only). "
-                    "Defaults to 'template-optimized-autonomous' if not specified."
-    )
-    cli_graph_name: Optional[str] = Field(
-        default=None,
-        description="Human-readable graph name for the internal CLI agent (VTuber role only)"
-    )
-    cli_tool_preset_id: Optional[str] = Field(
-        default=None,
-        description="Tool preset ID for the internal CLI agent (VTuber role only). "
-                    "If None, uses the CLI worker role default (template-all-tools)."
+        description="Explicit env_id for the bound Worker (VTuber role only). "
+                    "When None, resolve_env_id(role=WORKER) picks the default worker env."
     )
 
 

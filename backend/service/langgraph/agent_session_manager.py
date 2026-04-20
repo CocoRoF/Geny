@@ -277,12 +277,12 @@ class AgentSessionManager(SessionManager):
             )
             prompt = prompt + vtuber_ctx
 
-        # Append CLI-specific context (paired VTuber session info)
-        if request.session_type == "cli" and request.linked_session_id:
+        # Append bound-Worker context (paired VTuber session info)
+        if request.session_type == "bound" and request.linked_session_id:
             cli_ctx = (
                 f"\n\n## Paired VTuber Agent\n"
                 f"Session ID: `{request.linked_session_id}`\n"
-                f"You are the internal task executor for this VTuber persona.\n"
+                f"You are the Worker bound to this VTuber persona.\n"
                 f"Report results via `geny_send_direct_message` to this session when done."
             )
             prompt = prompt + cli_ctx
@@ -597,17 +597,17 @@ class AgentSessionManager(SessionManager):
                 cli_request = CreateSessionRequest(
                     session_name=cli_name,
                     working_dir=shared_dir,  # Share same working dir for memory sharing
-                    model=request.cli_model if request.cli_model else None,  # CLI model override or own default
+                    model=request.bound_worker_model if request.bound_worker_model else None,
                     max_turns=request.max_turns or 50,
                     timeout=request.timeout or 1800.0,
                     max_iterations=request.max_iterations or 50,
                     role=SessionRole.WORKER,
-                    system_prompt=request.cli_system_prompt,  # CLI-specific prompt
-                    workflow_id=request.cli_workflow_id or "template-optimized-autonomous",
-                    graph_name=request.cli_graph_name or "Optimized Autonomous",
-                    tool_preset_id=request.cli_tool_preset_id,  # None → CLI uses its own role default
+                    system_prompt=request.bound_worker_system_prompt,
+                    workflow_id="template-optimized-autonomous",
+                    graph_name="Optimized Autonomous",
+                    tool_preset_id=None,
                     linked_session_id=session_id,  # Link back to VTuber
-                    session_type="cli",
+                    session_type="bound",
                     env_vars=request.env_vars,
                 )
                 cli_agent = await self.create_agent_session(cli_request)

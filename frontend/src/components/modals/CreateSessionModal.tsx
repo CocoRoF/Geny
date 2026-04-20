@@ -132,9 +132,9 @@ export default function CreateSessionModal({ onClose }: Props) {
     setSelectedCliPrompt(name);
     if (name) {
       const content = await loadPromptContent(name);
-      if (content) setFormState(f => ({ ...f, cli_system_prompt: content }));
+      if (content) setFormState(f => ({ ...f, bound_worker_system_prompt: content }));
     } else {
-      setFormState(f => ({ ...f, cli_system_prompt: '' }));
+      setFormState(f => ({ ...f, bound_worker_system_prompt: '' }));
     }
   };
 
@@ -190,12 +190,10 @@ export default function CreateSessionModal({ onClose }: Props) {
         if (memoryTimezone.trim()) memCfg.timezone = memoryTimezone.trim();
         payload.memory_config = memCfg;
       }
-      // CLI-specific settings for VTuber role
-      if (formState.role === 'vtuber') {
-        if (selectedCliPreset) {
-          payload.cli_tool_preset_id = selectedCliPreset;
-        }
-      }
+      // Bound-Worker tool-preset override currently has no backend
+      // field (manifest-backed tool list now; see plan/02). The
+      // selector remains as a UI placeholder for PR 20's auto-pair
+      // reshape. Intentionally no-op here.
       const session = await createSession(payload);
       // Auto-assign avatar if selected for VTuber sessions
       if (selectedAvatar && session?.session_id && formState.role === 'vtuber') {
@@ -537,12 +535,12 @@ export default function CreateSessionModal({ onClose }: Props) {
                   ))}
                 </select>
                 <textarea className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] resize-y" rows={3} placeholder={t('createSession.cliPromptPlaceholder')}
-                  value={formState.cli_system_prompt || ''} onChange={e => setFormState(f => ({ ...f, cli_system_prompt: e.target.value }))} />
+                  value={formState.bound_worker_system_prompt || ''} onChange={e => setFormState(f => ({ ...f, bound_worker_system_prompt: e.target.value }))} />
               </div>
               {/* CLI Agent Model */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">{t('createSession.cliModel')} <InfoTooltip text={t('createSession.cliModelHelp')} /></label>
-                <select className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8" style={selectArrow} value={formState.cli_model || ''} onChange={e => setFormState(f => ({ ...f, cli_model: e.target.value }))}>
+                <select className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8" style={selectArrow} value={formState.bound_worker_model || ''} onChange={e => setFormState(f => ({ ...f, bound_worker_model: e.target.value }))}>
                   <option value="">{t('createSession.cliModelSame')}</option>
                   {MODEL_OPTIONS_BASE.filter(o => o.value).map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
