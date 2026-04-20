@@ -854,11 +854,33 @@ class AgentSession:
 
             # Log pipeline events to session_logger for WebSocket/SSE streaming
             if session_logger:
-                if event_type == "tool.execute_start":
-                    tool_name = event_data.get("tools", ["unknown"])[0] if event_data.get("tools") else "unknown"
+                if event_type == "tool.call_start":
                     session_logger.log_tool_use(
-                        tool_name=tool_name,
-                        tool_input=str(event_data.get("count", "")),
+                        tool_name=event_data.get("name", "unknown"),
+                        tool_input=event_data.get("input") or {},
+                        tool_id=event_data.get("tool_use_id"),
+                    )
+                elif event_type == "tool.call_complete":
+                    if event_data.get("is_error"):
+                        name = event_data.get("name", "unknown")
+                        duration_ms = event_data.get("duration_ms", 0)
+                        session_logger.log(
+                            level=LogLevel.TOOL_RESULT,
+                            message=f"Tool {name} failed ({duration_ms}ms)",
+                            metadata={
+                                "tool_name": name,
+                                "tool_id": event_data.get("tool_use_id"),
+                                "is_error": True,
+                                "duration_ms": duration_ms,
+                            },
+                        )
+                elif event_type == "tool.execute_start":
+                    count = event_data.get("count", 0)
+                    tools = event_data.get("tools", [])
+                    session_logger.log(
+                        level=LogLevel.INFO,
+                        message=f"Tool turn starting: {count} call(s)",
+                        metadata={"tool_count": count, "tools": tools},
                     )
                 elif event_type == "tool.execute_complete":
                     errors = event_data.get("errors", 0)

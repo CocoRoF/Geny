@@ -22,7 +22,7 @@ ddgs==9.11.4
 # Web fetch & browser automation
 playwright>=1.49.0
 # geny-executor: Pipeline-based execution engine
-geny-executor>=0.22.1,<0.23.0
+geny-executor>=0.23.0,<0.24.0
 # MCP (Model Context Protocol)
 mcp>=1.0.0
 # TTS (Text-to-Speech)
