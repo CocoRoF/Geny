@@ -27,3 +27,5 @@
   — geny-executor `feat/mcp-namespace-prefix`.
 - [03 — MCP 수명주기 하드닝 (PR3, Phase B)](03_mcp_lifecycle.md)
   — geny-executor `feat/mcp-lifecycle`.
+- [04 — AdhocToolProvider + external 필드 (PR4, Phase C host)](04_adhoc_tool_provider.md)
+  — geny-executor `feat/adhoc-tool-provider`.
