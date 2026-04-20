@@ -74,10 +74,16 @@ def _build_stage_entries(preset: str) -> List["object"]:
 
     Stage 3 ``system.builder`` is declared as ``"composable"`` to
     match the preset; the block list (persona + datetime + memory
-    context) is attached at runtime in a later PR. Stage 10
-    (``tool``) is left off the declarative stage list — presets
-    register it conditionally on ``tools`` being passed, and the
-    session-level code decides that at pipeline-build time.
+    context) is attached at runtime in a later PR.
+
+    Stages 10 (``tool``), 11 (``agent``), and 14 (``emit``) are
+    declared unconditionally. Each stage's own ``should_bypass``
+    handles the no-work path: ``ToolStage`` bypasses when
+    ``state.pending_tool_calls`` is empty, ``EmitStage`` bypasses
+    when its emitter chain is empty, and ``AgentStage`` is a
+    single-agent no-op by default. Omitting them from the manifest
+    silently disables tool execution — avoided by always emitting
+    them and relying on runtime bypass instead.
     """
     from geny_executor.core.environment import StageManifestEntry
 
@@ -148,6 +154,17 @@ def _worker_adaptive_stage_entries(StageManifestEntry) -> List["object"]:
             strategies={"parser": "default", "signal_detector": "regex"},
         ),
         StageManifestEntry(
+            order=10,
+            name="tool",
+            strategies={"executor": "sequential", "router": "registry"},
+        ),
+        StageManifestEntry(
+            order=11,
+            name="agent",
+            strategies={"orchestrator": "single_agent"},
+            config={"max_delegations": 4},
+        ),
+        StageManifestEntry(
             order=12,
             name="evaluate",
             strategies={"strategy": "binary_classify", "scorer": "no_scorer"},
@@ -163,6 +180,12 @@ def _worker_adaptive_stage_entries(StageManifestEntry) -> List["object"]:
             name="loop",
             strategies={"controller": "standard"},
             config={"max_turns": _WORKER_ADAPTIVE_MAX_TURNS},
+        ),
+        StageManifestEntry(
+            order=14,
+            name="emit",
+            strategies={},
+            chain_order={"emitters": []},
         ),
         StageManifestEntry(
             order=15,
@@ -239,6 +262,17 @@ def _vtuber_stage_entries(StageManifestEntry) -> List["object"]:
             strategies={"parser": "default", "signal_detector": "regex"},
         ),
         StageManifestEntry(
+            order=10,
+            name="tool",
+            strategies={"executor": "sequential", "router": "registry"},
+        ),
+        StageManifestEntry(
+            order=11,
+            name="agent",
+            strategies={"orchestrator": "single_agent"},
+            config={"max_delegations": 4},
+        ),
+        StageManifestEntry(
             order=12,
             name="evaluate",
             strategies={"strategy": "signal_based", "scorer": "no_scorer"},
@@ -248,6 +282,12 @@ def _vtuber_stage_entries(StageManifestEntry) -> List["object"]:
             name="loop",
             strategies={"controller": "standard"},
             config={"max_turns": _VTUBER_MAX_TURNS},
+        ),
+        StageManifestEntry(
+            order=14,
+            name="emit",
+            strategies={},
+            chain_order={"emitters": []},
         ),
         StageManifestEntry(
             order=15,
