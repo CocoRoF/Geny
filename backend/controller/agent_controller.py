@@ -303,10 +303,6 @@ async def update_system_prompt(
     # Update on AgentSession
     agent._system_prompt = new_prompt
 
-    # Update on the underlying ClaudeProcess so --append-system-prompt uses it
-    if agent.process:
-        agent.process.system_prompt = new_prompt
-
     # Persist to session store so the change survives delete/restore
     store = get_session_store()
     store.update(session_id, {"system_prompt": new_prompt or ""})
@@ -484,8 +480,6 @@ async def restore_session(
         # Restore the previously stored system prompt (user customization)
         if stored_system_prompt:
             agent._system_prompt = stored_system_prompt
-            if agent.process:
-                agent.process.system_prompt = stored_system_prompt
             store.update(session_id, {"system_prompt": stored_system_prompt})
 
         # Restore chat_room_id from stored record (chat room persists across delete/restore)
@@ -524,8 +518,6 @@ async def restore_session(
                         )
                         if linked_system_prompt:
                             linked_agent._system_prompt = linked_system_prompt
-                            if linked_agent.process:
-                                linked_agent.process.system_prompt = linked_system_prompt
                             store.update(linked_id, {"system_prompt": linked_system_prompt})
                         logger.info(f"✅ Linked session restored: {linked_id}")
                 except Exception as e:
@@ -908,20 +900,24 @@ async def list_storage_files(
     """
     List session storage files.
     """
+    from service.claude_manager import storage_utils
+
     agent = agent_manager.get_agent(session_id)
     if not agent:
         raise HTTPException(status_code=404, detail=f"AgentSession not found: {session_id}")
 
-    process = agent.process
-    if not process:
-        raise HTTPException(status_code=400, detail="AgentSession process not available")
+    storage_path = agent.storage_path
+    if not storage_path:
+        raise HTTPException(status_code=400, detail="AgentSession storage_path not available")
 
-    files_data = process.list_storage_files(path)
+    files_data = storage_utils.list_storage_files(
+        storage_path, subpath=path, session_id=session_id
+    )
     files = [StorageFile(**f) for f in files_data]
 
     return StorageListResponse(
         session_id=session_id,
-        storage_path=process.storage_path,
+        storage_path=storage_path,
         files=files
     )
 
@@ -935,15 +931,19 @@ async def read_storage_file(
     """
     Read storage file content.
     """
+    from service.claude_manager import storage_utils
+
     agent = agent_manager.get_agent(session_id)
     if not agent:
         raise HTTPException(status_code=404, detail=f"AgentSession not found: {session_id}")
 
-    process = agent.process
-    if not process:
-        raise HTTPException(status_code=400, detail="AgentSession process not available")
+    storage_path = agent.storage_path
+    if not storage_path:
+        raise HTTPException(status_code=400, detail="AgentSession storage_path not available")
 
-    file_content = process.read_storage_file(file_path, encoding)
+    file_content = storage_utils.read_storage_file(
+        storage_path, file_path, encoding=encoding, session_id=session_id
+    )
     if not file_content:
         raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
 
@@ -969,8 +969,8 @@ async def download_storage_folder(
 
     # Resolve storage path — live agent first, then session store
     agent = agent_manager.get_agent(session_id)
-    if agent and agent.process:
-        folder = agent.process.storage_path
+    if agent and agent.storage_path:
+        folder = agent.storage_path
     else:
         store = get_session_store()
         session_data = store.get(session_id)
