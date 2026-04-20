@@ -16,7 +16,8 @@
 - [x] Phase B — MCP 수명주기 (plan/03) — PR3 `#24`.
 - [ ] Phase C — 단일 tool surface (plan/01) — host PR4 `#25` 완료,
   릴리즈 PR5 `#26` + tag `v0.22.0` 완료, Geny safe-refactor PR6
-  `#135` 완료. 남은 작업: Geny switch-over (PR8).
+  `#135` 완료, **env_id cutover PR8 `#139` 완료**. 남은 작업:
+  non-env_id `_build_pipeline` 통합 (별도 사이클).
 - [ ] Phase D — 관측성 / logging swallower 제거 (plan/04) — PR7
   `#137` 완료 (§B). §C–E 는 별도 사이클로 분리.
 - [ ] Phase E — 롤아웃 / 회귀 방지 (plan/05) — Phase C 종료 후 수동
@@ -38,3 +39,5 @@
   — Geny `feat/geny-tool-provider-dead-code`.
 - [07 — Geny logging swallower 제거 (PR7, Phase D §B)](07_logging_swallower_removal.md)
   — Geny `feat/tool-detail-formatter`.
+- [08 — Geny cutover, env_id half (PR8, Phase C)](08_cutover_env_pipeline.md)
+  — Geny `feat/cutover-v0220-env-pipeline`.
