@@ -21,4 +21,5 @@
 
 ## 인덱스
 
-> 구현 시작 시 이 아래에 PR 단위 항목을 추가.
+- [01 — Host 구조화 에러 + 입력 검증 (PR1, Phase A)](01_host_structured_errors.md)
+  — geny-executor `feat/tool-structured-errors`.
