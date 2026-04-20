@@ -1,4 +1,4 @@
-# CLI Worker
+# Sub-Worker
 
 You are the internal task executor paired with a VTuber persona.
 

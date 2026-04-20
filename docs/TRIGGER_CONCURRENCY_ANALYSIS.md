@@ -99,8 +99,8 @@ T=3s:   사용자가 채팅 메시지 전송
 T=10s:  VTuber 위임 완료, 확인 메시지 표시
 T=10s:  CLI가 웹서핑 시작 (20-60초 소요)
 
-T=60s:  CLI 완료 → _notify_linked_vtuber(vtuber, [CLI_RESULT])
-        → execute_command(vtuber, [CLI_RESULT]) → 성공 (VTuber 유휴 상태)
+T=60s:  서브 워커 완료 → _notify_linked_vtuber(vtuber, [SUB_WORKER_RESULT])
+        → execute_command(vtuber, [SUB_WORKER_RESULT]) → 성공 (VTuber 유휴 상태)
         → VTuber가 웹 발견 내용 공유
 
 결과: T=3s의 사용자 메시지는 유실됨
@@ -122,21 +122,21 @@ T=30s:  ThinkingTrigger 루프 발화
 
 **심각도**: ✅ **정상** — 올바른 동작.
 
-### 시나리오 D: CLI 작업 완료 → VTuber 바쁜 동안 CLI_RESULT 도착
+### 시나리오 D: 서브 워커 작업 완료 → VTuber 바쁜 동안 SUB_WORKER_RESULT 도착
 
 ```
 T=0s:   VTuber가 CLI에 작업 위임
 T=30s:  사용자가 VTuber에 새 메시지 전송 → VTuber 실행 시작
-T=35s:  CLI 작업 완료 → _notify_linked_vtuber() 발동
-        → execute_command(vtuber, [CLI_RESULT]) → AlreadyExecutingError
+T=35s:  서브 워커 작업 완료 → _notify_linked_vtuber() 발동
+        → execute_command(vtuber, [SUB_WORKER_RESULT]) → AlreadyExecutingError
         → INBOX 폴백: inbox.deliver(vtuber, cli_result_content)
 T=40s:  VTuber 사용자 응답 완료
 
-결과: CLI 결과가 inbox에 있지만 자동 처리되지 않음
+결과: 서브 워커 결과가 inbox에 있지만 자동 처리되지 않음
       VTuber가 geny_read_inbox 도구를 호출해야 하지만 자율적으로 하지 않음
 ```
 
-**영향**: CLI 작업 결과가 inbox에 영구적으로 묻힘. 사용자가 위임한 작업 결과를 절대 볼 수 없음.
+**영향**: 서브 워커 작업 결과가 inbox에 영구적으로 묻힘. 사용자가 위임한 작업 결과를 절대 볼 수 없음.
 
 **심각도**: 🔴 **CRITICAL** — 동시성 하에서 핵심 기능 고장.
 
@@ -148,7 +148,7 @@ T=0s:   CLI가 web_search 실행 시작
 
 T=10s:  사용자가 "Python 뉴스 검색해줘" 전송 → broadcast
         → VTuber가 메시지 처리 → CLI에 위임
-        → _send_dm → execute_command(CLI) → AlreadyExecutingError
+        → _send_dm → execute_command(Sub-Worker) → AlreadyExecutingError
         → DM이 inbox에 저장되지만, CLI가 inbox를 자동으로 읽지 않음
 
 T=40s:  CLI가 Activity 트리거의 웹서핑 완료
@@ -199,7 +199,7 @@ execute_command() 흐름:
 
 ### 5.2 [P0] 실행 후 Inbox 자동 드레인
 
-**문제**: CLI_RESULT 또는 DM이 inbox에 폴백 저장되지만 읽히지 않음.
+**문제**: SUB_WORKER_RESULT 또는 DM이 inbox에 폴백 저장되지만 읽히지 않음.
 
 **해결**: 모든 VTuber/Worker 실행 완료 후 자동으로 미읽은 inbox 메시지를 확인하고 처리.
 
@@ -263,10 +263,10 @@ result = await execute_command(
 )
 ```
 
-Activity 트리거의 CLI 위임 시:
+Activity 트리거의 서브 워커 위임 시:
 ```python
 # Activity 트리거 VTuber 측: 30초 (위임만)
-# CLI 측 실행: 120초 (실제 웹 검색)
+# Sub-Worker 측 실행: 120초 (실제 웹 검색)
 ```
 
 **예상 난이도**: 낮음 — 파라미터 변경만.
@@ -289,7 +289,7 @@ Activity 트리거의 CLI 위임 시:
 | 우선순위 | 해결책 | 영향 | 노력 |
 |---------|--------|------|------|
 | **P0** | 5.1 사용자 채팅 시 트리거 취소 | 사용자가 트리거에 의해 차단되지 않음 | 중간 |
-| **P0** | 5.2 실행 후 inbox 드레인 | CLI 결과가 유실되지 않음 | 낮음 |
+| **P0** | 5.2 실행 후 inbox 드레인 | 서브 워커 결과가 유실되지 않음 | 낮음 |
 | **P1** | 5.3 사용자 메시지 큐 + 재시도 | 우아한 성능 저하 | 중간 |
 | **P1** | 5.4 짧은 트리거 타임아웃 | 차단 시간 단축 | 낮음 |
 | **P2** | 5.5 프론트엔드 바쁨 UX | 더 나은 사용자 경험 | 중간 |
@@ -318,7 +318,7 @@ backend/service/execution/agent_executor.py
 ├─ start_command_background() L551-600  — SSE 스트리밍 변형
 ├─ is_executing()             L304-308  — 바쁨 확인
 ├─ _execute_core()            L232-286  — Claude 서브프로세스 호출
-├─ _notify_linked_vtuber()    L170-200  — CLI→VTuber 결과 전달
+├─ _notify_linked_vtuber()    L170-200  — Sub-Worker→VTuber 결과 전달
 ├─ cleanup_execution()        L316-320  — holder 제거
 └─ _active_executions         L299      — 글로벌 실행 레지스트리
 
@@ -336,7 +336,7 @@ backend/controller/chat_controller.py
 backend/service/workflow/nodes/vtuber/
 ├─ vtuber_classify_node.py    — 트리거용 Fast-path 라우팅
 ├─ vtuber_respond_node.py     — 직접 채팅 응답 (도구 없음)
-├─ vtuber_delegate_node.py    — CLI 위임 + fire-and-forget
+├─ vtuber_delegate_node.py    — 서브 워커 위임 + fire-and-forget
 └─ vtuber_think_node.py       — 반성 + [SILENT] 옵션
 
 backend/service/chat/inbox.py

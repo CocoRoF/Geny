@@ -198,9 +198,9 @@ class AgentSession:
 
         # Process revival flag (set by _auto_revive when process is dead)
 
-        # Dual-agent pairing (VTuber ↔ bound Worker)
+        # Dual-agent pairing (VTuber ↔ Sub-Worker)
         self._linked_session_id: Optional[str] = None
-        self._session_type: Optional[str] = None  # "vtuber" | "bound" | "solo" | None
+        self._session_type: Optional[str] = None  # "vtuber" | "sub" | "solo" | None
         self._chat_room_id: Optional[str] = None
 
         # Initial status
@@ -333,24 +333,24 @@ class AgentSession:
 
     @property
     def linked_session_id(self) -> Optional[str]:
-        """ID of the paired session (VTuber ↔ CLI)."""
+        """ID of the paired session (VTuber ↔ Sub-Worker)."""
         return self._linked_session_id
 
     @property
     def session_type(self) -> Optional[str]:
-        """Session type: 'vtuber', 'cli', or None."""
+        """Session type: 'vtuber', 'sub', 'solo', or None."""
         return self._session_type
 
     @property
     def _is_always_on(self) -> bool:
         """Whether this session should never go idle.
 
-        True for VTuber sessions and their bound Worker sessions — these
+        True for VTuber sessions and their Sub-Worker sessions — these
         form a tightly-coupled unit that must stay warm together.
         """
         if self._role == SessionRole.VTUBER:
             return True
-        if self._session_type == "bound" and self._linked_session_id:
+        if self._session_type == "sub" and self._linked_session_id:
             return True
         return False
 

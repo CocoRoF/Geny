@@ -29,12 +29,12 @@ export default function InfoTab() {
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [promptMsg, setPromptMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [showPermanentDeleteModal, setShowPermanentDeleteModal] = useState(false);
-  const [cliData, setCliData] = useState<any>(null);
-  const [cliLoading, setCliLoading] = useState(false);
-  const [editingCliPrompt, setEditingCliPrompt] = useState(false);
-  const [cliPromptDraft, setCliPromptDraft] = useState('');
-  const [savingCliPrompt, setSavingCliPrompt] = useState(false);
-  const [cliPromptMsg, setCliPromptMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [subWorkerData, setSubWorkerData] = useState<any>(null);
+  const [subWorkerLoading, setSubWorkerLoading] = useState(false);
+  const [editingSubWorkerPrompt, setEditingSubWorkerPrompt] = useState(false);
+  const [subWorkerPromptDraft, setSubWorkerPromptDraft] = useState('');
+  const [savingSubWorkerPrompt, setSavingSubWorkerPrompt] = useState(false);
+  const [subWorkerPromptMsg, setSubWorkerPromptMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [thinkingTriggerEnabled, setThinkingTriggerEnabled] = useState<boolean | null>(null);
   const [thinkingTriggerInfo, setThinkingTriggerInfo] = useState<{ consecutive_triggers: number; current_threshold_seconds: number } | null>(null);
   const [thinkingTriggerLoading, setThinkingTriggerLoading] = useState(false);
@@ -65,14 +65,14 @@ export default function InfoTab() {
 
   useEffect(() => { fetchDetail(); }, [fetchDetail]);
 
-  // Fetch linked CLI session data when main session is VTuber type
+  // Fetch linked Sub-Worker session data when main session is VTuber type
   useEffect(() => {
     if (!data?.linked_session_id || data?.session_type !== 'vtuber') {
-      setCliData(null);
+      setSubWorkerData(null);
       return;
     }
     let cancelled = false;
-    setCliLoading(true);
+    setSubWorkerLoading(true);
     (async () => {
       try {
         let result: any;
@@ -81,11 +81,11 @@ export default function InfoTab() {
         } catch {
           result = await agentApi.getStore(data.linked_session_id);
         }
-        if (!cancelled) setCliData(result);
+        if (!cancelled) setSubWorkerData(result);
       } catch {
-        if (!cancelled) setCliData(null);
+        if (!cancelled) setSubWorkerData(null);
       } finally {
-        if (!cancelled) setCliLoading(false);
+        if (!cancelled) setSubWorkerLoading(false);
       }
     })();
     return () => { cancelled = true; };
@@ -359,41 +359,41 @@ export default function InfoTab() {
         </div>
       )}
 
-      {/* ── Linked CLI Agent Section (VTuber sessions only) ── */}
+      {/* ── Linked Sub-Worker Section (VTuber sessions only) ── */}
       {!isDeleted && data.session_type === 'vtuber' && data.linked_session_id && (
         <div className="mt-4 pt-4 border-t border-[var(--border-color)]">
           <div className="flex items-center gap-1.5 mb-3">
             <Link2 size={14} className="text-[var(--text-muted)]" />
-            <span className="text-[12px] font-semibold uppercase tracking-[0.5px] text-[var(--text-muted)]">{t('info.cliAgent.title')}</span>
-            {cliData && (
+            <span className="text-[12px] font-semibold uppercase tracking-[0.5px] text-[var(--text-muted)]">{t('info.subWorker.title')}</span>
+            {subWorkerData && (
               <span
                 className="text-[10px] font-semibold py-[2px] px-2 rounded-[10px] uppercase ml-1"
                 style={
-                  cliData.status === 'running'
+                  subWorkerData.status === 'running'
                     ? { background: 'rgba(16, 185, 129, 0.15)', color: 'var(--success-color)' }
                     : { background: 'rgba(107, 114, 128, 0.15)', color: 'var(--text-muted)' }
                 }
               >
-                {cliData.status || 'unknown'}
+                {subWorkerData.status || 'unknown'}
               </span>
             )}
           </div>
 
-          {cliLoading ? (
+          {subWorkerLoading ? (
             <div className="text-[12px] text-[var(--text-muted)] py-3">{t('common.loading')}</div>
-          ) : cliData ? (
+          ) : subWorkerData ? (
             <>
-              {/* CLI Session Info Grid */}
+              {/* Sub-Worker Session Info Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mb-3">
                 {[
-                  { label: t('info.cliAgent.sessionId'), value: cliData.session_id },
-                  { label: t('info.cliAgent.name'), value: cliData.session_name || t('info.unnamed') },
-                  { label: t('info.cliAgent.model'), value: cliData.model || t('info.default') },
-                  { label: t('info.cliAgent.role'), value: cliData.role || 'worker' },
-                  { label: t('info.cliAgent.graphName'), value: cliData.graph_name || '—' },
-                  { label: t('info.cliAgent.workflowId'), value: cliData.workflow_id || '—' },
-                  { label: t('info.cliAgent.toolPreset'), value: cliData.tool_preset_id || t('info.default') },
-                  { label: t('info.cliAgent.totalCost'), value: cliData.total_cost != null && cliData.total_cost > 0 ? `$${cliData.total_cost.toFixed(6)}` : '$0.000000' },
+                  { label: t('info.subWorker.sessionId'), value: subWorkerData.session_id },
+                  { label: t('info.subWorker.name'), value: subWorkerData.session_name || t('info.unnamed') },
+                  { label: t('info.subWorker.model'), value: subWorkerData.model || t('info.default') },
+                  { label: t('info.subWorker.role'), value: subWorkerData.role || 'worker' },
+                  { label: t('info.subWorker.graphName'), value: subWorkerData.graph_name || '—' },
+                  { label: t('info.subWorker.workflowId'), value: subWorkerData.workflow_id || '—' },
+                  { label: t('info.subWorker.toolPreset'), value: subWorkerData.tool_preset_id || t('info.default') },
+                  { label: t('info.subWorker.totalCost'), value: subWorkerData.total_cost != null && subWorkerData.total_cost > 0 ? `$${subWorkerData.total_cost.toFixed(6)}` : '$0.000000' },
                 ].map(f => (
                   <div key={f.label} className="flex flex-col gap-0.5 py-2 px-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)]">
                     <span className="text-[10px] font-semibold uppercase tracking-[0.5px] text-[var(--text-muted)]">{f.label}</span>
@@ -402,20 +402,20 @@ export default function InfoTab() {
                 ))}
               </div>
 
-              {/* CLI System Prompt Section */}
+              {/* Sub-Worker System Prompt Section */}
               <div className="mt-3">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-1.5">
                     <Terminal size={14} className="text-[var(--text-muted)]" />
-                    <span className="text-[12px] font-semibold uppercase tracking-[0.5px] text-[var(--text-muted)]">{t('info.cliAgent.systemPrompt')}</span>
-                    {cliData.system_prompt && !editingCliPrompt && (
-                      <span className="text-[10px] text-[var(--text-muted)] ml-1">({t('info.systemPrompt.chars', { count: String(cliData.system_prompt.length) })})</span>
+                    <span className="text-[12px] font-semibold uppercase tracking-[0.5px] text-[var(--text-muted)]">{t('info.subWorker.systemPrompt')}</span>
+                    {subWorkerData.system_prompt && !editingSubWorkerPrompt && (
+                      <span className="text-[10px] text-[var(--text-muted)] ml-1">({t('info.systemPrompt.chars', { count: String(subWorkerData.system_prompt.length) })})</span>
                     )}
                   </div>
-                  {!editingCliPrompt ? (
+                  {!editingSubWorkerPrompt ? (
                     <button
                       className="inline-flex items-center gap-1 py-1 px-2.5 text-[11px] font-medium rounded-md bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] transition-all duration-150 cursor-pointer"
-                      onClick={() => { setCliPromptDraft(cliData.system_prompt || ''); setEditingCliPrompt(true); setCliPromptMsg(null); }}
+                      onClick={() => { setSubWorkerPromptDraft(subWorkerData.system_prompt || ''); setEditingSubWorkerPrompt(true); setSubWorkerPromptMsg(null); }}
                     >
                       <Pencil size={11} /> {t('info.systemPrompt.edit')}
                     </button>
@@ -423,26 +423,26 @@ export default function InfoTab() {
                     <div className="flex gap-1.5">
                       <button
                         className="inline-flex items-center gap-1 py-1 px-2.5 text-[11px] font-medium rounded-md bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] transition-all duration-150 cursor-pointer"
-                        onClick={() => { setCliPromptDraft(''); }}
+                        onClick={() => { setSubWorkerPromptDraft(''); }}
                       >
                         <Eraser size={11} /> {t('info.systemPrompt.clear')}
                       </button>
                       <button
-                        disabled={savingCliPrompt}
+                        disabled={savingSubWorkerPrompt}
                         className="inline-flex items-center gap-1 py-1 px-2.5 text-[11px] font-medium rounded-md bg-[var(--primary-color)] text-white hover:bg-[var(--primary-hover)] border-none transition-all duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                         onClick={async () => {
-                          setSavingCliPrompt(true);
-                          setCliPromptMsg(null);
+                          setSavingSubWorkerPrompt(true);
+                          setSubWorkerPromptMsg(null);
                           try {
-                            const val = cliPromptDraft.trim() || null;
-                            await agentApi.updateSystemPrompt(cliData.session_id, val);
-                            setCliData((prev: any) => ({ ...prev, system_prompt: val }));
-                            setEditingCliPrompt(false);
-                            setCliPromptMsg({ type: 'ok', text: t('info.systemPrompt.saveSuccess') });
+                            const val = subWorkerPromptDraft.trim() || null;
+                            await agentApi.updateSystemPrompt(subWorkerData.session_id, val);
+                            setSubWorkerData((prev: any) => ({ ...prev, system_prompt: val }));
+                            setEditingSubWorkerPrompt(false);
+                            setSubWorkerPromptMsg({ type: 'ok', text: t('info.systemPrompt.saveSuccess') });
                           } catch {
-                            setCliPromptMsg({ type: 'err', text: t('info.systemPrompt.saveError') });
+                            setSubWorkerPromptMsg({ type: 'err', text: t('info.systemPrompt.saveError') });
                           } finally {
-                            setSavingCliPrompt(false);
+                            setSavingSubWorkerPrompt(false);
                           }
                         }}
                       >
@@ -450,7 +450,7 @@ export default function InfoTab() {
                       </button>
                       <button
                         className="inline-flex items-center gap-1 py-1 px-2.5 text-[11px] font-medium rounded-md bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] transition-all duration-150 cursor-pointer"
-                        onClick={() => { setEditingCliPrompt(false); setCliPromptMsg(null); }}
+                        onClick={() => { setEditingSubWorkerPrompt(false); setSubWorkerPromptMsg(null); }}
                       >
                         <X size={11} /> {t('info.systemPrompt.cancel')}
                       </button>
@@ -458,36 +458,36 @@ export default function InfoTab() {
                   )}
                 </div>
 
-                {cliPromptMsg && (
-                  <div className={`text-[11px] mb-2 ${cliPromptMsg.type === 'ok' ? 'text-[var(--success-color)]' : 'text-[var(--danger-color)]'}`}>
-                    {cliPromptMsg.text}
+                {subWorkerPromptMsg && (
+                  <div className={`text-[11px] mb-2 ${subWorkerPromptMsg.type === 'ok' ? 'text-[var(--success-color)]' : 'text-[var(--danger-color)]'}`}>
+                    {subWorkerPromptMsg.text}
                   </div>
                 )}
 
-                {editingCliPrompt ? (
+                {editingSubWorkerPrompt ? (
                   <textarea
                     className="w-full min-h-[120px] p-3 text-[12px] leading-relaxed rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--text-primary)] resize-y focus:outline-none focus:border-[var(--primary-color)] transition-colors"
                     style={{ fontFamily: "'SF Mono', 'Fira Code', monospace" }}
-                    value={cliPromptDraft}
-                    onChange={e => setCliPromptDraft(e.target.value)}
-                    placeholder={t('info.cliAgent.promptPlaceholder')}
+                    value={subWorkerPromptDraft}
+                    onChange={e => setSubWorkerPromptDraft(e.target.value)}
+                    placeholder={t('info.subWorker.promptPlaceholder')}
                     autoFocus
                   />
                 ) : (
                   <div className="p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)] min-h-[40px]">
-                    {cliData.system_prompt ? (
+                    {subWorkerData.system_prompt ? (
                       <pre className="text-[12px] leading-relaxed text-[var(--text-primary)] whitespace-pre-wrap break-words m-0" style={{ fontFamily: "'SF Mono', 'Fira Code', monospace" }}>
-                        {cliData.system_prompt}
+                        {subWorkerData.system_prompt}
                       </pre>
                     ) : (
-                      <span className="text-[12px] text-[var(--text-muted)] italic">{t('info.cliAgent.noPrompt')}</span>
+                      <span className="text-[12px] text-[var(--text-muted)] italic">{t('info.subWorker.noPrompt')}</span>
                     )}
                   </div>
                 )}
               </div>
             </>
           ) : (
-            <div className="text-[12px] text-[var(--text-muted)] italic py-3">{t('info.cliAgent.notFound')}</div>
+            <div className="text-[12px] text-[var(--text-muted)] italic py-3">{t('info.subWorker.notFound')}</div>
           )}
         </div>
       )}

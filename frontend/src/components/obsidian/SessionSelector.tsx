@@ -13,9 +13,9 @@ export default function SessionSelector() {
 
   const activeSessions = sessions.filter((s) => !s.is_deleted);
 
-  // Hide CLI sessions that are bound to a VTuber session (they share memory)
+  // Hide Sub-Worker sessions that are paired with a VTuber session (they share memory)
   const visibleSessions = activeSessions.filter(
-    (s) => !(s.session_type === 'cli' && s.linked_session_id),
+    (s) => !(s.session_type === 'sub' && s.linked_session_id),
   );
 
   return (
@@ -54,8 +54,8 @@ export default function SessionSelector() {
                   <span className="ss-card-name">
                     {s.session_name || s.session_id.slice(0, 8)}
                   </span>
-                  <span className={`ss-card-role ss-role-${s.role || 'cli'}`}>
-                    {s.role || 'cli'}
+                  <span className={`ss-card-role ss-role-${s.role || 'worker'}`}>
+                    {s.role || 'worker'}
                   </span>
                 </div>
                 <div className="ss-card-meta">

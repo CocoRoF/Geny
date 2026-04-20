@@ -133,13 +133,13 @@ async def _emit_avatar_state(session_id: str, result: 'ExecutionResult') -> None
 
 
 # ============================================================================
-# CLI → VTuber auto-report (called after every execution)
+# Sub-Worker → VTuber auto-report (called after every execution)
 # ============================================================================
 
 async def _notify_linked_vtuber(session_id: str, result: 'ExecutionResult') -> None:
     """
-    If this session is a CLI worker linked to a VTuber, fire-and-forget
-    a [CLI_RESULT] message to the VTuber so it can summarise for the user.
+    If this session is a Sub-Worker linked to a VTuber, fire-and-forget
+    a [SUB_WORKER_RESULT] message to the VTuber so it can summarise for the user.
 
     Best-effort: never raises.
     """
@@ -151,8 +151,8 @@ async def _notify_linked_vtuber(session_id: str, result: 'ExecutionResult') -> N
         if not agent:
             return
 
-        # Only bound Workers with a linked VTuber should notify
-        if getattr(agent, '_session_type', None) != 'bound':
+        # Only Sub-Workers with a linked VTuber should notify
+        if getattr(agent, '_session_type', None) != 'sub':
             return
         linked_id = getattr(agent, 'linked_session_id', None)
         if not linked_id:
@@ -165,11 +165,11 @@ async def _notify_linked_vtuber(session_id: str, result: 'ExecutionResult') -> N
         # Build a concise summary for the VTuber
         if result.success and result.output:
             summary = result.output[:2000]
-            content = f"[CLI_RESULT] Task completed successfully.\n\n{summary}"
+            content = f"[SUB_WORKER_RESULT] Task completed successfully.\n\n{summary}"
         elif result.error:
-            content = f"[CLI_RESULT] Task failed: {result.error[:500]}"
+            content = f"[SUB_WORKER_RESULT] Task failed: {result.error[:500]}"
         else:
-            content = "[CLI_RESULT] Task finished with no output."
+            content = "[SUB_WORKER_RESULT] Task finished with no output."
 
         # Fire-and-forget: trigger VTuber to process the result
         async def _trigger_vtuber() -> None:
@@ -184,10 +184,10 @@ async def _notify_linked_vtuber(session_id: str, result: 'ExecutionResult') -> N
                         target_session_id=linked_id,
                         content=content,
                         sender_session_id=session_id,
-                        sender_name="CLI Agent",
+                        sender_name="Sub-Worker",
                     )
                     logger.info(
-                        "VTuber %s busy — CLI_RESULT stored in inbox", linked_id
+                        "VTuber %s busy — SUB_WORKER_RESULT stored in inbox", linked_id
                     )
                 except Exception as inbox_err:
                     # Inbox also failed — store in DLQ for recovery
@@ -201,7 +201,7 @@ async def _notify_linked_vtuber(session_id: str, result: 'ExecutionResult') -> N
                             target_session_id=linked_id,
                             content=content,
                             sender_session_id=session_id,
-                            sender_name="CLI Agent",
+                            sender_name="Sub-Worker",
                             reason="vtuber_notify_inbox_failed",
                             original_error=str(inbox_err),
                         )
@@ -217,7 +217,7 @@ async def _notify_linked_vtuber(session_id: str, result: 'ExecutionResult') -> N
 
         asyncio.create_task(_trigger_vtuber())
         logger.info(
-            "CLI→VTuber auto-report queued: %s → %s", session_id, linked_id
+            "Sub-Worker→VTuber auto-report queued: %s → %s", session_id, linked_id
         )
 
     except Exception:
@@ -226,10 +226,10 @@ async def _notify_linked_vtuber(session_id: str, result: 'ExecutionResult') -> N
         )
 
 
-async def _notify_vtuber_cli_progress(session_id: str, status: str) -> None:
+async def _notify_vtuber_sub_worker_progress(session_id: str, status: str) -> None:
     """
-    If this is a CLI session linked to a VTuber, update the VTuber avatar
-    to show that the CLI worker is active (e.g., "surprise" expression).
+    If this is a Sub-Worker session linked to a VTuber, update the VTuber avatar
+    to show that the Sub-Worker is active (e.g., "surprise" expression).
 
     Best-effort: never raises.
     """
@@ -244,7 +244,7 @@ async def _notify_vtuber_cli_progress(session_id: str, status: str) -> None:
         agent = manager.get_agent(session_id)
         if not agent:
             return
-        if getattr(agent, '_session_type', None) != 'bound':
+        if getattr(agent, '_session_type', None) != 'sub':
             return
         linked_id = getattr(agent, 'linked_session_id', None)
         if not linked_id:
@@ -262,7 +262,7 @@ async def _notify_vtuber_cli_progress(session_id: str, status: str) -> None:
                 session_id=linked_id,
                 emotion="surprise",
                 expression_index=model.emotionMap.get("surprise", 0),
-                trigger="cli_progress",
+                trigger="sub_worker_progress",
             )
     except Exception:
         pass  # Best-effort
@@ -690,8 +690,8 @@ async def execute_command(
 
     # 4. Execute (blocking)
     try:
-        # Notify linked VTuber that CLI is working (best-effort)
-        await _notify_vtuber_cli_progress(session_id, "executing")
+        # Notify linked VTuber that Sub-Worker is working (best-effort)
+        await _notify_vtuber_sub_worker_progress(session_id, "executing")
 
         exec_task = asyncio.create_task(
             _execute_core(
@@ -708,7 +708,7 @@ async def execute_command(
 
         # 5. Emit avatar state (best-effort, never raises)
         await _emit_avatar_state(session_id, result)
-        # 6. Notify linked VTuber if this is a CLI worker (best-effort)
+        # 6. Notify linked VTuber if this is a Sub-Worker (best-effort)
         await _notify_linked_vtuber(session_id, result)
 
         return result
@@ -743,7 +743,7 @@ async def execute_command(
 async def _drain_inbox(session_id: str) -> None:
     """
     After an execution completes, check for unread inbox messages
-    (e.g. CLI_RESULT that arrived while VTuber was busy, or queued
+    (e.g. SUB_WORKER_RESULT that arrived while VTuber was busy, or queued
     user messages) and process them.
 
     Uses ``_draining_sessions`` to prevent infinite recursion:
@@ -936,7 +936,7 @@ async def start_command_background(
             )
             # Emit avatar state (best-effort)
             await _emit_avatar_state(session_id, result)
-            # Notify linked VTuber if this is a CLI worker (best-effort)
+            # Notify linked VTuber if this is a Sub-Worker (best-effort)
             await _notify_linked_vtuber(session_id, result)
         finally:
             # Schedule deferred cleanup: keep the holder alive for a grace

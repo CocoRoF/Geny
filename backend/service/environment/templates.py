@@ -3,7 +3,7 @@
 Mirrors :mod:`service.tool_preset.templates` for the environment layer.
 Every session the user creates runs through one of two seed
 :class:`EnvironmentManifest` templates — ``template-worker-env`` (task
-work) or ``template-vtuber-env`` (conversation). Bound Worker / solo
+work) or ``template-vtuber-env`` (conversation). Sub-Worker / solo
 Worker / developer / researcher / planner all resolve to the worker
 seed; only the VTuber role gets the lightweight vtuber seed.
 

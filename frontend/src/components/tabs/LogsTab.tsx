@@ -83,26 +83,26 @@ export default function LogsTab() {
   const [filter, setFilter] = useState('group:default');
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState<'vtuber' | 'cli'>('vtuber');
+  const [viewMode, setViewMode] = useState<'vtuber' | 'sub'>('vtuber');
 
-  // VTuber/CLI dual-view support
+  // VTuber/Sub-Worker dual-view support
   const session = useMemo(
     () => sessions.find(s => s.session_id === selectedSessionId),
     [sessions, selectedSessionId],
   );
 
-  const linkedCliSession = useMemo(() => {
+  const linkedSubWorkerSession = useMemo(() => {
     if (!session || session.session_type !== 'vtuber') return null;
-    return sessions.find(s => s.session_type === 'cli' && s.linked_session_id === session.session_id) ?? null;
+    return sessions.find(s => s.session_type === 'sub' && s.linked_session_id === session.session_id) ?? null;
   }, [session, sessions]);
 
-  const hasDualView = !!linkedCliSession;
+  const hasDualView = !!linkedSubWorkerSession;
 
   // Resolve which session ID to fetch logs for
   const targetSessionId = useMemo(() => {
     if (!hasDualView || viewMode === 'vtuber') return selectedSessionId;
-    return linkedCliSession?.session_id ?? selectedSessionId;
-  }, [hasDualView, viewMode, selectedSessionId, linkedCliSession]);
+    return linkedSubWorkerSession?.session_id ?? selectedSessionId;
+  }, [hasDualView, viewMode, selectedSessionId, linkedSubWorkerSession]);
 
   // Reset viewMode when session changes
   useEffect(() => { setViewMode('vtuber'); }, [selectedSessionId]);
@@ -215,7 +215,7 @@ export default function LogsTab() {
           </div>
           <h3 className="text-[0.8125rem] font-semibold text-[var(--text-primary)]">{t('logsTab.title')}</h3>
 
-          {/* VTuber / CLI toggle */}
+          {/* VTuber / Sub-Worker toggle */}
           {hasDualView && (
             <div className="flex items-center h-6 rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] overflow-hidden shrink-0">
               <button
@@ -230,19 +230,19 @@ export default function LogsTab() {
               </button>
               <button
                 className={`px-2 h-full text-[10px] font-semibold transition-colors border-none cursor-pointer ${
-                  viewMode === 'cli'
+                  viewMode === 'sub'
                     ? 'bg-[var(--primary-color)] text-white'
                     : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] bg-transparent'
                 }`}
-                onClick={() => setViewMode('cli')}
+                onClick={() => setViewMode('sub')}
               >
-                CLI
+                Sub-Worker
               </button>
             </div>
           )}
         </div>
         <div className="flex items-center gap-2">
-          {/* VTuber / CLI toggle — mobile */}
+          {/* VTuber / Sub-Worker toggle — mobile */}
           {hasDualView && (
             <div className="flex md:hidden items-center h-6 rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] overflow-hidden shrink-0">
               <button
@@ -257,13 +257,13 @@ export default function LogsTab() {
               </button>
               <button
                 className={`px-2 h-full text-[10px] font-semibold transition-colors border-none cursor-pointer ${
-                  viewMode === 'cli'
+                  viewMode === 'sub'
                     ? 'bg-[var(--primary-color)] text-white'
                     : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] bg-transparent'
                 }`}
-                onClick={() => setViewMode('cli')}
+                onClick={() => setViewMode('sub')}
               >
-                CLI
+                Sub-Worker
               </button>
             </div>
           )}

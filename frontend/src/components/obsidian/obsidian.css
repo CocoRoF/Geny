@@ -218,7 +218,6 @@ html.light .obsidian-root {
   border-radius: 10px;
   letter-spacing: 0.06em;
 }
-.ss-role-cli,
 .ss-role-worker,
 .ss-role-developer {
   background: rgba(59, 130, 246, 0.15);
@@ -237,7 +236,6 @@ html.light .obsidian-root {
   color: #fbbf24;
 }
 /* Light-mode: darken role badge text for readability */
-html.light .ss-role-cli,
 html.light .ss-role-worker,
 html.light .ss-role-developer {
   background: rgba(59, 130, 246, 0.12);

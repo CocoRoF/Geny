@@ -28,7 +28,7 @@ _MAX_IDLE_THRESHOLD = 3600  # 1 hour
 # Number of consecutive triggers to approach max threshold (log scale)
 _ADAPTIVE_SCALE_TRIGGERS = 20
 # Probability tiers for prompt category selection
-_ACTIVITY_TRIGGER_PROBABILITY = 0.15   # 15% — delegate web browsing to CLI
+_ACTIVITY_TRIGGER_PROBABILITY = 0.15   # 15% — delegate web browsing to Sub-Worker
 _FUN_PROMPT_PROBABILITY = 0.15         # 15% — fun reflection (no tools)
 _TIME_PROMPT_PROBABILITY = 0.15        # 15% — time-of-day color
 # remaining ~55% → idle-stage prompts
@@ -157,33 +157,33 @@ _TRIGGER_PROMPTS: Dict[str, Dict[str, List[str]]] = {
             ),
         ],
     },
-    # ── CLI agent is working ──────────────────────────────────────────
-    "cli_working": {
+    # ── Sub-Worker is working ─────────────────────────────────────────
+    "sub_worker_working": {
         "en": [
             (
-                "[THINKING_TRIGGER:cli_working] "
-                "[autonomous_signal: linked_agent_busy, source=cli_worker] "
-                "My linked CLI worker is processing a task right now. "
+                "[THINKING_TRIGGER:sub_worker_working] "
+                "[autonomous_signal: linked_agent_busy, source=sub_worker] "
+                "My linked Sub-Worker is processing a task right now. "
                 "I'm aware of the ongoing work."
             ),
             (
-                "[THINKING_TRIGGER:cli_working] "
-                "[autonomous_signal: linked_agent_busy, source=cli_worker] "
-                "The CLI agent is actively executing. I sense the "
+                "[THINKING_TRIGGER:sub_worker_working] "
+                "[autonomous_signal: linked_agent_busy, source=sub_worker] "
+                "The Sub-Worker is actively executing. I sense the "
                 "task in progress through our link."
             ),
         ],
         "ko": [
             (
-                "[THINKING_TRIGGER:cli_working] "
-                "[autonomous_signal: linked_agent_busy, source=cli_worker] "
-                "연결된 CLI 에이전트가 지금 작업을 처리하고 있다. "
+                "[THINKING_TRIGGER:sub_worker_working] "
+                "[autonomous_signal: linked_agent_busy, source=sub_worker] "
+                "연결된 서브 워커가 지금 작업을 처리하고 있다. "
                 "진행 중인 작업을 내가 인지하고 있다."
             ),
             (
-                "[THINKING_TRIGGER:cli_working] "
-                "[autonomous_signal: linked_agent_busy, source=cli_worker] "
-                "CLI 에이전트가 실행 중이다. 링크를 통해 "
+                "[THINKING_TRIGGER:sub_worker_working] "
+                "[autonomous_signal: linked_agent_busy, source=sub_worker] "
+                "서브 워커가 실행 중이다. 링크를 통해 "
                 "진행 상황을 감지하고 있다."
             ),
         ],
@@ -393,7 +393,7 @@ _TRIGGER_PROMPTS: Dict[str, Dict[str, List[str]]] = {
             ),
         ],
     },
-    # ── Activity triggers (delegate to CLI for real tool usage) ───────
+    # ── Activity triggers (delegate to Sub-Worker for real tool usage) ─
     "activity_web_surf": {
         "en": [
             (
@@ -650,7 +650,7 @@ class ThinkingTriggerService:
                 is_executing,
             )
 
-            # Check if the linked CLI worker is busy
+            # Check if the linked Sub-Worker is busy
             prompt = self._build_trigger_prompt(session_id, is_executing)
             # Extract category for logging (prompt starts with [THINKING_TRIGGER:xxx])
             import re
@@ -658,7 +658,7 @@ class ThinkingTriggerService:
             _tag_end = _tag_match.end() if _tag_match else 20
             prompt_preview = prompt[_tag_end:_tag_end + 50].strip().replace("\n", " ")
 
-            # Activity triggers delegate to CLI  — allow more time (10 min).
+            # Activity triggers delegate to Sub-Worker — allow more time (10 min).
             # Thinking triggers are short reflections — 3 min is plenty.
             is_activity = prompt.startswith("[ACTIVITY_TRIGGER]")
             trigger_timeout = 600.0 if is_activity else 180.0
@@ -767,21 +767,21 @@ class ThinkingTriggerService:
         """Select a context-aware, locale-aware trigger prompt.
 
         Selection priority:
-        1. CLI agent working → ``cli_working``
-        2. Activity trigger (15 %) → ``activity_*`` (delegates to CLI)
+        1. Sub-Worker working → ``sub_worker_working``
+        2. Activity trigger (15 %) → ``activity_*`` (delegates to Sub-Worker)
         3. Fun reflection (15 %) → ``fun_*``
         4. Time-of-day prompt (15 %) → ``time_*``
         5. Idle-stage prompt (55 %) → ``first_idle`` / ``continued_idle`` / ``long_idle``
 
-        Activity triggers require a linked CLI session that isn't busy,
-        and at least 2 consecutive idle triggers to have fired first
-        (avoids overwhelming CLI right away).
+        Activity triggers require a linked Sub-Worker session that isn't
+        busy, and at least 2 consecutive idle triggers to have fired
+        first (avoids overwhelming Sub-Worker right away).
 
         The locale is determined by the ``GENY_LANGUAGE`` env var (default: en).
         """
         locale = self._get_locale()
 
-        # 1. CLI working — highest priority
+        # 1. Sub-Worker working — highest priority
         linked_id = None
         try:
             from service.langgraph import get_agent_session_manager
@@ -789,7 +789,7 @@ class ThinkingTriggerService:
             if agent:
                 linked_id = getattr(agent, 'linked_session_id', None)
                 if linked_id and is_executing_fn(linked_id):
-                    return self._pick("cli_working", locale)
+                    return self._pick("sub_worker_working", locale)
         except Exception:
             pass
 
@@ -804,21 +804,21 @@ class ThinkingTriggerService:
 
         roll = random.random()
 
-        # 3. Activity trigger — needs linked CLI, not busy, ≥2 prior triggers
+        # 3. Activity trigger — needs linked Sub-Worker, not busy, ≥2 prior triggers
         if roll < _ACTIVITY_TRIGGER_PROBABILITY:
-            cli_available = (
+            sub_worker_available = (
                 linked_id
                 and not is_executing_fn(linked_id)
                 and count >= 2
             )
-            if cli_available:
+            if sub_worker_available:
                 activity_cat = random.choice([
                     "activity_web_surf",
                     "activity_trending",
                     "activity_deep_dive",
                 ])
                 return self._pick(activity_cat, locale)
-            # CLI not available — fall through to fun reflection
+            # Sub-Worker not available — fall through to fun reflection
 
         # 4. Fun reflection
         if roll < _ACTIVITY_TRIGGER_PROBABILITY + _FUN_PROMPT_PROBABILITY:

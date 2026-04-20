@@ -1,7 +1,7 @@
 # VTuber 이중 에이전트 아키텍처 검증 및 개선 계획서
 
 > **작성일**: 2026-03-30
-> **범위**: VTuber ↔ CLI 이중 에이전트 시스템 전체
+> **범위**: VTuber ↔ Sub-Worker 이중 에이전트 시스템 전체
 > **상태**: 검증 완료, 개선 계획 수립
 
 ---
@@ -33,20 +33,20 @@ VTuber 세션 (template-vtuber 워크플로우)
   │                        │                        ├─ [DELEGATION_REQUEST] DM 전송
   │                        │                        │       │
   │                        │                        │       ▼
-  │                        │                        │   CLI 세션 (execute_command 트리거)
+  │                        │                        │   서브 워커 세션 (execute_command 트리거)
   │                        │                        │       │
   │                        │                        │       ▼
   │                        │                        │   작업 완료 → _notify_linked_vtuber()
   │                        │                        │       │
   │                        │                        │       ▼
-  │                        │                        │   [CLI_RESULT] → VTuber 세션
+  │                        │                        │   [SUB_WORKER_RESULT] → VTuber 세션
   │                        │                        │
   │                        │                        └─ 사용자에게 "처리 중" 응답
   │                        │
   │                        └─ thinking ─────────▶ vtuber_think_node
   │                                                  │
   │                                                  ├─ [THINKING_TRIGGER] → 자기 반성
-  │                                                  ├─ [CLI_RESULT] → 결과 요약
+  │                                                  ├─ [SUB_WORKER_RESULT] → 결과 요약
   │                                                  └─ [SILENT] → 무출력
   │
   ▼
@@ -63,16 +63,16 @@ create_agent_session(role=VTUBER)
   ├── AgentSession 생성 (workflow_id="template-vtuber")
   ├── sessions.json에 등록
   │
-  └── Auto-create CLI 세션:
+  └── Auto-create 서브 워커 세션:
         ├── session_name="ㅋㅋ_cli"
         ├── role=WORKER
         ├── workflow_id="template-optimized-autonomous"
-        ├── linked_session_id=VTuber_ID  (← CLI → VTuber 역방향 링크)
+        ├── linked_session_id=VTuber_ID  (← Sub-Worker → VTuber 역방향 링크)
         │
         └── Back-link:
-              ├── VTuber session store에 linked_session_id=CLI_ID 저장
-              ├── agent._linked_session_id = CLI_ID
-              └── system_prompt에 CLI_ID 주입
+              ├── VTuber session store에 linked_session_id=SUB_WORKER_ID 저장
+              ├── agent._linked_session_id = SUB_WORKER_ID
+              └── system_prompt에 SUB_WORKER_ID 주입
 ```
 
 ### 1.3 Thinking Trigger 구조
@@ -104,10 +104,10 @@ agent_executor.py: execute_command()
 | **Workflow Nodes** | | |
 | `service/workflow/nodes/vtuber/vtuber_classify_node.py` | 입력 분류 (direct/delegate/thinking) | ~150 |
 | `service/workflow/nodes/vtuber/vtuber_respond_node.py` | 대화형 응답 생성 + 감정 태그 | ~100 |
-| `service/workflow/nodes/vtuber/vtuber_delegate_node.py` | CLI 에이전트에 작업 위임 + DM 전송 | ~200 |
-| `service/workflow/nodes/vtuber/vtuber_think_node.py` | 내부 사고/CLI 결과 요약 | ~120 |
+| `service/workflow/nodes/vtuber/vtuber_delegate_node.py` | 서브 워커에 작업 위임 + DM 전송 | ~200 |
+| `service/workflow/nodes/vtuber/vtuber_think_node.py` | 내부 사고/서브 워커 결과 요약 | ~120 |
 | **Session Management** | | |
-| `service/langgraph/agent_session_manager.py` | VTuber 세션 + CLI 세션 자동 생성, 프롬프트 구성 | 핵심 |
+| `service/langgraph/agent_session_manager.py` | VTuber 세션 + 서브 워커 세션 자동 생성, 프롬프트 구성 | 핵심 |
 | `service/langgraph/agent_session.py` | `_linked_session_id`, `_session_type` 속성 | 핵심 |
 | `service/execution/agent_executor.py` | `_notify_linked_vtuber()`, thinking trigger 기록 | 핵심 |
 | `service/claude_manager/models.py` | `SessionRole.VTUBER`, 링크 필드 | 핵심 |
@@ -145,16 +145,16 @@ agent_executor.py: execute_command()
 
 ---
 
-#### C-2. CLI 에이전트의 `_linked_session_id` / `_session_type` 미설정
+#### C-2. 서브 워커의 `_linked_session_id` / `_session_type` 미설정
 
 **위치**: `agent_session_manager.py:517-535`
-**현상**: CLI 세션 생성 시 `CreateSessionRequest`에 `linked_session_id`와 `session_type="cli"`를 넘기지만, `create_agent_session()` 내에서 이 값들을 `AgentSession` 객체에 할당하는 코드가 **VTuber 세션 블록(L542-543)에만 존재**.
+**현상**: 서브 워커 세션 생성 시 `CreateSessionRequest`에 `linked_session_id`와 `session_type="sub"`를 넘기지만, `create_agent_session()` 내에서 이 값들을 `AgentSession` 객체에 할당하는 코드가 **VTuber 세션 블록(L542-543)에만 존재**.
 
-**영향**: `_notify_linked_vtuber()`(agent_executor.py:154)에서 `getattr(agent, '_session_type', None) != 'cli'` 체크가 항상 True → **CLI → VTuber 자동 리포트가 절대 실행되지 않음**.
+**영향**: `_notify_linked_vtuber()`(agent_executor.py:154)에서 `getattr(agent, '_session_type', None) != 'sub'` 체크가 항상 True → **Sub-Worker → VTuber 자동 리포트가 절대 실행되지 않음**.
 
 ```python
-# agent_executor.py:154 — 이 조건이 항상 True (CLI의 _session_type은 None)
-if getattr(agent, '_session_type', None) != 'cli':
+# agent_executor.py:154 — 이 조건이 항상 True (CLI의 _session_type이 "sub"로 정규화되지 않음)
+if getattr(agent, '_session_type', None) != 'sub':
     return  # ← 항상 여기서 리턴!
 ```
 
@@ -169,7 +169,7 @@ if getattr(agent, '_session_type', None) != 'cli':
 **위치**: `controller/agent_controller.py:376-389`
 **현상**: `restore_session()`에서 `CreateSessionRequest`를 재구성할 때 `linked_session_id`와 `session_type`을 포함하지 않음. `get_creation_params()`는 이 값들을 반환하지만, 실제 Request 구성에서 누락.
 
-**영향**: VTuber 세션 복원 시 CLI 세션이 **또다시 생성**됨 (이미 존재하는데 새로 만듦). CLI 세션 복원 시 VTuber와의 링크가 끊어짐.
+**영향**: VTuber 세션 복원 시 서브 워커 세션이 **또다시 생성**됨 (이미 존재하는데 새로 만듦). 서브 워커 세션 복원 시 VTuber와의 링크가 끊어짐.
 
 ```python
 # agent_controller.py:376 — linked_session_id, session_type 누락!
@@ -196,11 +196,11 @@ request = CreateSessionRequest(
 #### I-3. 이중 실행(AlreadyExecutingError)으로 인한 메시지 드랍
 
 **위치**: `agent_executor.py:167-174`, `vtuber_delegate_node.py:227-230`
-**현상**: Fire-and-forget으로 CLI/VTuber를 트리거할 때 `AlreadyExecutingError`가 발생하면 **조용히 폐기**됨. 재시도 로직이 없음.
+**현상**: Fire-and-forget으로 서브 워커/VTuber를 트리거할 때 `AlreadyExecutingError`가 발생하면 **조용히 폐기**됨. 재시도 로직이 없음.
 
 **영향**:
-- 사용자가 VTuber에게 작업을 요청 → CLI 위임 → CLI가 이미 다른 작업 중 → DM 무시
-- CLI 완료 → VTuber 알림 → VTuber가 다른 대화 처리 중 → 결과 무시
+- 사용자가 VTuber에게 작업을 요청 → 서브 워커 위임 → 서브 워커가 이미 다른 작업 중 → DM 무시
+- 서브 워커 완료 → VTuber 알림 → VTuber가 다른 대화 처리 중 → 결과 무시
 - **사용자는 작업 결과를 영영 못 받을 수 있음**
 
 ---
@@ -219,7 +219,7 @@ Sonnet 4.5 기준 위임 한 번에 ~$0.04 추가 비용. 일상적인 대화가
 #### I-5. VTuber Classify Node — 모든 일반 입력에 LLM 호출
 
 **위치**: `vtuber_classify_node.py:113-135`
-**현상**: [THINKING_TRIGGER]/[CLI_RESULT] 외의 모든 입력에 대해 LLM 분류 호출. 간단한 인사("안녕")에도 classify + respond = 2회 LLM 호출.
+**현상**: [THINKING_TRIGGER]/[SUB_WORKER_RESULT] 외의 모든 입력에 대해 LLM 분류 호출. 간단한 인사("안녕")에도 classify + respond = 2회 LLM 호출.
 
 **영향**: 응답 시간 증가 (classify 7초 + respond 10초 = ~17초), 비용 2배.
 
@@ -229,9 +229,9 @@ Sonnet 4.5 기준 위임 한 번에 ~$0.04 추가 비용. 일상적인 대화가
 
 #### E-1. 세션쌍 UI 통합 부재
 
-**현상**: 프론트엔드에서 VTuber와 CLI 세션이 독립적인 세션 카드로 표시됨 (스크린샷: "ㅋㅋ" + "ㅋㅋ_cli"). 사용자가 CLI 세션을 직접 클릭하여 명령을 보내면 VTuber 와의 연동이 깨질 수 있음.
+**현상**: 프론트엔드에서 VTuber와 서브 워커 세션이 독립적인 세션 카드로 표시됨 (스크린샷: "ㅋㅋ" + "ㅋㅋ_cli"). 사용자가 서브 워커 세션을 직접 클릭하여 명령을 보내면 VTuber 와의 연동이 깨질 수 있음.
 
-**개선**: VTuber 세션 카드에 CLI 세션을 하위 항목으로 표시하거나, CLI 세션을 UI에서 숨기고 VTuber 탭 내에서만 상태를 확인할 수 있도록 변경.
+**개선**: VTuber 세션 카드에 서브 워커 세션을 하위 항목으로 표시하거나, 서브 워커 세션을 UI에서 숨기고 VTuber 탭 내에서만 상태를 확인할 수 있도록 변경.
 
 ---
 
@@ -241,15 +241,15 @@ Sonnet 4.5 기준 위임 한 번에 ~$0.04 추가 비용. 일상적인 대화가
 
 ---
 
-#### E-3. CLI 작업 진행상황 실시간 스트리밍 없음
+#### E-3. 서브 워커 작업 진행상황 실시간 스트리밍 없음
 
-**현상**: CLI 에이전트가 작업 중일 때 VTuber/사용자에게 진행 상황이 전달되지 않음. 완료 후에만 `[CLI_RESULT]` 1회 전달. 장시간 작업 시 사용자 경험 저하.
+**현상**: 서브 워커가 작업 중일 때 VTuber/사용자에게 진행 상황이 전달되지 않음. 완료 후에만 `[SUB_WORKER_RESULT]` 1회 전달. 장시간 작업 시 사용자 경험 저하.
 
 ---
 
 #### E-4. ThinkingTrigger 고도화 — 컨텍스트 인지
 
-**현상**: Thinking Trigger가 단순 idle 타이머 기반. 시간대(낮/밤), 이전 대화 주제, CLI 작업 진행 여부 등을 고려하지 않음.
+**현상**: Thinking Trigger가 단순 idle 타이머 기반. 시간대(낮/밤), 이전 대화 주제, 서브 워커 작업 진행 여부 등을 고려하지 않음.
 
 ---
 
@@ -261,7 +261,7 @@ Sonnet 4.5 기준 위임 한 번에 ~$0.04 추가 비용. 일상적인 대화가
 
 #### E-6. 메모리 공유의 불완전성
 
-**현상**: VTuber ↔ CLI가 `working_dir`을 공유하여 Memory 디렉토리를 공유하지만, VTuber의 대화 내용(채팅 히스토리)은 CLI의 memory에 직접 반영되지 않음. CLI가 VTuber의 이전 대화 맥락을 알 수 없어 "VTuber가 사용자에게 어떤 맥락으로 설명했는지" 알 수 없음.
+**현상**: VTuber ↔ Sub-Worker가 `working_dir`을 공유하여 Memory 디렉토리를 공유하지만, VTuber의 대화 내용(채팅 히스토리)은 CLI의 memory에 직접 반영되지 않음. CLI가 VTuber의 이전 대화 맥락을 알 수 없어 "VTuber가 사용자에게 어떤 맥락으로 설명했는지" 알 수 없음.
 
 ---
 
@@ -303,7 +303,7 @@ START → memory_gate → memory_inject → vtuber_classify
 
 ---
 
-#### 4.2 CLI 에이전트 링크 속성 설정
+#### 4.2 서브 워커 링크 속성 설정
 
 `create_agent_session()` 내에서 `request.linked_session_id`와 `request.session_type`이 제공된 경우 `AgentSession` 객체에 자동으로 할당하도록 수정.
 
@@ -334,7 +334,7 @@ request = CreateSessionRequest(
 )
 ```
 
-추가로, VTuber 세션 복원 시 이미 존재하는 CLI 세션과의 재연결 로직 구현. CLI 세션이 없으면 새로 생성, 있으면 링크만 재설정.
+추가로, VTuber 세션 복원 시 이미 존재하는 서브 워커 세션과의 재연결 로직 구현. 서브 워커 세션이 없으면 새로 생성, 있으면 링크만 재설정.
 
 ---
 
@@ -343,7 +343,7 @@ request = CreateSessionRequest(
 VTuber 세션 생성 시 `ThinkingTriggerService`에 즉시 등록하여 초기 인사 가능하도록 변경.
 
 **파일**: `agent_session_manager.py`
-**위치**: VTuber CLI 페어링 블록 내, agent 생성 완료 후
+**위치**: VTuber 서브 워커 페어링 블록 내, agent 생성 완료 후
 
 ```python
 # VTuber 세션 생성 완료 후 즉시 Thinking Trigger에 등록
@@ -375,7 +375,7 @@ _notify_linked_vtuber() or _send_dm()
 
 #### 4.6 ClassifyNode 경량화 — 규칙 기반 fast-path 확장
 
-현재 `[THINKING_TRIGGER]`, `[CLI_RESULT]`만 fast-path. 추가 패턴 매칭으로 LLM 호출 최소화.
+현재 `[THINKING_TRIGGER]`, `[SUB_WORKER_RESULT]`만 fast-path. 추가 패턴 매칭으로 LLM 호출 최소화.
 
 ```python
 # 규칙 기반 fast-path 확장
@@ -397,27 +397,27 @@ DELEGATE_PATTERNS = [
 
 #### 4.7 세션쌍 UI 통합
 
-VTuber 세션 카드에서 CLI 세션을 하위 항목으로 표시. CLI 세션 직접 접근 방지.
+VTuber 세션 카드에서 서브 워커 세션을 하위 항목으로 표시. 서브 워커 세션 직접 접근 방지.
 
 **프론트엔드 변경**:
 - `useVTuberStore.ts`: 링크된 세션쌍 정보 관리
-- 세션 리스트에서 `session_type === "cli"` && `linked_session_id`가 있는 세션은 개별 카드로 표시하지 않기
-- VTuber 카드 하단에 "CLI 상태: 실행중/대기중" 표시
+- 세션 리스트에서 `session_type === "sub"` && `linked_session_id`가 있는 세션은 개별 카드로 표시하지 않기
+- VTuber 카드 하단에 "서브 워커 상태: 실행중/대기중" 표시
 
 ---
 
-#### 4.8 CLI 작업 진행 스트리밍
+#### 4.8 서브 워커 작업 진행 스트리밍
 
-CLI 작업 중 중간 출력을 VTuber에게 전달하여 실시간 진행 표시.
+서브 워커 작업 중 중간 출력을 VTuber에게 전달하여 실시간 진행 표시.
 
 **설계**:
 ```
-CLI 에이전트 실행 중
+서브 워커 실행 중
   └── 각 tool_call 완료 시 → 중간 스트리밍 콜백
         └── VTuber Avatar: "작업 중" 표정 유지 + 진행 로그 표시
 
-CLI 완료
-  └── [CLI_RESULT] 최종 보고
+서브 워커 완료
+  └── [SUB_WORKER_RESULT] 최종 보고
 ```
 
 ---
@@ -484,9 +484,9 @@ class ThinkingTriggerService:
     async def _should_trigger(self, session_id: str) -> tuple[bool, str]:
         """컨텍스트 기반 트리거 결정"""
 
-        # 1. CLI 작업 완료 직후 → 결과 공유
-        if self._pending_cli_results.get(session_id):
-            return True, "[CLI_RESULT_PENDING]"
+        # 1. 서브 워커 작업 완료 직후 → 결과 공유
+        if self._pending_sub_worker_results.get(session_id):
+            return True, "[SUB_WORKER_RESULT_PENDING]"
 
         # 2. 시간대 기반 인사
         hour = datetime.now().hour
@@ -508,7 +508,7 @@ class ThinkingTriggerService:
 | # | 항목 | 상태 | 수정 파일 |
 |---|------|------|-----------|
 | C-1 | template-vtuber 워크플로우 | ✅ 완료 | `templates.py`, `agent_session.py` |
-| C-2 | CLI agent 링크 속성 미설정 | ✅ 완료 | `agent_session_manager.py` |
+| C-2 | Sub-Worker agent 링크 속성 미설정 | ✅ 완료 | `agent_session_manager.py` |
 | I-1 | 세션 복원 시 링크 손실 | ✅ 완료 | `agent_controller.py` |
 | I-2 | ThinkingTrigger 초기 등록 | ✅ 완료 | `agent_session_manager.py` |
 | I-3 | 메시지 드롭 방지 | ✅ 완료 | `agent_executor.py`, `vtuber_delegate_node.py` |
@@ -516,7 +516,7 @@ class ThinkingTriggerService:
 | 4.6 | ClassifyNode 경량화 | ⏭️ 스킵 | (현행 유지) |
 | E-1 | 세션 페어 UI 통합 | ✅ 완료 | `Sidebar.tsx` |
 | E-2 | Emotion→Motion 자동 매핑 | ✅ 완료 | `avatar_state_manager.py`, `live2d_model_manager.py`, `vtuber_controller.py` |
-| E-3 | CLI 진행 상태 스트리밍 | ✅ 완료 | `agent_executor.py` |
+| E-3 | 서브 워커 진행 상태 스트리밍 | ✅ 완료 | `agent_executor.py` |
 | E-4 | ThinkingTrigger 컨텍스트 인지 | ✅ 완료 | `thinking_trigger.py` |
 | E-5 | 캐릭터 커스터마이징 | ✅ 완료 | `vtuber_controller.py`, `prompts/vtuber_characters/` |
 | E-6 | 메모리 공유 강화 | ✅ 완료 | `vtuber_delegate_node.py` |
@@ -530,7 +530,7 @@ class ThinkingTriggerService:
 ```
 Week 0 (즉시)
   ├── [C-1] template-vtuber.json 생성 ★★★
-  └── [C-2] CLI 에이전트 링크 속성 설정 ★★★
+  └── [C-2] 서브 워커 링크 속성 설정 ★★★
 
 Week 1
   ├── [I-1] 세션 복원 링크 보존
@@ -544,7 +544,7 @@ Week 2
 
 Week 3~4
   ├── [E-2] Emotion → Motion 자동 매핑
-  ├── [E-3] CLI 작업 진행 스트리밍
+  ├── [E-3] 서브 워커 작업 진행 스트리밍
   ├── [E-5] 캐릭터 커스터마이징
   └── [E-7] [SILENT] 비언어적 표현
 
@@ -560,8 +560,8 @@ Week 3~4
 | 태그 | 방향 | 용도 | 처리 노드 |
 |------|------|------|-----------|
 | `[THINKING_TRIGGER]` | System → VTuber | 유휴 시 자기 반성 유도 | vtuber_think |
-| `[CLI_RESULT]` | CLI → VTuber | 작업 완료 자동 보고 | vtuber_think |
-| `[DELEGATION_REQUEST]` | VTuber → CLI | 작업 위임 | CLI의 execute_command |
-| `[DELEGATION_RESULT]` | CLI → VTuber | 작업 결과 보고 | vtuber_think |
+| `[SUB_WORKER_RESULT]` | Sub-Worker → VTuber | 작업 완료 자동 보고 | vtuber_think |
+| `[DELEGATION_REQUEST]` | VTuber → Sub-Worker | 작업 위임 | Sub-Worker의 execute_command |
+| `[DELEGATION_RESULT]` | Sub-Worker → VTuber | 작업 결과 보고 | vtuber_think |
 | `[SILENT]` | VTuber 내부 | 사용자에게 보이지 않는 내부 사고 | (무출력) |
-| `[SYSTEM]` | System → CLI | DM 수신 알림 | CLI의 execute_command |
+| `[SYSTEM]` | System → Sub-Worker | DM 수신 알림 | Sub-Worker의 execute_command |

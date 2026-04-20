@@ -267,14 +267,14 @@ class AgentSessionManager(SessionManager):
         if memory_context:
             prompt = prompt + "\n\n" + memory_context
 
-        # Append VTuber-specific context (bound Worker session info).
+        # Append VTuber-specific context (Sub-Worker session info).
         # Fires only when the VTuber was reconstituted with a
         # pre-existing linked_session_id (e.g. warm restart). The
-        # initial-create path builds the Bound Worker *after* this
+        # initial-create path builds the Sub-Worker *after* this
         # method and injects the block directly on the agent.
         if role == "vtuber" and request.linked_session_id:
             vtuber_ctx = (
-                f"\n\n## Bound Worker Agent\n"
+                f"\n\n## Sub-Worker Agent\n"
                 f"You have a Worker agent bound to you: "
                 f"session_id=`{request.linked_session_id}`.\n"
                 f"For complex tasks (coding, research, multi-step "
@@ -286,15 +286,15 @@ class AgentSessionManager(SessionManager):
             )
             prompt = prompt + vtuber_ctx
 
-        # Append bound-Worker context (paired VTuber session info)
-        if request.session_type == "bound" and request.linked_session_id:
-            cli_ctx = (
+        # Append Sub-Worker context (paired VTuber session info)
+        if request.session_type == "sub" and request.linked_session_id:
+            sub_ctx = (
                 f"\n\n## Paired VTuber Agent\n"
                 f"Session ID: `{request.linked_session_id}`\n"
                 f"You are the Worker bound to this VTuber persona.\n"
                 f"Report results via `geny_send_direct_message` to this session when done."
             )
-            prompt = prompt + cli_ctx
+            prompt = prompt + sub_ctx
 
         logger.debug(f"  PromptBuilder: mode={mode.value}, role={role}, length={len(prompt)} chars")
 
@@ -591,16 +591,16 @@ class AgentSessionManager(SessionManager):
 
         logger.info(f"[{session_id}] ✅ AgentSession created successfully")
 
-        # ── Auto-create bound Worker for VTuber agents ─────────────────
-        # Recursion guard: a VTuber request with session_type="bound"
-        # is a caller bug (bound sessions are always workers). The
+        # ── Auto-create Sub-Worker for VTuber agents ───────────────────
+        # Recursion guard: a VTuber request with session_type="sub"
+        # is a caller bug (sub sessions are always workers). The
         # implicit guard was `not request.linked_session_id` — that
         # worked because spawned requests carry linked_session_id, but
         # the invariant we actually want is "don't double-spawn." Make
         # it explicit on session_type.
         if (
             request.role == SessionRole.VTUBER
-            and request.session_type != "bound"
+            and request.session_type != "sub"
             and not request.linked_session_id
         ):
             try:
@@ -610,7 +610,7 @@ class AgentSessionManager(SessionManager):
                     request.working_dir
                     or (agent.storage_path if hasattr(agent, 'storage_path') else None)
                 )
-                # Let resolve_env_id(role=WORKER, explicit=bound_worker_env_id)
+                # Let resolve_env_id(role=WORKER, explicit=sub_worker_env_id)
                 # pick template-worker-env by default, or honor an
                 # explicit override. workflow_id/graph_name/tool_preset_id
                 # are left as Pydantic defaults — the manifest path (PR 15)
@@ -618,21 +618,21 @@ class AgentSessionManager(SessionManager):
                 worker_request = CreateSessionRequest(
                     session_name=worker_name,
                     working_dir=shared_dir,
-                    model=request.bound_worker_model or None,
+                    model=request.sub_worker_model or None,
                     max_turns=request.max_turns or 50,
                     timeout=request.timeout or 1800.0,
                     max_iterations=request.max_iterations or 50,
                     role=SessionRole.WORKER,
-                    system_prompt=request.bound_worker_system_prompt,
-                    env_id=request.bound_worker_env_id,
+                    system_prompt=request.sub_worker_system_prompt,
+                    env_id=request.sub_worker_env_id,
                     linked_session_id=session_id,
-                    session_type="bound",
+                    session_type="sub",
                     env_vars=request.env_vars,
                 )
                 worker_agent = await self.create_agent_session(worker_request)
                 worker_session_id = worker_agent.session_id
 
-                # Back-link: update VTuber session with bound-Worker ID
+                # Back-link: update VTuber session with Sub-Worker ID
                 self._store.update(session_id, {
                     "linked_session_id": worker_session_id,
                     "session_type": "vtuber",
@@ -641,12 +641,12 @@ class AgentSessionManager(SessionManager):
                 agent._linked_session_id = worker_session_id
                 agent._session_type = "vtuber"
 
-                # Inject the Bound Worker delegation block into the
+                # Inject the Sub-Worker delegation block into the
                 # VTuber's system prompt. The final-newline-bounded
                 # marker lets prompts/vtuber.md (plan PR 22) reference
                 # the section by header in the persona base prompt.
                 vtuber_ctx = (
-                    f"\n\n## Bound Worker Agent\n"
+                    f"\n\n## Sub-Worker Agent\n"
                     f"You have a Worker agent bound to you: "
                     f"session_id=`{worker_session_id}`.\n"
                     f"For complex tasks (coding, research, multi-step "
@@ -660,7 +660,7 @@ class AgentSessionManager(SessionManager):
                 agent._system_prompt = (agent._system_prompt or "") + vtuber_ctx
 
                 logger.info(
-                    f"[{session_id}] 🔗 Bound Worker created: "
+                    f"[{session_id}] 🔗 Sub-Worker created: "
                     f"{worker_session_id} ({worker_name})"
                 )
 
@@ -686,7 +686,7 @@ class AgentSessionManager(SessionManager):
                     pass  # best-effort
 
             except Exception as e:
-                logger.error(f"[{session_id}] Failed to create bound Worker: {e}", exc_info=True)
+                logger.error(f"[{session_id}] Failed to create Sub-Worker: {e}", exc_info=True)
 
         return agent
 

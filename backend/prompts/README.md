@@ -36,7 +36,7 @@ System prompt length directly reduces available conversation context.
 | Role | Target | Rationale |
 |------|--------|-----------|
 | VTuber | < 1,500 tokens | Conversational — needs maximum dialog context |
-| CLI Worker | < 800 tokens | Task executor — minimal framing needed |
+| Sub-Worker | < 800 tokens | Task executor — minimal framing needed |
 | Developer | < 1,200 tokens | bootstrap context files may be large |
 | Researcher / Planner | < 1,200 tokens | same |
 
@@ -90,8 +90,8 @@ backend/prompts/
 │   ├── vtuber-default.md       (VTuber: warm/friendly tone)
 │   ├── vtuber-cheerful.md      (VTuber: energetic/bright tone)
 │   ├── vtuber-professional.md  (VTuber: calm/professional tone)
-│   ├── cli-default.md          (CLI: standard worker)
-│   ├── cli-detailed.md         (CLI: thorough reporting)
+│   ├── sub-worker-default.md   (Sub-Worker: standard worker)
+│   ├── sub-worker-detailed.md  (Sub-Worker: thorough reporting)
 │   ├── developer-*.md          (Developer specializations)
 │   └── researcher-*.md         (Researcher specializations)
 └── vtuber_characters/      ← Live2D model-specific character files
@@ -161,14 +161,14 @@ Live2D model-specific character traits. Injected at runtime when a model is assi
 
 ---
 
-## VTuber ↔ Bound Worker Session Linking
+## VTuber ↔ Sub-Worker Session Linking
 
-When a VTuber session is created, a bound Worker session is
+When a VTuber session is created, a Sub-Worker session is
 auto-created (see `dev_docs/20260420_3/plan/03_vtuber_worker_binding.md`).
 
 **VTuber receives:**
 ```
-## Bound Worker Agent
+## Sub-Worker Agent
 You have a Worker agent bound to you: session_id=`{worker_session_id}`.
 For complex tasks (coding, research, multi-step execution),
 delegate to the Worker via the `geny_send_direct_message` tool
@@ -177,7 +177,7 @@ will arrive in your inbox; read it with `geny_read_inbox` and
 summarize for the user.
 ```
 
-**Bound Worker receives:**
+**Sub-Worker receives:**
 ```
 ## Paired VTuber Agent
 Session ID: `{vtuber_session_id}`

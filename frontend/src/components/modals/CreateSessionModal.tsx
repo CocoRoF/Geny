@@ -25,7 +25,7 @@ interface Props { onClose: () => void; }
 
 // Seeded env IDs from backend/service/environment/templates.py. When
 // role=vtuber, the VTuber session defaults to VTUBER_ENV and its
-// bound Worker defaults to WORKER_ENV — mirrors resolve_env_id on
+// Sub-Worker defaults to WORKER_ENV — mirrors resolve_env_id on
 // the backend.
 const DEFAULT_VTUBER_ENV_ID = 'template-vtuber-env';
 const DEFAULT_WORKER_ENV_ID = 'template-worker-env';
@@ -56,13 +56,13 @@ export default function CreateSessionModal({ onClose }: Props) {
     system_prompt: '',
   });
   const [selectedPrompt, setSelectedPrompt] = useState('geny-default');
-  const [selectedCliPrompt, setSelectedCliPrompt] = useState('');
+  const [selectedSubWorkerPrompt, setSelectedSubWorkerPrompt] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [toolPresets, setToolPresets] = useState<ToolPresetDefinition[]>([]);
   const [selectedPreset, setSelectedPreset] = useState('');
   const [selectedEnvId, setSelectedEnvId] = useState('');
-  const [selectedBoundWorkerEnvId, setSelectedBoundWorkerEnvId] = useState('');
+  const [selectedSubWorkerEnvId, setSelectedSubWorkerEnvId] = useState('');
   const [memoryProvider, setMemoryProvider] = useState<'' | 'disabled' | 'ephemeral' | 'file' | 'sql'>('');
   const [memoryRoot, setMemoryRoot] = useState('');
   const [memoryDsn, setMemoryDsn] = useState('');
@@ -135,13 +135,13 @@ export default function CreateSessionModal({ onClose }: Props) {
     }
   };
 
-  const handleCliPromptChange = async (name: string) => {
-    setSelectedCliPrompt(name);
+  const handleSubWorkerPromptChange = async (name: string) => {
+    setSelectedSubWorkerPrompt(name);
     if (name) {
       const content = await loadPromptContent(name);
-      if (content) setFormState(f => ({ ...f, bound_worker_system_prompt: content }));
+      if (content) setFormState(f => ({ ...f, sub_worker_system_prompt: content }));
     } else {
-      setFormState(f => ({ ...f, bound_worker_system_prompt: '' }));
+      setFormState(f => ({ ...f, sub_worker_system_prompt: '' }));
     }
   };
 
@@ -149,18 +149,18 @@ export default function CreateSessionModal({ onClose }: Props) {
     setFormState(f => ({ ...f, role }));
     if (role === 'vtuber') {
       handlePromptChange('vtuber-default');
-      handleCliPromptChange('cli-default');
+      handleSubWorkerPromptChange('sub-worker-default');
       if (!avatarsLoaded) fetchAvatarModels();
-      // Auto-select the seeded VTuber env and bound-Worker env so
+      // Auto-select the seeded VTuber env and Sub-Worker env so
       // the user sees — and can override — what the backend would
       // pick via resolve_env_id(VTUBER) / resolve_env_id(WORKER).
       setSelectedEnvId(DEFAULT_VTUBER_ENV_ID);
-      setSelectedBoundWorkerEnvId(DEFAULT_WORKER_ENV_ID);
+      setSelectedSubWorkerEnvId(DEFAULT_WORKER_ENV_ID);
     } else {
       setSelectedAvatar('');
       setSelectedTtsProfile('');
-      setSelectedCliPrompt('');
-      setSelectedBoundWorkerEnvId('');
+      setSelectedSubWorkerPrompt('');
+      setSelectedSubWorkerEnvId('');
       // If the main env was the VTuber seed (set by a prior vtuber
       // selection), clear it — a non-VTuber role shouldn't inherit
       // the VTuber pipeline.
@@ -172,8 +172,10 @@ export default function CreateSessionModal({ onClose }: Props) {
 
   // Filtered prompt lists
   const vtuberPrompts = prompts.filter(p => p.name.startsWith('vtuber-'));
-  const cliPrompts = prompts.filter(p => p.name.startsWith('cli-'));
-  const generalPrompts = prompts.filter(p => !p.name.startsWith('vtuber-') && !p.name.startsWith('cli-'));
+  const subWorkerPrompts = prompts.filter(p => p.name.startsWith('sub-worker-'));
+  const generalPrompts = prompts.filter(
+    p => !p.name.startsWith('vtuber-') && !p.name.startsWith('sub-worker-'),
+  );
 
   const handleSubmit = async () => {
     setSubmitting(true);
@@ -208,13 +210,13 @@ export default function CreateSessionModal({ onClose }: Props) {
         if (memoryTimezone.trim()) memCfg.timezone = memoryTimezone.trim();
         payload.memory_config = memCfg;
       }
-      // Bound-Worker env override — only meaningful for VTuber role,
-      // since that's the only path that spawns a bound Worker. The
+      // Sub-Worker env override — only meaningful for VTuber role,
+      // since that's the only path that spawns a Sub-Worker. The
       // backend's auto-pair block feeds this into
       // resolve_env_id(WORKER, explicit); leaving it blank keeps the
       // resolver default (template-worker-env).
-      if (formState.role === 'vtuber' && selectedBoundWorkerEnvId) {
-        payload.bound_worker_env_id = selectedBoundWorkerEnvId;
+      if (formState.role === 'vtuber' && selectedSubWorkerEnvId) {
+        payload.sub_worker_env_id = selectedSubWorkerEnvId;
       }
       const session = await createSession(payload);
       // Auto-assign avatar if selected for VTuber sessions
@@ -547,45 +549,45 @@ export default function CreateSessionModal({ onClose }: Props) {
                 <textarea className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] resize-y" rows={4} placeholder={t('createSession.systemPromptPlaceholder')}
                   value={formState.system_prompt || ''} onChange={e => setFormState(f => ({ ...f, system_prompt: e.target.value }))} />
               </div>
-              {/* Bound Worker Prompt */}
+              {/* Sub-Worker Prompt */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">{t('createSession.cliPromptLabel')} <InfoTooltip text={t('createSession.cliPromptHelp')} /></label>
-                <select className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8" style={selectArrow} value={selectedCliPrompt} onChange={e => handleCliPromptChange(e.target.value)}>
+                <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">{t('createSession.subWorkerPromptLabel')} <InfoTooltip text={t('createSession.subWorkerPromptHelp')} /></label>
+                <select className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8" style={selectArrow} value={selectedSubWorkerPrompt} onChange={e => handleSubWorkerPromptChange(e.target.value)}>
                   <option value="">{t('createSession.templateNone')}</option>
-                  {cliPrompts.map(p => (
+                  {subWorkerPrompts.map(p => (
                     <option key={p.name} value={p.name}>{p.name}</option>
                   ))}
                 </select>
-                <textarea className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] resize-y" rows={3} placeholder={t('createSession.cliPromptPlaceholder')}
-                  value={formState.bound_worker_system_prompt || ''} onChange={e => setFormState(f => ({ ...f, bound_worker_system_prompt: e.target.value }))} />
+                <textarea className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] resize-y" rows={3} placeholder={t('createSession.subWorkerPromptPlaceholder')}
+                  value={formState.sub_worker_system_prompt || ''} onChange={e => setFormState(f => ({ ...f, sub_worker_system_prompt: e.target.value }))} />
               </div>
-              {/* Bound Worker Model */}
+              {/* Sub-Worker Model */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">{t('createSession.cliModel')} <InfoTooltip text={t('createSession.cliModelHelp')} /></label>
-                <select className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8" style={selectArrow} value={formState.bound_worker_model || ''} onChange={e => setFormState(f => ({ ...f, bound_worker_model: e.target.value }))}>
-                  <option value="">{t('createSession.cliModelSame')}</option>
+                <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">{t('createSession.subWorkerModel')} <InfoTooltip text={t('createSession.subWorkerModelHelp')} /></label>
+                <select className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8" style={selectArrow} value={formState.sub_worker_model || ''} onChange={e => setFormState(f => ({ ...f, sub_worker_model: e.target.value }))}>
+                  <option value="">{t('createSession.subWorkerModelSame')}</option>
                   {MODEL_OPTIONS_BASE.filter(o => o.value).map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
               </div>
-              {/* Bound Worker Environment — feeds bound_worker_env_id
+              {/* Sub-Worker Environment — feeds sub_worker_env_id
                   on the backend. Default is the seeded WORKER env;
                   the user can swap to any EnvironmentManifest (e.g.
                   template-developer-env) for a Worker with a broader
                   tool surface. */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">{t('createSession.boundWorkerEnv')} <InfoTooltip text={t('createSession.boundWorkerEnvHelp')} /></label>
+                <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">{t('createSession.subWorkerEnv')} <InfoTooltip text={t('createSession.subWorkerEnvHelp')} /></label>
                 <select
                   className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8"
                   style={selectArrow}
-                  value={selectedBoundWorkerEnvId}
-                  onChange={e => setSelectedBoundWorkerEnvId(e.target.value)}
+                  value={selectedSubWorkerEnvId}
+                  onChange={e => setSelectedSubWorkerEnvId(e.target.value)}
                 >
                   <option value="">
                     {environmentsLoading && environments.length === 0
                       ? t('createSession.environmentLoading')
-                      : t('createSession.boundWorkerEnvDefault')}
+                      : t('createSession.subWorkerEnvDefault')}
                   </option>
                   {environments.map(env => (
                     <option key={env.id} value={env.id}>
@@ -595,8 +597,8 @@ export default function CreateSessionModal({ onClose }: Props) {
                 </select>
                 <small className="text-[0.75rem] text-[var(--text-muted)] mt-0.5">
                   {(() => {
-                    if (!selectedBoundWorkerEnvId) return t('createSession.boundWorkerEnvDefaultHelp');
-                    const env = environments.find(e => e.id === selectedBoundWorkerEnvId);
+                    if (!selectedSubWorkerEnvId) return t('createSession.subWorkerEnvDefaultHelp');
+                    const env = environments.find(e => e.id === selectedSubWorkerEnvId);
                     return env?.description || t('createSession.environmentSelected');
                   })()}
                 </small>

@@ -35,7 +35,7 @@ class SectionLibrary:
 
     # Role-specific identity lines — concise, purposeful
     _ROLE_IDENTITY = {
-        "worker":     "You are a Geny CLI agent.",
+        "worker":     "You are a Geny Worker agent.",
         "developer":  "You are a Geny Developer agent.",
         "researcher": "You are a Geny Researcher agent.",
         "planner":    "You are a Geny Plan Architect agent.",

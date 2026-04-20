@@ -9,18 +9,18 @@
 
 | # | 이슈 | 심각도 | 상태 |
 |---|---|---|---|
-| **BUG-1** | VTuber 세션 생성 시 CLI 세션이 사이드바에 함께 노출 | Critical | 미해결 |
+| **BUG-1** | VTuber 세션 생성 시 Sub-Worker 세션이 사이드바에 함께 노출 | Critical | 미해결 |
 | **BUG-2** | VTuber 탭에서 다른 탭으로 이동 후 복귀 시 채팅 내역 소실 | Critical | 미해결 |
 | **BUG-3** | 탭 전환 시 SSE 연결 끊김 및 재연결 | Medium | 미해결 |
 | **BUG-4** | 로그 패널 UI 상태(열림/높이) 탭 전환 시 초기화 | Low | 미해결 |
 
 ---
 
-## BUG-1: CLI 세션 사이드바 노출 문제
+## BUG-1: Sub-Worker 세션 사이드바 노출 문제
 
 ### 1.1 현상
-VTuber 역할로 세션을 생성하면 VTuber 세션과 함께 `{name}_cli` 세션도 사이드바에 표시됨.
-사이드바 전체 카운터(전체/실행 중/오류)에도 CLI 세션이 포함됨.
+VTuber 역할로 세션을 생성하면 VTuber 세션과 함께 `{name}_sub` 세션도 사이드바에 표시됨.
+사이드바 전체 카운터(전체/실행 중/오류)에도 Sub-Worker 세션이 포함됨.
 
 ### 1.2 관련 코드 흐름
 
@@ -31,21 +31,21 @@ agent_session_manager.py:create_agent_session()
 ├─ (1) AgentSession 생성 → agent._session_type = None
 ├─ (2) _store.register() ← session_type=None 상태로 등록
 ├─ (3) request.session_type 있으면 agent._session_type 설정
-├─ (4) _store.update() ← session_type='cli' 로 갱신
+├─ (4) _store.update() ← session_type='sub' 로 갱신
 │
-├─ (5) VTuber인 경우 CLI 세션 자동 생성 (재귀 호출)
-│   └─ CLI의 CreateSessionRequest에 session_type='cli', linked_session_id 포함
+├─ (5) VTuber인 경우 Sub-Worker 세션 자동 생성 (재귀 호출)
+│   └─ Sub-Worker의 CreateSessionRequest에 session_type='sub', linked_session_id 포함
 │   └─ 재귀 호출 시 (3)-(4)에서 정상적으로 설정됨
 │
 └─ (6) VTuber 세션에 back-link 설정
-    └─ _store.update(vtuber_id, { linked_session_id: cli_id, session_type: 'vtuber' })
+    └─ _store.update(vtuber_id, { linked_session_id: sub_id, session_type: 'vtuber' })
 ```
 
 #### 프론트엔드: 사이드바 필터
 ```typescript
 // Sidebar.tsx: SidebarContent 내부
 const visibleSessions = sessions.filter(
-  s => !(s.session_type === 'cli' && s.linked_session_id)
+  s => !(s.session_type === 'sub' && s.linked_session_id)
 );
 ```
 
@@ -80,12 +80,12 @@ async def list_agent_sessions():
 
 **정상 시나리오에서는 올바르게 작동해야 함.**
 
-CLI 세션의 경우:
-- `request.session_type = "cli"` → `agent._session_type = "cli"` ✅
+Sub-Worker 세션의 경우:
+- `request.session_type = "sub"` → `agent._session_type = "sub"` ✅
 - `request.linked_session_id = vtuber_id` → `agent._linked_session_id = vtuber_id` ✅
 
-따라서 `agent.get_session_info()`는 `session_type="cli"`, `linked_session_id=vtuber_id`를 반환.
-사이드바 필터는 `!(s.session_type === 'cli' && s.linked_session_id)` → 필터링됨 ✅
+따라서 `agent.get_session_info()`는 `session_type="sub"`, `linked_session_id=vtuber_id`를 반환.
+사이드바 필터는 `!(s.session_type === 'sub' && s.linked_session_id)` → 필터링됨 ✅
 
 **그렇다면 왜 문제가 발생하는가?**
 
@@ -124,26 +124,26 @@ CLI 세션의 경우:
 ```typescript
 // Sidebar.tsx
 const visibleSessions = sessions.filter(s => {
-  // 명시적 CLI 타입 표시
-  if (s.session_type === 'cli' && s.linked_session_id) return false;
+  // 명시적 Sub-Worker 타입 표시
+  if (s.session_type === 'sub' && s.linked_session_id) return false;
   // session_type 미설정 레거시 세션의 경우 이름 패턴으로 판단
-  if (s.role === 'worker' && s.linked_session_id && s.session_name?.endsWith('_cli')) return false;
+  if (s.role === 'worker' && s.linked_session_id && s.session_name?.endsWith('_sub')) return false;
   return true;
 });
 ```
 
 #### 방안 B: 백엔드에서 필터링 (권장)
 
-API 응답에서 CLI 세션을 아예 제외:
+API 응답에서 Sub-Worker 세션을 아예 제외:
 
 ```python
 # agent_controller.py
 @router.get("", response_model=List[SessionInfo])
-async def list_agent_sessions(include_cli: bool = False):
+async def list_agent_sessions(include_sub_workers: bool = False):
     agents = agent_manager.list_agents()
     result = [agent.get_session_info() for agent in agents]
-    if not include_cli:
-        result = [s for s in result if not (s.session_type == "cli" and s.linked_session_id)]
+    if not include_sub_workers:
+        result = [s for s in result if not (s.session_type == "sub" and s.linked_session_id)]
     return result
 ```
 
@@ -469,7 +469,7 @@ KeepAlive 적용 시 `useEffect` cleanup에서 SSE 해제하지 않도록 변경
 | `frontend/src/types/index.ts` | `ChatMessage` 인터페이스 추가 | 1 |
 | `frontend/src/components/TabContent.tsx` | VTuber 탭 KeepAlive 적용 | 2 |
 | `frontend/src/components/tabs/VTuberTab.tsx` | SSE cleanup 조건 변경 | 2 |
-| `frontend/src/components/Sidebar.tsx` | 방어적 CLI 필터링 | 3 |
+| `frontend/src/components/Sidebar.tsx` | 방어적 Sub-Worker 필터링 | 3 |
 | `backend/service/langgraph/agent_session_manager.py` | register 전 type 설정 | 3 |
 
 ---

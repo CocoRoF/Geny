@@ -96,7 +96,7 @@ START → memory_inject → vtuber_classify
 | **vtuber_classify** | 0~1회 | 입력을 3가지 카테고리로 분류 | ⭐ 매우 낮음 | ✅ **최적 후보** |
 | **vtuber_respond** | 1회 | 사용자 메시지에 페르소나 기반 응답 생성 | ⭐⭐⭐ 높음 | ❌ 메인 모델 필요 |
 | **vtuber_think** | 1회 | idle 시 내부 독백/반성 생성 | ⭐⭐ 중간 | ⚠️ 상황에 따라 |
-| **vtuber_delegate** | 1회 | 사용자 요청을 CLI 작업 지시로 변환 | ⭐⭐ 중간 | ⚠️ 상황에 따라 |
+| **vtuber_delegate** | 1회 | 사용자 요청을 서브 워커 작업 지시로 변환 | ⭐⭐ 중간 | ⚠️ 상황에 따라 |
 | **memory_reflect** | 0~1회 | 대화에서 인사이트 추출 (JSON) | ⭐⭐ 중간 | ✅ **적합** |
 | **transcript_record** | 0회 | 파일 I/O만 수행 | - | - |
 
@@ -127,7 +127,7 @@ response, fallback = await context.resilient_invoke(classify_messages, "vtuber_c
 
 - **입력**: 사용자 메시지 + 분류 프롬프트
 - **출력**: 단일 단어 (3개 중 택1)
-- **Fast-path**: `[THINKING_TRIGGER]`, `[CLI_RESULT]` 시 LLM 호출 없이 바로 라우팅
+- **Fast-path**: `[THINKING_TRIGGER]`, `[SUB_WORKER_RESULT]` 시 LLM 호출 없이 바로 라우팅
 - **경량 모델 적합도**: ★★★★★ — 3-way 분류. Haiku 4.5로 충분
 - **비용 절감**: ~1/10 비용
 
@@ -153,15 +153,15 @@ response, fallback = await context.resilient_invoke(messages, "vtuber_think")
 - **경량 모델 적합도**: ★★★☆☆ — 내부 독백이나 사용자에게 표시됨 (VTuber 채팅 패널)
 - **결론**: Config로 선택 가능하게. 기본은 메인 모델, 비용 절감 시 경량 모델 옵션
 
-#### `vtuber_delegate` — CLI 작업 위임 (LLM 호출 1회)
+#### `vtuber_delegate` — 서브 워커 작업 위임 (LLM 호출 1회)
 
 ```python
 response, fallback = await context.resilient_invoke(messages, "vtuber_delegate")
 ```
 
 - **입력**: 사용자 요청 + 위임 프롬프트
-- **출력**: CLI 에이전트에 전달할 작업 지시문
-- **경량 모델 적합도**: ★★★☆☆ — 작업 지시 품질이 CLI 실행 품질에 직결
+- **출력**: 서브 워커에 전달할 작업 지시문
+- **경량 모델 적합도**: ★★★☆☆ — 작업 지시 품질이 서브 워커 실행 품질에 직결
 - **결론**: Config로 선택 가능하게. 기본은 메인 모델 권장
 
 #### `memory_reflect` — 인사이트 추출 (LLM 호출 0~1회)

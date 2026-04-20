@@ -2,19 +2,24 @@
 Delegation Protocol
 ===================
 
-Defines the structured message format for VTuber ↔ CLI agent
+Defines the structured message format for VTuber ↔ Sub-Worker
 delegation and response reporting.
 
 Tags:
-  [DELEGATION_REQUEST]   — VTuber → CLI: task assignment
-  [DELEGATION_RESULT]    — CLI → VTuber: task completion report
-  [THINKING_TRIGGER]     — System → VTuber: idle thinking
-  [CLI_RESULT]           — System → VTuber: CLI finished (auto-report)
+  [DELEGATION_REQUEST]    — VTuber → Sub-Worker: task assignment
+  [DELEGATION_RESULT]     — Sub-Worker → VTuber: task completion report
+  [THINKING_TRIGGER]      — System → VTuber: idle thinking
+  [SUB_WORKER_RESULT]     — System → VTuber: Sub-Worker finished (auto-report)
 
 Loop Prevention:
-  Messages tagged with [DELEGATION_RESULT] or [CLI_RESULT] are
-  classified as "thinking" by VTuberClassifyNode and never
+  Messages tagged with [DELEGATION_RESULT] or [SUB_WORKER_RESULT]
+  are classified as "thinking" by VTuberClassifyNode and never
   re-delegated.
+
+Legacy:
+  The canonical tag is [SUB_WORKER_RESULT]. [CLI_RESULT] is the
+  pre-rename alias and is still accepted by the matcher below so
+  any in-flight inbox messages or persisted history keep working.
 """
 
 from __future__ import annotations
@@ -25,17 +30,23 @@ from enum import Enum
 from typing import Optional
 
 
+# Legacy tag accepted on read for backward compatibility with messages
+# that may have been persisted before the rename. Emitters always use
+# DelegationTag.SUB_WORKER_RESULT.
+_LEGACY_SUB_WORKER_RESULT_TAG = "[CLI_RESULT]"
+
+
 class DelegationTag(str, Enum):
     """Standard message tags for inter-agent communication."""
     REQUEST = "[DELEGATION_REQUEST]"
     RESULT = "[DELEGATION_RESULT]"
     THINKING = "[THINKING_TRIGGER]"
-    CLI_RESULT = "[CLI_RESULT]"
+    SUB_WORKER_RESULT = "[SUB_WORKER_RESULT]"
 
 
 @dataclass
 class DelegationMessage:
-    """Structured delegation message between VTuber and CLI agents."""
+    """Structured delegation message between VTuber and Sub-Worker agents."""
     tag: DelegationTag
     sender_session_id: str
     target_session_id: str
@@ -57,14 +68,18 @@ class DelegationMessage:
     @staticmethod
     def is_delegation_message(text: str) -> bool:
         """Check if a message is a delegation protocol message."""
-        return any(text.startswith(tag.value) for tag in DelegationTag)
+        if any(text.startswith(tag.value) for tag in DelegationTag):
+            return True
+        # Legacy tag fallback.
+        return text.startswith(_LEGACY_SUB_WORKER_RESULT_TAG)
 
     @staticmethod
     def is_result_message(text: str) -> bool:
         """Check if a message is a result/report (should not be re-delegated)."""
         return (
             text.startswith(DelegationTag.RESULT.value)
-            or text.startswith(DelegationTag.CLI_RESULT.value)
+            or text.startswith(DelegationTag.SUB_WORKER_RESULT.value)
+            or text.startswith(_LEGACY_SUB_WORKER_RESULT_TAG)
         )
 
     @staticmethod

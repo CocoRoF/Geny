@@ -5,8 +5,21 @@ Data model definitions for Claude Code session management.
 """
 from enum import Enum
 from typing import Optional, Dict, Any, List, Union, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
+
+
+# Legacy session_type values seen in persisted session records. The current
+# canonical value is "sub" (Sub-Worker); older runs wrote "bound" (PR 18+)
+# or "cli" (pre-PR 18). Normalize on input so the rest of the codebase only
+# has to reason about the current enum.
+_LEGACY_SESSION_TYPES = {"bound": "sub", "cli": "sub"}
+
+
+def _normalize_session_type(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    return _LEGACY_SESSION_TYPES.get(value, value)
 
 
 class SessionStatus(str, Enum):
@@ -194,29 +207,34 @@ class CreateSessionRequest(BaseModel):
                     "If None, the default preset for the session role is used."
     )
 
-    # Dual-agent pairing (VTuber ↔ bound Worker)
+    # Dual-agent pairing (VTuber ↔ Sub-Worker)
     linked_session_id: Optional[str] = Field(
         default=None,
-        description="Linked session ID for VTuber ↔ bound Worker pairing"
+        description="Linked session ID for VTuber ↔ Sub-Worker pairing"
     )
     session_type: Optional[str] = Field(
         default=None,
-        description="Session type: 'vtuber' (persona layer), 'bound' (Worker bound to a VTuber), "
+        description="Session type: 'vtuber' (persona layer), 'sub' (Worker bound to a VTuber), "
                     "or 'solo' / None (standalone Worker)"
     )
 
-    # VTuber-specific: overrides for the bound Worker session
-    bound_worker_system_prompt: Optional[str] = Field(
+    @field_validator("session_type", mode="before")
+    @classmethod
+    def _normalize_session_type_request(cls, v: Optional[str]) -> Optional[str]:
+        return _normalize_session_type(v)
+
+    # VTuber-specific: overrides for the Sub-Worker session
+    sub_worker_system_prompt: Optional[str] = Field(
         default=None,
-        description="System prompt override for the bound Worker (VTuber role only)"
+        description="System prompt override for the Sub-Worker (VTuber role only)"
     )
-    bound_worker_model: Optional[str] = Field(
+    sub_worker_model: Optional[str] = Field(
         default=None,
-        description="Model override for the bound Worker (VTuber role only)"
+        description="Model override for the Sub-Worker (VTuber role only)"
     )
-    bound_worker_env_id: Optional[str] = Field(
+    sub_worker_env_id: Optional[str] = Field(
         default=None,
-        description="Explicit env_id for the bound Worker (VTuber role only). "
+        description="Explicit env_id for the Sub-Worker (VTuber role only). "
                     "When None, resolve_env_id(role=WORKER) picks the default worker env."
     )
 
@@ -301,15 +319,21 @@ class SessionInfo(BaseModel):
         description="Cumulative API usage cost (USD) across all executions"
     )
 
-    # Dual-agent pairing (VTuber ↔ CLI)
+    # Dual-agent pairing (VTuber ↔ Sub-Worker)
     linked_session_id: Optional[str] = Field(
         default=None,
-        description="Linked session ID for VTuber↔CLI dual-agent pairing"
+        description="Linked session ID for VTuber ↔ Sub-Worker pairing"
     )
     session_type: Optional[str] = Field(
         default=None,
-        description="Session type: 'vtuber' or 'cli' (None defaults to standard CLI)"
+        description="Session type: 'vtuber' (persona layer), 'sub' (Worker bound to a VTuber), "
+                    "or 'solo' / None (standalone Worker)"
     )
+
+    @field_validator("session_type", mode="before")
+    @classmethod
+    def _normalize_session_type_info(cls, v: Optional[str]) -> Optional[str]:
+        return _normalize_session_type(v)
 
     # VTuber chat room
     chat_room_id: Optional[str] = Field(

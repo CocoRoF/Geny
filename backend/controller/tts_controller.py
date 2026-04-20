@@ -45,7 +45,8 @@ _SYSTEM_TAG_PATTERN = re.compile(
     r"autonomous_signal:[^]]*|"
     r"DELEGATION_REQUEST|"
     r"DELEGATION_RESULT|"
-    r"CLI_RESULT|"
+    r"SUB_WORKER_RESULT|"
+    r"CLI_RESULT|"  # legacy alias for SUB_WORKER_RESULT — keep for in-flight/historical messages
     r"ACTIVITY_TRIGGER|"
     r"SILENT)"
     r"\]\s*",

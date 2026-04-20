@@ -18,25 +18,25 @@ export default function SessionToolsTab() {
     custom_root: true,
   });
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState<'vtuber' | 'cli'>('vtuber');
+  const [viewMode, setViewMode] = useState<'vtuber' | 'sub'>('vtuber');
 
   useEffect(() => { loadPresets(); loadCatalog(); }, [loadPresets, loadCatalog]);
 
   const session = sessions.find(s => s.session_id === selectedSessionId);
 
-  // Find linked CLI session (if current is VTuber)
-  const linkedCliSession = useMemo(() => {
+  // Find linked Sub-Worker session (if current is VTuber)
+  const linkedSubWorkerSession = useMemo(() => {
     if (!session || session.session_type !== 'vtuber') return null;
-    return sessions.find(s => s.session_type === 'cli' && s.linked_session_id === session.session_id) ?? null;
+    return sessions.find(s => s.session_type === 'sub' && s.linked_session_id === session.session_id) ?? null;
   }, [session, sessions]);
 
-  const hasDualView = !!linkedCliSession;
+  const hasDualView = !!linkedSubWorkerSession;
 
   // Resolve which session to display
   const targetSession = useMemo(() => {
     if (!hasDualView || viewMode === 'vtuber') return session;
-    return linkedCliSession ?? session;
-  }, [hasDualView, viewMode, session, linkedCliSession]);
+    return linkedSubWorkerSession ?? session;
+  }, [hasDualView, viewMode, session, linkedSubWorkerSession]);
 
   // Reset viewMode when session changes
   useEffect(() => { setViewMode('vtuber'); }, [selectedSessionId]);
@@ -118,7 +118,7 @@ export default function SessionToolsTab() {
             {t('sessionTools.title')}
           </h3>
 
-          {/* VTuber / CLI toggle */}
+          {/* VTuber / Sub-Worker toggle */}
           {hasDualView && (
             <div className="flex items-center h-6 rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] overflow-hidden shrink-0">
               <button
@@ -133,13 +133,13 @@ export default function SessionToolsTab() {
               </button>
               <button
                 className={`px-2 h-full text-[10px] font-semibold transition-colors ${
-                  viewMode === 'cli'
+                  viewMode === 'sub'
                     ? 'bg-[var(--primary-color)] text-white'
                     : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
                 }`}
-                onClick={() => setViewMode('cli')}
+                onClick={() => setViewMode('sub')}
               >
-                CLI
+                Sub-Worker
               </button>
             </div>
           )}
