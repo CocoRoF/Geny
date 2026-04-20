@@ -731,6 +731,105 @@ class GenySendDirectMessageTool(BaseTool):
         }, indent=2, ensure_ascii=False, default=str)
 
 
+class GenyMessageCounterpartTool(BaseTool):
+    """Send a message to the bound counterpart agent (VTuber↔Sub-Worker).
+
+    Symmetric for both directions: a VTuber's counterpart is its
+    Sub-Worker; a Sub-Worker's counterpart is its paired VTuber. The
+    caller's ``session_id`` is injected by the adapter from
+    ``ToolContext.session_id``; the counterpart is resolved from
+    ``AgentSession._linked_session_id``. The LLM never sees — and
+    cannot get wrong — a target_session_id.
+
+    Returns an error without side-effects when the caller has no
+    linked counterpart, or when the linked session has been deleted.
+    """
+
+    name = "geny_message_counterpart"
+    description = (
+        "Send a message to your bound counterpart agent — "
+        "for a VTuber this is its Sub-Worker; for a Sub-Worker this is "
+        "its paired VTuber. No target is required: the runtime routes "
+        "to whichever agent is linked to you. Prefer this over "
+        "geny_send_direct_message whenever you want to reach your "
+        "paired counterpart, because it cannot misroute."
+    )
+
+    def run(self, session_id: str, content: str) -> str:
+        """Send *content* to the caller's linked counterpart.
+
+        Args:
+            session_id: Caller's own session id (injected by the adapter).
+            content: Message body. Must be non-empty.
+        """
+        if not content.strip():
+            return json.dumps({"error": "content must be non-empty"})
+
+        manager = _get_agent_manager()
+        self_agent = (
+            manager.get_agent(session_id)
+            or manager.resolve_session(session_id)
+        )
+        if self_agent is None:
+            return json.dumps(
+                {"error": f"caller session not found: {session_id}"}
+            )
+
+        counterpart_id = getattr(self_agent, "_linked_session_id", None)
+        if not counterpart_id:
+            return json.dumps(
+                {
+                    "error": (
+                        "no linked counterpart — this session has no "
+                        "bound pair"
+                    )
+                }
+            )
+
+        target, resolved_id = _resolve_session(counterpart_id)
+        if target is None:
+            return json.dumps(
+                {
+                    "error": (
+                        f"linked counterpart {counterpart_id} no longer "
+                        f"exists"
+                    )
+                }
+            )
+
+        sender_name = getattr(self_agent, "session_name", None) or session_id[:8]
+
+        inbox = _get_inbox_manager()
+        msg = inbox.deliver(
+            target_session_id=resolved_id,
+            content=content.strip(),
+            sender_session_id=session_id,
+            sender_name=sender_name,
+        )
+
+        _trigger_dm_response(
+            target_session_id=resolved_id,
+            sender_session_id=session_id,
+            sender_name=sender_name,
+            content=content.strip(),
+            message_id=msg["id"],
+        )
+
+        return json.dumps(
+            {
+                "success": True,
+                "message_id": msg["id"],
+                "delivered_to": resolved_id,
+                "delivered_to_name": target.session_name,
+                "timestamp": msg["timestamp"],
+                "auto_triggered": True,
+            },
+            indent=2,
+            ensure_ascii=False,
+            default=str,
+        )
+
+
 class GenyReadRoomMessagesTool(BaseTool):
     """Read recent messages from a chat room — catch up on the conversation.
 

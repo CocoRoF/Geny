@@ -167,6 +167,47 @@ def test_install_templates_propagates_to_vtuber(tmp_path) -> None:
     assert "browser_navigate" not in vtuber.tools.external
 
 
+def test_vtuber_env_denies_session_create() -> None:
+    """Cycle 20260420_7 / PR-1: the VTuber must not receive
+    ``geny_session_create``. The tool is platform-prefixed so the prior
+    filter let it through; the deny list now gates it. The LLM used to
+    treat "## Sub-Worker Agent" as a literal name and call
+    ``geny_session_create(session_name="Sub-Worker Agent")``, spawning
+    a spurious session and routing subsequent DMs to the wrong target
+    (see dev_docs/20260420_7/analysis/01)."""
+    from service.environment.templates import create_vtuber_env
+
+    all_names = [
+        "geny_session_create",
+        "geny_session_list",
+        "geny_send_direct_message",
+        "geny_message_counterpart",
+        "memory_read",
+        "web_search",
+    ]
+    manifest = create_vtuber_env(all_tool_names=all_names)
+    external = list(manifest.tools.external)
+    assert "geny_session_create" not in external, (
+        "VTuber must not see geny_session_create; deny list regressed"
+    )
+    # But every other platform tool stays — the deny set is narrow.
+    assert "geny_session_list" in external
+    assert "geny_send_direct_message" in external
+    assert "geny_message_counterpart" in external
+    assert "memory_read" in external
+
+
+def test_worker_env_still_receives_session_create() -> None:
+    """The deny list is VTuber-only. Workers (solo or Sub-Worker)
+    retain session-creation capability."""
+    from service.environment.templates import create_worker_env
+
+    manifest = create_worker_env(
+        external_tool_names=["geny_session_create", "memory_read"]
+    )
+    assert "geny_session_create" in manifest.tools.external
+
+
 def test_install_environment_templates_passes_all_names(tmp_path) -> None:
     """The boot path calls ``install_environment_templates`` with
     ``tool_loader.get_all_names()`` (see ``backend/main.py``). A

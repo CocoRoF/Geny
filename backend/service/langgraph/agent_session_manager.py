@@ -274,25 +274,27 @@ class AgentSessionManager(SessionManager):
         # method and injects the block directly on the agent.
         if role == "vtuber" and request.linked_session_id:
             vtuber_ctx = (
-                f"\n\n## Sub-Worker Agent\n"
-                f"You have a Worker agent bound to you: "
-                f"session_id=`{request.linked_session_id}`.\n"
-                f"For complex tasks (coding, research, multi-step "
-                f"execution), delegate to the Worker via the "
-                f"`geny_send_direct_message` tool with "
-                f"target_session_id=`{request.linked_session_id}`. "
-                f"The Worker's reply will arrive in your inbox; read "
-                f"it with `geny_read_inbox` and summarize for the user."
+                "\n\n## Sub-Worker Agent\n"
+                "You have a Worker agent bound to you by the runtime. "
+                "For complex tasks (coding, file operations, research, "
+                "multi-step execution), delegate via the "
+                "`geny_message_counterpart` tool — pass only the "
+                "`content` argument. The runtime routes the message to "
+                "your paired Sub-Worker automatically; you do NOT need "
+                "(and must not attempt to create) a target session. "
+                "The Worker's reply will arrive in your inbox; read it "
+                "with `geny_read_inbox` and summarize for the user."
             )
             prompt = prompt + vtuber_ctx
 
         # Append Sub-Worker context (paired VTuber session info)
         if request.session_type == "sub" and request.linked_session_id:
             sub_ctx = (
-                f"\n\n## Paired VTuber Agent\n"
-                f"Session ID: `{request.linked_session_id}`\n"
-                f"You are the Worker bound to this VTuber persona.\n"
-                f"Report results via `geny_send_direct_message` to this session when done."
+                "\n\n## Paired VTuber Agent\n"
+                "You are the Worker bound to a VTuber persona. "
+                "Report results via `geny_message_counterpart` — pass "
+                "only the `content` argument; the runtime routes it to "
+                "your paired VTuber automatically."
             )
             prompt = prompt + sub_ctx
 
@@ -647,20 +649,26 @@ class AgentSessionManager(SessionManager):
                 agent._session_type = "vtuber"
 
                 # Inject the Sub-Worker delegation block into the
-                # VTuber's system prompt. The final-newline-bounded
-                # marker lets prompts/vtuber.md (plan PR 22) reference
-                # the section by header in the persona base prompt.
+                # VTuber's system prompt. The runtime pairs this
+                # VTuber with the freshly-created Sub-Worker via
+                # _linked_session_id; the tool layer resolves the
+                # target itself, so we do not expose the Sub-Worker's
+                # session_id to the LLM (it doesn't need to copy a
+                # UUID and we don't want it to treat the header as a
+                # name to recreate).
                 vtuber_ctx = (
-                    f"\n\n## Sub-Worker Agent\n"
-                    f"You have a Worker agent bound to you: "
-                    f"session_id=`{worker_session_id}`.\n"
-                    f"For complex tasks (coding, research, multi-step "
-                    f"execution), delegate to the Worker via the "
-                    f"`geny_send_direct_message` tool with "
-                    f"target_session_id=`{worker_session_id}`. The "
-                    f"Worker's reply will arrive in your inbox; read "
-                    f"it with `geny_read_inbox` and summarize for "
-                    f"the user."
+                    "\n\n## Sub-Worker Agent\n"
+                    "You have a Worker agent bound to you by the "
+                    "runtime. For complex tasks (coding, file "
+                    "operations, research, multi-step execution), "
+                    "delegate via the `geny_message_counterpart` "
+                    "tool — pass only the `content` argument. The "
+                    "runtime routes the message to your paired "
+                    "Sub-Worker automatically; you do NOT need (and "
+                    "must not attempt to create) a target session. "
+                    "The Worker's reply will arrive in your inbox; "
+                    "read it with `geny_read_inbox` and summarize "
+                    "for the user."
                 )
                 agent._system_prompt = (agent._system_prompt or "") + vtuber_ctx
 

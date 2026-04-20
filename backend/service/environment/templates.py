@@ -68,11 +68,22 @@ _VTUBER_CUSTOM_TOOL_WHITELIST = frozenset(
 _PLATFORM_TOOL_PREFIXES = ("geny_", "memory_", "knowledge_", "opsidian_")
 
 
+# Platform tools a VTuber persona should *not* see even though they
+# match :data:`_PLATFORM_TOOL_PREFIXES`. The VTuber already has a
+# runtime-bound Sub-Worker (``AgentSession._linked_session_id``); the
+# ``geny_session_create`` tool tempts the LLM to mint a spurious new
+# session when it reads the "## Sub-Worker Agent" header literally as
+# a name, routing subsequent DMs to the wrong target. The
+# ``geny_message_counterpart`` tool replaces every legitimate use of
+# target-addressed delivery for the VTuber.
+_VTUBER_PLATFORM_DENY = frozenset({"geny_session_create"})
+
+
 def _vtuber_tool_roster(all_tool_names: List[str]) -> List[str]:
     """Filter *all_tool_names* down to the set the VTuber should see.
 
-    Every platform-layer builtin (by prefix) plus the three
-    conversational web tools from
+    Every platform-layer builtin (by prefix) minus the deny set, plus
+    the three conversational web tools from
     :data:`_VTUBER_CUSTOM_TOOL_WHITELIST`. Anything else — notably
     ``browser_*`` — is excluded.
 
@@ -83,7 +94,10 @@ def _vtuber_tool_roster(all_tool_names: List[str]) -> List[str]:
     return [
         name
         for name in all_tool_names
-        if name.startswith(_PLATFORM_TOOL_PREFIXES)
+        if (
+            name.startswith(_PLATFORM_TOOL_PREFIXES)
+            and name not in _VTUBER_PLATFORM_DENY
+        )
         or name in _VTUBER_CUSTOM_TOOL_WHITELIST
     ]
 
