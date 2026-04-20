@@ -17,7 +17,8 @@
 - [ ] Phase C — 단일 tool surface (plan/01) — host PR4 `#25` 완료,
   릴리즈 PR5 `#26` + tag `v0.22.0` 완료, Geny safe-refactor PR6
   `#135` 완료. 남은 작업: Geny switch-over (PR8).
-- [ ] Phase D — 관측성 / logging swallower 제거 (plan/04) — PR7 대기.
+- [ ] Phase D — 관측성 / logging swallower 제거 (plan/04) — PR7
+  `#137` 완료 (§B). §C–E 는 별도 사이클로 분리.
 - [ ] Phase E — 롤아웃 / 회귀 방지 (plan/05) — Phase C 종료 후 수동
   QA 진행.
 
@@ -35,3 +36,5 @@
   — geny-executor `release/v0.22.0` + tag `v0.22.0`.
 - [06 — Geny safe-refactor dead code (PR6, Phase C 준비)](06_safe_refactor_dead_code.md)
   — Geny `feat/geny-tool-provider-dead-code`.
+- [07 — Geny logging swallower 제거 (PR7, Phase D §B)](07_logging_swallower_removal.md)
+  — Geny `feat/tool-detail-formatter`.
