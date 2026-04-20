@@ -278,12 +278,12 @@ class AgentSessionManager(SessionManager):
                 "You have a Worker agent bound to you by the runtime. "
                 "For complex tasks (coding, file operations, research, "
                 "multi-step execution), delegate via the "
-                "`geny_message_counterpart` tool — pass only the "
+                "`send_direct_message_internal` tool — pass only the "
                 "`content` argument. The runtime routes the message to "
                 "your paired Sub-Worker automatically; you do NOT need "
                 "(and must not attempt to create) a target session. "
-                "The Worker's reply will arrive in your inbox; read it "
-                "with `geny_read_inbox` and summarize for the user."
+                "The Worker's reply arrives as a `[SUB_WORKER_RESULT]` "
+                "trigger message; summarize it for the user."
             )
             prompt = prompt + vtuber_ctx
 
@@ -292,7 +292,7 @@ class AgentSessionManager(SessionManager):
             sub_ctx = (
                 "\n\n## Paired VTuber Agent\n"
                 "You are the Worker bound to a VTuber persona. "
-                "Report results via `geny_message_counterpart` — pass "
+                "Report results via `send_direct_message_internal` — pass "
                 "only the `content` argument; the runtime routes it to "
                 "your paired VTuber automatically."
             )
@@ -661,14 +661,14 @@ class AgentSessionManager(SessionManager):
                     "You have a Worker agent bound to you by the "
                     "runtime. For complex tasks (coding, file "
                     "operations, research, multi-step execution), "
-                    "delegate via the `geny_message_counterpart` "
+                    "delegate via the `send_direct_message_internal` "
                     "tool — pass only the `content` argument. The "
                     "runtime routes the message to your paired "
                     "Sub-Worker automatically; you do NOT need (and "
                     "must not attempt to create) a target session. "
-                    "The Worker's reply will arrive in your inbox; "
-                    "read it with `geny_read_inbox` and summarize "
-                    "for the user."
+                    "The Worker's reply arrives as a "
+                    "`[SUB_WORKER_RESULT]` trigger message; "
+                    "summarize it for the user."
                 )
                 agent._system_prompt = (agent._system_prompt or "") + vtuber_ctx
 

@@ -13,7 +13,7 @@ Claude CLI receives full tool schemas (name, description, parameters) via MCP pr
 
 - Do NOT add tool names or tool descriptions to prompts
 - Do NOT list MCP server names in prompts
-- Only mention tools when giving **behavioral guidance** (e.g., "delegate via `geny_send_direct_message`")
+- Only mention tools when giving **behavioral guidance** (e.g., "delegate via `send_direct_message_internal`")
 
 ### Principle 2: Single Source of Truth Per Layer
 
@@ -126,7 +126,7 @@ Each role has a dedicated Markdown file that defines **behavioral rules only**.
 
 **Rules:**
 - Focus on **what to do** and **how to behave**, not what tools exist
-- Reference specific tools only for **behavioral guidance** (e.g., `geny_send_direct_message`)
+- Reference specific tools only for **behavioral guidance** (e.g., `send_direct_message_internal`)
 - Keep under 500 words
 
 ---
@@ -169,20 +169,19 @@ auto-created (see `dev_docs/20260420_3/plan/03_vtuber_worker_binding.md`).
 **VTuber receives:**
 ```
 ## Sub-Worker Agent
-You have a Worker agent bound to you: session_id=`{worker_session_id}`.
-For complex tasks (coding, research, multi-step execution),
-delegate to the Worker via the `geny_send_direct_message` tool
-with target_session_id=`{worker_session_id}`. The Worker's reply
-will arrive in your inbox; read it with `geny_read_inbox` and
-summarize for the user.
+You have a Worker agent bound to you. For complex tasks
+(coding, research, multi-step execution), delegate to the Worker
+via the `send_direct_message_internal` tool — pass only the
+`content` argument; no target id. The Worker's reply arrives as
+a `[SUB_WORKER_RESULT]` trigger; summarize for the user.
 ```
 
 **Sub-Worker receives:**
 ```
 ## Paired VTuber Agent
-Session ID: `{vtuber_session_id}`
 You are the Worker bound to this VTuber persona.
-Report results via `geny_send_direct_message` to this session when done.
+Report results via `send_direct_message_internal` — no target id;
+the runtime routes to your paired VTuber automatically.
 ```
 
 ---

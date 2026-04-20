@@ -100,7 +100,7 @@ def test_manifest_external_is_caller_supplied(preset: str) -> None:
     registration path the executor honours."""
     from service.langgraph.default_manifest import build_default_manifest
 
-    names = ["geny_send_direct_message", "memory_read", "web_search"]
+    names = ["send_direct_message_external", "memory_read", "web_search"]
     manifest = build_default_manifest(preset, external_tool_names=names)
     assert list(manifest.tools.external) == names
 

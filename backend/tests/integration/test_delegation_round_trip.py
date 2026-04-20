@@ -19,7 +19,7 @@ functional, which is exactly the invariant the PR #1 fix
 restores.
 
 The full VTuber ↔ Sub-Worker delegation round-trip (mocked LLM,
-two AgentSession instances, ``geny_send_direct_message``) is
+two AgentSession instances, ``send_direct_message_external``) is
 deliberately out of scope — it requires stubbing the Anthropic
 client and bootstrapping the full ``AgentSessionManager``,
 whose infrastructure (SessionStore, EnvironmentService, etc.)

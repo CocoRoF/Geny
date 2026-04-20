@@ -3,24 +3,29 @@ Geny Platform Tools — Built-in tools for team collaboration.
 
 The Geny platform is modelled as a virtual company / organization:
   - Sessions = team members / employees (each with a name and role)
-  - Rooms    = meeting rooms / group channels
   - Creating a session = hiring / bringing in a new team member
-  - Adding to a room   = inviting a colleague to a meeting / channel
   - DM inbox           = private email / direct messages between members
 
-Tool categories:
+Tool categories (what actually ships in ``TOOLS`` below):
   - Team management: list members, view profiles, hire new members
-  - Room management: list rooms, create rooms, invite members
-  - Communication:   post in rooms, send DMs, read messages, check inbox
+  - Messaging:
+    * ``send_direct_message_internal`` — symmetric counterpart DM
+      (VTuber↔Sub-Worker). No target id; runtime routes through the
+      caller's ``_linked_session_id``.
+    * ``send_direct_message_external`` — addressed DM to any non-bound
+      session. Requires ``target_session_id``.
+    * ``read_inbox`` — drain queued DMs.
 
-These tools are auto-loaded by MCPLoader (matches *_tools.py pattern)
-and registered as built-in tools under the ``_builtin_tools`` server.
+Room tools (``room_*`` and ``send_room_message`` / ``read_room_messages``)
+are defined in this file but **intentionally excluded from the ``TOOLS``
+export** — see the TOOLS list at the bottom and
+``dev_docs/20260420_8/analysis/01`` for rationale. Re-enable by
+uncommenting the relevant lines in TOOLS.
 
-Architecture:
-  - All tool operations go through the same singletons used by REST APIs
-  - Direct messages use a lightweight file-based inbox per session
-  - Room broadcasts re-use the existing ChatConversationStore
-  - DMs auto-trigger the recipient session to read and respond
+These tools are auto-loaded by ToolLoader (matches *_tools.py pattern).
+All operations go through the same singletons used by REST APIs; DMs
+use a lightweight file-based inbox per session and auto-trigger the
+recipient to read and respond.
 """
 
 from __future__ import annotations
@@ -105,7 +110,7 @@ def _trigger_dm_response(
                 f"[SYSTEM] You received a direct message from {sender_name} (session: {sender_session_id}). "
                 f"Read the message below and take appropriate action — respond to questions, "
                 f"perform requested tasks, etc. "
-                f"Only reply via 'geny_send_direct_message' if a response is explicitly needed or expected. "
+                f"Only reply via 'send_direct_message_internal' (to your counterpart) or 'send_direct_message_external' (to another session) if a response is explicitly needed or expected. "
                 f"Do NOT reply just to acknowledge receipt — focus on completing the task if one was requested.\n\n"
                 f"[DM from {sender_name}]: {content}"
             )
@@ -176,14 +181,14 @@ def _trigger_dm_response(
 # ============================================================================
 
 
-class GenySessionListTool(BaseTool):
+class SessionListTool(BaseTool):
     """List all team members (agent sessions) currently working in the company.
 
     In the Geny platform, each agent session represents a team member / employee.
     Use this to see who is available — their names, roles, and current status.
     """
 
-    name = "geny_session_list"
+    name = "session_list"
     description = (
         "List all team members (agent sessions) currently in the company. "
         "Each session is like an employee with a name, role (developer/researcher/planner/worker), and status. "
@@ -210,14 +215,14 @@ class GenySessionListTool(BaseTool):
         }, indent=2, ensure_ascii=False, default=str)
 
 
-class GenySessionInfoTool(BaseTool):
+class SessionInfoTool(BaseTool):
     """Get detailed profile of a specific team member (agent session).
 
     Like looking up an employee's profile — see their role, speciality,
     current status, and when they joined.
     """
 
-    name = "geny_session_info"
+    name = "session_info"
     description = (
         "Get detailed profile of a specific team member (agent session) by name or ID. "
         "Returns their role, status, model, and creation time — like an employee profile card. "
@@ -262,7 +267,7 @@ def _get_model_options() -> list[dict]:
 VALID_ROLES = ["developer", "worker", "researcher", "planner"]
 
 
-class GenySessionCreateTool(BaseTool):
+class SessionCreateTool(BaseTool):
     """Hire / bring in a new team member (create a new agent session).
 
     Like hiring a new employee for the company — you give them a name and
@@ -270,7 +275,7 @@ class GenySessionCreateTool(BaseTool):
     invited to chat rooms or assigned tasks.
     """
 
-    name = "geny_session_create"
+    name = "session_create"
     description = (
         "Hire a new team member — create a new agent session. "
         "Only session_name is required. Role defaults to 'developer' and model uses the system default — "
@@ -366,7 +371,7 @@ class GenySessionCreateTool(BaseTool):
             }, indent=2, ensure_ascii=False, default=str)
 
         except Exception as e:
-            logger.error("geny_session_create failed: %s", e, exc_info=True)
+            logger.error("session_create failed: %s", e, exc_info=True)
             return json.dumps({"error": f"Failed to create session: {e}"})
 
     async def arun(
@@ -407,7 +412,7 @@ class GenySessionCreateTool(BaseTool):
             }, indent=2, ensure_ascii=False, default=str)
 
         except Exception as e:
-            logger.error("geny_session_create failed: %s", e, exc_info=True)
+            logger.error("session_create failed: %s", e, exc_info=True)
             return json.dumps({"error": f"Failed to create session: {e}"})
 
 
@@ -416,13 +421,13 @@ class GenySessionCreateTool(BaseTool):
 # ============================================================================
 
 
-class GenyRoomListTool(BaseTool):
+class RoomListTool(BaseTool):
     """List all chat rooms (meeting rooms / group channels) in the company.
 
     See which rooms exist, who's in them, and how active they are.
     """
 
-    name = "geny_room_list"
+    name = "room_list"
     description = (
         "List all chat rooms in the company — like viewing available meeting rooms or group channels. "
         "Returns room names, member lists, and message counts. "
@@ -458,19 +463,19 @@ class GenyRoomListTool(BaseTool):
         }, indent=2, ensure_ascii=False, default=str)
 
 
-class GenyRoomCreateTool(BaseTool):
+class RoomCreateTool(BaseTool):
     """Create a new chat room — like setting up a meeting room or team channel.
 
     Bring team members together by creating a room and adding them as members.
     """
 
-    name = "geny_room_create"
+    name = "room_create"
     description = (
         "Create a new chat room and add team members to it — like setting up a meeting room or team channel. "
         "Provide a room name and comma-separated session IDs of members to include. "
         "Use this when asked to: set up a discussion, create a project channel, "
         "make a room for the team, gather people for a meeting, etc. "
-        "Tip: use geny_session_list first to find member IDs, or geny_session_create to hire new members."
+        "Tip: use session_list first to find member IDs, or session_create to hire new members."
     )
 
     def run(self, room_name: str, session_ids: str) -> str:
@@ -491,7 +496,7 @@ class GenyRoomCreateTool(BaseTool):
             if agent:
                 valid_ids.append(resolved_id)
             else:
-                logger.warning("geny_room_create: session %s not found, skipping", entry)
+                logger.warning("room_create: session %s not found, skipping", entry)
 
         if not valid_ids:
             return json.dumps({"error": "None of the specified sessions exist."})
@@ -508,10 +513,10 @@ class GenyRoomCreateTool(BaseTool):
         }, indent=2, ensure_ascii=False, default=str)
 
 
-class GenyRoomInfoTool(BaseTool):
+class RoomInfoTool(BaseTool):
     """Get detailed information about a specific chat room."""
 
-    name = "geny_room_info"
+    name = "room_info"
     description = (
         "Get detailed information about a chat room by ID. "
         "Returns the room name, member session IDs, message count, "
@@ -555,16 +560,16 @@ class GenyRoomInfoTool(BaseTool):
         }, indent=2, ensure_ascii=False, default=str)
 
 
-class GenyRoomAddMembersTool(BaseTool):
+class RoomAddMembersTool(BaseTool):
     """Invite / add team members to an existing chat room."""
 
-    name = "geny_room_add_members"
+    name = "room_add_members"
     description = (
         "Invite team members to an existing chat room — like adding colleagues to a group chat or meeting. "
         "Provide the room ID and comma-separated session IDs of members to add. "
         "Use this when asked to: invite someone to a room, add a member to the channel, "
         "bring someone into the conversation, invite to a chat room, add a member, etc. "
-        "Tip: use geny_session_list to find member IDs, and geny_room_list to find room IDs."
+        "Tip: use session_list to find member IDs, and room_list to find room IDs."
     )
 
     def run(self, room_id: str, session_ids: str) -> str:
@@ -615,15 +620,15 @@ class GenyRoomAddMembersTool(BaseTool):
 # ============================================================================
 
 
-class GenySendRoomMessageTool(BaseTool):
+class SendRoomMessageTool(BaseTool):
     """Post a message in a chat room — like speaking in a group channel.
 
     The message is saved to the room's history so all members can see it.
     This does NOT trigger responses from other agents — it simply records
-    your message. Other agents can read it via geny_read_room_messages.
+    your message. Other agents can read it via read_room_messages.
     """
 
-    name = "geny_send_room_message"
+    name = "send_room_message"
     description = (
         "Post a message in a chat room as this agent — like speaking in a team channel. "
         "The message is saved to the room's history for all members to see. "
@@ -663,7 +668,7 @@ class GenySendRoomMessageTool(BaseTool):
         }, indent=2, ensure_ascii=False, default=str)
 
 
-class GenySendDirectMessageTool(BaseTool):
+class SendDirectMessageExternalTool(BaseTool):
     """Send a direct (private) message to another team member.
 
     Like sending a DM or private chat — the message goes to the target's
@@ -671,14 +676,16 @@ class GenySendDirectMessageTool(BaseTool):
     respond to it.
     """
 
-    name = "geny_send_direct_message"
+    name = "send_direct_message_external"
     description = (
-        "Send a direct message (DM) to another team member privately. "
-        "You can specify the recipient by session name or session ID. "
-        "The message is delivered to their inbox AND the recipient is automatically "
-        "notified so they can read and respond. "
-        "Use this for 1:1 communication, sending tasks to a specific colleague, "
-        "or private coordination that doesn't need to be in a group room."
+        "Send a direct message (DM) to another session that is NOT your "
+        "bound counterpart — for example, to a colleague you discovered "
+        "via session_list. Specify the recipient by session name or "
+        "session ID. The message is delivered to their inbox AND the "
+        "recipient is automatically notified so they can read and "
+        "respond. If you want to reach the agent you are paired with "
+        "(VTuber↔Sub-Worker), use send_direct_message_internal instead "
+        "— that tool cannot misroute and needs no target id."
     )
 
     def run(
@@ -731,7 +738,7 @@ class GenySendDirectMessageTool(BaseTool):
         }, indent=2, ensure_ascii=False, default=str)
 
 
-class GenyMessageCounterpartTool(BaseTool):
+class SendDirectMessageInternalTool(BaseTool):
     """Send a message to the bound counterpart agent (VTuber↔Sub-Worker).
 
     Symmetric for both directions: a VTuber's counterpart is its
@@ -745,14 +752,14 @@ class GenyMessageCounterpartTool(BaseTool):
     linked counterpart, or when the linked session has been deleted.
     """
 
-    name = "geny_message_counterpart"
+    name = "send_direct_message_internal"
     description = (
-        "Send a message to your bound counterpart agent — "
-        "for a VTuber this is its Sub-Worker; for a Sub-Worker this is "
-        "its paired VTuber. No target is required: the runtime routes "
-        "to whichever agent is linked to you. Prefer this over "
-        "geny_send_direct_message whenever you want to reach your "
-        "paired counterpart, because it cannot misroute."
+        "Send a direct message to your bound counterpart agent. "
+        "Use this when you want to reach the agent you are paired with "
+        "(VTuber↔Sub-Worker). No target id is needed — the runtime "
+        "routes to whichever session is linked to you. Prefer this "
+        "over send_direct_message_external whenever you want to reach "
+        "your paired counterpart, because it cannot misroute."
     )
 
     def run(self, session_id: str, content: str) -> str:
@@ -830,13 +837,13 @@ class GenyMessageCounterpartTool(BaseTool):
         )
 
 
-class GenyReadRoomMessagesTool(BaseTool):
+class ReadRoomMessagesTool(BaseTool):
     """Read recent messages from a chat room — catch up on the conversation.
 
     Returns the latest messages with who said what and when.
     """
 
-    name = "geny_read_room_messages"
+    name = "read_room_messages"
     description = (
         "Read messages from a chat room — like scrolling through a group chat history. "
         "Returns recent messages with sender names, roles, and timestamps. "
@@ -882,14 +889,14 @@ class GenyReadRoomMessagesTool(BaseTool):
         }, indent=2, ensure_ascii=False, default=str)
 
 
-class GenyReadInboxTool(BaseTool):
+class ReadInboxTool(BaseTool):
     """Check your inbox — read private messages from other team members.
 
     Like checking your email or DM inbox. See who sent you messages
     and what they said. Can filter for unread only.
     """
 
-    name = "geny_read_inbox"
+    name = "read_inbox"
     description = (
         "Check your inbox for direct messages from other team members. "
         "Returns recent DMs with sender info — like checking your email or private messages. "
@@ -937,18 +944,26 @@ class GenyReadInboxTool(BaseTool):
 # =============================================================================
 
 TOOLS = [
-    # Session management
-    GenySessionListTool(),
-    GenySessionInfoTool(),
-    GenySessionCreateTool(),
-    # Room management
-    GenyRoomListTool(),
-    GenyRoomCreateTool(),
-    GenyRoomInfoTool(),
-    GenyRoomAddMembersTool(),
+    # Session management — discovery + creation of arbitrary sessions.
+    # Sub-Workers use these; VTubers are denied at the env-template layer.
+    SessionListTool(),
+    SessionInfoTool(),
+    SessionCreateTool(),
     # Messaging
-    GenySendRoomMessageTool(),
-    GenySendDirectMessageTool(),
-    GenyReadRoomMessagesTool(),
-    GenyReadInboxTool(),
+    SendDirectMessageExternalTool(),
+    SendDirectMessageInternalTool(),  # symmetric counterpart DM
+    ReadInboxTool(),
+    # Room tools intentionally disabled at the export level.
+    # The Geny service does not actively use room-based collaboration
+    # right now (VTuber↔Sub-Worker pair through _linked_session_id,
+    # user chat binds through _chat_room_id); exposing room_* to LLMs
+    # encourages spurious exploration. Classes remain defined above for
+    # future re-enablement — simply uncomment the lines below.
+    # See dev_docs/20260420_8/analysis/01 § Room 도구 전역 비활성.
+    # RoomListTool(),
+    # RoomCreateTool(),
+    # RoomInfoTool(),
+    # RoomAddMembersTool(),
+    # SendRoomMessageTool(),
+    # ReadRoomMessagesTool(),
 ]

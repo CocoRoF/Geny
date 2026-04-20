@@ -19,7 +19,7 @@ The matrix here covers every tool shape the adapter has to handle:
 - Unreadable signature (partial / C-callable) → False (safe default)
 
 Plus: ``execute`` must not mutate the caller's input dict, and a
-real-world smoke against ``GenySendDirectMessageTool`` (the tool that
+real-world smoke against ``SendDirectMessageExternalTool`` (the tool that
 actually broke in production) with ``_resolve_session`` monkey-patched
 so no live SessionStore is required.
 """
@@ -224,11 +224,11 @@ async def test_execute_tool_wrapper_with_session_id() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────
-# Real-world smoke: GenySendDirectMessageTool via the adapter
+# Real-world smoke: SendDirectMessageExternalTool via the adapter
 # ─────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_geny_send_direct_message_adapter_no_type_error(monkeypatch) -> None:
+async def test_send_direct_message_external_adapter_no_type_error(monkeypatch) -> None:
     """End-to-end smoke on the exact class that failed in production.
 
     Monkey-patches ``_resolve_session`` / ``_get_inbox_manager`` /
@@ -256,14 +256,14 @@ async def test_geny_send_direct_message_adapter_no_type_error(monkeypatch) -> No
         lambda **kwargs: None,
     )
 
-    tool = geny_tools.GenySendDirectMessageTool()
+    tool = geny_tools.SendDirectMessageExternalTool()
     adapter = _GenyToolAdapter(tool)
 
     # The production bug: probe returned True, adapter injected
     # session_id, run raised TypeError. Assert the probe now gets it
     # right and the call returns cleanly.
     assert adapter._accepts_session_id is False, (
-        "GenySendDirectMessageTool.run does not declare session_id and "
+        "SendDirectMessageExternalTool.run does not declare session_id and "
         "has no **kwargs — probe must return False"
     )
 
@@ -272,6 +272,6 @@ async def test_geny_send_direct_message_adapter_no_type_error(monkeypatch) -> No
         _SimpleContext("vtuber-session"),
     )
     assert result.is_error is False, (
-        f"GenySendDirectMessageTool adapter still errors: {result.content}"
+        f"SendDirectMessageExternalTool adapter still errors: {result.content}"
     )
     assert "delivered_to" in str(result.content) or "success" in str(result.content)

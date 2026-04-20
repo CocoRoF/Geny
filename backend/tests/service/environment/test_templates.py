@@ -7,13 +7,45 @@ the seed env factories to declare every provider-backed tool
 executor honours via ``_register_external_tools``.
 
 Before PR #1 the worker env only received ``tool_loader.get_custom_names()``
-at boot, so platform tools (``geny_send_direct_message`` etc.) never
-reached ``pipeline.tool_registry``. These tests lock that in: if a
-future refactor drops platform tools from the worker roster, the
-unit test is the first thing to fail.
+at boot, so platform tools (``send_direct_message_external`` etc.)
+never reached ``pipeline.tool_registry``. These tests lock that in:
+if a future refactor drops platform tools from the worker roster,
+the unit test is the first thing to fail.
+
+Cycle 20260420_8 / plan/01 renamed built-ins (dropped the ``geny_``
+prefix, split DM into ``_internal`` / ``_external``) and replaced
+the prefix-based platform filter with a source-stem allowlist
+(:data:`_PLATFORM_TOOL_SOURCES`). The VTuber deny list grew to
+include every address-discovery / external-DM primitive so the
+persona defaults to ``send_direct_message_internal`` as its only
+inter-agent outbound channel.
 """
 
 from __future__ import annotations
+
+from typing import Iterable, Optional
+
+
+class _FakeToolLoader:
+    """Minimal :class:`ToolLoader` stand-in for tests.
+
+    Supplies :meth:`get_tool_source` over a caller-provided mapping so
+    the VTuber roster filter can identify platform-layer stems without
+    touching the filesystem.
+    """
+
+    def __init__(self, source_map: dict[str, str]):
+        self._source = source_map
+
+    def get_tool_source(self, name: str) -> Optional[str]:
+        return self._source.get(name)
+
+
+def _loader_for(platform_names: Iterable[str]) -> _FakeToolLoader:
+    """Build a fake loader that tags every *platform_names* entry as
+    part of ``geny_tools``. Names not listed are treated as custom.
+    """
+    return _FakeToolLoader({name: "geny_tools" for name in platform_names})
 
 
 def test_worker_env_includes_platform_tools_when_given_all_names() -> None:
@@ -24,10 +56,11 @@ def test_worker_env_includes_platform_tools_when_given_all_names() -> None:
     from service.environment.templates import create_worker_env
 
     all_names = [
-        # Platform builtins
-        "geny_send_direct_message",
-        "geny_read_inbox",
-        "geny_session_list",
+        # Platform builtins (post-rename)
+        "send_direct_message_external",
+        "send_direct_message_internal",
+        "read_inbox",
+        "session_list",
         "memory_read",
         "memory_write",
         "knowledge_search",
@@ -41,8 +74,9 @@ def test_worker_env_includes_platform_tools_when_given_all_names() -> None:
     external = list(manifest.tools.external)
 
     # Platform tools reach the registry
-    assert "geny_send_direct_message" in external
-    assert "geny_read_inbox" in external
+    assert "send_direct_message_external" in external
+    assert "send_direct_message_internal" in external
+    assert "read_inbox" in external
     assert "memory_read" in external
     assert "knowledge_search" in external
     # Custom tools remain
@@ -60,34 +94,57 @@ def test_worker_env_external_mirrors_caller_input() -> None:
     assert list(manifest.tools.external) == names
 
 
-def test_vtuber_env_includes_platform_tools() -> None:
-    """PR #2 of the 20260420_5 cycle: VTuber must receive every
-    platform-layer builtin so it can DM its Sub-Worker, read its
-    inbox, and consult memory/knowledge. Prior to this PR the
-    VTuber was hardcoded to three web tools."""
+def test_vtuber_env_has_internal_dm_and_inbox_only() -> None:
+    """Cycle 20260420_8 / plan/01: VTuber must receive the
+    ``send_direct_message_internal`` + ``read_inbox`` pair (plus
+    ``memory_*`` / ``knowledge_*``) and **must not** see
+    ``send_direct_message_external``, ``session_list``,
+    ``session_info``, or ``session_create``. Exposing those caused
+    the trial-and-error DM sequence observed in the 01:15:28 →
+    01:15:37 log (analysis/01)."""
     from service.environment.templates import create_vtuber_env
 
     all_names = [
-        "geny_send_direct_message",
-        "geny_read_inbox",
+        "send_direct_message_external",
+        "send_direct_message_internal",
+        "read_inbox",
+        "session_list",
+        "session_info",
+        "session_create",
         "memory_read",
         "memory_write",
         "knowledge_search",
-        "opsidian_browse",
         "web_search",
         "news_search",
         "web_fetch",
         "browser_navigate",
     ]
-    manifest = create_vtuber_env(all_tool_names=all_names)
+    platform_names = {
+        "send_direct_message_external",
+        "send_direct_message_internal",
+        "read_inbox",
+        "session_list",
+        "session_info",
+        "session_create",
+    }
+    loader = _loader_for(platform_names)
+    manifest = create_vtuber_env(all_tool_names=all_names, tool_loader=loader)
     external = list(manifest.tools.external)
 
-    # Platform tools present
-    assert "geny_send_direct_message" in external
-    assert "geny_read_inbox" in external
+    # Must be present
+    assert "send_direct_message_internal" in external
+    assert "read_inbox" in external
     assert "memory_read" in external
     assert "knowledge_search" in external
-    assert "opsidian_browse" in external
+
+    # Must be absent — deny list
+    assert "send_direct_message_external" not in external, (
+        "VTuber must not see send_direct_message_external; "
+        "it should rely on internal DM for its counterpart"
+    )
+    assert "session_list" not in external, sorted(external)
+    assert "session_info" not in external, sorted(external)
+    assert "session_create" not in external, sorted(external)
 
 
 def test_vtuber_env_excludes_browser_tools() -> None:
@@ -151,61 +208,94 @@ def test_install_templates_propagates_to_vtuber(tmp_path) -> None:
 
     service = EnvironmentService(storage_path=str(tmp_path))
     all_names = [
-        "geny_send_direct_message",
+        "send_direct_message_internal",
+        "read_inbox",
         "memory_read",
         "web_search",
         "browser_navigate",
     ]
-    install_environment_templates(service, external_tool_names=all_names)
+    loader = _loader_for({"send_direct_message_internal", "read_inbox"})
+    install_environment_templates(
+        service,
+        external_tool_names=all_names,
+        tool_loader=loader,
+    )
 
     vtuber = service.load_manifest(VTUBER_ENV_ID)
     assert vtuber is not None
-    assert "geny_send_direct_message" in vtuber.tools.external
+    assert "send_direct_message_internal" in vtuber.tools.external
+    assert "read_inbox" in vtuber.tools.external
     assert "memory_read" in vtuber.tools.external
     assert "web_search" in vtuber.tools.external
     # browser_navigate filtered out even though passed in
     assert "browser_navigate" not in vtuber.tools.external
 
 
-def test_vtuber_env_denies_session_create() -> None:
-    """Cycle 20260420_7 / PR-1: the VTuber must not receive
-    ``geny_session_create``. The tool is platform-prefixed so the prior
-    filter let it through; the deny list now gates it. The LLM used to
-    treat "## Sub-Worker Agent" as a literal name and call
-    ``geny_session_create(session_name="Sub-Worker Agent")``, spawning
-    a spurious session and routing subsequent DMs to the wrong target
-    (see dev_docs/20260420_7/analysis/01)."""
+def test_vtuber_env_denies_full_address_primitives_set() -> None:
+    """Cycle 20260420_8 / plan/01: the VTuber deny set now covers
+    every address-discovery / external-DM primitive, not just
+    ``session_create``. Regression guard against a future change
+    that re-narrows the deny list."""
     from service.environment.templates import create_vtuber_env
 
     all_names = [
-        "geny_session_create",
-        "geny_session_list",
-        "geny_send_direct_message",
-        "geny_message_counterpart",
+        "session_create",
+        "session_list",
+        "session_info",
+        "send_direct_message_external",
+        "send_direct_message_internal",
         "memory_read",
         "web_search",
     ]
-    manifest = create_vtuber_env(all_tool_names=all_names)
+    loader = _loader_for({
+        "session_create",
+        "session_list",
+        "session_info",
+        "send_direct_message_external",
+        "send_direct_message_internal",
+    })
+    manifest = create_vtuber_env(all_tool_names=all_names, tool_loader=loader)
     external = list(manifest.tools.external)
-    assert "geny_session_create" not in external, (
-        "VTuber must not see geny_session_create; deny list regressed"
-    )
-    # But every other platform tool stays — the deny set is narrow.
-    assert "geny_session_list" in external
-    assert "geny_send_direct_message" in external
-    assert "geny_message_counterpart" in external
+
+    for denied in (
+        "session_create",
+        "session_list",
+        "session_info",
+        "send_direct_message_external",
+    ):
+        assert denied not in external, (
+            f"VTuber must not see {denied}; deny list regressed "
+            f"(external={sorted(external)})"
+        )
+    # Counterpart DM remains
+    assert "send_direct_message_internal" in external
     assert "memory_read" in external
 
 
-def test_worker_env_still_receives_session_create() -> None:
+def test_worker_env_retains_full_messaging_set() -> None:
     """The deny list is VTuber-only. Workers (solo or Sub-Worker)
-    retain session-creation capability."""
+    retain every session / messaging primitive."""
     from service.environment.templates import create_worker_env
 
     manifest = create_worker_env(
-        external_tool_names=["geny_session_create", "memory_read"]
+        external_tool_names=[
+            "session_create",
+            "session_list",
+            "session_info",
+            "send_direct_message_external",
+            "send_direct_message_internal",
+            "memory_read",
+        ]
     )
-    assert "geny_session_create" in manifest.tools.external
+    external = list(manifest.tools.external)
+    for name in (
+        "session_create",
+        "session_list",
+        "session_info",
+        "send_direct_message_external",
+        "send_direct_message_internal",
+    ):
+        assert name in external, sorted(external)
 
 
 def test_worker_env_declares_all_executor_built_ins() -> None:
@@ -231,7 +321,7 @@ def test_vtuber_env_declares_no_executor_built_ins() -> None:
     """Cycle 20260420_7 / PR-3: VTuber seeds keep
     ``manifest.tools.built_in = []``. The conversational persona has
     no business touching files — every file action is delegated to
-    its bound Sub-Worker via ``geny_message_counterpart``."""
+    its bound Sub-Worker via ``send_direct_message_internal``."""
     from service.environment.templates import create_vtuber_env
 
     manifest = create_vtuber_env(all_tool_names=["web_search"])
@@ -280,7 +370,7 @@ def test_install_environment_templates_passes_all_names(tmp_path) -> None:
 
     service = EnvironmentService(storage_path=str(tmp_path))
     all_names = [
-        "geny_send_direct_message",
+        "send_direct_message_external",
         "memory_read",
         "knowledge_search",
         "web_search",

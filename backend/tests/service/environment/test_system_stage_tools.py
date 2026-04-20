@@ -64,7 +64,7 @@ def _build_worker_pipeline():
 
     from service.environment.templates import create_worker_env
 
-    names = ["geny_send_direct_message", "memory_read", "web_search"]
+    names = ["send_direct_message_external", "memory_read", "web_search"]
     manifest = create_worker_env(external_tool_names=names)
     return Pipeline.from_manifest(
         manifest,
@@ -146,7 +146,7 @@ def test_system_and_tool_stage_share_populated_tools() -> None:
     tool_stage = next(s for s in pipeline.stages if getattr(s, "order", None) == 10)
 
     registered = set(pipeline.tool_registry.list_names())
-    assert "geny_send_direct_message" in registered, sorted(registered)
+    assert "send_direct_message_external" in registered, sorted(registered)
     assert "memory_read" in registered, sorted(registered)
 
     assert system_stage._tool_registry is tool_stage._registry, (

@@ -13,7 +13,7 @@ Claude CLI는 MCP 프로토콜을 통해 모든 툴의 이름, 설명, 파라미
 
 - 프롬프트에 툴 이름이나 설명을 추가하지 마세요
 - MCP 서버 이름을 프롬프트에 나열하지 마세요
-- **행동 지침**을 줄 때만 툴을 언급하세요 (예: "`geny_send_direct_message`로 위임하라")
+- **행동 지침**을 줄 때만 툴을 언급하세요 (예: "`send_direct_message_internal`로 위임하라")
 
 ### 원칙 2: 레이어별 단일 책임
 
@@ -126,7 +126,7 @@ backend/prompts/
 
 **규칙:**
 - **무엇을 하고** **어떻게 행동하는지**에 집중, 어떤 도구가 있는지는 적지 않음
-- 특정 도구는 **행동 지침**을 줄 때만 언급 (예: `geny_send_direct_message`)
+- 특정 도구는 **행동 지침**을 줄 때만 언급 (예: `send_direct_message_internal`)
 - 500단어 이내로 유지
 
 ---
@@ -169,20 +169,19 @@ VTuber 세션이 생성되면 서브 워커 세션이 자동 생성됩니다
 **VTuber가 받는 정보:**
 ```
 ## Sub-Worker Agent
-You have a Worker agent bound to you: session_id=`{worker_session_id}`.
-For complex tasks (coding, research, multi-step execution),
-delegate to the Worker via the `geny_send_direct_message` tool
-with target_session_id=`{worker_session_id}`. The Worker's reply
-will arrive in your inbox; read it with `geny_read_inbox` and
-summarize for the user.
+You have a Worker agent bound to you. For complex tasks
+(coding, research, multi-step execution), delegate to the Worker
+via the `send_direct_message_internal` tool — pass only the
+`content` argument; no target id. The Worker's reply arrives as
+a `[SUB_WORKER_RESULT]` trigger; summarize for the user.
 ```
 
 **서브 워커가 받는 정보:**
 ```
 ## Paired VTuber Agent
-Session ID: `{vtuber_session_id}`
 You are the Worker bound to this VTuber persona.
-Report results via `geny_send_direct_message` to this session when done.
+Report results via `send_direct_message_internal` — no target id;
+the runtime routes to your paired VTuber automatically.
 ```
 
 ---

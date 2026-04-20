@@ -1,23 +1,26 @@
-"""Integration: a VTuber pipeline can actually dispatch geny_send_direct_message.
+"""Integration: a VTuber pipeline can actually dispatch send_direct_message_internal.
 
 The 20260420_5 cycle root-caused LOG2 (``Tool error [...] Executed with 1 errors``)
 to the following chain:
 
 1. VTuber env was hardcoded to three web tools (``web_search``,
-   ``news_search``, ``web_fetch``) — ``geny_send_direct_message``
-   was never in ``manifest.tools.external``.
-2. Even if the VTuber *tried* to call ``geny_send_direct_message``,
-   the pipeline's tool registry had no entry for it, so the router
-   short-circuited with ``unknown_tool``.
+   ``news_search``, ``web_fetch``) — the DM tool was never in
+   ``manifest.tools.external``.
+2. Even if the VTuber *tried* to call the DM tool, the pipeline's
+   tool registry had no entry for it, so the router short-circuited
+   with ``unknown_tool``.
 
 PR #2 fixed (1) by giving the VTuber every platform tool plus the
 three web tools. PR #1 (and the v0.26.1 / v0.26.2 executor bumps)
-fixed the registration/rebind invariant. This integration test
-locks the combined behaviour:
+fixed the registration/rebind invariant.
 
-    Given: VTuber manifest built with the full roster.
-    When:  Stage 10 is dispatched with a pending geny_send_direct_message call.
-    Then:  The tool recorded the call with the expected input.
+Cycle 20260420_8 / plan/01 split the DM tool into two variants
+(``send_direct_message_internal`` for the bound counterpart,
+``send_direct_message_external`` for addressed DMs) and added
+``send_direct_message_external`` + every ``session_*`` primitive to
+the VTuber deny list. The VTuber's *only* inter-agent outbound
+channel is now ``send_direct_message_internal``, so that is the
+registration / dispatch contract this integration test enforces.
 
 Similar in spirit to the existing
 ``test_delegation_round_trip.py::test_tool_stage_executes_pending_calls_for_worker_manifest``
@@ -28,7 +31,7 @@ The full live round-trip (VTuber session → API → tool stage → DM into
 the Sub-Worker inbox) requires a live Anthropic key and the full
 ``AgentSessionManager`` bootstrap, which this layer of tests
 intentionally avoids. Manual smoke is the verification for that layer;
-see ``dev_docs/20260420_5/plan/04_end_to_end_validation.md``.
+see ``dev_docs/20260420_8/plan/01_tool_surface_redesign.md``.
 """
 
 from __future__ import annotations
@@ -39,35 +42,33 @@ import pytest
 from geny_executor.tools.base import Tool, ToolContext, ToolResult
 
 
-class _RecordingDMTool(Tool):
-    """Stub ``geny_send_direct_message`` that records every call.
+class _RecordingInternalDMTool(Tool):
+    """Stub ``send_direct_message_internal`` that records every call.
 
-    Matches the real tool's *name* and accepts the same top-level
-    input shape (``target_session_id``, ``message``). Returning a
-    simple success result is enough to check that Stage 10 dispatched
-    the call; the real tool's side effect (enqueue into the target's
-    inbox) is out of scope for this layer."""
+    The real tool resolves the counterpart via
+    ``AgentSession._linked_session_id`` and takes only ``content`` as
+    input — no ``target_session_id`` is exposed to the LLM. Matching
+    that shape here keeps the dispatch contract honest."""
 
     def __init__(self) -> None:
         self.calls: List[Dict[str, Any]] = []
 
     @property
     def name(self) -> str:
-        return "geny_send_direct_message"
+        return "send_direct_message_internal"
 
     @property
     def description(self) -> str:
-        return "Recording stub for geny_send_direct_message."
+        return "Recording stub for send_direct_message_internal."
 
     @property
     def input_schema(self) -> Dict[str, Any]:
         return {
             "type": "object",
             "properties": {
-                "target_session_id": {"type": "string"},
-                "message": {"type": "string"},
+                "content": {"type": "string"},
             },
-            "required": ["target_session_id", "message"],
+            "required": ["content"],
         }
 
     async def execute(self, input: Dict[str, Any], context: ToolContext) -> ToolResult:
@@ -76,51 +77,77 @@ class _RecordingDMTool(Tool):
 
 
 class _DMProvider:
-    """Supplies only ``geny_send_direct_message`` via the AdhocToolProvider
-    Protocol — the pipeline will skip every other manifest name with a
-    warning, which is exactly the production behaviour if a deployment
-    chose to not wire a given tool."""
+    """Supplies only ``send_direct_message_internal`` via the
+    AdhocToolProvider Protocol — the pipeline will skip every other
+    manifest name with a warning, which is exactly the production
+    behaviour if a deployment chose to not wire a given tool."""
 
-    def __init__(self, tool: _RecordingDMTool) -> None:
+    def __init__(self, tool: _RecordingInternalDMTool) -> None:
         self._tool = tool
 
     def list_names(self) -> List[str]:
         return [self._tool.name]
 
-    def get(self, name: str) -> Optional[_RecordingDMTool]:
+    def get(self, name: str) -> Optional[_RecordingInternalDMTool]:
         return self._tool if name == self._tool.name else None
 
 
+class _FakeToolLoader:
+    """Minimal ToolLoader stand-in for create_vtuber_env."""
+
+    def __init__(self, source_map: Dict[str, str]) -> None:
+        self._source = source_map
+
+    def get_tool_source(self, name: str) -> Optional[str]:
+        return self._source.get(name)
+
+
 @pytest.mark.asyncio
-async def test_vtuber_pipeline_dispatches_dm_call() -> None:
+async def test_vtuber_pipeline_dispatches_internal_dm_call() -> None:
     """VTuber pipeline, built through the real manifest + Pipeline
-    path, actually routes a ``geny_send_direct_message`` call to the
+    path, routes a ``send_direct_message_internal`` call to the
     registered tool.
 
-    This is the functional proof that PR #1 + PR #2 + the v0.26.1/.2
-    executor bumps compose into a working end-to-end path for the
-    VTuber persona: the tool is *on the manifest*, the pipeline
-    registers it, and Stage 10 dispatches the call to it."""
+    Functional proof that cycle 20260420_8 / plan/01 composes into a
+    working end-to-end path for the VTuber persona: the tool is *on
+    the manifest* (cycle-7-1 gap closed), the pipeline registers it,
+    and Stage 10 dispatches the call to it."""
     from geny_executor.core.pipeline import Pipeline
     from geny_executor.core.state import PipelineState
 
     from service.environment.templates import create_vtuber_env
 
     all_names = [
-        "geny_send_direct_message",
-        "geny_read_inbox",
+        "send_direct_message_external",
+        "send_direct_message_internal",
+        "read_inbox",
+        "session_list",
         "memory_read",
         "memory_write",
         "knowledge_search",
-        "opsidian_browse",
         "web_search",
         "news_search",
         "web_fetch",
         "browser_navigate",
     ]
-    manifest = create_vtuber_env(all_tool_names=all_names)
+    platform_stems = {
+        name: "geny_tools" if not name.startswith("memory_") and not name.startswith("knowledge_") else (
+            "memory_tools" if name.startswith("memory_") else "knowledge_tools"
+        )
+        for name in (
+            "send_direct_message_external",
+            "send_direct_message_internal",
+            "read_inbox",
+            "session_list",
+            "memory_read",
+            "memory_write",
+            "knowledge_search",
+        )
+    }
+    loader = _FakeToolLoader(platform_stems)
+    manifest = create_vtuber_env(all_tool_names=all_names, tool_loader=loader)
 
-    recording = _RecordingDMTool()
+    recording = _RecordingInternalDMTool()
     provider = _DMProvider(recording)
 
     pipeline = Pipeline.from_manifest(
@@ -130,9 +157,14 @@ async def test_vtuber_pipeline_dispatches_dm_call() -> None:
         adhoc_providers=[provider],
     )
 
-    assert "geny_send_direct_message" in pipeline.tool_registry.list_names(), (
-        "VTuber pipeline should have geny_send_direct_message registered. "
-        f"Got: {pipeline.tool_registry.list_names()}"
+    registered = pipeline.tool_registry.list_names()
+    assert "send_direct_message_internal" in registered, (
+        "VTuber pipeline should have send_direct_message_internal registered. "
+        f"Got: {registered}"
+    )
+    assert "send_direct_message_external" not in registered, (
+        "VTuber pipeline leaked send_direct_message_external — deny list "
+        f"regressed. Got: {registered}"
     )
 
     tool_stage = next(s for s in pipeline.stages if getattr(s, "order", None) == 10)
@@ -140,21 +172,16 @@ async def test_vtuber_pipeline_dispatches_dm_call() -> None:
     state = PipelineState(session_id="vtuber-session")
     state.pending_tool_calls = [
         {
-            "tool_name": "geny_send_direct_message",
-            "tool_input": {
-                "target_session_id": "sub-worker-session",
-                "message": "안녕",
-            },
+            "tool_name": "send_direct_message_internal",
+            "tool_input": {"content": "please create test.txt"},
             "tool_use_id": "call_dm_1",
         }
     ]
 
     await tool_stage.execute(input=None, state=state)
 
-    assert recording.calls == [
-        {"target_session_id": "sub-worker-session", "message": "안녕"}
-    ], (
-        "Stage 10 did not dispatch geny_send_direct_message to the "
+    assert recording.calls == [{"content": "please create test.txt"}], (
+        "Stage 10 did not dispatch send_direct_message_internal to the "
         "registered tool. This is the exact failure path LOG2 reported — "
         "the manifest/registration chain is broken."
     )
@@ -180,18 +207,22 @@ async def test_vtuber_pipeline_skips_browser_dispatch() -> None:
 
     from service.environment.templates import create_vtuber_env
 
+    loader = _FakeToolLoader(
+        {"send_direct_message_internal": "geny_tools"}
+    )
     manifest = create_vtuber_env(
         all_tool_names=[
-            "geny_send_direct_message",
+            "send_direct_message_internal",
             "web_search",
             "browser_navigate",
-        ]
+        ],
+        tool_loader=loader,
     )
     pipeline = Pipeline.from_manifest(
         manifest,
         api_key="sk-test",
         strict=False,
-        adhoc_providers=[_DMProvider(_RecordingDMTool())],
+        adhoc_providers=[_DMProvider(_RecordingInternalDMTool())],
     )
 
     assert "browser_navigate" not in pipeline.tool_registry.list_names(), (

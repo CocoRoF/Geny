@@ -20,7 +20,7 @@ Usage:
     # Build per-session MCP config with proxy
     session_config = build_session_mcp_config(
         global_config=config,
-        allowed_tools=["geny_session_list", "web_search"],
+        allowed_tools=["session_list", "web_search"],
         session_id="abc-123",
         backend_port=8000,
     )

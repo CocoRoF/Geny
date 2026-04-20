@@ -80,9 +80,10 @@ class _FakeProvider:
 
 
 _REPRESENTATIVE_ROSTER = [
-    "geny_send_direct_message",
-    "geny_read_inbox",
-    "geny_session_list",
+    "send_direct_message_external",
+    "send_direct_message_internal",
+    "read_inbox",
+    "session_list",
     "memory_read",
     "memory_write",
     "knowledge_search",
@@ -93,6 +94,32 @@ _REPRESENTATIVE_ROSTER = [
     "browser_navigate",
     "browser_click",
 ]
+
+
+class _FakeToolLoader:
+    """Minimal ToolLoader stand-in. Tags every entry in
+    *platform_stems* as a platform-built-in with the given stem."""
+
+    def __init__(self, source_map: Dict[str, str]) -> None:
+        self._source = source_map
+
+    def get_tool_source(self, name: str) -> Optional[str]:
+        return self._source.get(name)
+
+
+_PLATFORM_TAGS = {
+    "send_direct_message_external": "geny_tools",
+    "send_direct_message_internal": "geny_tools",
+    "read_inbox": "geny_tools",
+    "session_list": "geny_tools",
+    "memory_read": "memory_tools",
+    "memory_write": "memory_tools",
+    "knowledge_search": "knowledge_tools",
+}
+
+
+def _representative_loader() -> _FakeToolLoader:
+    return _FakeToolLoader(dict(_PLATFORM_TAGS))
 
 
 def test_worker_pipeline_registry_contains_platform_tools() -> None:
@@ -117,8 +144,8 @@ def test_worker_pipeline_registry_contains_platform_tools() -> None:
     registered = set(pipeline.tool_registry.list_names())
 
     for required in (
-        "geny_send_direct_message",
-        "geny_read_inbox",
+        "send_direct_message_external",
+        "read_inbox",
         "memory_read",
         "knowledge_search",
         "web_search",
@@ -130,17 +157,20 @@ def test_worker_pipeline_registry_contains_platform_tools() -> None:
         )
 
 
-def test_vtuber_pipeline_registry_excludes_browser_tools() -> None:
-    """The VTuber env filters ``browser_*`` at the manifest level
-    (:func:`_vtuber_tool_roster`). Even when the provider can supply
-    ``browser_navigate``, the pipeline's tool_registry must not
-    contain it — the manifest never declared the name so the
-    registration walk never asks for it."""
+def test_vtuber_pipeline_registry_excludes_browser_and_external_dm() -> None:
+    """The VTuber env filters ``browser_*`` and every address-primitive
+    / external-DM name at the manifest level (:func:`_vtuber_tool_roster`).
+    Even when the provider can supply them, the pipeline's
+    ``tool_registry`` must not contain them — the manifest never
+    declared the name so the registration walk never asks for it."""
     from geny_executor.core.pipeline import Pipeline
 
     from service.environment.templates import create_vtuber_env
 
-    manifest = create_vtuber_env(all_tool_names=_REPRESENTATIVE_ROSTER)
+    manifest = create_vtuber_env(
+        all_tool_names=_REPRESENTATIVE_ROSTER,
+        tool_loader=_representative_loader(),
+    )
     provider = _FakeProvider(_REPRESENTATIVE_ROSTER)
 
     pipeline = Pipeline.from_manifest(
@@ -152,17 +182,54 @@ def test_vtuber_pipeline_registry_excludes_browser_tools() -> None:
 
     registered = set(pipeline.tool_registry.list_names())
 
-    # Platform tools present
-    assert "geny_send_direct_message" in registered, sorted(registered)
+    # Counterpart DM + memory tools present
+    assert "send_direct_message_internal" in registered, sorted(registered)
     assert "memory_read" in registered, sorted(registered)
     # Conversational web tools present
     assert "web_search" in registered, sorted(registered)
+    # External DM + session_* denied
+    for denied in (
+        "send_direct_message_external",
+        "session_list",
+    ):
+        assert denied not in registered, (
+            f"VTuber pipeline leaked denied tool {denied!r}: "
+            f"{sorted(registered)}"
+        )
     # Browser tools filtered out
     for name in registered:
         assert not name.startswith("browser_"), (
             f"VTuber pipeline registered browser tool: {name}. "
             f"Full set: {sorted(registered)}"
         )
+
+
+def test_vtuber_pipeline_registers_internal_dm_tool() -> None:
+    """Cycle 20260420_8 / plan/01 completion criterion: the
+    VTuber pipeline — end-to-end via :meth:`Pipeline.from_manifest`
+    — must have ``send_direct_message_internal`` registered. This
+    closes the integration gap cycle 7-1 left open: the counterpart
+    tool class was defined and unit-tested in isolation, but never
+    landed in ``TOOLS`` export, so no VTuber pipeline ever saw it.
+    """
+    from geny_executor.core.pipeline import Pipeline
+
+    from service.environment.templates import create_vtuber_env
+
+    manifest = create_vtuber_env(
+        all_tool_names=_REPRESENTATIVE_ROSTER,
+        tool_loader=_representative_loader(),
+    )
+    pipeline = Pipeline.from_manifest(
+        manifest,
+        api_key="sk-test",
+        strict=False,
+        adhoc_providers=[_FakeProvider(_REPRESENTATIVE_ROSTER)],
+    )
+
+    registered = set(pipeline.tool_registry.list_names())
+    assert "send_direct_message_internal" in registered, sorted(registered)
+    assert "send_direct_message_external" not in registered, sorted(registered)
 
 
 def test_worker_pipeline_registry_empty_when_provider_missing() -> None:
@@ -188,7 +255,7 @@ def test_worker_pipeline_registry_empty_when_provider_missing() -> None:
     from service.environment.templates import create_worker_env
 
     manifest = create_worker_env(
-        external_tool_names=["geny_send_direct_message", "memory_read"]
+        external_tool_names=["send_direct_message_external", "memory_read"]
     )
     pipeline = Pipeline.from_manifest(
         manifest, api_key="sk-test", strict=False, adhoc_providers=[]
@@ -292,13 +359,16 @@ def test_vtuber_pipeline_registers_no_executor_built_ins() -> None:
     """Cycle 20260420_7 / PR-3: the VTuber seed env keeps
     ``manifest.tools.built_in = []``, so no framework built-in names
     appear in the registry. File actions must always route through
-    the Sub-Worker via ``geny_message_counterpart``."""
+    the Sub-Worker via ``send_direct_message_internal``."""
     from geny_executor.core.pipeline import Pipeline
     from geny_executor.tools.built_in import BUILT_IN_TOOL_CLASSES
 
     from service.environment.templates import create_vtuber_env
 
-    manifest = create_vtuber_env(all_tool_names=_REPRESENTATIVE_ROSTER)
+    manifest = create_vtuber_env(
+        all_tool_names=_REPRESENTATIVE_ROSTER,
+        tool_loader=_representative_loader(),
+    )
     pipeline = Pipeline.from_manifest(
         manifest,
         api_key="sk-test",

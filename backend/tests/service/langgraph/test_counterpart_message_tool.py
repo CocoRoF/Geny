@@ -1,8 +1,8 @@
-"""Regression tests for `GenyMessageCounterpartTool`.
+"""Regression tests for `SendDirectMessageInternalTool`.
 
 Cycle 20260420_7 / PR-1: the VTuber↔Sub-Worker DM path used to require
 the LLM to copy a UUID from its system prompt into
-``geny_send_direct_message``'s ``target_session_id`` argument; when the
+``send_direct_message_external``'s ``target_session_id`` argument; when the
 LLM treated the "## Sub-Worker Agent" header as a literal session name
 instead, it created a new session and routed the DM there. The
 counterpart tool drops ``target_session_id`` from the LLM-visible
@@ -105,7 +105,7 @@ def patched_world(monkeypatch):
 
 
 def test_schema_does_not_expose_target_session_id() -> None:
-    tool = geny_tools.GenyMessageCounterpartTool()
+    tool = geny_tools.SendDirectMessageInternalTool()
     schema = tool.parameters
     props = schema.get("properties", {})
     assert "target_session_id" not in props, (
@@ -118,7 +118,7 @@ def test_schema_does_not_expose_target_session_id() -> None:
 def test_adapter_probe_injects_session_id() -> None:
     """`session_id` is a declared run() parameter, so the Cycle-6 probe
     recognises it and the adapter injects ToolContext.session_id."""
-    tool = geny_tools.GenyMessageCounterpartTool()
+    tool = geny_tools.SendDirectMessageInternalTool()
     adapter = _GenyToolAdapter(tool)
     assert adapter._accepts_session_id is True
 
@@ -136,7 +136,7 @@ async def test_vtuber_sends_to_linked_sub_worker(patched_world) -> None:
         "sub-1": _FakeAgent("sub-1", "SubWorker", linked_id="vtuber-1"),
     })
 
-    tool = geny_tools.GenyMessageCounterpartTool()
+    tool = geny_tools.SendDirectMessageInternalTool()
     adapter = _GenyToolAdapter(tool)
 
     result = await adapter.execute(
@@ -165,7 +165,7 @@ async def test_sub_worker_replies_to_linked_vtuber(patched_world) -> None:
         "sub-1": _FakeAgent("sub-1", "SubWorker", linked_id="vtuber-1"),
     })
 
-    tool = geny_tools.GenyMessageCounterpartTool()
+    tool = geny_tools.SendDirectMessageInternalTool()
     adapter = _GenyToolAdapter(tool)
 
     result = await adapter.execute(
@@ -191,7 +191,7 @@ async def test_no_linked_counterpart_returns_error(patched_world) -> None:
         "solo-1": _FakeAgent("solo-1", "Solo", linked_id=None),
     })
 
-    tool = geny_tools.GenyMessageCounterpartTool()
+    tool = geny_tools.SendDirectMessageInternalTool()
     adapter = _GenyToolAdapter(tool)
 
     result = await adapter.execute(
@@ -215,7 +215,7 @@ async def test_linked_counterpart_deleted_returns_error(patched_world) -> None:
         "vtuber-1": _FakeAgent("vtuber-1", "VTuber", linked_id="ghost-sub"),
     })
 
-    tool = geny_tools.GenyMessageCounterpartTool()
+    tool = geny_tools.SendDirectMessageInternalTool()
     adapter = _GenyToolAdapter(tool)
 
     result = await adapter.execute(
@@ -238,7 +238,7 @@ async def test_empty_content_returns_error(patched_world) -> None:
         "sub-1": _FakeAgent("sub-1", "SubWorker", linked_id="vtuber-1"),
     })
 
-    tool = geny_tools.GenyMessageCounterpartTool()
+    tool = geny_tools.SendDirectMessageInternalTool()
     adapter = _GenyToolAdapter(tool)
 
     result = await adapter.execute(
@@ -256,7 +256,7 @@ async def test_unknown_caller_returns_error(patched_world) -> None:
     install, inbox, triggers = patched_world
     install({})  # nothing registered
 
-    tool = geny_tools.GenyMessageCounterpartTool()
+    tool = geny_tools.SendDirectMessageInternalTool()
     adapter = _GenyToolAdapter(tool)
 
     result = await adapter.execute(

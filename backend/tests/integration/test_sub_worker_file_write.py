@@ -106,7 +106,7 @@ def test_vtuber_env_has_no_write_tool() -> None:
     """Symmetric guard for PR-3: the VTuber env must *not* register
     ``Write`` (or any framework built-in). Every file operation for
     the VTuber goes through its bound Sub-Worker via
-    ``geny_message_counterpart``."""
+    ``send_direct_message_internal``."""
     from geny_executor.core.pipeline import Pipeline
 
     from service.environment.templates import create_vtuber_env

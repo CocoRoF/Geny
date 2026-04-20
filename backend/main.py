@@ -326,6 +326,7 @@ async def lifespan(app: FastAPI):
     env_templates_installed = install_environment_templates(
         environment_service,
         external_tool_names=tool_loader.get_all_names(),
+        tool_loader=tool_loader,
     )
     logger.info(f"   - Environment templates installed: {env_templates_installed}")
     logger.info(f"   - Total environments: {len(environment_service.list_all())}")
@@ -370,17 +371,17 @@ async def lifespan(app: FastAPI):
     # read-only tool directly and checking the response.
     print_step_banner("HEALTH", "TOOL RUNTIME CHECK", "Verifying tools execute correctly...")
     try:
-        test_tool = tool_loader.get_tool("geny_session_list")
+        test_tool = tool_loader.get_tool("session_list")
         if test_tool:
             test_result = test_tool.run()
             if test_result and isinstance(test_result, str):
-                logger.info(f"   ✅ geny_session_list: OK (response {len(test_result)} bytes)")
+                logger.info(f"   ✅ session_list: OK (response {len(test_result)} bytes)")
             else:
-                logger.warning(f"   ❌ geny_session_list: unexpected result type: {type(test_result)}")
+                logger.warning(f"   ❌ session_list: unexpected result type: {type(test_result)}")
         else:
-            logger.warning("   ❌ geny_session_list: tool not found in loader")
+            logger.warning("   ❌ session_list: tool not found in loader")
     except Exception as e:
-        logger.error(f"   ❌ geny_session_list: execution failed: {e}")
+        logger.error(f"   ❌ session_list: execution failed: {e}")
 
     print_step_banner("READY", "GENY AGENT READY", "All systems operational!")
     logger.info("Geny Agent startup complete! Ready to serve requests.")
