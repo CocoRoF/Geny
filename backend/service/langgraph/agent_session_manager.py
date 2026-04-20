@@ -356,20 +356,24 @@ class AgentSessionManager(SessionManager):
         except Exception as e:
             logger.warning(f"  Tool preset resolution failed: {e}")
 
-        # Compute allowed Python tools from preset (split by category)
-        allowed_builtin_tools: list[str] = []
-        allowed_custom_tools: list[str] = []
-        allowed_tool_names: list[str] = []
-
+        # Log the tool_preset's resolved tool list for operational
+        # visibility. After master-plan PR 15 removed
+        # ``build_geny_tool_registry``, these values are no longer fed
+        # into pipeline construction — tools flow through the manifest
+        # (``tools.built_in`` + ``tools.external`` + ``GenyToolProvider``
+        # adhoc provider). The log line is retained so operators can
+        # still answer "what did this tool_preset resolve to?" at
+        # session creation time.
         if self._tool_loader and preset:
-            allowed_builtin_tools, allowed_custom_tools = self._tool_loader.get_allowed_tools_by_category(preset)
-            allowed_tool_names = allowed_builtin_tools + allowed_custom_tools
-            logger.info(f"  allowed_tools: {len(allowed_builtin_tools)} builtin + {len(allowed_custom_tools)} custom")
+            builtin, custom = self._tool_loader.get_allowed_tools_by_category(preset)
+            logger.info(
+                f"  allowed_tools: {len(builtin)} builtin + {len(custom)} custom"
+            )
         elif self._tool_loader:
-            allowed_builtin_tools = self._tool_loader.get_builtin_names()
-            allowed_custom_tools = self._tool_loader.get_custom_names()
-            allowed_tool_names = allowed_builtin_tools + allowed_custom_tools
-            logger.info(f"  allowed_tools: all ({len(allowed_tool_names)})")
+            total = len(self._tool_loader.get_builtin_names()) + len(
+                self._tool_loader.get_custom_names()
+            )
+            logger.info(f"  allowed_tools: all ({total})")
 
         # Compute allowed MCP servers from preset
         if preset and preset.mcp_servers:

@@ -3,9 +3,17 @@
 Each session runs a geny-executor Pipeline that calls the Anthropic API
 directly (no CLI subprocess). Session creation flow:
 
-    1. Determine preset from workflow_id string
-    2. Build geny-executor Pipeline via GenyPresets
-    3. Initialize SessionMemoryManager for session storage path
+    1. Manager resolves role → env_id → EnvironmentManifest → Pipeline
+       (via ``EnvironmentService.instantiate_pipeline``) and hands it
+       in as ``prebuilt_pipeline``.
+    2. ``AgentSession._build_pipeline`` calls ``Pipeline.attach_runtime``
+       to wire the session-scoped runtime objects that a static
+       manifest cannot encode: memory retriever/strategy/persistence,
+       ``ComposablePromptBuilder`` with persona + datetime + memory
+       blocks, and ``ToolContext`` carrying the session's working_dir
+       and storage_path.
+    3. ``SessionMemoryManager`` is initialized for the session storage
+       path.
 
 Usage::
 
@@ -13,7 +21,7 @@ Usage::
         working_dir="/path/to/project",
         model_name="claude-sonnet-4-20250514",
         session_name="my-agent",
-        workflow_id="template-optimized-autonomous",
+        prebuilt_pipeline=<manifest-built pipeline>,
     )
     result = await agent.invoke("Hello, what can you help me with?")
     await agent.cleanup()
@@ -50,13 +58,52 @@ logger = getLogger(__name__)
 # ============================================================================
 
 
+_DEFAULT_WORKER_PROMPT = """\
+You are an autonomous AI agent. Complete the user's task step by step.
+
+When you have finished the task, end your response with [TASK_COMPLETE].
+If you need to continue working, end with [CONTINUE: next action].
+If you are blocked and cannot proceed, end with [BLOCKED: reason].
+
+Be thorough, accurate, and concise."""
+
+_ADAPTIVE_PROMPT = """\
+## Execution Strategy
+
+Classify the task and act accordingly:
+
+**Easy tasks** (factual Q&A, simple lookups, greetings, short explanations):
+Answer directly in one response. Do not use tools unless absolutely necessary.
+
+**Complex tasks** (coding, research, multi-step work, file operations):
+1. Plan: Decompose into clear steps
+2. Execute: Use tools to complete each step
+3. Verify: Check your work
+4. Signal [CONTINUE: next step] after each step
+5. Signal [TASK_COMPLETE] when all steps are done"""
+
+_DEFAULT_VTUBER_PROMPT = """\
+You are a friendly AI VTuber assistant. Engage in natural conversation
+while being helpful and knowledgeable.
+
+When the user asks a complex task that requires tools or multi-step work,
+indicate that you will delegate it.
+
+Keep responses conversational and natural."""
+
+
 class AgentSession:
     """geny-executor Pipeline-based agent session.
 
     Key architecture:
-        - geny-executor Pipeline: 16-stage execution engine
-        - SessionMemoryManager: long-term / short-term memory
-        - GenyPresets: pre-configured pipeline templates (worker_adaptive, vtuber, worker_easy)
+        - geny-executor Pipeline: 16-stage execution engine, built
+          from an EnvironmentManifest by the session manager and
+          handed in via ``prebuilt_pipeline``.
+        - ``Pipeline.attach_runtime``: the sole injection point for
+          session-scoped runtime (memory retriever/strategy/persistence,
+          composable system prompt builder, tool context).
+        - SessionMemoryManager: long-term / short-term memory backing
+          the retriever + strategy + persistence triple.
     """
 
     def __init__(
@@ -629,35 +676,45 @@ class AgentSession:
     # ========================================================================
 
     def _build_pipeline(self):
-        """Build a geny-executor Pipeline.
+        """Adopt the manager-built Pipeline and attach session runtime.
 
-        Three paths:
-          - ``prebuilt_pipeline`` was injected (env_id flow) → adopt as-is.
-          - ``vtuber``: conversational agent with persona + memory (preset).
-          - ``default`` (worker_adaptive): full autonomous agent with binary
-            classify (preset).
+        Every AgentSession is now manifest-backed: the session manager
+        resolves ``role → env_id`` via :func:`resolve_env_id`, calls
+        :meth:`EnvironmentService.instantiate_pipeline` to build a
+        Pipeline from the stored :class:`EnvironmentManifest`, and
+        hands it in as ``prebuilt_pipeline``. This method wires the
+        session-scoped runtime objects that a static manifest cannot
+        encode (memory, composable system prompt, tool context) via
+        :meth:`Pipeline.attach_runtime`.
 
-        No fallback — if this fails, the session is in error state.
+        Raises:
+            RuntimeError: If ``prebuilt_pipeline`` is missing
+                (direct construction without the manager is no longer
+                supported) or ``ANTHROPIC_API_KEY`` is not configured.
         """
-        # ── env_id path: the manager already built the Pipeline from a
-        # stored EnvironmentManifest. Adopt it and skip the preset branch.
-        if self._prebuilt_pipeline is not None:
-            self._pipeline = self._prebuilt_pipeline
-            self._preset_name = f"env:{self._env_id}" if self._env_id else "env"
-            logger.info(
-                f"[{self._session_id}] Pipeline adopted from manifest: "
-                f"preset={self._preset_name}"
+        if self._prebuilt_pipeline is None:
+            raise RuntimeError(
+                f"[{self._session_id}] prebuilt_pipeline is None. "
+                f"Every AgentSession must now be constructed through "
+                f"AgentSessionManager, which resolves env_id via "
+                f"resolve_env_id() and builds the Pipeline from the "
+                f"stored EnvironmentManifest before handing it to "
+                f"AgentSession."
             )
-            return
 
-        from geny_executor.memory import GenyPresets
-        from geny_executor.tools.registry import ToolRegistry
+        from geny_executor.memory import (
+            GenyMemoryRetriever,
+            GenyMemoryStrategy,
+            GenyPersistence,
+        )
         from geny_executor.tools.base import ToolContext
-        from geny_executor.tools.built_in import (
-            ReadTool, WriteTool, EditTool, BashTool, GlobTool, GrepTool,
+        from geny_executor.stages.s03_system.artifact.default.builders import (
+            ComposablePromptBuilder,
+            DateTimeBlock,
+            MemoryContextBlock,
+            PersonaBlock,
         )
 
-        # ── API key (required) ──
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         try:
             from service.config.manager import get_config_manager
@@ -666,49 +723,32 @@ class AgentSession:
             api_key = api_key or api_cfg.anthropic_api_key or ""
         except Exception:
             pass
-
         if not api_key:
             raise RuntimeError(
                 f"[{self._session_id}] ANTHROPIC_API_KEY is required. "
                 f"Set it in environment or config."
             )
 
-        model = self._model_name or "claude-sonnet-4-20250514"
-        system_prompt = self._system_prompt or ""
         working_dir = self._working_dir or self.storage_path or ""
-
-        # ── Determine preset: vtuber or default ──
         is_vtuber = self._role == SessionRole.VTUBER
-        self._preset_name = "vtuber" if is_vtuber else "default"
 
-        # ── Build tool registry ──
-        tools = ToolRegistry()
+        # Persona text — preserve legacy GenyPresets.* behavior. The
+        # adaptive tail teaches the LLM the [TASK_COMPLETE] / [CONTINUE]
+        # / [BLOCKED] vocabulary Stage 12's binary_classify evaluator
+        # expects. VTuber roles skip it — they use signal_based
+        # evaluation and a conversational persona.
+        system_prompt = self._system_prompt or ""
+        if is_vtuber:
+            persona_text = system_prompt or _DEFAULT_VTUBER_PROMPT
+            max_inject_chars = 8000
+        else:
+            persona_text = (
+                (system_prompt or _DEFAULT_WORKER_PROMPT)
+                + "\n\n"
+                + _ADAPTIVE_PROMPT
+            )
+            max_inject_chars = 10000
 
-        # Core built-in tools (file I/O, shell, search). Geny application
-        # tools no longer land here — they flow in through the manifest
-        # path's ``tools.external`` + ``GenyToolProvider`` adhoc path.
-        # This fallback branch only runs when the env_id prebuild fails,
-        # in which case we accept losing custom tools until PR 17 deletes
-        # this branch entirely.
-        tools.register(ReadTool())
-        tools.register(WriteTool())
-        tools.register(EditTool())
-        tools.register(BashTool())
-        tools.register(GlobTool())
-        tools.register(GrepTool())
-
-        logger.info(
-            f"[{self._session_id}] Tool registry: {len(tools)} tools"
-        )
-
-        # ── ToolContext for working_dir propagation ──
-        tool_context = ToolContext(
-            session_id=self._session_id,
-            working_dir=working_dir,
-            storage_path=self.storage_path,
-        )
-
-        # ── Curated knowledge ──
         curated_km = None
         if self._owner_username:
             try:
@@ -717,40 +757,49 @@ class AgentSession:
             except Exception:
                 pass
 
-        # ── LLM reflection callback ──
         llm_reflect = self._make_llm_reflect_callback(api_key)
 
-        # ── Build pipeline ──
-        if is_vtuber:
-            self._pipeline = GenyPresets.vtuber(
-                api_key=api_key,
-                memory_manager=self._memory_manager,
-                model=model,
-                persona_prompt=system_prompt,
+        # ── Session-scoped runtime objects ──
+        attach_kwargs: Dict[str, Any] = {
+            "system_builder": ComposablePromptBuilder(
+                blocks=[
+                    PersonaBlock(persona_text),
+                    DateTimeBlock(),
+                    MemoryContextBlock(),
+                ]
+            ),
+            "tool_context": ToolContext(
+                session_id=self._session_id,
+                working_dir=working_dir,
+                storage_path=self.storage_path,
+            ),
+        }
+        if self._memory_manager is not None:
+            attach_kwargs["memory_retriever"] = GenyMemoryRetriever(
+                self._memory_manager,
+                max_inject_chars=max_inject_chars,
+                enable_vector_search=True,
                 curated_knowledge_manager=curated_km,
-                llm_reflect=llm_reflect,
-                tools=tools,
-                tool_context=tool_context,
             )
-        else:
-            max_turns = self._max_iterations or 30
-            self._pipeline = GenyPresets.worker_adaptive(
-                api_key=api_key,
-                memory_manager=self._memory_manager,
-                model=model,
-                system_prompt=system_prompt,
-                tools=tools,
-                tool_context=tool_context,
-                max_turns=max_turns,
-                easy_max_turns=1,
-                curated_knowledge_manager=curated_km,
+            attach_kwargs["memory_strategy"] = GenyMemoryStrategy(
+                self._memory_manager,
+                enable_reflection=True,
                 llm_reflect=llm_reflect,
+                curated_knowledge_manager=curated_km,
+            )
+            attach_kwargs["memory_persistence"] = GenyPersistence(
+                self._memory_manager
             )
 
+        self._pipeline = self._prebuilt_pipeline
+        self._pipeline.attach_runtime(**attach_kwargs)
+        self._preset_name = f"env:{self._env_id}" if self._env_id else "env"
 
         logger.info(
-            f"[{self._session_id}] Pipeline built: preset={self._preset_name}, "
-            f"model={model}, tools={len(tools)}, working_dir={working_dir[:50]}"
+            f"[{self._session_id}] Pipeline adopted + runtime attached: "
+            f"preset={self._preset_name}, role={self._role.value}, "
+            f"memory={'yes' if self._memory_manager else 'no'}, "
+            f"working_dir={working_dir[:50]}"
         )
 
     @staticmethod
