@@ -25,3 +25,5 @@
   — geny-executor `feat/tool-structured-errors`.
 - [02 — MCP 도구 네임스페이스 prefix (PR2, Phase A)](02_mcp_namespace_prefix.md)
   — geny-executor `feat/mcp-namespace-prefix`.
+- [03 — MCP 수명주기 하드닝 (PR3, Phase B)](03_mcp_lifecycle.md)
+  — geny-executor `feat/mcp-lifecycle`.
