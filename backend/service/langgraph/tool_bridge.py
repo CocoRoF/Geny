@@ -3,12 +3,16 @@
 Bridges the gap between Geny's tool system (BaseTool with run(**kwargs))
 and geny-executor's tool system (Tool ABC with async execute(input, context)).
 
-Usage::
+The single public type exported is :class:`_GenyToolAdapter`, consumed
+by :class:`service.langgraph.geny_tool_provider.GenyToolProvider` —
+the :class:`AdhocToolProvider` that the manifest path hands to
+``Pipeline.from_manifest_async(adhoc_providers=[...])`` so that
+``manifest.tools.external`` names resolve against Geny's loader.
 
-    from service.langgraph.tool_bridge import build_geny_tool_registry
-
-    registry = build_geny_tool_registry(tool_loader, ["web_search", "file_read"])
-    pipeline = GenyPresets.worker_full(api_key, memory_manager, tools=registry)
+The old ``build_geny_tool_registry`` helper that pre-populated a
+fully-built :class:`ToolRegistry` up front is gone — tool
+registration now flows through the manifest + provider path and is
+no longer computed session-by-session in Geny.
 """
 
 from __future__ import annotations
@@ -16,47 +20,9 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
-
-
-def build_geny_tool_registry(
-    tool_loader: Any,
-    allowed_tool_names: List[str],
-) -> Any:
-    """Build a geny-executor ToolRegistry from Geny's ToolLoader.
-
-    Args:
-        tool_loader: Geny's ToolLoader instance (has get_tool(name) method).
-        allowed_tool_names: List of tool names to include.
-
-    Returns:
-        geny-executor ToolRegistry populated with adapted tools.
-    """
-    from geny_executor.tools.registry import ToolRegistry
-    from geny_executor.tools.base import Tool, ToolResult
-
-    registry = ToolRegistry()
-
-    for tool_name in allowed_tool_names:
-        try:
-            geny_tool = tool_loader.get_tool(tool_name)
-            if geny_tool is None:
-                continue
-
-            adapted = _GenyToolAdapter(geny_tool)
-            registry.register(adapted)
-
-        except Exception as exc:
-            logger.debug("tool_bridge: failed to adapt '%s': %s", tool_name, exc)
-
-    logger.info(
-        "tool_bridge: built registry with %d tools (from %d requested)",
-        len(registry),
-        len(allowed_tool_names),
-    )
-    return registry
 
 
 class _GenyToolAdapter:

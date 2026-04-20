@@ -77,7 +77,6 @@ class AgentSession:
         graph_name: Optional[str] = None,
         tool_preset_id: Optional[str] = None,
         owner_username: Optional[str] = None,
-        geny_tool_registry: Optional[Any] = None,
         env_id: Optional[str] = None,
         memory_config: Optional[Dict[str, Any]] = None,
         prebuilt_pipeline: Optional[Any] = None,
@@ -135,9 +134,6 @@ class AgentSession:
         self._env_id: Optional[str] = env_id
         self._memory_config: Optional[Dict[str, Any]] = memory_config
         self._prebuilt_pipeline: Optional[Any] = prebuilt_pipeline
-
-        # geny-executor tool registry (set by AgentSessionManager)
-        self._geny_tool_registry = geny_tool_registry
 
         # Memory manager (initialized lazily once storage_path is available)
         self._memory_manager: Optional["SessionMemoryManager"] = None
@@ -688,18 +684,18 @@ class AgentSession:
         # ── Build tool registry ──
         tools = ToolRegistry()
 
-        # 1. Core built-in tools (file I/O, shell, search)
+        # Core built-in tools (file I/O, shell, search). Geny application
+        # tools no longer land here — they flow in through the manifest
+        # path's ``tools.external`` + ``GenyToolProvider`` adhoc path.
+        # This fallback branch only runs when the env_id prebuild fails,
+        # in which case we accept losing custom tools until PR 17 deletes
+        # this branch entirely.
         tools.register(ReadTool())
         tools.register(WriteTool())
         tools.register(EditTool())
         tools.register(BashTool())
         tools.register(GlobTool())
         tools.register(GrepTool())
-
-        # 2. Geny application tools (via tool_bridge adapter)
-        if self._geny_tool_registry:
-            for t in self._geny_tool_registry.list_all():
-                tools.register(t)
 
         logger.info(
             f"[{self._session_id}] Tool registry: {len(tools)} tools"

@@ -430,49 +430,44 @@ class AgentSessionManager(SessionManager):
 
         logger.info(f"  workflow_id: {workflow_id}, graph_name: {graph_name}")
 
-        # Build geny-executor ToolRegistry for pipeline mode
-        geny_tool_registry = None
-        if self._tool_loader and allowed_tool_names:
-            try:
-                from service.langgraph.tool_bridge import build_geny_tool_registry
-                geny_tool_registry = build_geny_tool_registry(
-                    self._tool_loader, allowed_tool_names
-                )
-            except Exception as e:
-                logger.debug(f"  geny-executor tool registry build skipped: {e}")
+        # ── env_id resolution: always through the manifest path ──────────
+        # Every session (regardless of role or whether the caller supplied
+        # env_id explicitly) resolves to a seed environment id via
+        # ``resolve_env_id`` and gets a manifest-backed Pipeline from
+        # ``EnvironmentService.instantiate_pipeline``. The GenyPresets
+        # branch inside ``AgentSession._build_pipeline`` is reached only
+        # if the prebuild fails — master-plan PR 17 deletes that fallback.
+        from service.environment.role_defaults import resolve_env_id
 
-        # ── env_id path: pre-build the Pipeline from the stored manifest ──
-        # When env_id is set, skip the GenyPresets branch in _build_pipeline
-        # and hand the session a manifest-backed Pipeline instead.
-        prebuilt_pipeline = None
-        if env_id:
-            if self._environment_service is None:
-                raise ValueError(
-                    "env_id supplied but EnvironmentService is not configured on "
-                    "AgentSessionManager"
-                )
-            try:
-                from service.config.manager import get_config_manager
-                from service.config.sub_config.general.api_config import APIConfig
-                api_key = os.environ.get("ANTHROPIC_API_KEY") or (
-                    get_config_manager().load_config(APIConfig).anthropic_api_key or ""
-                )
-            except Exception:
-                api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-            if not api_key:
-                raise ValueError("ANTHROPIC_API_KEY is required for env_id-based sessions")
-            adhoc_providers: list = []
-            if self._tool_loader is not None:
-                from service.langgraph.geny_tool_provider import GenyToolProvider
+        env_id = resolve_env_id(request.role, env_id)
+        if self._environment_service is None:
+            raise RuntimeError(
+                "EnvironmentService is not configured on AgentSessionManager. "
+                "Wire it via set_environment_service(...) at app boot — "
+                "every session now resolves through the manifest path."
+            )
+        try:
+            from service.config.manager import get_config_manager
+            from service.config.sub_config.general.api_config import APIConfig
+            api_key = os.environ.get("ANTHROPIC_API_KEY") or (
+                get_config_manager().load_config(APIConfig).anthropic_api_key or ""
+            )
+        except Exception:
+            api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            raise ValueError("ANTHROPIC_API_KEY is required for manifest-backed sessions")
+        adhoc_providers: list = []
+        if self._tool_loader is not None:
+            from service.langgraph.geny_tool_provider import GenyToolProvider
 
-                adhoc_providers.append(GenyToolProvider(self._tool_loader))
-            prebuilt_pipeline = await self._environment_service.instantiate_pipeline(
-                env_id, api_key=api_key, adhoc_providers=adhoc_providers,
-            )
-            logger.info(
-                f"  env_id: {env_id} → manifest-backed pipeline built "
-                f"(adhoc_providers={len(adhoc_providers)})"
-            )
+            adhoc_providers.append(GenyToolProvider(self._tool_loader))
+        prebuilt_pipeline = await self._environment_service.instantiate_pipeline(
+            env_id, api_key=api_key, adhoc_providers=adhoc_providers,
+        )
+        logger.info(
+            f"  env_id: {env_id} → manifest-backed pipeline built "
+            f"(adhoc_providers={len(adhoc_providers)})"
+        )
 
         # Create AgentSession
         agent = await AgentSession.create(
@@ -492,7 +487,6 @@ class AgentSessionManager(SessionManager):
             graph_name=graph_name,
             tool_preset_id=preset_id,
             owner_username=owner_username,
-            geny_tool_registry=geny_tool_registry,
             env_id=env_id,
             memory_config=memory_config,
             prebuilt_pipeline=prebuilt_pipeline,
