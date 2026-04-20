@@ -130,7 +130,14 @@ class ShortTermMemory:
         """Append a message to the transcript.
 
         Args:
-            role: "user", "assistant", or "system".
+            role: Conventionally one of ``"user"``, ``"assistant"``, or
+                ``"system"``, but this layer is role-agnostic — callers
+                may also pass ``"internal_trigger"`` (idle/activity auto
+                triggers) or ``"assistant_dm"`` (inter-agent DM received)
+                so retrieval can distinguish real user input from system
+                self-prompts and counterpart messages. See
+                ``dev_docs/20260420_8/plan/03_turn_memory_continuity.md``
+                § 4-2.
             content: Message text.
             metadata: Optional extra fields (tool_calls, duration_ms, etc.).
         """
