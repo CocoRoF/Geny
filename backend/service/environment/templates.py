@@ -68,6 +68,23 @@ _VTUBER_CUSTOM_TOOL_WHITELIST = frozenset(
 _PLATFORM_TOOL_PREFIXES = ("geny_", "memory_", "knowledge_", "opsidian_")
 
 
+# Framework-shipped built-in tool selection per role.
+#
+# Worker seeds get the full set (``["*"]``) — ``Read`` / ``Write`` /
+# ``Edit`` / ``Bash`` / ``Glob`` / ``Grep``. This fixes the Sub-Worker
+# file-creation gap: previously "create test.txt" fell back to
+# ``memory_write`` because no filesystem tool was in the roster. The
+# executor sandboxes every write to ``ToolContext.working_dir`` —
+# which :class:`AgentSession` sets to the session's ``storage_path``
+# — so Worker writes land in ``backend/storage/<session_id>/``.
+#
+# VTuber seeds get ``[]``. The conversational persona must not touch
+# files directly; every file operation is delegated to its bound
+# Sub-Worker via :func:`geny_message_counterpart` (Plan/01).
+_WORKER_BUILT_IN_TOOL_NAMES: List[str] = ["*"]
+_VTUBER_BUILT_IN_TOOL_NAMES: List[str] = []
+
+
 # Platform tools a VTuber persona should *not* see even though they
 # match :data:`_PLATFORM_TOOL_PREFIXES`. The VTuber already has a
 # runtime-bound Sub-Worker (``AgentSession._linked_session_id``); the
@@ -117,12 +134,19 @@ def create_worker_env(
     union (not just the custom slice) to get platform tools into
     the session's tool registry.
 
+    Worker seeds additionally opt into every framework built-in tool
+    (:data:`_WORKER_BUILT_IN_TOOL_NAMES` = ``["*"]``). This gives
+    Sub-Workers ``Write`` / ``Read`` / ``Edit`` / ``Bash`` / ``Glob`` /
+    ``Grep`` — required to actually create files in the session's
+    ``storage_path`` instead of falling back to ``memory_write``.
+
     The ``model`` block is left empty — session creation fills it in
     via :class:`PipelineConfig` based on the user's LLM settings.
     """
     manifest = build_default_manifest(
         preset="worker_adaptive",
         external_tool_names=list(external_tool_names or []),
+        built_in_tool_names=list(_WORKER_BUILT_IN_TOOL_NAMES),
     )
     manifest.metadata.id = WORKER_ENV_ID
     manifest.metadata.name = "Worker Environment"
@@ -164,6 +188,7 @@ def create_vtuber_env(
     manifest = build_default_manifest(
         preset="vtuber",
         external_tool_names=external,
+        built_in_tool_names=list(_VTUBER_BUILT_IN_TOOL_NAMES),
     )
     manifest.metadata.id = VTUBER_ENV_ID
     manifest.metadata.name = "VTuber Environment"

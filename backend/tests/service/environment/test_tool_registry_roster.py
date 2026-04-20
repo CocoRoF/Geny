@@ -173,11 +173,17 @@ def test_worker_pipeline_registry_empty_when_provider_missing() -> None:
     could supply every name, but the manifest only declared custom
     ones, so platform tools were absent from the registry. This test
     models the inverse: a manifest that declares platform tools with
-    *no* provider supplying them must produce an empty registry
-    (every name skipped with a warning), not silently fall back to
-    some other source. Demonstrates that ``.external`` + providers is
-    the only path that matters."""
+    *no* provider supplying them must not resolve those names from
+    anywhere — every ``.external`` entry is skipped with a warning.
+
+    Framework built-ins (``manifest.tools.built_in``) do register
+    regardless of providers, because the executor resolves them from
+    its own ``BUILT_IN_TOOL_CLASSES``; subtract those from the
+    registry before the comparison so we're only checking the
+    external-resolution path. Demonstrates ``.external`` + providers
+    is the only path that matters for external tools."""
     from geny_executor.core.pipeline import Pipeline
+    from geny_executor.tools.built_in import BUILT_IN_TOOL_CLASSES
 
     from service.environment.templates import create_worker_env
 
@@ -189,18 +195,24 @@ def test_worker_pipeline_registry_empty_when_provider_missing() -> None:
     )
 
     registered = set(pipeline.tool_registry.list_names())
-    assert registered == set(), (
-        "With no provider, manifest names must be skipped — not resolved "
-        f"from elsewhere. Got: {sorted(registered)}"
+    externals_registered = registered - set(BUILT_IN_TOOL_CLASSES)
+    assert externals_registered == set(), (
+        "With no provider, external manifest names must be skipped — "
+        f"not resolved from elsewhere. Got: {sorted(externals_registered)}"
     )
 
 
-def test_worker_pipeline_registers_zero_tools_when_roster_empty() -> None:
+def test_worker_pipeline_registers_zero_externals_when_roster_empty() -> None:
     """A worker manifest built with ``external_tool_names=[]`` must
-    register zero tools, even when the provider could supply many.
-    The pipeline does not fabricate a default roster from the
-    provider's catalog — ``.external`` is authoritative."""
+    register zero *external* tools, even when the provider could
+    supply many. The pipeline does not fabricate a default roster
+    from the provider's catalog — ``.external`` is authoritative.
+
+    Framework built-ins still register because ``.built_in`` is
+    ``["*"]`` for worker seeds; the assertion targets only the
+    external-resolution channel."""
     from geny_executor.core.pipeline import Pipeline
+    from geny_executor.tools.built_in import BUILT_IN_TOOL_CLASSES
 
     from service.environment.templates import create_worker_env
 
@@ -211,7 +223,11 @@ def test_worker_pipeline_registers_zero_tools_when_roster_empty() -> None:
         strict=False,
         adhoc_providers=[_FakeProvider(_REPRESENTATIVE_ROSTER)],
     )
-    assert pipeline.tool_registry.list_names() == []
+    registered = set(pipeline.tool_registry.list_names())
+    externals = registered - set(BUILT_IN_TOOL_CLASSES)
+    assert externals == set(), (
+        f"worker env with empty external roster leaked: {sorted(externals)}"
+    )
 
 
 def test_vtuber_pipeline_registers_legacy_three_when_called_without_roster() -> None:
@@ -238,3 +254,61 @@ def test_vtuber_pipeline_registers_legacy_three_when_called_without_roster() -> 
         "news_search",
         "web_fetch",
     }
+
+
+def test_worker_pipeline_registers_all_executor_built_ins() -> None:
+    """Cycle 20260420_7 / PR-3: the worker seed env now carries
+    ``manifest.tools.built_in = ["*"]``, which the executor (>= 0.27.0)
+    expands to the full :data:`BUILT_IN_TOOL_CLASSES` set inside
+    :meth:`Pipeline.from_manifest_async`. The resulting pipeline's
+    ``tool_registry`` must expose ``Read`` / ``Write`` / ``Edit`` /
+    ``Bash`` / ``Glob`` / ``Grep`` alongside any external/custom
+    tools. This closes the Sub-Worker file-creation gap — "create
+    test.txt" now resolves to ``Write`` instead of ``memory_write``."""
+    from geny_executor.core.pipeline import Pipeline
+    from geny_executor.tools.built_in import BUILT_IN_TOOL_CLASSES
+
+    from service.environment.templates import create_worker_env
+
+    manifest = create_worker_env(external_tool_names=["memory_read"])
+    pipeline = Pipeline.from_manifest(
+        manifest,
+        api_key="sk-test",
+        strict=False,
+        adhoc_providers=[_FakeProvider(["memory_read"])],
+    )
+
+    registered = set(pipeline.tool_registry.list_names())
+    for name in BUILT_IN_TOOL_CLASSES:
+        assert name in registered, (
+            f"worker pipeline missing framework built-in {name!r}. "
+            f"Got: {sorted(registered)}"
+        )
+    # External coexistence still holds
+    assert "memory_read" in registered
+
+
+def test_vtuber_pipeline_registers_no_executor_built_ins() -> None:
+    """Cycle 20260420_7 / PR-3: the VTuber seed env keeps
+    ``manifest.tools.built_in = []``, so no framework built-in names
+    appear in the registry. File actions must always route through
+    the Sub-Worker via ``geny_message_counterpart``."""
+    from geny_executor.core.pipeline import Pipeline
+    from geny_executor.tools.built_in import BUILT_IN_TOOL_CLASSES
+
+    from service.environment.templates import create_vtuber_env
+
+    manifest = create_vtuber_env(all_tool_names=_REPRESENTATIVE_ROSTER)
+    pipeline = Pipeline.from_manifest(
+        manifest,
+        api_key="sk-test",
+        strict=False,
+        adhoc_providers=[_FakeProvider(_REPRESENTATIVE_ROSTER)],
+    )
+
+    registered = set(pipeline.tool_registry.list_names())
+    for name in BUILT_IN_TOOL_CLASSES:
+        assert name not in registered, (
+            f"VTuber pipeline leaked framework built-in {name!r}. "
+            f"Got: {sorted(registered)}"
+        )

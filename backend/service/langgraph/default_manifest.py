@@ -296,6 +296,7 @@ def build_default_manifest(
     *,
     model: Optional[str] = None,
     external_tool_names: Optional[List[str]] = None,
+    built_in_tool_names: Optional[List[str]] = None,
 ) -> "object":
     """Materialize an :class:`EnvironmentManifest` for a preset name.
 
@@ -315,13 +316,21 @@ def build_default_manifest(
             :meth:`Pipeline.from_manifest_async` at session build,
             each name listed here gets registered if the provider
             claims it.
+        built_in_tool_names: Names of framework-shipped built-in tools
+            (from ``geny_executor.tools.built_in.BUILT_IN_TOOL_CLASSES``)
+            to register on the session. ``["*"]`` opts into every
+            framework tool — ``Read`` / ``Write`` / ``Edit`` / ``Bash`` /
+            ``Glob`` / ``Grep``. ``[]`` / ``None`` disables them (what
+            a conversational VTuber wants). The executor resolves these
+            inside :meth:`Pipeline.from_manifest_async` against its
+            built-in registry; see ``geny-executor`` v0.27.0 changelog.
 
     Returns:
         An :class:`EnvironmentManifest` ready to feed
         :meth:`Pipeline.from_manifest_async`. The manifest carries a
         populated stage list (mirroring the preset's stage chain),
-        ``tools.built_in`` populated from the shared default set,
-        and ``tools.external`` populated from *external_tool_names*.
+        ``tools.built_in`` populated from *built_in_tool_names*, and
+        ``tools.external`` populated from *external_tool_names*.
         No ``mcp_servers`` are declared; callers that need MCP tools
         add them to the manifest explicitly.
 
@@ -357,15 +366,15 @@ def build_default_manifest(
         base_preset=effective,
     )
 
-    # `.built_in` is left empty: the executor's `from_manifest` path
-    # only consumes `.external` (see `_register_external_tools` in
-    # `geny_executor/core/pipeline.py`). Populating `.built_in` with
-    # names no provider supplies would be dead metadata. The seed env
-    # factories pass every provider-backed tool (builtin + custom
-    # alike) through `external_tool_names`, so the resulting registry
-    # is the full roster.
+    # ``.built_in`` is resolved by the executor (v0.27.0+) against its
+    # shipped tool registry inside ``Pipeline.from_manifest_async``.
+    # ``["*"]`` expands to every framework tool; ``[]`` / missing
+    # keeps them off. The seed env factories choose per role — Worker
+    # gets ``["*"]`` (filesystem + Bash), VTuber gets ``[]`` (pure
+    # conversational persona). ``.external`` carries the Geny-provider
+    # tool names (platform + custom) the session should also expose.
     tools = ToolsSnapshot(
-        built_in=[],
+        built_in=list(built_in_tool_names or []),
         external=list(external_tool_names or []),
     )
 

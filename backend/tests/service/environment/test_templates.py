@@ -208,6 +208,64 @@ def test_worker_env_still_receives_session_create() -> None:
     assert "geny_session_create" in manifest.tools.external
 
 
+def test_worker_env_declares_all_executor_built_ins() -> None:
+    """Cycle 20260420_7 / PR-3: worker seeds opt into every
+    framework-shipped built-in by setting
+    ``manifest.tools.built_in = ["*"]``. The executor
+    (``Pipeline.from_manifest_async`` in geny-executor >= 0.27.0)
+    resolves ``"*"`` against ``BUILT_IN_TOOL_CLASSES`` so the session
+    registry ends up with ``Write`` / ``Read`` / ``Edit`` / ``Bash`` /
+    ``Glob`` / ``Grep``. Before this PR the field was hardcoded to
+    ``[]`` and Sub-Workers had no filesystem tool, forcing
+    ``memory_write`` fallback for "create test.txt"-style requests
+    (see dev_docs/20260420_7/analysis/02)."""
+    from service.environment.templates import create_worker_env
+
+    manifest = create_worker_env(external_tool_names=["memory_read"])
+    assert list(manifest.tools.built_in) == ["*"], (
+        "worker env must opt into every executor built-in via '*'"
+    )
+
+
+def test_vtuber_env_declares_no_executor_built_ins() -> None:
+    """Cycle 20260420_7 / PR-3: VTuber seeds keep
+    ``manifest.tools.built_in = []``. The conversational persona has
+    no business touching files — every file action is delegated to
+    its bound Sub-Worker via ``geny_message_counterpart``."""
+    from service.environment.templates import create_vtuber_env
+
+    manifest = create_vtuber_env(all_tool_names=["web_search"])
+    assert list(manifest.tools.built_in) == [], (
+        "VTuber env must not declare any built-in; file ops go via Sub-Worker"
+    )
+
+
+def test_install_templates_persists_role_built_in_choices(tmp_path) -> None:
+    """Cycle 20260420_7 / PR-3: the ``.built_in`` field is serialized
+    to disk by ``install_environment_templates``. Worker seed keeps
+    ``["*"]``, VTuber seed keeps ``[]`` — verifies the roundtrip, so
+    a boot-time edit of the seed env and a read-back don't silently
+    drop the selection."""
+    from service.environment.service import EnvironmentService
+    from service.environment.templates import (
+        VTUBER_ENV_ID,
+        WORKER_ENV_ID,
+        install_environment_templates,
+    )
+
+    service = EnvironmentService(storage_path=str(tmp_path))
+    install_environment_templates(
+        service,
+        external_tool_names=["memory_read", "web_search"],
+    )
+
+    worker = service.load_manifest(WORKER_ENV_ID)
+    vtuber = service.load_manifest(VTUBER_ENV_ID)
+    assert worker is not None and vtuber is not None
+    assert list(worker.tools.built_in) == ["*"]
+    assert list(vtuber.tools.built_in) == []
+
+
 def test_install_environment_templates_passes_all_names(tmp_path) -> None:
     """The boot path calls ``install_environment_templates`` with
     ``tool_loader.get_all_names()`` (see ``backend/main.py``). A
