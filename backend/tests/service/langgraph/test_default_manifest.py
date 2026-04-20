@@ -75,6 +75,37 @@ def test_vtuber_manifest_omits_think_stage() -> None:
 
 
 @pytest.mark.parametrize("preset", _known_preset_ids())
+def test_manifest_built_in_is_empty(preset: str) -> None:
+    """`manifest.tools.built_in` is dead metadata — the executor's
+    `_register_external_tools` only walks `.external`. The factory
+    should leave `.built_in` empty to keep the manifest honest
+    about what actually reaches the registry. Regression guard
+    against re-introducing a hardcoded builtin list (e.g. the old
+    ``["Read", "Write", "Edit", ...]`` that pointed at names no
+    provider supplied)."""
+    from service.langgraph.default_manifest import build_default_manifest
+
+    manifest = build_default_manifest(preset)
+    assert list(manifest.tools.built_in) == [], (
+        f"{preset}: manifest.tools.built_in must be empty — the "
+        f"executor does not consume it; populating it creates dead "
+        f"metadata. Got: {list(manifest.tools.built_in)}"
+    )
+
+
+@pytest.mark.parametrize("preset", _known_preset_ids())
+def test_manifest_external_is_caller_supplied(preset: str) -> None:
+    """Everything the caller passes as ``external_tool_names`` lands
+    verbatim in ``manifest.tools.external`` — this is the single
+    registration path the executor honours."""
+    from service.langgraph.default_manifest import build_default_manifest
+
+    names = ["geny_send_direct_message", "memory_read", "web_search"]
+    manifest = build_default_manifest(preset, external_tool_names=names)
+    assert list(manifest.tools.external) == names
+
+
+@pytest.mark.parametrize("preset", _known_preset_ids())
 def test_pipeline_from_manifest_registers_tool_stages(preset: str) -> None:
     """End-to-end wiring check: the stage entries the builder emits
     actually produce registered Stage objects in a materialized

@@ -316,12 +316,16 @@ async def lifespan(app: FastAPI):
     # build_default_manifest output — custom envs (any other id) are
     # untouched. Keeps seeds in lockstep with manifest-builder changes
     # without a migration framework. The worker env binds to every
-    # custom tool the loader knows about, so its "All Tools" sensibility
-    # tracks what the user actually has.
+    # tool the loader knows about — both platform builtins (``geny_*``,
+    # ``memory_*``, ``knowledge_*``) and custom tools — so its "All
+    # Tools" sensibility tracks what the user actually has. The
+    # executor's ``_register_external_tools`` path only consumes
+    # ``manifest.tools.external``, so passing the union here is what
+    # gets the platform tools into ``pipeline.tool_registry``.
     from service.environment.templates import install_environment_templates
     env_templates_installed = install_environment_templates(
         environment_service,
-        external_tool_names=tool_loader.get_custom_names(),
+        external_tool_names=tool_loader.get_all_names(),
     )
     logger.info(f"   - Environment templates installed: {env_templates_installed}")
     logger.info(f"   - Total environments: {len(environment_service.list_all())}")
