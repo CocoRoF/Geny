@@ -8,10 +8,18 @@ switch-over collapses every session path onto the single
 point; this factory is the piece that turns a preset *name* into the
 manifest that entry-point expects.
 
-**Dead code.** Introduced by the Phase C safe-refactor PR. Nothing in
-the current AgentSession code path imports this module; the
-switch-over PR will replace the ``GenyPresets.*`` branches with a
-call to :func:`build_default_manifest`.
+**Still inactive after the Phase C cutover PR.** That PR activates
+:class:`GenyToolProvider` in the env_id flow (where a manifest is
+loaded from disk), but the non-env_id path in
+``AgentSession._build_pipeline`` continues to call
+:class:`~geny_executor.memory.GenyPresets` directly. Replacing that
+path requires populating ``stages=[...]`` here with the worker /
+vtuber stage chains *and* writing a post-construction attach helper
+that injects ``memory_manager`` / ``llm_reflect`` /
+``curated_knowledge_manager`` into the relevant stages — both
+deliberately out of scope for the current cutover. Once that
+follow-on PR lands, this factory becomes the single entry point for
+non-env_id sessions.
 
 Returned manifests deliberately carry **only what the manifest can
 authoritatively express**: stage layout, built-in tool whitelist, and

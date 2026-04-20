@@ -17,7 +17,7 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 from uuid import uuid4
 
 from geny_executor import (
@@ -481,18 +481,31 @@ class EnvironmentService:
         self._write_manifest(new_id, clone)
         return new_id
 
-    def instantiate_pipeline(
+    async def instantiate_pipeline(
         self,
         env_id: str,
         *,
         api_key: str,
         strict: bool = True,
+        adhoc_providers: Sequence[Any] = (),
     ) -> Pipeline:
-        """Load the manifest and build a Pipeline via the library helper."""
+        """Load the manifest and build a Pipeline via the library helper.
+
+        Uses :meth:`Pipeline.from_manifest_async` (geny-executor v0.22+)
+        so that any ``tools.mcp_servers`` declared in the manifest are
+        connected before the pipeline is returned, and
+        ``adhoc_providers`` get a chance to register their tools against
+        ``manifest.tools.external``.
+        """
         manifest = self.load_manifest(env_id)
         if manifest is None:
             raise EnvironmentNotFoundError(env_id)
-        return Pipeline.from_manifest(manifest, api_key=api_key, strict=strict)
+        return await Pipeline.from_manifest_async(
+            manifest,
+            api_key=api_key,
+            strict=strict,
+            adhoc_providers=adhoc_providers,
+        )
 
     # ── Diff ───────────────────────────────────────────────────
 

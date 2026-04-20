@@ -461,10 +461,18 @@ class AgentSessionManager(SessionManager):
                 api_key = os.environ.get("ANTHROPIC_API_KEY", "")
             if not api_key:
                 raise ValueError("ANTHROPIC_API_KEY is required for env_id-based sessions")
-            prebuilt_pipeline = self._environment_service.instantiate_pipeline(
-                env_id, api_key=api_key
+            adhoc_providers: list = []
+            if self._tool_loader is not None:
+                from service.langgraph.geny_tool_provider import GenyToolProvider
+
+                adhoc_providers.append(GenyToolProvider(self._tool_loader))
+            prebuilt_pipeline = await self._environment_service.instantiate_pipeline(
+                env_id, api_key=api_key, adhoc_providers=adhoc_providers,
             )
-            logger.info(f"  env_id: {env_id} → manifest-backed pipeline built")
+            logger.info(
+                f"  env_id: {env_id} → manifest-backed pipeline built "
+                f"(adhoc_providers={len(adhoc_providers)})"
+            )
 
         # Create AgentSession
         agent = await AgentSession.create(

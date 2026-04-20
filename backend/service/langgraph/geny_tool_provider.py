@@ -7,14 +7,18 @@ can consume it directly. No inheritance — the executor Protocol is
 ``@runtime_checkable`` and duck-typing keeps this module importable
 even against executor versions that predate the Protocol.
 
-**Dead code.** Introduced by the Phase C safe-refactor PR (see
-``dev_docs/20260420_2/plan/01_unified_tool_surface.md``). The Phase C
-switch-over PR wires it into :class:`AgentSession._build_pipeline` and
-:meth:`EnvironmentService.instantiate_pipeline`. Until then nothing
-imports this module at FastAPI boot time, so the extra code path is
-completely inert.
+**Active in env_id sessions.** Wired into
+:meth:`EnvironmentService.instantiate_pipeline` by the Phase C
+cutover PR; the env_id flow in ``AgentSessionManager`` constructs
+one of these and forwards it as ``adhoc_providers=[...]`` so that
+``manifest.tools.external`` names resolve against Geny's
+:class:`~service.tool_loader.ToolLoader`. The non-env_id
+``AgentSession._build_pipeline`` path still uses
+:class:`~geny_executor.memory.GenyPresets` directly — replacing
+that path requires a follow-on PR (manifest stage chain +
+post-construction memory_manager / callback attach helper).
 
-Usage (once the switch-over PR lands)::
+Usage::
 
     from service.langgraph.geny_tool_provider import GenyToolProvider
     provider = GenyToolProvider(tool_loader)
