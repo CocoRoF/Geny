@@ -46,30 +46,51 @@ class _GenyToolAdapter:
 
     @staticmethod
     def _probe_session_id_support(tool: Any) -> bool:
-        """Return True iff the tool's run/arun signature can accept
-        a ``session_id`` kwarg — either declared explicitly or via
-        ``**kwargs``.
+        """Return True iff injecting ``session_id`` into this tool's call
+        kwargs is safe.
 
-        Probed once at adapter construction; the result is cached on
-        the instance. Some Geny built-in tools (e.g. ``mcp_tools``,
-        ``sub_agent``, inbox helpers) require ``session_id``; others
-        (``news_search``, ``web_search``, ``web_fetch``) don't declare
-        it and raise ``TypeError`` if it is injected.
+        The adapter's kwargs flow through ``arun(**input)`` →
+        ``run(**input)`` via :meth:`BaseTool.arun`'s inherited
+        ``**kwargs`` forwarder, so the signature that actually
+        *accepts* the kwargs is ``run``'s, not ``arun``'s. Probing
+        ``arun`` first — as this did before — trips on the forwarder's
+        bare ``**kwargs`` and returns a false positive for every
+        BaseTool subclass regardless of its concrete ``run``
+        signature (see cycle ``dev_docs/20260420_6/analysis/01``).
+
+        For a ``@tool``-decorated function wrapped in
+        :class:`~tools.base.ToolWrapper`, the kwargs reach ``func``
+        through ``ToolWrapper.run``'s fixed ``**kwargs`` forwarder —
+        so the authoritative signature is ``func``'s.
+
+        Resolution order:
+          1. ``tool.func`` — wrapped function inside a ToolWrapper.
+          2. ``tool.run`` — concrete override on a BaseTool subclass.
+          3. ``tool.arun`` — fallback for duck-typed objects that expose
+             only the async method.
+
+        A target accepts ``session_id`` if it declares the parameter
+        explicitly OR accepts ``**kwargs``. If inspection fails
+        (C-implemented callables, unreadable partials), return False
+        — safer to omit the injection than to crash the call.
         """
-        fn = getattr(tool, "arun", None) or getattr(tool, "run", None)
-        if fn is None:
-            return False
-        try:
-            sig = inspect.signature(fn)
-        except (TypeError, ValueError):
-            # Builtins / C-implemented callables: safest assumption is
-            # "does not accept arbitrary kwargs".
-            return False
-        for param in sig.parameters.values():
-            if param.name == "session_id":
-                return True
-            if param.kind is inspect.Parameter.VAR_KEYWORD:
-                return True
+        for fn in (
+            getattr(tool, "func", None),
+            getattr(tool, "run", None),
+            getattr(tool, "arun", None),
+        ):
+            if fn is None:
+                continue
+            try:
+                sig = inspect.signature(fn)
+            except (TypeError, ValueError):
+                continue
+            for param in sig.parameters.values():
+                if param.name == "session_id":
+                    return True
+                if param.kind is inspect.Parameter.VAR_KEYWORD:
+                    return True
+            return False  # first inspectable target is authoritative
         return False
 
     @property
@@ -108,23 +129,28 @@ class _GenyToolAdapter:
         """
         from geny_executor.tools.base import ToolResult
 
+        # Copy the caller's dict so our injection doesn't mutate the
+        # state.pending_tool_calls entry Stage 10 passed in. Adapters
+        # are cached in GenyToolProvider, and stages can retry on
+        # transient failure; a mutated input would persist across turns.
+        call_input = dict(input)
         if (
             self._accepts_session_id
             and context
             and getattr(context, "session_id", None)
         ):
-            input.setdefault("session_id", context.session_id)
+            call_input.setdefault("session_id", context.session_id)
 
         try:
             # Try async first (arun), fall back to sync (run)
             if hasattr(self._tool, "arun"):
-                result = await self._tool.arun(**input)
+                result = await self._tool.arun(**call_input)
             elif hasattr(self._tool, "run"):
                 run_fn = self._tool.run
                 if asyncio.iscoroutinefunction(run_fn):
-                    result = await run_fn(**input)
+                    result = await run_fn(**call_input)
                 else:
-                    result = await asyncio.to_thread(lambda: run_fn(**input))
+                    result = await asyncio.to_thread(lambda: run_fn(**call_input))
             else:
                 return ToolResult(
                     content=f"Tool '{self._name}' has no run/arun method",
