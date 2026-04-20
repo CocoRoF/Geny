@@ -23,20 +23,6 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 
-# Core built-in tool set shared across presets. Mirrors the six tools
-# ``AgentSession._build_pipeline`` currently registers before handing
-# the registry to ``GenyPresets.*``. Kept as a module-level constant
-# so the switch-over PR's tests can assert against a stable value.
-_DEFAULT_BUILT_IN_TOOLS: List[str] = [
-    "Read",
-    "Write",
-    "Edit",
-    "Bash",
-    "Glob",
-    "Grep",
-]
-
-
 # Supported preset names. ``default`` is the alias used by
 # :class:`AgentSession` for the adaptive worker path.
 _VTUBER = "vtuber"
@@ -371,8 +357,15 @@ def build_default_manifest(
         base_preset=effective,
     )
 
+    # `.built_in` is left empty: the executor's `from_manifest` path
+    # only consumes `.external` (see `_register_external_tools` in
+    # `geny_executor/core/pipeline.py`). Populating `.built_in` with
+    # names no provider supplies would be dead metadata. The seed env
+    # factories pass every provider-backed tool (builtin + custom
+    # alike) through `external_tool_names`, so the resulting registry
+    # is the full roster.
     tools = ToolsSnapshot(
-        built_in=list(_DEFAULT_BUILT_IN_TOOLS),
+        built_in=[],
         external=list(external_tool_names or []),
     )
 

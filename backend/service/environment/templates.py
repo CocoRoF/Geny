@@ -54,9 +54,13 @@ def create_worker_env(
 
     Uses the ``worker_adaptive`` stage chain — adaptive loop with
     ``binary_classify`` evaluation, ``aggressive_cache``, and
-    ``max_turns=30``. Binds to the custom tools supplied via
-    *external_tool_names* (typically the full custom-tool registry
-    so "all tools" mirrors ``template-all-tools`` behaviour).
+    ``max_turns=30``. Binds to every provider-backed tool supplied
+    via *external_tool_names* — both Geny platform builtins
+    (``geny_*``, ``memory_*``, ``knowledge_*``, ``opsidian_*``) and
+    custom tools. The executor's manifest loader only registers
+    names listed in ``.external``, so callers must pass the full
+    union (not just the custom slice) to get platform tools into
+    the session's tool registry.
 
     The ``model`` block is left empty — session creation fills it in
     via :class:`PipelineConfig` based on the user's LLM settings.
@@ -103,9 +107,11 @@ def install_environment_templates(
 
     Mirrors :func:`service.tool_preset.templates.install_templates`.
     Called once at app boot after the tool preset templates are
-    installed and the :class:`ToolLoader` has enumerated custom tools
-    — so *external_tool_names* can be the full custom-tool registry
-    for the worker env.
+    installed and the :class:`ToolLoader` has enumerated tools — so
+    *external_tool_names* should be ``tool_loader.get_all_names()``
+    (builtin + custom) for the worker env. Anything that does not
+    land in ``manifest.tools.external`` will never reach the
+    session's tool registry.
 
     The two template seed envs (``template-worker-env`` /
     ``template-vtuber-env``) are rewritten every boot from the
