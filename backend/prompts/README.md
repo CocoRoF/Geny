@@ -161,23 +161,28 @@ Live2D model-specific character traits. Injected at runtime when a model is assi
 
 ---
 
-## VTuber ↔ CLI Session Linking
+## VTuber ↔ Bound Worker Session Linking
 
-When a VTuber session is created, a paired CLI session is auto-created.
+When a VTuber session is created, a bound Worker session is
+auto-created (see `dev_docs/20260420_3/plan/03_vtuber_worker_binding.md`).
 
 **VTuber receives:**
 ```
-## Paired CLI Agent
-Session ID: `{cli_session_id}`
-Delegate complex tasks via `geny_send_direct_message`.
+## Bound Worker Agent
+You have a Worker agent bound to you: session_id=`{worker_session_id}`.
+For complex tasks (coding, research, multi-step execution),
+delegate to the Worker via the `geny_send_direct_message` tool
+with target_session_id=`{worker_session_id}`. The Worker's reply
+will arrive in your inbox; read it with `geny_read_inbox` and
+summarize for the user.
 ```
 
-**CLI receives:**
+**Bound Worker receives:**
 ```
 ## Paired VTuber Agent
 Session ID: `{vtuber_session_id}`
-You are the internal task executor for this VTuber persona.
-Report results via `geny_send_direct_message` to this session.
+You are the Worker bound to this VTuber persona.
+Report results via `geny_send_direct_message` to this session when done.
 ```
 
 ---
