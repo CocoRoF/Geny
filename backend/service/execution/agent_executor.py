@@ -202,7 +202,7 @@ async def _notify_linked_vtuber(session_id: str, result: 'ExecutionResult') -> N
         # Fire-and-forget: trigger VTuber to process the result
         async def _trigger_vtuber() -> None:
             try:
-                await execute_command(linked_id, content)
+                vtuber_result = await execute_command(linked_id, content)
             except AlreadyExecutingError:
                 # VTuber is busy — store in inbox for later pickup
                 try:
@@ -242,6 +242,16 @@ async def _notify_linked_vtuber(session_id: str, result: 'ExecutionResult') -> N
                 logger.debug(
                     "VTuber notification to %s skipped: %s", linked_id, exc
                 )
+                return
+
+            # VTuber produced a conversational reply to the
+            # [SUB_WORKER_RESULT] trigger. Without this broadcast the
+            # reply is generated but never surfaces in the user's chat
+            # panel — the THINKING_TRIGGER path is the only other code
+            # that writes to the room, and it doesn't run here. Mirror
+            # `_save_drain_to_chat_room` / `thinking_trigger.
+            # _save_to_chat_room` so SSE subscribers see the response.
+            _save_subworker_reply_to_chat_room(linked_id, vtuber_result)
 
         asyncio.create_task(_trigger_vtuber())
         logger.info(
@@ -871,6 +881,78 @@ async def _drain_inbox(session_id: str) -> None:
                 _save_drain_to_chat_room(session_id, result)
     finally:
         _draining_sessions.discard(session_id)
+
+
+def _save_subworker_reply_to_chat_room(
+    vtuber_session_id: str,
+    result: 'ExecutionResult',
+) -> None:
+    """Post the VTuber's reply to the user's chat room.
+
+    Mirrors :func:`_save_drain_to_chat_room` /
+    :meth:`ThinkingTriggerService._save_to_chat_room` for the
+    Sub-Worker → VTuber auto-report pathway. Without this the VTuber's
+    response to ``[SUB_WORKER_RESULT]`` is generated (and even costed)
+    but never reaches the panel the user is watching — cycle 20260420_8
+    Bug 2a.
+
+    Best-effort: never raises. Noop when the VTuber has no
+    ``_chat_room_id`` (solo session, pre-binding state, etc.) or when
+    the VTuber produced no meaningful output (empty string, failure).
+    """
+    try:
+        if not result.success or not result.output or not result.output.strip():
+            return
+
+        agent = _get_agent_manager().get_agent(vtuber_session_id)
+        if agent is None:
+            return
+
+        chat_room_id = getattr(agent, '_chat_room_id', None)
+        if not chat_room_id:
+            logger.debug(
+                "VTuber %s has no _chat_room_id; skipping sub-worker reply broadcast",
+                vtuber_session_id,
+            )
+            return
+
+        from service.chat.conversation_store import get_chat_store
+        store = get_chat_store()
+
+        session_name = getattr(agent, '_session_name', None) or vtuber_session_id
+        role_val = getattr(agent, '_role', None)
+        role = role_val.value if hasattr(role_val, 'value') else str(role_val or 'vtuber')
+
+        msg = store.add_message(chat_room_id, {
+            "type": "agent",
+            "content": result.output.strip(),
+            "session_id": vtuber_session_id,
+            "session_name": session_name,
+            "role": role,
+            "duration_ms": result.duration_ms,
+            "cost_usd": result.cost_usd,
+            "source": "sub_worker_reply",
+        })
+
+        logger.info(
+            "[SubWorkerReply] Posted VTuber response to chat room %s "
+            "(msg_id=%s, len=%d)",
+            chat_room_id, msg.get("id", "?"), len(result.output),
+        )
+
+        try:
+            from controller.chat_controller import _notify_room
+            _notify_room(chat_room_id)
+        except Exception:
+            logger.warning(
+                "[SubWorkerReply] _notify_room failed for %s",
+                chat_room_id, exc_info=True,
+            )
+    except Exception:
+        logger.warning(
+            "[SubWorkerReply] Failed to post VTuber reply to chat room",
+            exc_info=True,
+        )
 
 
 def _save_drain_to_chat_room(session_id: str, result: 'ExecutionResult') -> None:
