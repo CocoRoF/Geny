@@ -76,6 +76,35 @@ class _GenyToolAdapter:
             "type": "object",
             "properties": {},
         }
+        self._accepts_session_id = self._probe_session_id_support(geny_tool)
+
+    @staticmethod
+    def _probe_session_id_support(tool: Any) -> bool:
+        """Return True iff the tool's run/arun signature can accept
+        a ``session_id`` kwarg — either declared explicitly or via
+        ``**kwargs``.
+
+        Probed once at adapter construction; the result is cached on
+        the instance. Some Geny built-in tools (e.g. ``mcp_tools``,
+        ``sub_agent``, inbox helpers) require ``session_id``; others
+        (``news_search``, ``web_search``, ``web_fetch``) don't declare
+        it and raise ``TypeError`` if it is injected.
+        """
+        fn = getattr(tool, "arun", None) or getattr(tool, "run", None)
+        if fn is None:
+            return False
+        try:
+            sig = inspect.signature(fn)
+        except (TypeError, ValueError):
+            # Builtins / C-implemented callables: safest assumption is
+            # "does not accept arbitrary kwargs".
+            return False
+        for param in sig.parameters.values():
+            if param.name == "session_id":
+                return True
+            if param.kind is inspect.Parameter.VAR_KEYWORD:
+                return True
+        return False
 
     @property
     def name(self) -> str:
@@ -106,13 +135,18 @@ class _GenyToolAdapter:
     ) -> Any:
         """Execute the Geny tool and wrap result as ToolResult.
 
-        Automatically injects session_id from ToolContext into the input
-        dict if the tool expects it (many Geny built-in tools require it).
+        Injects ``session_id`` from the Pipeline ``ToolContext`` only
+        when the wrapped tool's signature accepts it — decided once
+        at construction time by :meth:`_probe_session_id_support` and
+        cached on ``self._accepts_session_id``.
         """
         from geny_executor.tools.base import ToolResult
 
-        # Auto-inject session_id from Pipeline ToolContext
-        if context and hasattr(context, "session_id") and context.session_id:
+        if (
+            self._accepts_session_id
+            and context
+            and getattr(context, "session_id", None)
+        ):
             input.setdefault("session_id", context.session_id)
 
         try:
