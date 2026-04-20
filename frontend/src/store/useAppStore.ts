@@ -4,7 +4,7 @@ import { agentApi, commandApi, healthApi, configApi } from '@/lib/api';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 
 // Session-scoped tab IDs (must match TabNavigation)
-const SESSION_TAB_IDS = new Set(['command', 'logs', 'storage', 'graph', 'info', 'sessionTools', 'memory', 'vtuber']);
+const SESSION_TAB_IDS = new Set(['command', 'logs', 'storage', 'environment', 'graph', 'info', 'sessionTools', 'memory', 'vtuber']);
 
 // ==================== Session Data Cache ====================
 export interface SessionData {
@@ -164,7 +164,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const next = !s.devMode;
     localStorage.setItem('geny-dev-mode', String(next));
     // If switching to normal mode while on a dev-only tab, fall back to main
-    const devOnlyTabs = new Set(['toolSets', 'tools', 'settings', 'logs', 'graph', 'sessionTools']);
+    const devOnlyTabs = new Set(['toolSets', 'tools', 'settings', 'logs', 'environment', 'graph', 'sessionTools']);
     const activeTab = !next && devOnlyTabs.has(s.activeTab) ? 'main' : s.activeTab;
     return { devMode: next, activeTab };
   }),

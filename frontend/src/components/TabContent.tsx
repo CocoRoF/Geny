@@ -11,7 +11,7 @@ const PlaygroundTab = dynamic(() => import('@/components/tabs/PlaygroundTab'), {
 const CommandTab = dynamic(() => import('@/components/tabs/CommandTab'));
 const LogsTab = dynamic(() => import('@/components/tabs/LogsTab'));
 const StorageTab = dynamic(() => import('@/components/tabs/StorageTab'));
-const GraphTab = dynamic(() => import('@/components/tabs/GraphTab'), { ssr: false });
+const SessionEnvironmentTab = dynamic(() => import('@/components/tabs/SessionEnvironmentTab'), { ssr: false });
 const InfoTab = dynamic(() => import('@/components/tabs/InfoTab'));
 const SettingsTab = dynamic(() => import('@/components/tabs/SettingsTab'));
 const SharedFolderTab = dynamic(() => import('@/components/tabs/SharedFolderTab'));
@@ -28,7 +28,9 @@ const TAB_MAP: Record<string, React.ComponentType> = {
   command: CommandTab,
   logs: LogsTab,
   storage: StorageTab,
-  graph: GraphTab,
+  environment: SessionEnvironmentTab,
+  // Legacy 'graph' tab is now the per-session Environment view (manifest-driven).
+  graph: SessionEnvironmentTab,
   sharedFolder: SharedFolderTab,
   info: InfoTab,
   settings: SettingsTab,

@@ -16,7 +16,7 @@ const GLOBAL_TAB_IDS = ['main', 'playground', 'playground2d', 'toolSets', 'envir
 const SESSION_TAB_DEFS = [
   { id: 'command', accent: true },
   { id: 'vtuber' },
-  { id: 'graph' },
+  { id: 'environment' },
   { id: 'memory' },
   { id: 'storage' },
   { id: 'sessionTools' },
@@ -26,7 +26,7 @@ const SESSION_TAB_DEFS = [
 // Tabs hidden in Normal mode
 const DEV_ONLY_GLOBAL = new Set(['toolSets', 'environments', 'settings']);
 // 'logs' is intentionally NOT in this set — it must be visible in User mode too (e.g. mobile)
-const DEV_ONLY_SESSION = new Set(['graph']);
+const DEV_ONLY_SESSION = new Set(['environment']);
 
 const TAB_BASE =
   'relative py-1.5 px-3.5 text-[0.8125rem] font-medium bg-transparent border-none rounded-[6px] cursor-pointer transition-all duration-150 whitespace-nowrap';
