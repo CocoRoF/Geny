@@ -120,3 +120,31 @@ def format_delegation_result(
         task_id=task_id,
     )
     return msg.format()
+
+
+def parse_delegation_headers(text: str) -> Optional[dict]:
+    """Extract the tag (+ optional From/Task headers) from a formatted
+    delegation message. Returns None if *text* is not a delegation
+    message. Tolerates formats that omit the From/Task lines — the
+    SUB_WORKER_RESULT template in agent_executor skips them.
+    """
+    if not text or not DelegationMessage.is_delegation_message(text):
+        return None
+    first_line = text.split("\n", 1)[0].strip()
+    tag: Optional[str] = None
+    for known in list(DelegationTag) + [DelegationTag.SUB_WORKER_RESULT]:  # type: ignore[list-item]
+        if first_line.startswith(known.value):
+            tag = known.value
+            break
+    if tag is None and first_line.startswith(_LEGACY_SUB_WORKER_RESULT_TAG):
+        tag = DelegationTag.SUB_WORKER_RESULT.value
+    headers: dict = {"tag": tag}
+    for line in text.split("\n")[1:5]:  # scan the first few lines only
+        stripped = line.strip()
+        if stripped.startswith("From:"):
+            headers["from_session_id"] = stripped[len("From:"):].strip()
+        elif stripped.startswith("Task:"):
+            headers["task_id"] = stripped[len("Task:"):].strip()
+        elif not stripped:
+            break
+    return headers

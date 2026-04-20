@@ -268,6 +268,15 @@ export interface LogEntryMetadata {
   env_id?: string;
   role?: string;
 
+  // Delegation events (event === 'delegation.sent' | 'delegation.received')
+  event?: string;
+  tag?: string;
+  from_session_id?: string;
+  to_session_id?: string;
+  from_role?: string;
+  to_role?: string;
+  task_id?: string;
+
   // Rich structured data for IDE display (injected by enhanced logger)
   file_changes?: FileChanges;
   command_data?: CommandData;

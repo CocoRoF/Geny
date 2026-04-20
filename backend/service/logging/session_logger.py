@@ -681,6 +681,26 @@ class SessionLogger:
             metadata.update(details)
         self.log(LogLevel.INFO, f"SESSION EVENT: {event}", metadata)
 
+    def log_delegation_event(self, event: str, details: Dict[str, Any]) -> None:
+        """Log a delegation protocol event.
+
+        `event` is one of "delegation.sent" / "delegation.received".
+        `details` must carry both session ids (`from_session_id`,
+        `to_session_id`), the delegation `tag`, and optionally
+        `task_id` + `from_role` / `to_role`.
+        """
+        metadata = {"event": event}
+        metadata.update({k: v for k, v in details.items() if v is not None})
+        tag = details.get("tag") or ""
+        other_id = (
+            details.get("to_session_id") if event == "delegation.sent"
+            else details.get("from_session_id")
+        )
+        other_short = (other_id[:8] + "…") if isinstance(other_id, str) and len(other_id) > 8 else other_id
+        direction = "→" if event == "delegation.sent" else "←"
+        message = f"DELEGATION {direction} {tag} {other_short or ''}".strip()
+        self.log(LogLevel.INFO, message, metadata)
+
     # ========== LangGraph Event Logging ==========
 
     def log_graph_event(

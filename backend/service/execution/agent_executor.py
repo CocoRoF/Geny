@@ -171,6 +171,34 @@ async def _notify_linked_vtuber(session_id: str, result: 'ExecutionResult') -> N
         else:
             content = "[SUB_WORKER_RESULT] Task finished with no output."
 
+        # Emit delegation.sent on the Sub-Worker's log so the flow is
+        # visible from the sender side. The receiver side will emit
+        # delegation.received when the VTuber's _execute_core picks up
+        # the tagged prompt (via either the direct path or the inbox).
+        try:
+            sender_logger = _get_session_logger(session_id, create_if_missing=False)
+            if sender_logger is not None:
+                _sender_role = getattr(agent, "role", None)
+                _target_role = getattr(vtuber_agent, "role", None)
+                sender_logger.log_delegation_event(
+                    "delegation.sent",
+                    {
+                        "tag": "[SUB_WORKER_RESULT]",
+                        "from_session_id": session_id,
+                        "to_session_id": linked_id,
+                        "from_role": (
+                            _sender_role.value if _sender_role is not None
+                            and hasattr(_sender_role, "value") else _sender_role
+                        ),
+                        "to_role": (
+                            _target_role.value if _target_role is not None
+                            and hasattr(_target_role, "value") else _target_role
+                        ),
+                    },
+                )
+        except Exception:
+            logger.debug("delegation.sent emit failed for %s", session_id, exc_info=True)
+
         # Fire-and-forget: trigger VTuber to process the result
         async def _trigger_vtuber() -> None:
             try:
@@ -494,6 +522,29 @@ async def _execute_core(
                 env_id=log_env_id,
                 role=log_role,
             )
+            # Receiver-side delegation marker: if the incoming prompt is
+            # a tagged delegation message, record a matching
+            # delegation.received event so LogsTab can pair it with the
+            # sender's delegation.sent entry.
+            try:
+                from service.vtuber.delegation import parse_delegation_headers
+
+                headers = parse_delegation_headers(prompt)
+                if headers is not None:
+                    session_logger.log_delegation_event(
+                        "delegation.received",
+                        {
+                            "tag": headers.get("tag"),
+                            "from_session_id": headers.get("from_session_id"),
+                            "to_session_id": session_id,
+                            "task_id": headers.get("task_id"),
+                            "to_role": log_role,
+                        },
+                    )
+            except Exception:
+                logger.debug(
+                    "delegation.received emit failed for %s", session_id, exc_info=True,
+                )
 
         # 2. Invoke
         effective_timeout = timeout or getattr(agent, "timeout", 21600.0)

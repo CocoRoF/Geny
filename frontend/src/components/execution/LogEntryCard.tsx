@@ -87,6 +87,20 @@ function getEntryDescription(entry: LogEntry): string {
     return meta.event_type + (meta.node_name ? `: ${meta.node_name}` : '');
   }
 
+  // Delegation events — render as "<tag> <arrow> <peer>" regardless of level.
+  const event = meta && typeof (meta as Record<string, unknown>).event === 'string'
+    ? ((meta as Record<string, unknown>).event as string)
+    : undefined;
+  if (event === 'delegation.sent' || event === 'delegation.received') {
+    const m = meta as Record<string, unknown>;
+    const tag = typeof m.tag === 'string' ? m.tag : '';
+    const peerId = event === 'delegation.sent' ? m.to_session_id : m.from_session_id;
+    const peer = typeof peerId === 'string' ? `${peerId.slice(0, 8)}…` : '';
+    const arrow = event === 'delegation.sent' ? '→' : '←';
+    const taskId = typeof m.task_id === 'string' ? ` (task ${m.task_id})` : '';
+    return `${tag} ${arrow} ${peer}${taskId}`.trim();
+  }
+
   // Generic: strip prefixes and truncate
   const msg = entry.message
     .replace(/^PROMPT:\s*/, '')
