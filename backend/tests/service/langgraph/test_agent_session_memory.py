@@ -64,11 +64,26 @@ from service.langgraph.agent_session import (
         # Forward-compat placeholders from plan/03 § 4-2
         ("[SUB_WORKER_PROGRESS] 50% done", "assistant_dm"),
         ("[FROM_COUNTERPART:sub-1] hey worker", "assistant_dm"),
+        # Inbox drain wrappers — emitted by _drain_inbox in
+        # service/execution/agent_executor.py when a queued DM is
+        # picked up after the busy window closes. Covers the common
+        # regression path where a [SUB_WORKER_RESULT] arrives while
+        # the VTuber is still running its own turn and ends up being
+        # replayed via drain (cycle 20260421_1).
+        (
+            "[INBOX from Sub-Worker]\n"
+            "[SUB_WORKER_RESULT] Task completed successfully.\n\nfound a fact",
+            "assistant_dm",
+        ),
+        ("[INBOX from Sub-Worker]\nplain body with no inner tag", "assistant_dm"),
+        ("[INBOX from alice]\nhi there", "assistant_dm"),
         # Leading whitespace must not defeat the match
         ("   [SUB_WORKER_RESULT] leading ws stripped", "assistant_dm"),
+        ("   [INBOX from Bob]\nhello", "assistant_dm"),
         # Ambiguous / embedded — must stay "user"
         ("fake [THINKING_TRIGGER] inside prose", "user"),
         ("[OTHER_TAG] not ours", "user"),
+        ("fake [INBOX from foo] mid-sentence", "user"),
         # Unrelated [SYSTEM] prompts must not be swept up
         ("[SYSTEM] Something else entirely", "user"),
     ],
