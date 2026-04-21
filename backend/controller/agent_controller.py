@@ -300,8 +300,12 @@ async def update_system_prompt(
 
     new_prompt = request.system_prompt if request.system_prompt else None
 
-    # Update on AgentSession
-    agent._system_prompt = new_prompt
+    # Route through the PersonaProvider (cycle 20260421_7 PR-X1-3). The
+    # provider replaces the legacy ``agent._system_prompt`` write; the
+    # pipeline's DynamicPersonaSystemBuilder picks up the new override on
+    # the next turn. Persisting to session_store is unchanged so restore
+    # can re-stage the override.
+    agent_manager.persona_provider.set_static_override(session_id, new_prompt)
 
     # Persist to session store so the change survives delete/restore
     store = get_session_store()
@@ -477,9 +481,14 @@ async def restore_session(
             session_id=session_id,
         )
 
-        # Restore the previously stored system prompt (user customization)
+        # Restore the previously stored system prompt (user customization).
+        # Route through the PersonaProvider (cycle 20260421_7 PR-X1-3) — the
+        # newly-created AgentSession's DynamicPersonaSystemBuilder reads from
+        # the same provider on its first turn.
         if stored_system_prompt:
-            agent._system_prompt = stored_system_prompt
+            agent_manager.persona_provider.set_static_override(
+                session_id, stored_system_prompt
+            )
             store.update(session_id, {"system_prompt": stored_system_prompt})
 
         # Restore chat_room_id from stored record (chat room persists across delete/restore)
@@ -517,7 +526,9 @@ async def restore_session(
                             session_id=linked_id,
                         )
                         if linked_system_prompt:
-                            linked_agent._system_prompt = linked_system_prompt
+                            agent_manager.persona_provider.set_static_override(
+                                linked_id, linked_system_prompt
+                            )
                             store.update(linked_id, {"system_prompt": linked_system_prompt})
                         logger.info(f"✅ Linked session restored: {linked_id}")
                 except Exception as e:

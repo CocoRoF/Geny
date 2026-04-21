@@ -52,8 +52,20 @@ from service.prompt.builder import PromptMode
 
 from service.claude_manager.session_store import get_session_store
 
+from pathlib import Path as _Path
+
+from service.langgraph.agent_session import (
+    _ADAPTIVE_PROMPT,
+    _DEFAULT_VTUBER_PROMPT,
+    _DEFAULT_WORKER_PROMPT,
+)
+from backend.service.persona import CharacterPersonaProvider
+
 
 logger = getLogger(__name__)
+
+
+_VTUBER_CHARACTERS_DIR = _Path(__file__).resolve().parent.parent.parent / "prompts" / "vtuber_characters"
 
 
 class AgentSessionManager(SessionManager):
@@ -101,7 +113,23 @@ class AgentSessionManager(SessionManager):
         self._idle_monitor_interval: float = 60.0  # check every 60 seconds
         self._idle_monitor_running: bool = False
 
+        # Persona provider — single manager-scoped instance, keys state on
+        # session_id. Created eagerly so controllers can inject per-session
+        # persona edits without reaching into AgentSession internals.
+        self._persona_provider = CharacterPersonaProvider(
+            characters_dir=_VTUBER_CHARACTERS_DIR,
+            default_vtuber_prompt=_DEFAULT_VTUBER_PROMPT,
+            default_worker_prompt=_DEFAULT_WORKER_PROMPT,
+            adaptive_prompt=_ADAPTIVE_PROMPT,
+        )
+
         logger.info("✅ AgentSessionManager initialized")
+
+    @property
+    def persona_provider(self) -> CharacterPersonaProvider:
+        """Shared ``CharacterPersonaProvider`` — controllers use it to stage
+        per-session persona edits (character / static override / context)."""
+        return self._persona_provider
 
     def set_app_db(self, app_db) -> None:
         """Store the AppDatabaseManager for per-session DB wiring.
@@ -484,6 +512,12 @@ class AgentSessionManager(SessionManager):
             f"(adhoc_providers={len(adhoc_providers)})"
         )
 
+        # Seed the persona provider with the assembled static prompt so the
+        # DynamicPersonaSystemBuilder hands back exactly this text on the
+        # first turn. Persona mutations (character swap, user-edited
+        # system-prompt, sub-worker ctx) then layer on top via the provider.
+        self._persona_provider.set_static_override(session_id, system_prompt or None)
+
         # Create AgentSession
         agent = await AgentSession.create(
             working_dir=request.working_dir,
@@ -505,6 +539,7 @@ class AgentSessionManager(SessionManager):
             env_id=env_id,
             memory_config=memory_config,
             prebuilt_pipeline=prebuilt_pipeline,
+            persona_provider=self._persona_provider,
         )
 
         session_id = agent.session_id
@@ -670,7 +705,12 @@ class AgentSessionManager(SessionManager):
                     "`[SUB_WORKER_RESULT]` trigger message; "
                     "summarize it for the user."
                 )
-                agent._system_prompt = (agent._system_prompt or "") + vtuber_ctx
+                # Stage the sub-worker delegation block through the
+                # PersonaProvider instead of mutating ``agent._system_prompt``
+                # directly. ``append_context`` is idempotent on identical
+                # text, so re-registration of an already-paired VTuber is
+                # safe.
+                self._persona_provider.append_context(session_id, vtuber_ctx)
 
                 logger.info(
                     f"[{session_id}] 🔗 Sub-Worker created: "
@@ -842,6 +882,13 @@ class AgentSessionManager(SessionManager):
             # Also remove from _local_processes (for compatibility)
             if session_id in self._local_processes:
                 del self._local_processes[session_id]
+
+            # Clear persona provider's in-memory state for this session.
+            # Restore re-stages static_override/character from sessions.json.
+            try:
+                self._persona_provider.reset(session_id)
+            except Exception:
+                pass  # best-effort — provider must not block deletion
 
             # Remove session logger
             remove_session_logger(session_id)

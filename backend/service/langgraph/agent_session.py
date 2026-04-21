@@ -178,6 +178,7 @@ class AgentSession:
         env_id: Optional[str] = None,
         memory_config: Optional[Dict[str, Any]] = None,
         prebuilt_pipeline: Optional[Any] = None,
+        persona_provider: Optional[Any] = None,
     ):
         """Initialize AgentSession.
 
@@ -196,6 +197,10 @@ class AgentSession:
             enable_checkpointing: Enable LangGraph MemorySaver checkpointing.
             workflow_id: Preset identifier (e.g. template-vtuber, template-optimized-autonomous).
             graph_name: Human-readable graph/workflow name.
+            persona_provider: ``PersonaProvider`` resolved per turn by
+                ``DynamicPersonaSystemBuilder``. When omitted, the session
+                falls back to the legacy fixed ``ComposablePromptBuilder``
+                (kept for tests that construct ``AgentSession`` directly).
         """
         # Session identity
         self._session_id = session_id or str(uuid.uuid4())
@@ -208,6 +213,7 @@ class AgentSession:
         self._max_turns = max_turns
         self._timeout = timeout
         self._system_prompt = system_prompt
+        self._persona_provider = persona_provider
         self._env_vars = env_vars or {}
         self._mcp_config = mcp_config
         self._max_iterations = max_iterations
@@ -322,6 +328,11 @@ class AgentSession:
     @property
     def session_id(self) -> str:
         return self._session_id
+
+    @property
+    def persona_provider(self) -> Optional[Any]:
+        """``PersonaProvider`` bound at construction — None for legacy path."""
+        return self._persona_provider
 
     @property
     def session_name(self) -> Optional[str]:
@@ -924,14 +935,37 @@ class AgentSession:
             reflection_resolver = None
 
         # ── Session-scoped runtime objects ──
-        attach_kwargs: Dict[str, Any] = {
-            "system_builder": ComposablePromptBuilder(
+        #
+        # When a PersonaProvider is bound to this session (PR-X1-3 cycle
+        # 20260421_7), s03's builder becomes a DynamicPersonaSystemBuilder
+        # that re-resolves the persona section on every turn — persona
+        # edits (set_character / set_static_override / append_context)
+        # take effect on the next pipeline.run without rebuilding stages.
+        # When no provider is bound (legacy / direct AgentSession
+        # construction in tests), the fixed ComposablePromptBuilder path
+        # is preserved.
+        if self._persona_provider is not None:
+            from backend.service.persona import DynamicPersonaSystemBuilder
+            system_builder: Any = DynamicPersonaSystemBuilder(
+                self._persona_provider,
+                session_meta={
+                    "session_id": self._session_id,
+                    "is_vtuber": is_vtuber,
+                    "role": self._role.value if self._role else "worker",
+                    "owner_username": self._owner_username,
+                },
+                tail_blocks=[DateTimeBlock(), MemoryContextBlock()],
+            )
+        else:
+            system_builder = ComposablePromptBuilder(
                 blocks=[
                     PersonaBlock(persona_text),
                     DateTimeBlock(),
                     MemoryContextBlock(),
                 ]
-            ),
+            )
+        attach_kwargs: Dict[str, Any] = {
+            "system_builder": system_builder,
             "tool_context": ToolContext(
                 session_id=self._session_id,
                 working_dir=working_dir,
