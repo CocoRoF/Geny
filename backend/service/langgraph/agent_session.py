@@ -75,6 +75,14 @@ def _classify_input_role(input_text: str) -> str:
     * ``[SUB_WORKER_PROGRESS]`` / ``[FROM_COUNTERPART]`` are reserved
       forward-compat slots from plan/03 § 4-2; kept here so callers
       that later emit them get routed without another code change.
+    * ``[INBOX from {sender}]`` — wrapper emitted by ``_drain_inbox``
+      in ``service/execution/agent_executor.py`` when a queued DM
+      (e.g. a ``[SUB_WORKER_RESULT]`` that arrived while the target
+      was busy) is picked up after the target's execution slot frees.
+      Always an inter-agent message, never from the human user →
+      ``assistant_dm``. See
+      ``dev_docs/20260421_1/analysis/01_dm_continuity_regression.md``
+      § 2 for the regression pattern this catches.
 
     Prefix matches use the open form (``[TAG`` rather than ``[TAG]``)
     so variants like ``[THINKING_TRIGGER:first_idle]`` match.
@@ -90,6 +98,7 @@ def _classify_input_role(input_text: str) -> str:
         or head.startswith("[DELEGATION_RESULT")
         or head.startswith("[FROM_COUNTERPART")
         or head.startswith("[SYSTEM] You received a direct message")
+        or head.startswith("[INBOX from")
     ):
         return "assistant_dm"
     return "user"
