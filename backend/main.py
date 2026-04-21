@@ -357,7 +357,7 @@ async def lifespan(app: FastAPI):
     # ── VTuber Thinking Trigger Service ────────────────────────────────
     from service.vtuber.thinking_trigger import get_thinking_trigger_service
     thinking_trigger = get_thinking_trigger_service()
-    thinking_trigger.start()
+    await thinking_trigger.start()
     app.state.thinking_trigger = thinking_trigger
 
     # ── Curation Scheduler Service ────────────────────────────────────
@@ -393,7 +393,7 @@ async def lifespan(app: FastAPI):
 
     # Stop thinking trigger service
     if hasattr(app.state, 'thinking_trigger'):
-        app.state.thinking_trigger.stop()
+        await app.state.thinking_trigger.stop()
 
     # Stop curation scheduler
     if hasattr(app.state, 'curation_scheduler'):
