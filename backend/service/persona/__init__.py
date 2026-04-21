@@ -16,6 +16,7 @@ from backend.service.persona.blocks import (
     RelationshipBlock,
     VitalsBlock,
 )
+from backend.service.persona.character_provider import CharacterPersonaProvider
 from backend.service.persona.dynamic_builder import DynamicPersonaSystemBuilder
 from backend.service.persona.provider import PersonaProvider, PersonaResolution
 
@@ -23,6 +24,7 @@ __all__ = [
     "PersonaProvider",
     "PersonaResolution",
     "DynamicPersonaSystemBuilder",
+    "CharacterPersonaProvider",
     "MoodBlock",
     "RelationshipBlock",
     "VitalsBlock",
