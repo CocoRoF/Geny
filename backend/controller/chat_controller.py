@@ -21,6 +21,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from service.chat.conversation_store import get_chat_store
 from service.langgraph import get_agent_session_manager
+from service.utils.text_sanitizer import sanitize_for_display
 from service.execution.agent_executor import (
     execute_command,
     is_executing,
@@ -50,7 +51,8 @@ class AgentExecutionState:
     role: str
     status: str = "pending"  # pending | executing | completed | failed | queued
     thinking_preview: Optional[str] = None  # Latest log message (1 line)
-    streaming_text: Optional[str] = None  # Accumulated streaming text (token-level)
+    streaming_text: Optional[str] = None  # Sanitized view of streaming_raw — what the UI renders
+    streaming_raw: Optional[str] = None  # Raw accumulator: next token may complete a partial tag, so strip only after concatenation
     started_at: Optional[float] = None
     last_activity_at: Optional[float] = None  # monotonic timestamp of last log entry
     last_tool_name: Optional[str] = None  # tool name if last log was TOOL level
@@ -604,9 +606,9 @@ async def _run_broadcast(
 
                             # Token-level streaming: accumulate STREAM entries
                             if level == "STREAM":
-                                agent_state.streaming_text = (
-                                    (agent_state.streaming_text or "") + (entry.message or "")
-                                )
+                                raw = (agent_state.streaming_raw or "") + (entry.message or "")
+                                agent_state.streaming_raw = raw
+                                agent_state.streaming_text = sanitize_for_display(raw)
                                 agent_state.last_activity_at = time.monotonic()
                                 had_new = True
                                 continue
@@ -665,10 +667,11 @@ async def _run_broadcast(
                 len(result.output or ""), result.duration_ms, result.cost_usd,
             )
 
-            if result.success and result.output and result.output.strip():
+            cleaned_output = sanitize_for_display(result.output) if result.success else ""
+            if cleaned_output:
                 msg_data: Dict[str, Any] = {
                     "type": "agent",
-                    "content": result.output.strip(),
+                    "content": cleaned_output,
                     "session_id": session_id,
                     "session_name": sname,
                     "role": role,

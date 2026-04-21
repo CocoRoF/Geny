@@ -720,6 +720,11 @@ class ThinkingTriggerService:
         Also notifies SSE listeners so the VTuber chat panel updates live.
         """
         try:
+            from service.utils.text_sanitizer import sanitize_for_display
+            cleaned = sanitize_for_display(result.output) if result.success else ""
+            if not cleaned:
+                return
+
             from service.langgraph import get_agent_session_manager
             agent = get_agent_session_manager().get_agent(session_id)
             if not agent:
@@ -740,7 +745,7 @@ class ThinkingTriggerService:
 
             msg = store.add_message(chat_room_id, {
                 "type": "agent",
-                "content": result.output.strip(),
+                "content": cleaned,
                 "session_id": session_id,
                 "session_name": session_name,
                 "role": role,
@@ -750,7 +755,7 @@ class ThinkingTriggerService:
 
             logger.info(
                 "[ThinkingTrigger] Saved response to chat room %s (msg_id=%s, len=%d)",
-                chat_room_id, msg.get("id", "?"), len(result.output),
+                chat_room_id, msg.get("id", "?"), len(cleaned),
             )
 
             # Notify SSE listeners

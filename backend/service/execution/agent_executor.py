@@ -901,7 +901,9 @@ def _save_subworker_reply_to_chat_room(
     the VTuber produced no meaningful output (empty string, failure).
     """
     try:
-        if not result.success or not result.output or not result.output.strip():
+        from service.utils.text_sanitizer import sanitize_for_display
+        cleaned = sanitize_for_display(result.output) if result.success else ""
+        if not cleaned:
             return
 
         agent = _get_agent_manager().get_agent(vtuber_session_id)
@@ -925,7 +927,7 @@ def _save_subworker_reply_to_chat_room(
 
         msg = store.add_message(chat_room_id, {
             "type": "agent",
-            "content": result.output.strip(),
+            "content": cleaned,
             "session_id": vtuber_session_id,
             "session_name": session_name,
             "role": role,
@@ -937,7 +939,7 @@ def _save_subworker_reply_to_chat_room(
         logger.info(
             "[SubWorkerReply] Posted VTuber response to chat room %s "
             "(msg_id=%s, len=%d)",
-            chat_room_id, msg.get("id", "?"), len(result.output),
+            chat_room_id, msg.get("id", "?"), len(cleaned),
         )
 
         try:
@@ -962,6 +964,11 @@ def _save_drain_to_chat_room(session_id: str, result: 'ExecutionResult') -> None
     from agent_executor without circular dependency.
     """
     try:
+        from service.utils.text_sanitizer import sanitize_for_display
+        cleaned = sanitize_for_display(result.output) if result.success else ""
+        if not cleaned:
+            return
+
         agent_manager = _get_agent_manager()
         agent = agent_manager.get_agent(session_id)
         if not agent:
@@ -980,7 +987,7 @@ def _save_drain_to_chat_room(session_id: str, result: 'ExecutionResult') -> None
 
         store.add_message(chat_room_id, {
             "type": "agent",
-            "content": result.output.strip(),
+            "content": cleaned,
             "session_id": session_id,
             "session_name": session_name,
             "role": role,
@@ -997,7 +1004,7 @@ def _save_drain_to_chat_room(session_id: str, result: 'ExecutionResult') -> None
 
         logger.info(
             "Inbox drain result saved to chat room %s (len=%d)",
-            chat_room_id, len(result.output),
+            chat_room_id, len(cleaned),
         )
     except Exception:
         logger.debug("Failed to save drain result to chat room", exc_info=True)
