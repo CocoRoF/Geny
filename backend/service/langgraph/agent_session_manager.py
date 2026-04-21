@@ -109,9 +109,13 @@ class AgentSessionManager(SessionManager):
         # ToolLoader reference (for preset-based tool filtering)
         self._tool_loader = None
 
-        # Background idle monitor
-        self._idle_monitor_task: Optional[asyncio.Task] = None
-        self._idle_monitor_interval: float = 60.0  # check every 60 seconds
+        # Background idle monitor (cycle 20260421_8 PR-X2-5: runs on the
+        # shared TickEngine rather than a bespoke ``while True`` loop).
+        from service.tick import TickEngine
+        self._idle_tick_engine: TickEngine = TickEngine()
+        self._owns_idle_tick_engine: bool = True
+        self._idle_monitor_interval: float = 60.0  # spec cadence (s)
+        self._idle_monitor_jitter: float = 3.0     # spec jitter (s)
         self._idle_monitor_running: bool = False
 
         # Persona provider — single manager-scoped instance, keys state on
@@ -996,8 +1000,23 @@ class AgentSessionManager(SessionManager):
     # Background Idle Monitor
     # ========================================================================
 
-    def start_idle_monitor(self) -> None:
-        """Start the background idle monitor task.
+    def set_tick_engine(self, engine: "TickEngine") -> None:  # type: ignore[name-defined]
+        """Inject an externally-owned ``TickEngine``.
+
+        Used in X2-6 when ``main.py`` constructs a single shared engine
+        for all services. When injected, the manager won't call
+        ``engine.start()`` / ``engine.stop()`` — the owner does.
+        Must be called before :meth:`start_idle_monitor`.
+        """
+        if self._idle_monitor_running:
+            raise RuntimeError(
+                "set_tick_engine must be called before start_idle_monitor"
+            )
+        self._idle_tick_engine = engine
+        self._owns_idle_tick_engine = False
+
+    async def start_idle_monitor(self) -> None:
+        """Start the background idle monitor on the TickEngine.
 
         Periodically scans all RUNNING sessions and transitions them to
         IDLE if they have had no activity for ``idle_transition_seconds``
@@ -1009,49 +1028,37 @@ class AgentSessionManager(SessionManager):
             logger.debug("Idle monitor already running")
             return
 
+        from service.tick import TickSpec
+        self._idle_tick_engine.register(
+            TickSpec(
+                name="idle_monitor",
+                interval=self._idle_monitor_interval,
+                handler=self._scan_for_idle_sessions,
+                jitter=self._idle_monitor_jitter,
+            )
+        )
+        if self._owns_idle_tick_engine:
+            await self._idle_tick_engine.start()
         self._idle_monitor_running = True
-        self._idle_monitor_task = asyncio.ensure_future(self._idle_monitor_loop())
         logger.info(
-            f"✅ Idle monitor started (interval={self._idle_monitor_interval}s)"
+            "✅ Idle monitor started (interval=%ss±%ss, owned=%s)",
+            self._idle_monitor_interval,
+            self._idle_monitor_jitter,
+            self._owns_idle_tick_engine,
         )
 
     async def stop_idle_monitor(self) -> None:
-        """Stop the background idle monitor task.
+        """Stop the background idle monitor.
 
         Called during application shutdown.
         """
+        if not self._idle_monitor_running:
+            return
         self._idle_monitor_running = False
-        if self._idle_monitor_task and not self._idle_monitor_task.done():
-            self._idle_monitor_task.cancel()
-            try:
-                await self._idle_monitor_task
-            except asyncio.CancelledError:
-                pass
-        self._idle_monitor_task = None
+        self._idle_tick_engine.unregister("idle_monitor")
+        if self._owns_idle_tick_engine:
+            await self._idle_tick_engine.stop()
         logger.info("Idle monitor stopped")
-
-    async def _idle_monitor_loop(self) -> None:
-        """Background loop that checks for idle sessions.
-
-        Runs every ``_idle_monitor_interval`` seconds and calls
-        ``mark_idle()`` on sessions whose freshness evaluates as
-        STALE_IDLE.  This causes their status to change from RUNNING
-        to IDLE, which is visible in the frontend.
-
-        When the user later sends a command, the session auto-revives
-        transparently.
-        """
-        logger.info("Idle monitor loop started")
-        while self._idle_monitor_running:
-            try:
-                await asyncio.sleep(self._idle_monitor_interval)
-                if not self._idle_monitor_running:
-                    break
-                await self._scan_for_idle_sessions()
-            except asyncio.CancelledError:
-                break
-            except Exception:
-                logger.debug("Idle monitor tick error (non-critical)", exc_info=True)
 
     async def _scan_for_idle_sessions(self) -> None:
         """Scan all agent sessions and mark idle ones.
