@@ -18,13 +18,22 @@ import asyncio
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
+from ..decay import DecayPolicy, apply_decay
 from ..schema.creature_state import CreatureState
 from ..schema.mutation import Mutation
 from .interface import StateConflictError
 from .mutate import apply_mutations
 from .serialize import dumps, loads
+
+
+# Decay tick contends with pipeline ``apply`` for the same row. One
+# internal retry absorbs the common case of "pipeline committed while
+# decay was computing"; further contention escalates as a conflict so
+# the decay service can skip to the next scheduled tick rather than
+# spinning.
+_TICK_MAX_RETRIES = 3
 
 
 _MIGRATION = (Path(__file__).parent / "migrations" / "0001_initial.sql").read_text()
@@ -218,6 +227,76 @@ class SqliteCreatureStateProvider:
         ).fetchone()
         return int(row["row_version"]) if row is not None else None
 
+    def _tick_sync(
+        self, character_id: str, policy: DecayPolicy,
+    ) -> CreatureState:
+        """Load → apply_decay → OCC UPDATE, with bounded retry on conflict."""
+        last_err: Optional[StateConflictError] = None
+        for _ in range(_TICK_MAX_RETRIES):
+            cur = self._conn.execute(
+                "SELECT data_json, row_version FROM creature_state "
+                "WHERE character_id = ?",
+                (character_id,),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise KeyError(f"character {character_id!r} not loaded")
+            snap = loads(row["data_json"])
+            expected = int(row["row_version"])
+            setattr(snap, "_row_version", expected)
+
+            new_state = apply_decay(snap, policy)
+            blob = dumps(new_state)
+            last_interaction_iso = (
+                new_state.last_interaction_at.isoformat()
+                if new_state.last_interaction_at is not None
+                else None
+            )
+
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                result = self._conn.execute(
+                    "UPDATE creature_state "
+                    "   SET data_json = ?, schema_version = ?, "
+                    "       last_tick_at = ?, last_interaction_at = ?, "
+                    "       updated_at = ?, row_version = row_version + 1 "
+                    " WHERE character_id = ? AND row_version = ?",
+                    (
+                        blob,
+                        new_state.schema_version,
+                        new_state.last_tick_at.isoformat(),
+                        last_interaction_iso,
+                        _utcnow_iso(),
+                        character_id,
+                        expected,
+                    ),
+                )
+                if result.rowcount == 0:
+                    self._conn.execute("ROLLBACK")
+                    last_err = StateConflictError(
+                        f"tick: row_version mismatch on {character_id!r} "
+                        f"(expected {expected})"
+                    )
+                    continue  # re-read + retry
+                self._conn.execute("COMMIT")
+            except StateConflictError:
+                raise
+            except Exception:
+                self._conn.execute("ROLLBACK")
+                raise
+
+            setattr(new_state, "_row_version", expected + 1)
+            return new_state
+
+        assert last_err is not None  # loop always sets on retry branch
+        raise last_err
+
+    def _list_characters_sync(self) -> List[str]:
+        rows = self._conn.execute(
+            "SELECT character_id FROM creature_state"
+        ).fetchall()
+        return [str(r["character_id"]) for r in rows]
+
     # -- async Protocol surface -------------------------------------------
 
     async def load(
@@ -253,6 +332,18 @@ class SqliteCreatureStateProvider:
         """Peek at the OCC version — diagnostic / test helper."""
         async with self._lock:
             return await asyncio.to_thread(self._row_version_sync, character_id)
+
+    async def tick(
+        self,
+        character_id: str,
+        policy: DecayPolicy,
+    ) -> CreatureState:
+        async with self._lock:
+            return await asyncio.to_thread(self._tick_sync, character_id, policy)
+
+    async def list_characters(self) -> List[str]:
+        async with self._lock:
+            return await asyncio.to_thread(self._list_characters_sync)
 
 
 def _assign_path(state: CreatureState, path: str, value: Any) -> None:

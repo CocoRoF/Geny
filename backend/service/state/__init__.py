@@ -9,14 +9,27 @@ Stages mutate state by appending ``Mutation`` entries to a buffer on
 See ``dev_docs/20260421_6/plan/02_creature_state_contract.md`` for the
 full contract; this package is layered as:
 
-- ``schema/`` — pure dataclasses (this PR-X3-1).
+- ``schema/`` — pure dataclasses (PR-X3-1).
 - ``provider/`` — storage protocol + sqlite impl (PR-X3-2).
 - ``registry`` / ``hydrator`` — pipeline integration (PR-X3-3).
-- ``decay`` — TickEngine handler (PR-X3-4).
+- ``decay`` + ``decay_service`` — time-based drift + tick engine
+  registration (PR-X3-4).
 """
 
 from __future__ import annotations
 
+from .decay import (
+    CATCHUP_THRESHOLD,
+    DEFAULT_DECAY,
+    DecayPolicy,
+    DecayRule,
+    apply_decay,
+)
+from .decay_service import (
+    DEFAULT_DECAY_INTERVAL_SECONDS,
+    DEFAULT_DECAY_JITTER_SECONDS,
+    CreatureStateDecayService,
+)
 from .hydrator import hydrate_state, persist_state
 from .provider import (
     CreatureStateProvider,
@@ -45,7 +58,14 @@ from .schema import (
 )
 
 __all__ = [
+    "CATCHUP_THRESHOLD",
     "CREATURE_STATE_KEY",
+    "CreatureStateDecayService",
+    "DEFAULT_DECAY",
+    "DEFAULT_DECAY_INTERVAL_SECONDS",
+    "DEFAULT_DECAY_JITTER_SECONDS",
+    "DecayPolicy",
+    "DecayRule",
     "MUTATION_BUFFER_KEY",
     "SCHEMA_VERSION",
     "SESSION_META_KEY",
@@ -63,6 +83,7 @@ __all__ = [
     "SqliteCreatureStateProvider",
     "StateConflictError",
     "Vitals",
+    "apply_decay",
     "apply_mutations",
     "hydrate_state",
     "persist_state",

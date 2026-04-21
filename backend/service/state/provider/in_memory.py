@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import copy
-from typing import Any, Dict, Sequence
+from typing import Any, Dict, List, Sequence
 
+from ..decay import DecayPolicy, apply_decay
 from ..schema.creature_state import CreatureState
 from ..schema.mutation import Mutation
 from .mutate import apply_mutations
@@ -70,6 +71,24 @@ class InMemoryCreatureStateProvider:
                 _assign_path(new_state, path, value)
             self._store[character_id] = copy.deepcopy(new_state)
             return copy.deepcopy(new_state)
+
+    async def tick(
+        self,
+        character_id: str,
+        policy: DecayPolicy,
+    ) -> CreatureState:
+        async with self._lock_for(character_id):
+            state = self._store.get(character_id)
+            if state is None:
+                raise KeyError(f"character {character_id!r} not loaded")
+            new_state = apply_decay(state, policy)
+            self._store[character_id] = copy.deepcopy(new_state)
+            return copy.deepcopy(new_state)
+
+    async def list_characters(self) -> List[str]:
+        # Snapshot of keys — safe to read without per-key locks because
+        # dict iteration under CPython is atomic for this op.
+        return list(self._store.keys())
 
 
 def _assign_path(state: CreatureState, path: str, value: Any) -> None:

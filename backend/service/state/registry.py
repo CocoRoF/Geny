@@ -13,15 +13,28 @@ Sequencing per turn (see ``plan/02 §4``):
    to ``state.shared['creature_state_mut']``.
 4. ``await registry.persist(state)`` after ``pipeline.run`` — commits
    mutations, emits ``state.persisted`` or ``state.conflict``.
+
+Hydrate also performs **catch-up decay** (plan/02 §5.4): if the stored
+``last_tick_at`` is older than :data:`~backend.service.state.decay.CATCHUP_THRESHOLD`
+(typically because the owner has been offline), the registry calls
+``provider.tick`` once before stages see the snapshot so drifted vitals
+are reflected in this turn's prompt. Catch-up failures do not block the
+turn — stages fall back to the stale snapshot and the scheduled decay
+service will correct on its next run.
 """
 
 from __future__ import annotations
 
+import logging
+from datetime import datetime, timezone
 from typing import Any, Optional
 
+from .decay import CATCHUP_THRESHOLD, DEFAULT_DECAY, DecayPolicy
 from .provider.interface import CreatureStateProvider, StateConflictError
 from .schema.creature_state import CreatureState
 from .schema.mutation import MutationBuffer
+
+logger = logging.getLogger(__name__)
 
 # Keys we write into ``state.shared`` — exported as constants so stages
 # don't fight over spelling.
@@ -38,11 +51,13 @@ class SessionRuntimeRegistry:
         character_id: str,
         owner_user_id: str,
         provider: CreatureStateProvider,
+        catchup_policy: DecayPolicy = DEFAULT_DECAY,
     ) -> None:
         self.session_id = session_id
         self.character_id = character_id
         self.owner_user_id = owner_user_id
         self._provider = provider
+        self._catchup_policy = catchup_policy
         self._snapshot: Optional[CreatureState] = None
 
     @property
@@ -53,6 +68,7 @@ class SessionRuntimeRegistry:
         snap = await self._provider.load(
             self.character_id, owner_user_id=self.owner_user_id,
         )
+        snap = await self._maybe_catchup(state, snap)
         self._snapshot = snap
         _put_shared(state, CREATURE_STATE_KEY, snap)
         _put_shared(state, MUTATION_BUFFER_KEY, MutationBuffer())
@@ -68,6 +84,51 @@ class SessionRuntimeRegistry:
             "last_tick_at": snap.last_tick_at.isoformat(),
         })
         return snap
+
+    async def _maybe_catchup(
+        self, state: Any, snap: CreatureState,
+    ) -> CreatureState:
+        """Tick once if ``last_tick_at`` is older than the threshold.
+
+        Returns the decayed snapshot, or the original on any failure.
+        """
+        now = datetime.now(timezone.utc)
+        last_tick = snap.last_tick_at
+        if last_tick.tzinfo is None:
+            # Defensive: serialized states should round-trip with tzinfo,
+            # but guard against a legacy row sneaking through naive.
+            last_tick = last_tick.replace(tzinfo=timezone.utc)
+        if now - last_tick < CATCHUP_THRESHOLD:
+            return snap
+
+        tick = getattr(self._provider, "tick", None)
+        if not callable(tick):
+            # Provider pre-dates PR-X3-4 — no catch-up available, ship
+            # the stale snapshot rather than fail the turn.
+            return snap
+
+        try:
+            caught_up = await tick(self.character_id, self._catchup_policy)
+        except Exception as e:
+            # Catch-up must never block a turn. Stages see the stale
+            # snapshot; the scheduled decay service will correct.
+            logger.warning(
+                "state catchup failed for %s: %s", self.character_id, e
+            )
+            _emit(state, "state.catchup_failed", {
+                "character_id": self.character_id,
+                "session_id": self.session_id,
+                "reason": str(e),
+            })
+            return snap
+
+        _emit(state, "state.catchup", {
+            "character_id": self.character_id,
+            "session_id": self.session_id,
+            "from_last_tick_at": snap.last_tick_at.isoformat(),
+            "to_last_tick_at": caught_up.last_tick_at.isoformat(),
+        })
+        return caught_up
 
     async def persist(self, state: Any) -> CreatureState:
         if self._snapshot is None:
