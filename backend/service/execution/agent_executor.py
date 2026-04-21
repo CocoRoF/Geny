@@ -87,11 +87,47 @@ def set_app_state(app_state) -> None:
 # Avatar state emission (called after every execution)
 # ============================================================================
 
+async def _load_mood_for_session(session_id: str):
+    """Best-effort lookup of ``CreatureState.mood`` for this session.
+
+    Returns ``None`` when:
+      * the ``AgentSessionManager`` has no ``state_provider`` wired
+        (classic, non-game mode),
+      * the session isn't registered (background / unit-test call),
+      * the agent has no ``character_id``, or
+      * the provider raises for any reason.
+
+    Never raises — the caller treats ``None`` as "no mood signal, fall
+    back to text/agent_state extraction".
+    """
+    try:
+        manager = _get_agent_manager()
+        provider = getattr(manager, "state_provider", None)
+        if provider is None:
+            return None
+
+        agent = manager.get_agent(session_id)
+        character_id = getattr(agent, "character_id", None) if agent else None
+        if not character_id:
+            return None
+
+        creature = await provider.load(character_id)
+        return getattr(creature, "mood", None)
+    except Exception:
+        logger.debug("mood lookup failed for %s", session_id, exc_info=True)
+        return None
+
+
 async def _emit_avatar_state(session_id: str, result: 'ExecutionResult') -> None:
     """
     Emit avatar state update based on execution result.
     Called after _execute_core completes — ensures ALL execution paths
     (sync, async, chat broadcast) update the Live2D avatar.
+
+    When a ``CreatureState`` is hydrated for this session, its
+    ``MoodVector`` is passed into ``EmotionExtractor.resolve_emotion``
+    so the facial signal reflects the accumulated mood rather than a
+    keyword guess from the most recent reply (PR-X3-9).
 
     Best-effort: never raises.
     """
@@ -111,9 +147,13 @@ async def _emit_avatar_state(session_id: str, result: 'ExecutionResult') -> None
         from service.vtuber.emotion_extractor import EmotionExtractor
         extractor = EmotionExtractor(model.emotionMap)
 
+        mood = await _load_mood_for_session(session_id)
+
         if result.success and result.output:
             # Extract emotion from agent output text
-            emotion, index = extractor.resolve_emotion(result.output, "completed")
+            emotion, index = extractor.resolve_emotion(
+                result.output, "completed", mood=mood
+            )
             await state_manager.update_state(
                 session_id=session_id,
                 emotion=emotion,
@@ -123,7 +163,9 @@ async def _emit_avatar_state(session_id: str, result: 'ExecutionResult') -> None
         elif not result.success:
             # Error/timeout → set appropriate emotion
             agent_state = "timeout" if "Timeout" in (result.error or "") else "error"
-            emotion, index = extractor.resolve_emotion(None, agent_state)
+            emotion, index = extractor.resolve_emotion(
+                None, agent_state, mood=mood
+            )
             await state_manager.update_state(
                 session_id=session_id,
                 emotion=emotion,
