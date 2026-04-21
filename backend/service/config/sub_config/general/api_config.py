@@ -24,6 +24,13 @@ MODEL_OPTIONS = [
     {"value": "claude-haiku-4-20250414", "label": "Claude Haiku 4"},
 ]
 
+PROVIDER_OPTIONS = [
+    {"value": "anthropic", "label": "Anthropic"},
+    {"value": "openai", "label": "OpenAI"},
+    {"value": "google", "label": "Google"},
+    {"value": "vllm", "label": "vLLM (OpenAI-compatible)"},
+]
+
 
 @register_config
 @dataclass
@@ -34,6 +41,9 @@ class APIConfig(BaseConfig):
     anthropic_model: str = "claude-sonnet-4-6"
     vtuber_default_model: str = "claude-haiku-4-5-20251001"
     memory_model: str = "claude-haiku-4-5-20251001"
+    provider: str = "anthropic"
+    base_url: str = ""
+    use_legacy_reflect: bool = False
     max_thinking_tokens: int = 31999
     skip_permissions: bool = True
     app_port: int = 8000
@@ -43,6 +53,9 @@ class APIConfig(BaseConfig):
         "anthropic_model": "ANTHROPIC_MODEL",
         "vtuber_default_model": "VTUBER_DEFAULT_MODEL",
         "memory_model": "MEMORY_MODEL",
+        "provider": "LLM_PROVIDER",
+        "base_url": "LLM_BASE_URL",
+        "use_legacy_reflect": "USE_LEGACY_REFLECT",
         "max_thinking_tokens": "MAX_THINKING_TOKENS",
         "skip_permissions": "CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS",
         "app_port": "APP_PORT",
@@ -99,6 +112,18 @@ class APIConfig(BaseConfig):
                     "memory_model": {
                         "label": "Memory Model",
                         "description": "메모리 게이트/인사이트 추출 전용 경량 모델 (비워두면 메인 모델 사용)",
+                    },
+                    "provider": {
+                        "label": "LLM Provider",
+                        "description": "어느 벤더 SDK가 메인·메모리 LLM 호출을 담당할지 선택합니다. 기본값: anthropic.",
+                    },
+                    "base_url": {
+                        "label": "Base URL",
+                        "description": "API 엔드포인트 오버라이드. vllm에는 필수, 그 외에는 선택. 비워두면 벤더 기본값을 사용합니다.",
+                    },
+                    "use_legacy_reflect": {
+                        "label": "Use legacy LLM reflection (hardcoded Haiku)",
+                        "description": "기본 Off — 메모리 반영은 geny-executor의 s15 단계에서 Memory Model 설정으로 실행됩니다. On으로 바꾸면 cycle 20260421_4 이전의 하드코딩된 Haiku 콜백 경로로 롤백합니다.",
                     },
                     "max_thinking_tokens": {
                         "label": "Max Thinking Tokens",
@@ -159,6 +184,46 @@ class APIConfig(BaseConfig):
                 options=[{"value": "", "label": "Same as main model"}] + MODEL_OPTIONS,
                 group="api",
                 apply_change=env_sync("MEMORY_MODEL"),
+            ),
+            ConfigField(
+                name="provider",
+                field_type=FieldType.SELECT,
+                label="LLM Provider",
+                description=(
+                    "Which vendor SDK backs both the main reasoning call and "
+                    "memory-side LLM work. Default: anthropic. Changing requires "
+                    "the matching vendor SDK to be installed."
+                ),
+                default="anthropic",
+                options=PROVIDER_OPTIONS,
+                group="api",
+                apply_change=env_sync("LLM_PROVIDER"),
+            ),
+            ConfigField(
+                name="base_url",
+                field_type=FieldType.STRING,
+                label="Base URL",
+                description=(
+                    "Override API endpoint. Required for vllm; optional for other "
+                    "providers. Leave blank to use the vendor default."
+                ),
+                default="",
+                group="api",
+                apply_change=env_sync("LLM_BASE_URL"),
+            ),
+            ConfigField(
+                name="use_legacy_reflect",
+                field_type=FieldType.BOOLEAN,
+                label="Use legacy LLM reflection (hardcoded Haiku)",
+                description=(
+                    "Off (default): memory reflection runs via the geny-executor "
+                    "memory stage, using the Memory Model above. "
+                    "On: falls back to the pre-cycle hardcoded-Haiku callback path. "
+                    "Use only if the default path is misbehaving."
+                ),
+                default=False,
+                group="api",
+                apply_change=env_sync("USE_LEGACY_REFLECT"),
             ),
             ConfigField(
                 name="max_thinking_tokens",

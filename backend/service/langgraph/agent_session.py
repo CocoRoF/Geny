@@ -764,6 +764,7 @@ class AgentSession:
             GenyMemoryRetriever,
             GenyMemoryStrategy,
             GenyPersistence,
+            ReflectionResolver,
         )
         from geny_executor.tools.base import ToolContext
         from geny_executor.stages.s03_system.artifact.default.builders import (
@@ -772,8 +773,13 @@ class AgentSession:
             MemoryContextBlock,
             PersonaBlock,
         )
+        from geny_executor.core.config import ModelConfig
+        from geny_executor.core.mutation import PipelineMutator
+        from geny_executor.core.errors import MutationError
+        from geny_executor.llm_client import ClientRegistry
 
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        api_cfg = None
         try:
             from service.config.manager import get_config_manager
             from service.config.sub_config.general.api_config import APIConfig
@@ -781,6 +787,9 @@ class AgentSession:
             api_key = api_key or api_cfg.anthropic_api_key or ""
         except Exception:
             pass
+        if api_cfg is None:
+            from service.config.sub_config.general.api_config import APIConfig
+            api_cfg = APIConfig()
         if not api_key:
             raise RuntimeError(
                 f"[{self._session_id}] ANTHROPIC_API_KEY is required. "
@@ -815,7 +824,104 @@ class AgentSession:
             except Exception:
                 pass
 
-        llm_reflect = self._make_llm_reflect_callback(api_key)
+        # ── Memory model routing (cycle 20260421_4) ──
+        #
+        # Push APIConfig.memory_model down onto s02 (context) and s15
+        # (memory) so executor-native paths honour the per-stage override.
+        # Empty memory_model falls back to the main model so no surprise
+        # LLM calls spin up.
+        mem_model_name = (api_cfg.memory_model or "").strip() or api_cfg.anthropic_model
+        memory_cfg = ModelConfig(
+            model=mem_model_name,
+            max_tokens=2048,
+            temperature=0.0,
+            thinking_enabled=False,
+        )
+        try:
+            mutator = PipelineMutator(self._prebuilt_pipeline)
+        except Exception as exc:
+            mutator = None
+            logger.warning(
+                f"[{self._session_id}] cycle-4: PipelineMutator init failed — "
+                f"continuing without stage-level overrides: {exc}"
+            )
+        if mutator is not None:
+            try:
+                mutator.set_stage_model(2, memory_cfg)
+            except MutationError:
+                logger.warning(
+                    f"[{self._session_id}] cycle-4: s02 context stage absent — "
+                    f"skipping memory model override"
+                )
+            try:
+                mutator.set_stage_model(15, memory_cfg)
+            except MutationError:
+                logger.warning(
+                    f"[{self._session_id}] cycle-4: s15 memory stage absent — "
+                    f"skipping memory model override"
+                )
+
+        # ── Shared LLM client (cycle 20260421_4) ──
+        #
+        # Build the vendor-selected client once and inject it via
+        # attach_runtime. s06_api's _resolve_client prefers state.llm_client,
+        # so main-stage and memory-stage LLM calls both run through the
+        # same instance — no credential drift by construction.
+        provider_name = (getattr(api_cfg, "provider", "") or "anthropic").strip()
+        base_url = (getattr(api_cfg, "base_url", "") or "").strip() or None
+        try:
+            client_cls = ClientRegistry.get(provider_name)
+            client_kwargs: Dict[str, Any] = {"api_key": api_key}
+            if base_url:
+                client_kwargs["base_url"] = base_url
+            llm_client = client_cls(**client_kwargs)
+        except Exception as exc:
+            logger.exception(
+                f"[{self._session_id}] cycle-4: failed to build LLM client "
+                f"for provider={provider_name!r}: {exc}"
+            )
+            raise
+
+        # Sync s06_api's own config so its fallback client (used only if
+        # state.llm_client ever becomes None at run time) stays consistent.
+        try:
+            s06_stage = next(
+                (st for st in self._prebuilt_pipeline.stages if getattr(st, "order", None) == 6),
+                None,
+            )
+            if s06_stage is not None and hasattr(s06_stage, "update_config"):
+                s06_stage.update_config({
+                    "provider": provider_name,
+                    "base_url": base_url or "",
+                })
+        except Exception as exc:
+            logger.warning(
+                f"[{self._session_id}] cycle-4: failed to sync s06 provider: {exc}"
+            )
+
+        # ── Legacy reflection callback (kept behind APIConfig flag) ──
+        use_legacy_reflect = bool(getattr(api_cfg, "use_legacy_reflect", False))
+        llm_reflect = (
+            self._make_llm_reflect_callback(api_key) if use_legacy_reflect else None
+        )
+
+        # ── Native reflection resolver ──
+        #
+        # Consumed by GenyMemoryStrategy when llm_reflect is None. Closes
+        # over the s15 stage handle so the resolver reads the live model
+        # override at reflect time (not pipeline-build time).
+        s15_stage = next(
+            (st for st in self._prebuilt_pipeline.stages if getattr(st, "order", None) == 15),
+            None,
+        )
+        if s15_stage is not None:
+            reflection_resolver = ReflectionResolver(
+                resolve_cfg=lambda state, _stage=s15_stage: _stage.resolve_model_config(state),
+                has_override=lambda _stage=s15_stage: getattr(_stage, "_model_override", None) is not None,
+                client_getter=lambda state: getattr(state, "llm_client", None),
+            )
+        else:
+            reflection_resolver = None
 
         # ── Session-scoped runtime objects ──
         attach_kwargs: Dict[str, Any] = {
@@ -831,6 +937,7 @@ class AgentSession:
                 working_dir=working_dir,
                 storage_path=self.storage_path,
             ),
+            "llm_client": llm_client,
         }
         if self._memory_manager is not None:
             attach_kwargs["memory_retriever"] = GenyMemoryRetriever(
@@ -845,6 +952,7 @@ class AgentSession:
                 enable_reflection=True,
                 llm_reflect=llm_reflect,
                 curated_knowledge_manager=curated_km,
+                resolver=reflection_resolver,
             )
             attach_kwargs["memory_persistence"] = GenyPersistence(
                 self._memory_manager
@@ -863,10 +971,20 @@ class AgentSession:
 
     @staticmethod
     def _make_llm_reflect_callback(api_key: str):
-        """Create an LLM reflection callback for GenyMemoryStrategy.
+        """Create a legacy LLM reflection callback for GenyMemoryStrategy.
+
+        .. deprecated:: cycle 20260421_4
+            Since cycle 20260421_4, geny-executor's memory stage (s15)
+            runs reflection natively via
+            :class:`geny_executor.memory.ReflectionResolver` using
+            ``APIConfig.memory_model``. This callback is retained for
+            one cycle behind the ``APIConfig.use_legacy_reflect`` flag
+            so operators can A/B-test regressions. It is expected to
+            be removed in the next cycle.
 
         Returns an async callable: (input_text, output_text) -> List[Dict].
-        Uses the Anthropic SDK directly (lightweight, no LangChain).
+        Uses the Anthropic SDK directly (lightweight, no LangChain) with
+        a hardcoded Haiku model.
         """
         async def _llm_reflect(input_text: str, output_text: str):
             import json as _json
