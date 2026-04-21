@@ -82,6 +82,51 @@ def _resolve_session(name_or_id: str):
     return None, None
 
 
+def _record_dm_on_sender_stm(
+    session_id: str,
+    content: str,
+    target_label: str,
+    channel: str,
+) -> None:
+    """Write the outgoing DM body to the sender's short-term memory.
+
+    Classified as ``assistant_dm`` — mirrors how incoming DMs are
+    recorded on the recipient side (via ``_trigger_dm_response``'s
+    ``[SYSTEM] You received a direct message ...`` prompt, which
+    ``_classify_input_role`` already routes to ``assistant_dm``).
+    Without this record, the outgoing DM body lives only in the tool
+    event log, so next turn's retrieval (L0 recent turns / session
+    summary / keyword / vector) cannot see what the sender actually
+    asked — the sub-worker reply lands with no request visible.
+
+    Non-critical: any failure (missing agent, missing memory manager,
+    record_message exception) is swallowed so tool execution keeps
+    working. See ``dev_docs/20260421_1/analysis/01`` § 3.
+
+    Args:
+        session_id: Caller's own session id.
+        content: DM body (already stripped).
+        target_label: Display name or session id of the recipient
+            — used to make the STM line self-describing.
+        channel: ``"internal"`` for counterpart DMs,
+            ``"external"`` for addressed DMs.
+    """
+    try:
+        agent = _get_agent_manager().get_agent(session_id)
+        if agent is None:
+            return
+        memory = getattr(agent, "_memory_manager", None)
+        if memory is None:
+            return
+        body = f"[DM to {target_label} ({channel})]: {content}"
+        memory.record_message("assistant_dm", body[:10000])
+    except Exception:
+        logger.debug(
+            "Failed to record outgoing DM on sender STM — non-critical",
+            exc_info=True,
+        )
+
+
 def _trigger_dm_response(
     target_session_id: str,
     sender_name: str,
@@ -728,6 +773,16 @@ class SendDirectMessageExternalTool(BaseTool):
             message_id=msg["id"],
         )
 
+        # Pin the outgoing DM on the sender's STM — see helper docstring
+        # for why this is needed on top of the recipient-side record.
+        if sender_session_id:
+            _record_dm_on_sender_stm(
+                session_id=sender_session_id,
+                content=content.strip(),
+                target_label=target.session_name or resolved_id,
+                channel="external",
+            )
+
         return json.dumps({
             "success": True,
             "message_id": msg["id"],
@@ -820,6 +875,15 @@ class SendDirectMessageInternalTool(BaseTool):
             sender_name=sender_name,
             content=content.strip(),
             message_id=msg["id"],
+        )
+
+        # Pin the outgoing DM on the sender's STM — see helper docstring
+        # for why this is needed on top of the recipient-side record.
+        _record_dm_on_sender_stm(
+            session_id=session_id,
+            content=content.strip(),
+            target_label=target.session_name or resolved_id,
+            channel="internal",
         )
 
         return json.dumps(
