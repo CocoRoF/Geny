@@ -33,6 +33,7 @@ from service.langgraph import (
     get_agent_session_manager,
     AgentSession,
 )
+from backend.service.lifecycle import LifecycleEvent
 from service.logging.session_logger import get_session_logger
 from service.claude_manager.session_store import get_session_store
 from service.execution.agent_executor import (
@@ -531,8 +532,24 @@ async def restore_session(
                             )
                             store.update(linked_id, {"system_prompt": linked_system_prompt})
                         logger.info(f"✅ Linked session restored: {linked_id}")
+                        await agent_manager.lifecycle_bus.emit(
+                            LifecycleEvent.SESSION_RESTORED,
+                            linked_id,
+                            cascade="linked_peer",
+                            peer=session_id,
+                        )
                 except Exception as e:
                     logger.warning(f"⚠️ Failed to cascade restore to linked session {linked_id}: {e}")
+
+        # Main restore emit comes last so subscribers see the pair as
+        # consistent (linked_id already alive) by the time the VTuber
+        # event fires.
+        await agent_manager.lifecycle_bus.emit(
+            LifecycleEvent.SESSION_RESTORED,
+            session_id,
+            cascade="main",
+            linked_id=linked_id,
+        )
 
         return session_info
     except Exception as e:

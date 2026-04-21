@@ -179,6 +179,7 @@ class AgentSession:
         memory_config: Optional[Dict[str, Any]] = None,
         prebuilt_pipeline: Optional[Any] = None,
         persona_provider: Optional[Any] = None,
+        lifecycle_bus: Optional[Any] = None,
     ):
         """Initialize AgentSession.
 
@@ -201,6 +202,10 @@ class AgentSession:
                 ``DynamicPersonaSystemBuilder``. When omitted, the session
                 falls back to the legacy fixed ``ComposablePromptBuilder``
                 (kept for tests that construct ``AgentSession`` directly).
+            lifecycle_bus: Optional ``SessionLifecycleBus`` the session
+                uses to emit ``SESSION_REVIVED`` when ``revive`` /
+                ``_auto_revive`` succeed. Tests that construct a session
+                directly may leave this ``None``.
         """
         # Session identity
         self._session_id = session_id or str(uuid.uuid4())
@@ -214,6 +219,7 @@ class AgentSession:
         self._timeout = timeout
         self._system_prompt = system_prompt
         self._persona_provider = persona_provider
+        self._lifecycle_bus = lifecycle_bus
         self._env_vars = env_vars or {}
         self._mcp_config = mcp_config
         self._max_iterations = max_iterations
@@ -547,6 +553,11 @@ class AgentSession:
             f"(revive_count={self._freshness.revive_count})"
         )
 
+        # Fire-and-forget bus emit — _auto_revive is sync but runs inside
+        # invoke/astream, both async. If no loop is running (very early
+        # startup), skip silently; no session state depends on the emit.
+        self._schedule_revived_emit(kind="auto_revive")
+
     def mark_idle(self) -> bool:
         """Transition this session to IDLE status.
 
@@ -633,7 +644,7 @@ class AgentSession:
             # 4. Mark as alive
             self._initialized = True
             self._status = SessionStatus.RUNNING
-    
+
             # Record revival
             self._freshness.record_revival()
 
@@ -641,6 +652,8 @@ class AgentSession:
                 f"[{self._session_id}] Session revival successful "
                 f"(revive_count={self._freshness.revive_count})"
             )
+
+            await self._emit_revived(kind="pipeline_rebuild")
 
             return True
 
@@ -651,6 +664,44 @@ class AgentSession:
                 f"[{self._session_id}] Session revival failed: {e}"
             )
             return False
+
+    async def _emit_revived(self, *, kind: str) -> None:
+        """Emit SESSION_REVIVED on the lifecycle bus (if one is attached).
+
+        ``kind`` distinguishes ``pipeline_rebuild`` (full ``revive()``
+        path) from ``auto_revive`` (lightweight timestamp reset) so
+        subscribers can choose how thoroughly to react.
+        """
+        if self._lifecycle_bus is None:
+            return
+        try:
+            from backend.service.lifecycle import LifecycleEvent
+            await self._lifecycle_bus.emit(
+                LifecycleEvent.SESSION_REVIVED,
+                self._session_id,
+                revive_count=self._freshness.revive_count,
+                kind=kind,
+            )
+        except Exception:
+            logger.debug(
+                f"[{self._session_id}] SESSION_REVIVED emit failed (non-critical)",
+                exc_info=True,
+            )
+
+    def _schedule_revived_emit(self, *, kind: str) -> None:
+        """Fire-and-forget SESSION_REVIVED emit from a sync context.
+
+        Used by ``_auto_revive`` which runs inside async ``invoke``/
+        ``astream`` but is itself sync. If no loop is running we skip
+        silently — the emit is best-effort.
+        """
+        if self._lifecycle_bus is None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return  # no running loop — skip
+        loop.create_task(self._emit_revived(kind=kind))
 
     async def _ensure_alive(self) -> None:
         """Ensure the session is alive before execution.

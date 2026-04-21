@@ -60,6 +60,7 @@ from service.langgraph.agent_session import (
     _DEFAULT_WORKER_PROMPT,
 )
 from backend.service.persona import CharacterPersonaProvider
+from backend.service.lifecycle import LifecycleEvent, SessionLifecycleBus
 
 
 logger = getLogger(__name__)
@@ -123,6 +124,12 @@ class AgentSessionManager(SessionManager):
             adaptive_prompt=_ADAPTIVE_PROMPT,
         )
 
+        # Session lifecycle bus — manager-scoped pub/sub rail (cycle
+        # 20260421_8 PR-X2-1). Call sites route CREATED/DELETED/PAIRED/
+        # RESTORED/IDLE/REVIVED through it; subscribers (not yet any in X2)
+        # attach via ``manager.lifecycle_bus.subscribe``.
+        self._lifecycle_bus = SessionLifecycleBus()
+
         logger.info("✅ AgentSessionManager initialized")
 
     @property
@@ -130,6 +137,12 @@ class AgentSessionManager(SessionManager):
         """Shared ``CharacterPersonaProvider`` — controllers use it to stage
         per-session persona edits (character / static override / context)."""
         return self._persona_provider
+
+    @property
+    def lifecycle_bus(self) -> SessionLifecycleBus:
+        """Shared ``SessionLifecycleBus`` — subscribers react to the 7
+        canonical session lifecycle events."""
+        return self._lifecycle_bus
 
     def set_app_db(self, app_db) -> None:
         """Store the AppDatabaseManager for per-session DB wiring.
@@ -540,6 +553,7 @@ class AgentSessionManager(SessionManager):
             memory_config=memory_config,
             prebuilt_pipeline=prebuilt_pipeline,
             persona_provider=self._persona_provider,
+            lifecycle_bus=self._lifecycle_bus,
         )
 
         session_id = agent.session_id
@@ -610,6 +624,23 @@ class AgentSessionManager(SessionManager):
                 "linked_session_id": request.linked_session_id,
             })
             logger.info(f"[{session_id}] 📝 Session logger created")
+
+        # Lifecycle bus emit — SESSION_CREATED. For a sub-worker spawned
+        # from a VTuber, ``linked_session_id`` on the request is the
+        # VTuber's id (set by the pairing block below) — surface it as
+        # ``paired_parent`` so subscribers can reconstruct pairings.
+        role_value = request.role.value if request.role else "worker"
+        created_meta: Dict[str, Any] = {
+            "role": role_value,
+            "is_vtuber": request.role == SessionRole.VTUBER,
+            "session_type": request.session_type,
+            "env_id": env_id,
+        }
+        if request.linked_session_id:
+            created_meta["paired_parent"] = request.linked_session_id
+        await self._lifecycle_bus.emit(
+            LifecycleEvent.SESSION_CREATED, session_id, **created_meta
+        )
 
         # Persist session metadata to sessions.json
         self._store.register(session_id, session_info.model_dump(mode="json"))
@@ -711,6 +742,16 @@ class AgentSessionManager(SessionManager):
                 # text, so re-registration of an already-paired VTuber is
                 # safe.
                 self._persona_provider.append_context(session_id, vtuber_ctx)
+
+                # SESSION_PAIRED — fires once per pair, after both sides'
+                # SESSION_CREATED events have already fired. session_id
+                # is the VTuber (the "owning" half).
+                await self._lifecycle_bus.emit(
+                    LifecycleEvent.SESSION_PAIRED,
+                    session_id,
+                    vtuber_id=session_id,
+                    worker_id=worker_session_id,
+                )
 
                 logger.info(
                     f"[{session_id}] 🔗 Sub-Worker created: "
@@ -896,6 +937,14 @@ class AgentSessionManager(SessionManager):
             # Soft-delete in persistent store (keeps metadata for restore)
             self._store.soft_delete(session_id)
 
+            # SESSION_DELETED bus emit — ``hard`` reflects whether the
+            # caller asked for storage cleanup (permanent delete flow).
+            await self._lifecycle_bus.emit(
+                LifecycleEvent.SESSION_DELETED,
+                session_id,
+                hard=bool(cleanup_storage),
+            )
+
             logger.info(f"[{session_id}] ✅ AgentSession deleted (soft)")
             return True
 
@@ -998,20 +1047,22 @@ class AgentSessionManager(SessionManager):
                 await asyncio.sleep(self._idle_monitor_interval)
                 if not self._idle_monitor_running:
                     break
-                self._scan_for_idle_sessions()
+                await self._scan_for_idle_sessions()
             except asyncio.CancelledError:
                 break
             except Exception:
                 logger.debug("Idle monitor tick error (non-critical)", exc_info=True)
 
-    def _scan_for_idle_sessions(self) -> None:
+    async def _scan_for_idle_sessions(self) -> None:
         """Scan all agent sessions and mark idle ones.
 
-        This is a lightweight synchronous scan — no I/O, no process
-        restarts.  It only flips the status flag.
+        Lightweight — flips the status flag and emits SESSION_IDLE on the
+        bus for each transition. No process restarts, no heavy I/O.
         """
         transitioned = 0
-        for session_id, agent in self._local_agents.items():
+        # Snapshot items() so a concurrent create/delete does not mutate
+        # the dict mid-scan.
+        for session_id, agent in list(self._local_agents.items()):
             if agent.status == SessionStatus.RUNNING:
                 if agent.mark_idle():
                     transitioned += 1
@@ -1021,6 +1072,11 @@ class AgentSessionManager(SessionManager):
                         self._store.register(session_id, info.model_dump(mode="json"))
                     except Exception:
                         pass  # non-critical
+                    await self._lifecycle_bus.emit(
+                        LifecycleEvent.SESSION_IDLE,
+                        session_id,
+                        reason="timeout",
+                    )
 
         if transitioned > 0:
             logger.info(f"Idle monitor: {transitioned} session(s) transitioned to IDLE")
