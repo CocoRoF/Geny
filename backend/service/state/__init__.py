@@ -56,6 +56,11 @@ from .schema import (
     Progression,
     Vitals,
 )
+from .tool_context import (
+    bind_mutation_buffer,
+    current_mutation_buffer,
+    reset_mutation_buffer,
+)
 
 __all__ = [
     "CATCHUP_THRESHOLD",
@@ -85,6 +90,9 @@ __all__ = [
     "Vitals",
     "apply_decay",
     "apply_mutations",
+    "bind_mutation_buffer",
+    "current_mutation_buffer",
     "hydrate_state",
     "persist_state",
+    "reset_mutation_buffer",
 ]

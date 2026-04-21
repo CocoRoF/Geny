@@ -1194,6 +1194,39 @@ class AgentSession:
             )
             return False
 
+    async def _pipeline_events_scoped(
+        self, input_text: str, state: Any, hydrated: bool,
+    ) -> AsyncIterator[Any]:
+        """Yield events from ``pipeline.run_stream`` with the current-turn
+        mutation buffer bound as a contextvar.
+
+        Game tools (``feed`` / ``play`` / ``gift`` / ``talk``) retrieve
+        the buffer via :func:`~service.state.current_mutation_buffer`;
+        the bind must span exactly the ``run_stream`` iteration so the
+        reset fires on normal completion, on exception, and on early
+        consumer abandonment (``aclose()`` on this generator propagates
+        into the ``finally``).
+
+        A ``None`` token is used when hydrate failed or no buffer was
+        installed — :func:`~service.state.reset_mutation_buffer` is
+        tolerant of ``None``, so we avoid branching here.
+        """
+        from service.state import (
+            MUTATION_BUFFER_KEY,
+            bind_mutation_buffer,
+            reset_mutation_buffer,
+        )
+        token = None
+        if hydrated:
+            buf = state.shared.get(MUTATION_BUFFER_KEY)
+            if buf is not None:
+                token = bind_mutation_buffer(buf)
+        try:
+            async for event in self._pipeline.run_stream(input_text, state):
+                yield event
+        finally:
+            reset_mutation_buffer(token)
+
     async def _persist_state_safely(
         self, registry: Any, state: Any,
     ) -> None:
@@ -1268,7 +1301,15 @@ class AgentSession:
                 _state_registry, _state,
             )
 
-        async for event in self._pipeline.run_stream(input_text, _state):
+        # Publish the current-turn mutation buffer to game tools via a
+        # contextvar (PR-X3-6). ``_pipeline_events_scoped`` binds the
+        # buffer before yielding the first event and resets it when the
+        # underlying stream closes — keeps the ``async for`` body and
+        # the post-stream accumulation logic at their current
+        # indentation while still being exception-safe.
+        async for event in self._pipeline_events_scoped(
+            input_text, _state, _state_hydrated,
+        ):
             event_type = event.type if hasattr(event, "type") else ""
             event_data = event.data if hasattr(event, "data") else {}
 
@@ -1509,7 +1550,11 @@ class AgentSession:
                 _state_registry, _state,
             )
 
-        async for event in self._pipeline.run_stream(input_text, _state):
+        # Bind mutation buffer contextvar for game tools — see
+        # _pipeline_events_scoped for the rationale.
+        async for event in self._pipeline_events_scoped(
+            input_text, _state, _state_hydrated,
+        ):
             event_type = event.type if hasattr(event, "type") else ""
             event_data = event.data if hasattr(event, "data") else {}
 
