@@ -569,6 +569,15 @@ class AgentSessionManager(SessionManager):
             f"(adhoc_providers={len(adhoc_providers)})"
         )
 
+        # With CreatureState wired up, prepend the AffectTagEmitter so
+        # LLM ``[emotion]`` cues fold into mood/bond mutations on the
+        # same turn. Gated on ``state_provider`` presence so classic
+        # (non-game) sessions never see their final_text rewritten.
+        if self._state_provider is not None:
+            from service.emit import install_affect_tag_emitter
+
+            install_affect_tag_emitter(prebuilt_pipeline)
+
         # Seed the persona provider with the assembled static prompt so the
         # DynamicPersonaSystemBuilder hands back exactly this text on the
         # first turn. Persona mutations (character swap, user-edited
