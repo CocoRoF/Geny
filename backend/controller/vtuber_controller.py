@@ -12,7 +12,6 @@ Avatar state streaming is handled by ws/avatar_stream.py (WebSocket).
 """
 
 import json
-from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
@@ -22,38 +21,26 @@ logger = getLogger(__name__)
 
 router = APIRouter(prefix="/api/vtuber", tags=["vtuber"])
 
-_CHARACTERS_DIR = Path(__file__).resolve().parent.parent / "prompts" / "vtuber_characters"
-
 
 def _inject_character_prompt(session_id: str, model_name: str) -> None:
-    """Load a per-model character prompt and append to the agent's system prompt."""
+    """Stage a per-model character prompt through the PersonaProvider.
+
+    Replaces the legacy ``agent._system_prompt`` append (cycle 20260421_7
+    PR-X1-3). The provider owns file caching and duplicate-write
+    suppression; the pipeline picks up the change on the next turn via
+    ``DynamicPersonaSystemBuilder``.
+    """
     try:
         from service.langgraph import get_agent_session_manager
-        agent = get_agent_session_manager().get_agent(session_id)
+        manager = get_agent_session_manager()
+        agent = manager.get_agent(session_id)
         if not agent or getattr(agent, '_session_type', None) != 'vtuber':
             return
-
-        # Try model-specific file, fall back to default
-        char_file = _CHARACTERS_DIR / f"{model_name}.md"
-        if not char_file.exists():
-            char_file = _CHARACTERS_DIR / "default.md"
-        if not char_file.exists():
-            return
-
-        char_prompt = char_file.read_text(encoding="utf-8").strip()
-        if not char_prompt:
-            return
-
-        marker = "\n\n## Character Personality"
-        # Avoid duplicate injection
-        if marker in (agent._system_prompt or ""):
-            return
-
-        agent._system_prompt = (agent._system_prompt or "") + "\n\n" + char_prompt
-        if agent.process:
-            agent.process.system_prompt = agent._system_prompt
-
-        logger.info(f"[{session_id}] Character prompt injected from {char_file.name}")
+        manager.persona_provider.set_character(session_id, model_name)
+        logger.info(
+            f"[{session_id}] Character persona staged via PersonaProvider "
+            f"(model={model_name})"
+        )
     except Exception as e:
         logger.debug(f"Character prompt injection failed: {e}", exc_info=True)
 
