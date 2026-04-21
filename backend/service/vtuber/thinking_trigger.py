@@ -19,7 +19,15 @@ from datetime import datetime
 from logging import getLogger
 from typing import Dict, List, Optional, Set
 
+from service.tick import TickEngine, TickSpec
+
 logger = getLogger(__name__)
+
+# TickEngine spec cadence — the spec polls every 30s; per-session
+# adaptive backoff is enforced inside the handler (``scan_all``).
+_TICK_INTERVAL_SECONDS = 30.0
+_TICK_JITTER_SECONDS = 2.0
+_TICK_SPEC_NAME = "thinking_trigger"
 
 # Minimum idle seconds before a thinking trigger fires
 _DEFAULT_IDLE_THRESHOLD = 120  # 2 minutes
@@ -496,11 +504,15 @@ class ThinkingTriggerService:
         self,
         idle_threshold: float = _DEFAULT_IDLE_THRESHOLD,
         max_idle_threshold: float = _MAX_IDLE_THRESHOLD,
+        engine: Optional[TickEngine] = None,
     ) -> None:
         self._base_threshold = idle_threshold
         self._max_threshold = max_idle_threshold
-        self._task: Optional[asyncio.Task] = None
-        self._stopped = False
+        # Reuse an injected TickEngine (shared across services in X2-5/X2-6)
+        # or own one ourselves.
+        self._engine = engine if engine is not None else TickEngine()
+        self._owns_engine = engine is None
+        self._running = False
         # session_id → last_activity_epoch  (updated externally)
         self._activity: Dict[str, float] = {}
         # Sessions explicitly disabled by user
@@ -512,23 +524,37 @@ class ThinkingTriggerService:
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def start(self) -> None:
-        """Start the background polling loop."""
-        if self._task is not None:
+    async def start(self) -> None:
+        """Register the tick spec and start the engine (if owned)."""
+        if self._running:
             return
-        self._stopped = False
-        self._task = asyncio.create_task(self._loop())
+        self._engine.register(
+            TickSpec(
+                name=_TICK_SPEC_NAME,
+                interval=_TICK_INTERVAL_SECONDS,
+                handler=self.scan_all,
+                jitter=_TICK_JITTER_SECONDS,
+            )
+        )
+        if self._owns_engine:
+            await self._engine.start()
+        self._running = True
         logger.info(
-            "ThinkingTriggerService started (base=%ss, max=%ss)",
-            self._base_threshold, self._max_threshold,
+            "ThinkingTriggerService started (base=%ss, max=%ss, tick=%ss±%ss)",
+            self._base_threshold,
+            self._max_threshold,
+            _TICK_INTERVAL_SECONDS,
+            _TICK_JITTER_SECONDS,
         )
 
-    def stop(self) -> None:
-        """Stop the background loop gracefully."""
-        self._stopped = True
-        if self._task:
-            self._task.cancel()
-            self._task = None
+    async def stop(self) -> None:
+        """Unregister the spec; stop the engine only if we own it."""
+        if not self._running:
+            return
+        self._running = False
+        self._engine.unregister(_TICK_SPEC_NAME)
+        if self._owns_engine:
+            await self._engine.stop()
         self._activity.clear()
         self._disabled_sessions.clear()
         self._consecutive_triggers.clear()
@@ -590,50 +616,46 @@ class ThinkingTriggerService:
         return self._base_threshold + (self._max_threshold - self._base_threshold) * scale
 
     # ------------------------------------------------------------------
-    # Background loop
+    # Tick handler
     # ------------------------------------------------------------------
 
-    async def _loop(self) -> None:
-        """Poll every 30s and fire triggers for idle VTuber sessions."""
+    async def scan_all(self) -> None:
+        """One tick — fan out triggers for sessions whose idle time exceeds
+        their current adaptive threshold.
+
+        Registered as ``TickSpec(name="thinking_trigger")``. The spec
+        cadence is fixed at 30s; per-session adaptive backoff is
+        enforced here via ``_get_adaptive_threshold``.
+        """
         import time
 
-        while not self._stopped:
-            try:
-                await asyncio.sleep(30)
-                now = time.time()
+        now = time.time()
 
-                # Fire triggers concurrently — each VTuber is independent
-                trigger_tasks = []
-                for sid, last in list(self._activity.items()):
-                    # Skip disabled sessions
-                    if sid in self._disabled_sessions:
-                        continue
+        # Fire triggers concurrently — each VTuber is independent
+        trigger_tasks = []
+        for sid, last in list(self._activity.items()):
+            # Skip disabled sessions
+            if sid in self._disabled_sessions:
+                continue
 
-                    idle = now - last
-                    threshold = self._get_adaptive_threshold(sid)
-                    if idle < threshold:
-                        continue
+            idle = now - last
+            threshold = self._get_adaptive_threshold(sid)
+            if idle < threshold:
+                continue
 
-                    trigger_tasks.append((sid, self._fire_trigger(sid)))
-                    # Reset to avoid immediate re-fire
-                    self._activity[sid] = now
+            trigger_tasks.append((sid, self._fire_trigger(sid)))
+            # Reset to avoid immediate re-fire
+            self._activity[sid] = now
 
-                # Await all triggers concurrently
-                if trigger_tasks:
-                    results = await asyncio.gather(
-                        *[coro for _, coro in trigger_tasks],
-                        return_exceptions=True,
-                    )
-                    for (sid, _), result in zip(trigger_tasks, results):
-                        if isinstance(result, Exception):
-                            logger.debug(
-                                "Trigger failed for %s: %s", sid, result
-                            )
-
-            except asyncio.CancelledError:
-                break
-            except Exception:
-                logger.debug("ThinkingTrigger loop error", exc_info=True)
+        # Await all triggers concurrently
+        if trigger_tasks:
+            results = await asyncio.gather(
+                *[coro for _, coro in trigger_tasks],
+                return_exceptions=True,
+            )
+            for (sid, _), result in zip(trigger_tasks, results):
+                if isinstance(result, Exception):
+                    logger.debug("Trigger failed for %s: %s", sid, result)
 
     async def _fire_trigger(self, session_id: str) -> None:
         """Send a context-aware [THINKING_TRIGGER] to the VTuber session.
