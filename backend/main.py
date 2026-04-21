@@ -261,7 +261,7 @@ async def lifespan(app: FastAPI):
     )
 
     # Start background idle monitor (transitions idle sessions to IDLE status)
-    agent_manager.start_idle_monitor()
+    await agent_manager.start_idle_monitor()
     logger.info("   - Session idle monitor: started (10min threshold)")
 
     # ── MemoryProvider Registry (Phase 2) ──────────────────────────────
