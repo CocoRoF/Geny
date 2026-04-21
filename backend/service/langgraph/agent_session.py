@@ -1014,6 +1014,37 @@ class AgentSession:
                         stage_order=STAGE_ORDER.get(stage_name),
                         iteration=iteration or 0,
                     )
+                elif event_type == "stage.bypass":
+                    stage_name = event.stage if hasattr(event, "stage") else event_data.get("stage", "unknown")
+                    iteration = event.iteration if hasattr(event, "iteration") else event_data.get("iteration", 0)
+                    session_logger.log_stage_bypass(
+                        stage_name=stage_name,
+                        stage_order=STAGE_ORDER.get(stage_name),
+                        iteration=iteration or 0,
+                        reason=event_data.get("reason"),
+                    )
+                elif event_type == "stage.error":
+                    stage_name = event.stage if hasattr(event, "stage") else event_data.get("stage", "unknown")
+                    iteration = event.iteration if hasattr(event, "iteration") else event_data.get("iteration", 0)
+                    session_logger.log_stage_error(
+                        stage_name=stage_name,
+                        error=event_data.get("error") or "unknown error",
+                        stage_order=STAGE_ORDER.get(stage_name),
+                        iteration=iteration or 0,
+                    )
+                elif event_type == "pipeline.start":
+                    session_logger.log_stage_execution_start(
+                        input_text=input_text,
+                        thread_id=getattr(_state, "pipeline_id", None),
+                        execution_mode="invoke",
+                    )
+                elif event_type == "pipeline.error":
+                    err = event_data.get("error") or "unknown"
+                    session_logger.log(
+                        level=LogLevel.ERROR,
+                        message=f"Pipeline error: {err}",
+                        metadata={"source": "pipeline"},
+                    )
                 elif event_type in ("loop.escalate", "loop.error"):
                     signal = event_data.get("signal") or "unknown"
                     iteration = event.iteration if hasattr(event, "iteration") else event_data.get("iteration", 0)
@@ -1065,7 +1096,7 @@ class AgentSession:
 
         # Log execution completion
         if session_logger:
-            session_logger.log_graph_execution_complete(
+            session_logger.log_stage_execution_complete(
                 success=success,
                 total_iterations=iterations,
                 final_output=accumulated_output[:500] if accumulated_output else None,
@@ -1186,6 +1217,37 @@ class AgentSession:
                         stage_order=STAGE_ORDER.get(stage_name),
                         iteration=iteration or 0,
                     )
+                elif event_type == "stage.bypass":
+                    stage_name = event.stage if hasattr(event, "stage") else event_data.get("stage", "unknown")
+                    iteration = event.iteration if hasattr(event, "iteration") else event_data.get("iteration", 0)
+                    session_logger.log_stage_bypass(
+                        stage_name=stage_name,
+                        stage_order=STAGE_ORDER.get(stage_name),
+                        iteration=iteration or 0,
+                        reason=event_data.get("reason"),
+                    )
+                elif event_type == "stage.error":
+                    stage_name = event.stage if hasattr(event, "stage") else event_data.get("stage", "unknown")
+                    iteration = event.iteration if hasattr(event, "iteration") else event_data.get("iteration", 0)
+                    session_logger.log_stage_error(
+                        stage_name=stage_name,
+                        error=event_data.get("error") or "unknown error",
+                        stage_order=STAGE_ORDER.get(stage_name),
+                        iteration=iteration or 0,
+                    )
+                elif event_type == "pipeline.start":
+                    session_logger.log_stage_execution_start(
+                        input_text=input_text,
+                        thread_id=getattr(_state, "pipeline_id", None),
+                        execution_mode="astream",
+                    )
+                elif event_type == "pipeline.error":
+                    err = event_data.get("error") or "unknown"
+                    session_logger.log(
+                        level=LogLevel.ERROR,
+                        message=f"Pipeline error: {err}",
+                        metadata={"source": "pipeline"},
+                    )
                 elif event_type in ("loop.escalate", "loop.error"):
                     signal = event_data.get("signal") or "unknown"
                     iteration = event.iteration if hasattr(event, "iteration") else event_data.get("iteration", 0)
@@ -1255,7 +1317,7 @@ class AgentSession:
         duration_ms = int((time.time() - start_time) * 1000)
 
         if session_logger:
-            session_logger.log_graph_execution_complete(
+            session_logger.log_stage_execution_complete(
                 success=success,
                 total_iterations=iterations,
                 final_output=accumulated_output[:500] if accumulated_output else None,
@@ -1344,7 +1406,7 @@ class AgentSession:
 
         # Log execution start
         if session_logger:
-            session_logger.log_graph_execution_start(
+            session_logger.log_stage_execution_start(
                 input_text=input_text,
                 thread_id=thread_id,
                 max_iterations=effective_max_iterations,
@@ -1375,7 +1437,7 @@ class AgentSession:
             logger.exception(f"[{self._session_id}] Error during invoke: {e}")
 
             if session_logger:
-                session_logger.log_graph_execution_complete(
+                session_logger.log_stage_execution_complete(
                     success=False,
                     total_iterations=self._current_iteration,
                     final_output=None,
@@ -1427,7 +1489,7 @@ class AgentSession:
 
         # Log execution start
         if session_logger:
-            session_logger.log_graph_execution_start(
+            session_logger.log_stage_execution_start(
                 input_text=input_text,
                 thread_id=thread_id,
                 max_iterations=effective_max_iterations,
@@ -1457,7 +1519,7 @@ class AgentSession:
                     iteration=self._current_iteration,
                     error_type=type(e).__name__,
                 )
-                session_logger.log_graph_execution_complete(
+                session_logger.log_stage_execution_complete(
                     success=False,
                     total_iterations=self._current_iteration,
                     final_output=None,

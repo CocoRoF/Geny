@@ -27,6 +27,8 @@ from dataclasses import dataclass, asdict
 from logging import getLogger
 from typing import Any, Dict, Optional, Set
 
+from service.logging.session_logger import LogLevel
+
 logger = getLogger(__name__)
 
 
@@ -217,12 +219,34 @@ async def _notify_linked_vtuber(session_id: str, result: 'ExecutionResult') -> N
                     logger.info(
                         "VTuber %s busy — SUB_WORKER_RESULT stored in inbox", linked_id
                     )
+                    sender_sl = _get_session_logger(session_id, create_if_missing=False)
+                    if sender_sl is not None:
+                        sender_sl.log(
+                            level=LogLevel.INFO,
+                            message="Recipient busy — message queued to inbox",
+                            metadata={
+                                "event": "inbox.delivered",
+                                "to_session_id": linked_id,
+                                "tag": "[SUB_WORKER_RESULT]",
+                            },
+                        )
                 except Exception as inbox_err:
                     # Inbox also failed — store in DLQ for recovery
                     logger.warning(
                         "VTuber notification inbox fallback failed for %s: %s",
                         linked_id, inbox_err,
                     )
+                    sender_sl = _get_session_logger(session_id, create_if_missing=False)
+                    if sender_sl is not None:
+                        sender_sl.log(
+                            level=LogLevel.WARNING,
+                            message=f"Inbox delivery failed — falling back to DLQ: {inbox_err}",
+                            metadata={
+                                "event": "inbox.fallback_dlq",
+                                "to_session_id": linked_id,
+                                "error": str(inbox_err),
+                            },
+                        )
                     try:
                         from service.chat.inbox import get_inbox_manager
                         get_inbox_manager().send_to_dlq(
@@ -233,11 +257,22 @@ async def _notify_linked_vtuber(session_id: str, result: 'ExecutionResult') -> N
                             reason="vtuber_notify_inbox_failed",
                             original_error=str(inbox_err),
                         )
-                    except Exception:
+                    except Exception as dlq_err:
                         logger.error(
                             "VTuber notification DLQ fallback also failed for %s",
                             linked_id, exc_info=True,
                         )
+                        sender_sl = _get_session_logger(session_id, create_if_missing=False)
+                        if sender_sl is not None:
+                            sender_sl.log(
+                                level=LogLevel.ERROR,
+                                message=f"DLQ fallback failed — message lost: {dlq_err}",
+                                metadata={
+                                    "event": "inbox.dlq_failed",
+                                    "to_session_id": linked_id,
+                                    "error": str(dlq_err),
+                                },
+                            )
             except (AgentNotFoundError, AgentNotAliveError) as exc:
                 logger.debug(
                     "VTuber notification to %s skipped: %s", linked_id, exc
@@ -465,6 +500,13 @@ async def _resolve_agent(session_id: str):
                 logger.info("[%s] ✅ Auto-revival successful", session_id)
                 if agent.process:
                     agent_manager._local_processes[session_id] = agent.process
+                sl = _get_session_logger(session_id, create_if_missing=False)
+                if sl is not None:
+                    sl.log(
+                        level=LogLevel.INFO,
+                        message="Agent auto-revived after inactivity",
+                        metadata={"event": "auto_revival", "session_id": session_id},
+                    )
             else:
                 raise AgentNotAliveError(
                     f"AgentSession is not running and revival failed (status: {agent.status})"
@@ -839,6 +881,10 @@ async def _drain_inbox(session_id: str) -> None:
 
     inbox = get_inbox_manager()
     _draining_sessions.add(session_id)
+    sl = _get_session_logger(session_id, create_if_missing=False)
+    n_ok = 0
+    n_err = 0
+    started = False
     try:
         while True:
             try:
@@ -851,6 +897,14 @@ async def _drain_inbox(session_id: str) -> None:
             if not pulled:
                 return
             msg = pulled[0]
+
+            if not started and sl is not None:
+                sl.log(
+                    level=LogLevel.INFO,
+                    message="Draining inbox",
+                    metadata={"event": "inbox.drain.start"},
+                )
+                started = True
 
             sender = msg.get("sender_name") or "Unknown"
             prompt = f"[INBOX from {sender}]\n{msg['content']}"
@@ -869,18 +923,50 @@ async def _drain_inbox(session_id: str) -> None:
                     session_id,
                 )
                 return
-            except Exception:
+            except Exception as drain_err:
                 logger.debug(
                     "Drained execute_command failed for %s",
                     session_id, exc_info=True,
                 )
+                n_err += 1
+                if sl is not None:
+                    sl.log(
+                        level=LogLevel.WARNING,
+                        message=f"Inbox drain item failed: {drain_err}",
+                        metadata={
+                            "event": "inbox.drain.item_failed",
+                            "sender": sender,
+                            "error": str(drain_err),
+                        },
+                    )
                 # Message already consumed — skip to next one.
                 continue
+
+            n_ok += 1
+            if sl is not None:
+                sl.log(
+                    level=LogLevel.INFO,
+                    message=f"Replayed inbox message from {sender}",
+                    metadata={
+                        "event": "inbox.drain.item_ok",
+                        "sender": sender,
+                    },
+                )
 
             if result.success and result.output and result.output.strip():
                 _save_drain_to_chat_room(session_id, result)
     finally:
         _draining_sessions.discard(session_id)
+        if started and sl is not None:
+            sl.log(
+                level=LogLevel.INFO,
+                message=f"Drain complete: {n_ok} ok, {n_err} failed",
+                metadata={
+                    "event": "inbox.drain.complete",
+                    "n_ok": n_ok,
+                    "n_err": n_err,
+                },
+            )
 
 
 def _save_subworker_reply_to_chat_room(
