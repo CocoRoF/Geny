@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from .events import LifecycleEvent, LifecyclePayload
 from .bus import Handler, SessionLifecycleBus, SubscriptionToken
+from .ws_abandoned_detector import WSAbandonedDetector
 
 __all__ = [
     "Handler",
@@ -19,4 +20,5 @@ __all__ = [
     "LifecyclePayload",
     "SessionLifecycleBus",
     "SubscriptionToken",
+    "WSAbandonedDetector",
 ]

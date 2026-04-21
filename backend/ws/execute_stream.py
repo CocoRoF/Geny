@@ -298,6 +298,13 @@ async def ws_execute_stream(websocket: WebSocket, session_id: str):
     logger.info("[ExecWS:%s] WebSocket accepted", session_id[:8])
     app_state = websocket.app.state
 
+    # Cycle 20260421_8 PR-X2-6 — WS abandoned detector. When this is the
+    # only attached WS and stays disconnected past the detector's
+    # threshold, SESSION_ABANDONED fires on the lifecycle bus.
+    abandoned_detector = getattr(app_state, "ws_abandoned_detector", None)
+    if abandoned_detector is not None:
+        abandoned_detector.connect(session_id)
+
     try:
         while True:
             raw = await websocket.receive_text()
@@ -420,3 +427,6 @@ async def ws_execute_stream(websocket: WebSocket, session_id: str):
             await _send_event(websocket, "error", {"error": str(e)}, session_id)
         except Exception:
             pass
+    finally:
+        if abandoned_detector is not None:
+            abandoned_detector.disconnect(session_id)

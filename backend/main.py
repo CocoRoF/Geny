@@ -264,6 +264,32 @@ async def lifespan(app: FastAPI):
     await agent_manager.start_idle_monitor()
     logger.info("   - Session idle monitor: started (10min threshold)")
 
+    # Cycle 20260421_8 PR-X2-6 — WS abandoned detector. WS handlers call
+    # ``detector.connect/disconnect``; a TickEngine spec polls every 60s
+    # and emits SESSION_ABANDONED for sessions whose WS has been closed
+    # for longer than the threshold (default 120s).
+    from service.lifecycle import WSAbandonedDetector
+    from service.tick import TickEngine as _WSDetectorEngine
+    from service.tick import TickSpec as _WSDetectorSpec
+
+    ws_abandoned_detector = WSAbandonedDetector(
+        bus=agent_manager.lifecycle_bus,
+        threshold_seconds=120.0,
+    )
+    _ws_detector_engine = _WSDetectorEngine()
+    _ws_detector_engine.register(
+        _WSDetectorSpec(
+            name="ws_abandoned_detector",
+            interval=60.0,
+            handler=ws_abandoned_detector.scan,
+            jitter=5.0,
+        )
+    )
+    await _ws_detector_engine.start()
+    app.state.ws_abandoned_detector = ws_abandoned_detector
+    app.state.ws_detector_engine = _ws_detector_engine
+    logger.info("   - WS abandoned detector: started (120s threshold, 60s±5s tick)")
+
     # ── MemoryProvider Registry (Phase 2) ──────────────────────────────
     # Registry sits next to the legacy SessionMemoryManager. Its default
     # config is resolved from MEMORY_* env vars; if MEMORY_PROVIDER is
@@ -401,6 +427,10 @@ async def lifespan(app: FastAPI):
 
     # Stop idle monitor
     await agent_manager.stop_idle_monitor()
+
+    # Stop WS abandoned detector
+    if hasattr(app.state, 'ws_detector_engine'):
+        await app.state.ws_detector_engine.stop()
 
     # Stop all active sessions (processes only — storage preserved)
     # Soft-delete all active sessions so they appear in "deleted sessions" on restart
