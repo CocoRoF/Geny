@@ -357,6 +357,45 @@ async def lifespan(app: FastAPI):
     logger.info(f"   - Environment templates installed: {env_templates_installed}")
     logger.info(f"   - Total environments: {len(environment_service.list_all())}")
 
+    # ── CreatureState (cycle 20260421_9 PR-X3-5) ────────────────────────
+    # Feature-gated via ``GENY_GAME_FEATURES`` (default off so classic
+    # sessions stay unaffected). When enabled we:
+    #   1. Build a process-wide ``SqliteCreatureStateProvider``.
+    #   2. Launch ``CreatureStateDecayService`` on its own TickEngine.
+    #   3. Wire the provider into ``agent_manager`` so new sessions
+    #      hydrate/persist around every pipeline turn.
+    # Shutdown mirrors: stop the decay service, close the provider.
+    geny_game_features = (
+        os.environ.get("GENY_GAME_FEATURES", "0").strip().lower()
+        in ("1", "true", "yes", "on")
+    )
+    app.state.state_provider = None
+    app.state.state_decay_service = None
+    if geny_game_features:
+        from service.state import (
+            CreatureStateDecayService,
+            SqliteCreatureStateProvider,
+        )
+
+        state_db_path = os.environ.get(
+            "GENY_STATE_DB", str(Path(__file__).parent / "data" / "geny_state.sqlite3"),
+        )
+        Path(state_db_path).parent.mkdir(parents=True, exist_ok=True)
+        state_provider = SqliteCreatureStateProvider(db_path=state_db_path)
+        decay_service = CreatureStateDecayService(provider=state_provider)
+        await decay_service.start()
+        agent_manager.set_state_provider(
+            state_provider, decay_service=decay_service,
+        )
+        app.state.state_provider = state_provider
+        app.state.state_decay_service = decay_service
+        logger.info(
+            f"   - CreatureState: enabled (sqlite={state_db_path}, "
+            f"decay interval=15m)"
+        )
+    else:
+        logger.info("   - CreatureState: disabled (GENY_GAME_FEATURES not set)")
+
     # ── ArtifactService (Phase 3) ───────────────────────────────────────
     # Session-less catalog of executor stage/artifact introspection.
     # Caches are lazy + process-wide; first call warms them.
@@ -431,6 +470,22 @@ async def lifespan(app: FastAPI):
     # Stop WS abandoned detector
     if hasattr(app.state, 'ws_detector_engine'):
         await app.state.ws_detector_engine.stop()
+
+    # Stop creature state decay service + close provider (PR-X3-5).
+    if getattr(app.state, "state_decay_service", None) is not None:
+        try:
+            await app.state.state_decay_service.stop()
+            logger.info("   - CreatureStateDecayService stopped")
+        except Exception as e:
+            logger.warning(f"   - CreatureStateDecayService stop failed: {e}")
+    if getattr(app.state, "state_provider", None) is not None:
+        close = getattr(app.state.state_provider, "close", None)
+        if callable(close):
+            try:
+                close()
+                logger.info("   - CreatureState provider closed")
+            except Exception as e:
+                logger.warning(f"   - CreatureState provider close failed: {e}")
 
     # Stop all active sessions (processes only — storage preserved)
     # Soft-delete all active sessions so they appear in "deleted sessions" on restart

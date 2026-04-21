@@ -134,6 +134,13 @@ class AgentSessionManager(SessionManager):
         # attach via ``manager.lifecycle_bus.subscribe``.
         self._lifecycle_bus = SessionLifecycleBus()
 
+        # Creature state provider (cycle 20260421_9 PR-X3-5). None until
+        # ``set_state_provider`` is called at boot. Gated in ``main.py``
+        # by ``GENY_GAME_FEATURES`` — when the flag is off every session
+        # runs in classic (no-state) mode.
+        self._state_provider = None
+        self._state_decay_service = None
+
         logger.info("✅ AgentSessionManager initialized")
 
     @property
@@ -166,6 +173,39 @@ class AgentSessionManager(SessionManager):
         """
         self._memory_registry = memory_registry
         logger.info("AgentSessionManager: memory_registry set for per-session provider wiring")
+
+    def set_state_provider(
+        self,
+        state_provider,
+        *,
+        decay_service=None,
+    ) -> None:
+        """Wire the creature ``CreatureStateProvider`` + its decay service.
+
+        When set, newly created ``AgentSession`` instances receive the
+        provider and hydrate/persist ``CreatureState`` around every
+        pipeline turn. ``decay_service`` is stored so the manager owns
+        the reference — main.py lifespan uses ``state_decay_service``
+        for start/stop. Leaving both as ``None`` (the default) keeps
+        the session stack in classic mode.
+        """
+        self._state_provider = state_provider
+        self._state_decay_service = decay_service
+        logger.info(
+            "AgentSessionManager: state_provider set "
+            f"({type(state_provider).__name__}; "
+            f"decay_service={'yes' if decay_service else 'no'})"
+        )
+
+    @property
+    def state_provider(self):
+        """Currently-wired ``CreatureStateProvider`` or ``None``."""
+        return self._state_provider
+
+    @property
+    def state_decay_service(self):
+        """Decay service paired with the provider (or ``None``)."""
+        return self._state_decay_service
 
     def set_environment_service(self, environment_service) -> None:
         """Store the EnvironmentService for env_id-driven session creation.
@@ -558,6 +598,10 @@ class AgentSessionManager(SessionManager):
             prebuilt_pipeline=prebuilt_pipeline,
             persona_provider=self._persona_provider,
             lifecycle_bus=self._lifecycle_bus,
+            state_provider=self._state_provider,
+            # MVP: one creature per session — character_id tracks session_id.
+            # PR-X4 replaces this with owner-driven multi-character lookup.
+            character_id=(session_id if self._state_provider else None),
         )
 
         session_id = agent.session_id

@@ -180,6 +180,9 @@ class AgentSession:
         prebuilt_pipeline: Optional[Any] = None,
         persona_provider: Optional[Any] = None,
         lifecycle_bus: Optional[Any] = None,
+        state_provider: Optional[Any] = None,
+        character_id: Optional[str] = None,
+        catchup_policy: Optional[Any] = None,
     ):
         """Initialize AgentSession.
 
@@ -206,6 +209,20 @@ class AgentSession:
                 uses to emit ``SESSION_REVIVED`` when ``revive`` /
                 ``_auto_revive`` succeed. Tests that construct a session
                 directly may leave this ``None``.
+            state_provider: Optional ``CreatureStateProvider`` (PR-X3-5).
+                When combined with ``character_id``, each turn hydrates
+                the creature state into ``PipelineState.shared`` before
+                ``pipeline.run_stream`` and persists mutations after. When
+                ``None``, the session runs in "classic" mode — no state
+                layer involvement. Shadow rollout is driven by
+                ``GENY_GAME_FEATURES`` at the manager level.
+            character_id: Optional character id for state load/persist.
+                Defaults to ``session_id`` when ``state_provider`` is
+                set — each session owns one creature. PR-X4 moves
+                character identity onto the owner/env surface.
+            catchup_policy: Optional ``DecayPolicy`` for the hydrate-side
+                catch-up tick. Defaults to ``DEFAULT_DECAY`` when
+                unspecified and ``state_provider`` is set.
         """
         # Session identity
         self._session_id = session_id or str(uuid.uuid4())
@@ -265,6 +282,15 @@ class AgentSession:
         self._linked_session_id: Optional[str] = None
         self._session_type: Optional[str] = None  # "vtuber" | "sub" | "solo" | None
         self._chat_room_id: Optional[str] = None
+
+        # Creature state wiring (PR-X3-5). Registry is turn-scoped — a
+        # fresh one is built inside ``_invoke_pipeline`` / ``_astream_pipeline``
+        # so the snapshot and mutation buffer don't leak across turns. When
+        # ``state_provider`` is ``None`` the hydrate/persist path is
+        # skipped entirely (classic mode).
+        self._state_provider = state_provider
+        self._character_id = character_id
+        self._catchup_policy = catchup_policy
 
         # Initial status
         self._status = SessionStatus.STARTING
@@ -1122,6 +1148,78 @@ class AgentSession:
     # Pipeline Execution Methods
     # ========================================================================
 
+    def _build_state_registry(self) -> Optional[Any]:
+        """Return a fresh ``SessionRuntimeRegistry`` for this turn, or None.
+
+        Turn-scoped by design (plan/02 §4): the snapshot + mutation buffer
+        must not leak across turns. When ``state_provider`` is ``None`` the
+        session is in classic mode and this returns ``None``; callers
+        treat that as "skip hydrate/persist entirely".
+
+        ``character_id`` defaults to ``session_id`` when the caller didn't
+        supply one — MVP assumption of one creature per session. PR-X4
+        will replace this with an owner-driven lookup once multi-character
+        ownership lands.
+        """
+        if self._state_provider is None:
+            return None
+        from backend.service.state import (
+            DEFAULT_DECAY,
+            SessionRuntimeRegistry,
+        )
+        return SessionRuntimeRegistry(
+            session_id=self._session_id,
+            character_id=self._character_id or self._session_id,
+            owner_user_id=self._owner_username or "",
+            provider=self._state_provider,
+            catchup_policy=self._catchup_policy or DEFAULT_DECAY,
+        )
+
+    async def _hydrate_state_safely(
+        self, registry: Any, state: Any,
+    ) -> bool:
+        """Best-effort ``registry.hydrate``. Returns True on success.
+
+        A hydrate failure must not block the turn: stages simply won't
+        see ``creature_state`` in ``state.shared``. Per plan/02 §4.3 the
+        user response always takes priority over state observability.
+        """
+        try:
+            await registry.hydrate(state)
+            return True
+        except Exception:
+            logger.exception(
+                f"[{self._session_id}] creature_state hydrate failed "
+                "— running turn without state"
+            )
+            return False
+
+    async def _persist_state_safely(
+        self, registry: Any, state: Any,
+    ) -> None:
+        """Best-effort ``registry.persist``. Swallows everything.
+
+        ``StateConflictError`` falls to ``debug`` — these races are
+        routine when the scheduled decay service and the pipeline
+        contend for the same row. All other exceptions go to
+        ``exception`` so ops still sees them, but the turn result
+        (already yielded to the user) is not rewritten into an error.
+        """
+        from backend.service.state.provider.interface import (
+            StateConflictError,
+        )
+        try:
+            await registry.persist(state)
+        except StateConflictError as e:
+            logger.debug(
+                f"[{self._session_id}] creature_state persist conflict "
+                f"(non-critical): {e}"
+            )
+        except Exception:
+            logger.exception(
+                f"[{self._session_id}] creature_state persist failed"
+            )
+
     async def _invoke_pipeline(
         self,
         input_text: str,
@@ -1158,6 +1256,17 @@ class AgentSession:
         # Create PipelineState with session context
         from geny_executor.core.state import PipelineState as _PipelineState
         _state = _PipelineState(session_id=self._session_id)
+
+        # Creature state hydrate (PR-X3-5). Skipped when no state_provider
+        # is wired — classic session mode. A failed hydrate leaves
+        # ``state.shared`` without ``creature_state``; stages check
+        # presence via the registry key before reading.
+        _state_registry = self._build_state_registry()
+        _state_hydrated = False
+        if _state_registry is not None:
+            _state_hydrated = await self._hydrate_state_safely(
+                _state_registry, _state,
+            )
 
         async for event in self._pipeline.run_stream(input_text, _state):
             event_type = event.type if hasattr(event, "type") else ""
@@ -1345,6 +1454,14 @@ class AgentSession:
                     exc_info=True,
                 )
 
+        # Creature state persist (PR-X3-5). Runs even on pipeline error —
+        # some stages may have produced mutations before the failure and
+        # dropping them would silently rewind progress. Persist only when
+        # hydrate succeeded; otherwise there is no baseline to apply
+        # against.
+        if _state_registry is not None and _state_hydrated:
+            await self._persist_state_safely(_state_registry, _state)
+
         if not success:
             self._error_message = error_msg
             return {"output": f"Error: {error_msg}", "total_cost": total_cost}
@@ -1383,6 +1500,14 @@ class AgentSession:
         # Create PipelineState with session context
         from geny_executor.core.state import PipelineState as _PipelineState
         _state = _PipelineState(session_id=self._session_id)
+
+        # Creature state hydrate (PR-X3-5, mirrors _invoke_pipeline).
+        _state_registry = self._build_state_registry()
+        _state_hydrated = False
+        if _state_registry is not None:
+            _state_hydrated = await self._hydrate_state_safely(
+                _state_registry, _state,
+            )
 
         async for event in self._pipeline.run_stream(input_text, _state):
             event_type = event.type if hasattr(event, "type") else ""
@@ -1561,6 +1686,14 @@ class AgentSession:
                     f"[{self._session_id}] LTM execution record failed (non-critical)",
                     exc_info=True,
                 )
+
+        # Creature state persist (PR-X3-5). Runs after the stream has
+        # been fully consumed. If the consumer abandons the generator
+        # early, this line is reached only when the generator is
+        # ``aclose()``'d — persist of mutations that never got to fire
+        # is intentionally lossy here (no baseline guarantee).
+        if _state_registry is not None and _state_hydrated:
+            await self._persist_state_safely(_state_registry, _state)
 
     # ========================================================================
     # Execution Methods
