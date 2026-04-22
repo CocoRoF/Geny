@@ -104,6 +104,13 @@ class SessionRuntimeRegistry:
             "character_id": self.character_id,
             "owner_user_id": self.owner_user_id,
         })
+        # PR-X5F-3: also expose the registry on the typed
+        # ``state.session_runtime`` slot (geny-executor >= 0.30.0), so
+        # stages and third-party plugins can reach ``snapshot`` /
+        # ``session_id`` / ``character_id`` via attribute access instead
+        # of the stringly-typed ``state.shared`` bag. Coexists with the
+        # shared-dict writes above — existing consumers unchanged.
+        _put_session_runtime(state, self)
         _emit(state, "state.hydrated", {
             "character_id": self.character_id,
             "session_id": self.session_id,
@@ -294,6 +301,24 @@ def _put_shared(state: Any, key: str, value: Any) -> None:
     if shared is None:
         raise AttributeError("state has no 'shared' mapping")
     shared[key] = value
+
+
+def _put_session_runtime(state: Any, runtime: Any) -> None:
+    """Best-effort write of the registry onto ``state.session_runtime``.
+
+    Tolerates state objects that refuse arbitrary attribute writes
+    (``__slots__`` without the field, frozen dataclasses, unusual
+    hosts). The shared-dict path remains authoritative in that case;
+    this attribute is an *ergonomic* alias, not the storage source.
+    """
+    try:
+        state.session_runtime = runtime
+    except (AttributeError, TypeError):
+        logger.debug(
+            "state %r rejected session_runtime attribute write; "
+            "falling back to shared-dict only",
+            type(state).__name__,
+        )
 
 
 def _get_shared(state: Any, key: str) -> Any:
