@@ -44,9 +44,39 @@ Design constraints (inherited from PR-X6-1/X6-2)
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Iterable, List, Optional, Tuple
 
-__all__ = ["AFFECT_VECTOR_TAGS", "summarize_affect_mutations"]
+__all__ = [
+    "AFFECT_VECTOR_TAGS",
+    "AFFECT_TURN_SUMMARY_KEY",
+    "AffectTurnSummary",
+    "summarize_affect_mutations",
+    "stash_affect_summary",
+]
+
+#: Key under which an :class:`AffectTurnSummary` is stashed on
+#: ``state.shared`` by :class:`AffectTagEmitter` (PR-X6F-3).
+#: Pipeline callers downstream of stage 14 read this key to forward
+#: affect fields to STM writes (e.g. PR-X6F-2-extended callers).
+AFFECT_TURN_SUMMARY_KEY: str = "affect_turn_summary"
+
+
+@dataclass(frozen=True)
+class AffectTurnSummary:
+    """Per-turn affect snapshot, shaped for direct DB write.
+
+    Consumers receive this from ``state.shared[AFFECT_TURN_SUMMARY_KEY]``
+    after stage 14 and can pass its fields straight to
+    :func:`service.database.memory_db_helper.db_stm_add_message`.
+
+    The frozen dataclass makes accidental mutation loud — the value
+    on ``state.shared`` is a read-only snapshot of the turn's affect,
+    not a scratchpad.
+    """
+
+    emotion_vec: Tuple[float, ...]
+    emotion_intensity: float
 
 #: The canonical tag order used for the stored 6-dim emotion vector.
 #: Matches :data:`service.emit.affect_tag_emitter.AFFECT_TAGS` but is
@@ -124,3 +154,25 @@ def summarize_affect_mutations(
     else:
         intensity = min(1.0, peak)
     return (vec, intensity)
+
+
+def stash_affect_summary(shared: Any, entries: Optional[Iterable[Any]]) -> Optional["AffectTurnSummary"]:
+    """Compute an :class:`AffectTurnSummary` from ``entries`` and write it to ``shared``.
+
+    Returns the stashed summary (or ``None`` when no mood mutations
+    were found — in which case ``shared`` is left untouched). This
+    lets the emitter decide whether to clear a stale prior-turn
+    summary; the default is *not to*, so that heterogeneous emit
+    chains (multiple emitters contributing mood deltas) compose
+    naturally: each call accumulates into the same buffer, and the
+    last caller's summary wins.
+    """
+    vec, intensity = summarize_affect_mutations(entries)
+    if vec is None or intensity is None:
+        return None
+    summary = AffectTurnSummary(
+        emotion_vec=tuple(vec),
+        emotion_intensity=intensity,
+    )
+    shared[AFFECT_TURN_SUMMARY_KEY] = summary
+    return summary

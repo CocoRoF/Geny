@@ -30,6 +30,7 @@ from geny_executor.core.state import PipelineState
 from geny_executor.stages.s14_emit.interface import Emitter
 from geny_executor.stages.s14_emit.types import EmitResult
 
+from service.affect.summary import stash_affect_summary
 from service.state import MUTATION_BUFFER_KEY
 
 logger = logging.getLogger(__name__)
@@ -138,6 +139,14 @@ class AffectTagEmitter(Emitter):
                 self._max_tags_per_turn,
             )
 
+        # PR-X6F-3: stash a turn-level affect summary on state.shared so
+        # downstream STM writers can persist it via the emotion_vec /
+        # emotion_intensity kwargs from PR-X6F-2. ``stash_affect_summary``
+        # is null-safe — if no mood mutations accumulated (e.g. tags
+        # matched but the buffer op filtering dropped them), shared is
+        # left untouched.
+        stashed = stash_affect_summary(state.shared, buf)
+
         return EmitResult(
             emitted=True,
             channels=["affect_tag"],
@@ -146,6 +155,7 @@ class AffectTagEmitter(Emitter):
                 "applied": applied,
                 "dropped": dropped,
                 "stripped": True,
+                "summary_stashed": stashed is not None,
             },
         )
 

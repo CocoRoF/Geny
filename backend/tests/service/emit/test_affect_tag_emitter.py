@@ -209,3 +209,105 @@ async def test_mood_only_for_sadness_excitement_no_secondary_bond() -> None:
     assert _by_path(buf, "mood.excitement")
     assert _by_path(buf, "bond.affection") == []
     assert _by_path(buf, "bond.trust") == []
+
+
+# ── PR-X6F-3: state.shared[AFFECT_TURN_SUMMARY_KEY] stash ───────────
+
+
+@pytest.mark.asyncio
+async def test_emit_stashes_turn_summary_on_shared() -> None:
+    """After a successful emit, the turn's affect summary lives on shared."""
+    from service.affect.summary import (
+        AFFECT_TURN_SUMMARY_KEY,
+        AFFECT_VECTOR_TAGS,
+        AffectTurnSummary,
+    )
+
+    state, _ = _state_with_buffer("sparks! [joy:1]")
+    result = await AffectTagEmitter().emit(state)
+
+    summary = state.shared.get(AFFECT_TURN_SUMMARY_KEY)
+    assert isinstance(summary, AffectTurnSummary)
+    assert len(summary.emotion_vec) == len(AFFECT_VECTOR_TAGS)
+    # joy is slot 0 — strength 1.0 × MOOD_ALPHA = MOOD_ALPHA
+    assert summary.emotion_vec[0] == pytest.approx(MOOD_ALPHA)
+    # intensity = peak / MOOD_ALPHA = 1.0 for full-strength single tag
+    assert summary.emotion_intensity == pytest.approx(1.0)
+    assert result.metadata["summary_stashed"] is True
+
+
+@pytest.mark.asyncio
+async def test_no_tags_leaves_shared_untouched() -> None:
+    """Emit with no matches must not pollute shared with a stale summary."""
+    from service.affect.summary import AFFECT_TURN_SUMMARY_KEY
+
+    state, _ = _state_with_buffer("nothing to see here")
+    await AffectTagEmitter().emit(state)
+    assert AFFECT_TURN_SUMMARY_KEY not in state.shared
+
+
+@pytest.mark.asyncio
+async def test_stashed_summary_is_frozen_snapshot() -> None:
+    """The stashed value is a frozen dataclass — accidental mutation raises."""
+    from dataclasses import FrozenInstanceError
+
+    from service.affect.summary import AFFECT_TURN_SUMMARY_KEY
+
+    state, _ = _state_with_buffer("[calm:1]")
+    await AffectTagEmitter().emit(state)
+    summary = state.shared[AFFECT_TURN_SUMMARY_KEY]
+    with pytest.raises(FrozenInstanceError):
+        summary.emotion_intensity = 0.0  # type: ignore[misc]
+
+
+@pytest.mark.asyncio
+async def test_summary_shape_matches_db_writer_kwargs() -> None:
+    """End-to-end type check: the stashed summary's fields map 1:1 to
+    db_stm_add_message(emotion_vec=, emotion_intensity=) kwargs."""
+    from service.affect import decode_emotion_vec
+    from service.affect.summary import AFFECT_TURN_SUMMARY_KEY
+    from service.database.memory_db_helper import _coerce_emotion_vec
+
+    state, _ = _state_with_buffer("[joy:1] [calm:1]")
+    await AffectTagEmitter().emit(state)
+    summary = state.shared[AFFECT_TURN_SUMMARY_KEY]
+
+    # Writer can consume summary.emotion_vec directly (tuple of floats)
+    raw = _coerce_emotion_vec(list(summary.emotion_vec))
+    assert raw is not None
+    assert decode_emotion_vec(raw) == list(summary.emotion_vec)
+    # Writer can consume summary.emotion_intensity directly (float)
+    assert isinstance(summary.emotion_intensity, float)
+    assert 0.0 <= summary.emotion_intensity <= 1.0
+
+
+@pytest.mark.asyncio
+async def test_multi_tag_summary_accumulates_all_mood_paths() -> None:
+    """Summary vector reflects every applied tag, not just the last one."""
+    from service.affect.summary import AFFECT_TURN_SUMMARY_KEY, AFFECT_VECTOR_TAGS
+
+    state, _ = _state_with_buffer("[joy:1] [fear:0.5] [calm:0.25]")
+    await AffectTagEmitter().emit(state)
+    summary = state.shared[AFFECT_TURN_SUMMARY_KEY]
+    # Build by-name view for readability
+    by_tag = dict(zip(AFFECT_VECTOR_TAGS, summary.emotion_vec))
+    assert by_tag["joy"] == pytest.approx(MOOD_ALPHA)
+    assert by_tag["fear"] == pytest.approx(0.5 * MOOD_ALPHA)
+    assert by_tag["calm"] == pytest.approx(0.25 * MOOD_ALPHA)
+    assert by_tag["sadness"] == 0.0
+    assert by_tag["anger"] == 0.0
+    assert by_tag["excitement"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_no_mutation_buffer_does_not_stash_summary() -> None:
+    """When there's no buffer, no summary — and the emit path still
+    short-circuits cleanly (reason='no_mutation_buffer')."""
+    from service.affect.summary import AFFECT_TURN_SUMMARY_KEY
+
+    state = PipelineState()
+    state.final_text = "[joy:1]"
+    # Intentionally no MUTATION_BUFFER_KEY on shared
+    result = await AffectTagEmitter().emit(state)
+    assert result.metadata.get("reason") == "no_mutation_buffer"
+    assert AFFECT_TURN_SUMMARY_KEY not in state.shared
