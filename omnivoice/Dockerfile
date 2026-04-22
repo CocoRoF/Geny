@@ -1,8 +1,15 @@
 # ── geny-omnivoice Dockerfile ─────────────────────────────────────────
-# CUDA 12.8 + PyTorch 2.8 + vendored OmniVoice (omnivoice_core/) +
+# CUDA 12.6 + PyTorch 2.6 + vendored OmniVoice (omnivoice_core/) +
 # Geny FastAPI wrapper (server/).
+#
+# Note: We deliberately stay on CUDA 12.6 / torch 2.6 rather than the
+# newer cu128 / torch 2.8 wheels because the latter dropped Pascal
+# (sm_60/61) support — Geny's reference dev box ships a GTX 1070
+# (sm_61) and would otherwise crash at first kernel launch with
+# ``CUDA error: no kernel image is available for execution on the
+# device``. cu126 wheels still bundle sm_60/61/70/75/80/86/90 kernels.
 # ──────────────────────────────────────────────────────────────────────
-FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04 AS base
+FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -25,9 +32,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # ── PyTorch first (heavy layer, cached separately) ────────────────────
+# torch 2.6.0 + cu126 still ships Pascal (sm_60/61) kernels.
 RUN pip install --no-cache-dir \
-        torch==2.8.0 torchaudio==2.8.0 \
-        --extra-index-url https://download.pytorch.org/whl/cu128
+        torch==2.6.0 torchaudio==2.6.0 \
+        --extra-index-url https://download.pytorch.org/whl/cu126
 
 # ── Project install ──────────────────────────────────────────────────
 COPY pyproject.toml README.md ./
