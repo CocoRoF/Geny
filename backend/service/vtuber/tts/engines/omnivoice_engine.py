@@ -311,6 +311,19 @@ class OmniVoiceEngine(TTSEngine):
 
         payload, profile = self._build_payload(request, config)
 
+        # Inject sentence-splitter knobs from TTSGeneralConfig (so they
+        # live in the same Settings card as ``streaming_mode``). The
+        # upstream defaults take over if the load fails.
+        try:
+            from service.config.sub_config.tts.tts_general_config import TTSGeneralConfig
+            general = get_config_manager().load_config(TTSGeneralConfig)
+            min_chars = int(getattr(general, "streaming_min_sentence_chars", 60) or 0)
+            max_chars = int(getattr(general, "streaming_max_sentence_chars", 240) or 240)
+            payload["min_sentence_chars"] = max(0, min(min_chars, 500))
+            payload["max_sentence_chars"] = max(20, min(max_chars, 2000))
+        except Exception as e:
+            logger.debug("Could not load streaming chunk knobs from tts_general: %r", e)
+
         api_url = config.api_url.rstrip("/")
         # Sentence stream can take longer end-to-end than a single /tts
         # call (it synthesises N sentences sequentially). Use the same
@@ -320,20 +333,28 @@ class OmniVoiceEngine(TTSEngine):
 
         client = await _get_client(api_url, read_timeout=timeout)
         logger.info(
-            "OmniVoice stream request: url=%s/tts/stream mode=%s profile=%s lang=%s timeout=%.1fs text_len=%d",
+            "OmniVoice stream request: url=%s/tts/stream mode=%s profile=%s "
+            "lang=%s timeout=%.1fs text_len=%d min_chars=%s max_chars=%s",
             api_url, payload["mode"], profile, payload.get("language"),
             timeout, len(request.text or ""),
+            payload.get("min_sentence_chars"), payload.get("max_sentence_chars"),
         )
 
         sample_rate = int(payload.get("sample_rate") or 24000)
         audio_format_str = str(payload.get("audio_format") or "wav")
         last_seq = -1
         try:
+            import time as _time
+            t0 = _time.monotonic()
+            first_byte_at: Optional[float] = None
+            first_frame_at: Optional[float] = None
             async with client.stream(
                 "POST", f"{api_url}/tts/stream", json=payload
             ) as resp:
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
+                    if first_byte_at is None:
+                        first_byte_at = _time.monotonic() - t0
                     line = (line or "").strip()
                     if not line:
                         continue
@@ -344,6 +365,16 @@ class OmniVoiceEngine(TTSEngine):
                         continue
 
                     if frame.get("done"):
+                        total_dt = _time.monotonic() - t0
+                        logger.info(
+                            "OmniVoice /tts/stream: done in %.2fs "
+                            "(first_byte=%.2fs, first_frame=%.2fs, "
+                            "last_seq=%d, upstream_elapsed=%s)",
+                            total_dt,
+                            first_byte_at if first_byte_at is not None else -1.0,
+                            first_frame_at if first_frame_at is not None else -1.0,
+                            last_seq, frame.get("elapsed_seconds"),
+                        )
                         # Terminator frame — synthesise an empty final
                         # chunk so callers can release UI state.
                         yield TTSSentenceChunk(
@@ -357,6 +388,8 @@ class OmniVoiceEngine(TTSEngine):
                         return
 
                     seq = int(frame.get("seq", last_seq + 1))
+                    if first_frame_at is None and frame.get("audio_b64"):
+                        first_frame_at = _time.monotonic() - t0
                     last_seq = max(last_seq, seq)
                     text = str(frame.get("text") or "")
                     err = frame.get("error")

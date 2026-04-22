@@ -101,6 +101,13 @@ async def tts(req: TTSRequest) -> Response:
     if not engine.is_loaded():
         raise HTTPException(status_code=503, detail="model_not_ready")
 
+    import time as _time
+    t0 = _time.monotonic()
+    logger.info(
+        "tts: starting single-shot synthesis chars=%d mode=%s ref=%s",
+        len(req.text or ""), req.mode, req.ref_audio_path or "<none>",
+    )
+
     try:
         audio, sample_rate = await engine.synthesize(
             text=req.text,
@@ -124,10 +131,20 @@ async def tts(req: TTSRequest) -> Response:
         logger.exception("Synthesis failed")
         raise HTTPException(status_code=500, detail=f"synthesis_failed: {exc}") from exc
 
+    synth_dt = _time.monotonic() - t0
     body = encode(audio, sample_rate, req.audio_format)
+    audio_seconds = audio.size / float(sample_rate) if sample_rate else 0.0
+    rtf = synth_dt / audio_seconds if audio_seconds else float("inf")
+    logger.info(
+        "tts: done synth=%.2fs audio=%.2fs rtf=%.2f chars=%d",
+        synth_dt, audio_seconds, rtf, len(req.text or ""),
+    )
     headers = {
         "X-OmniVoice-Sample-Rate": str(sample_rate),
         "X-OmniVoice-Mode": req.mode,
+        "X-OmniVoice-Synth-Seconds": f"{synth_dt:.3f}",
+        "X-OmniVoice-Audio-Seconds": f"{audio_seconds:.3f}",
+        "X-OmniVoice-RTF": f"{rtf:.3f}",
     }
     return Response(content=body, media_type=media_type_for(req.audio_format), headers=headers)
 
@@ -157,20 +174,41 @@ async def tts_stream(req: TTSStreamRequest) -> StreamingResponse:
     if not engine.is_loaded():
         raise HTTPException(status_code=503, detail="model_not_ready")
 
-    sentences = split_sentences(req.text, max_chars=req.max_sentence_chars)
+    sentences = split_sentences(
+        req.text,
+        max_chars=req.max_sentence_chars,
+        min_chars=req.min_sentence_chars,
+    )
     if not sentences:
         raise HTTPException(status_code=400, detail="empty_text")
 
     sample_rate = req.sample_rate
     media = media_type_for(req.audio_format)
+    total_chars = sum(len(s) for s in sentences)
+    logger.info(
+        "tts/stream: starting %d sentences, %d total chars "
+        "(input_len=%d, max=%d, min=%d, mode=%s, ref=%s)",
+        len(sentences), total_chars, len(req.text or ""),
+        req.max_sentence_chars, req.min_sentence_chars,
+        req.mode, req.ref_audio_path or "<none>",
+    )
+    # Per-sentence char counts at debug level — invaluable for tuning
+    # the min_sentence_chars knob ("did the merge actually fire?").
+    logger.debug(
+        "tts/stream: chunk lengths = %s",
+        [len(s) for s in sentences],
+    )
 
     async def _gen():
+        import time as _time
         success = 0
+        stream_t0 = _time.monotonic()
         for seq, sentence in enumerate(sentences):
             sentence_seed = (
                 req.seed + seq if (req.seed is not None and req.seed_jitter)
                 else req.seed
             )
+            sent_t0 = _time.monotonic()
             try:
                 audio, sr = await engine.synthesize(
                     text=sentence,
@@ -188,7 +226,15 @@ async def tts_stream(req: TTSStreamRequest) -> StreamingResponse:
                     postprocess_output=req.postprocess_output,
                     seed=sentence_seed,
                 )
+                synth_dt = _time.monotonic() - sent_t0
                 body = encode(audio, sr, req.audio_format)
+                audio_seconds = audio.size / float(sr) if sr else 0.0
+                rtf = synth_dt / audio_seconds if audio_seconds else float("inf")
+                logger.info(
+                    "tts/stream: seq=%d/%d synth=%.2fs audio=%.2fs rtf=%.2f chars=%d text=%r",
+                    seq, len(sentences) - 1, synth_dt, audio_seconds, rtf,
+                    len(sentence), sentence[:60],
+                )
                 frame = {
                     "seq": seq,
                     "text": sentence,
@@ -200,14 +246,24 @@ async def tts_stream(req: TTSStreamRequest) -> StreamingResponse:
                 }
                 success += 1
             except Exception as exc:  # pragma: no cover - logged below
-                logger.exception("streaming sentence %d failed", seq)
+                logger.exception(
+                    "tts/stream: seq=%d failed after %.2fs",
+                    seq, _time.monotonic() - sent_t0,
+                )
                 frame = {"seq": seq, "text": sentence, "error": str(exc)}
             yield (json.dumps(frame, ensure_ascii=False) + "\n").encode("utf-8")
+        total_dt = _time.monotonic() - stream_t0
+        logger.info(
+            "tts/stream: done %d/%d sentences in %.2fs (avg %.2fs/sentence)",
+            success, len(sentences), total_dt,
+            (total_dt / max(1, len(sentences))),
+        )
         terminator = {
             "done": True,
             "total": success,
             "requested": len(sentences),
             "sample_rate": int(sample_rate),
+            "elapsed_seconds": round(total_dt, 3),
         }
         yield (json.dumps(terminator) + "\n").encode("utf-8")
 

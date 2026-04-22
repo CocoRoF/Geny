@@ -27,7 +27,7 @@ class OmniVoiceConfig(BaseConfig):
     # ── Server ──────────────────────────────────────────────────────
     enabled: bool = False
     api_url: str = "http://omnivoice:9881"
-    timeout_seconds: float = 60.0
+    timeout_seconds: float = 180.0
 
     # ── Mode + voice ────────────────────────────────────────────────
     mode: str = "clone"  # clone | design | auto
@@ -92,9 +92,14 @@ class OmniVoiceConfig(BaseConfig):
                 name="timeout_seconds",
                 field_type=FieldType.NUMBER,
                 label="HTTP Timeout (s)",
+                description=(
+                    "Per-request HTTP read timeout. Long-form sentence streaming "
+                    "with many sentences can take several minutes on Pascal-class "
+                    "GPUs; raise this if you see RuntimeError 'request timed out'."
+                ),
                 group="server",
                 min_value=5.0,
-                max_value=300.0,
+                max_value=900.0,
             ),
             ConfigField(
                 name="mode",

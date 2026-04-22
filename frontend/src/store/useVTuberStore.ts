@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { vtuberApi, ttsApi } from '@/lib/api';
+import { vtuberApi, ttsApi, configApi } from '@/lib/api';
 import { getAudioManager } from '@/lib/audioManager';
 import { consumeSentenceStream } from '@/lib/ttsSentenceStream';
 import type { Live2dModelInfo, AvatarState, VTuberLogEntry } from '@/types';
@@ -9,6 +9,43 @@ let _logIdCounter = 0;
 
 // TTS fetch 취소용 AbortController (세션별)
 const _ttsAbortControllers: Map<string, AbortController> = new Map();
+
+// ── Cached tts_general settings (refresh every 30s) ──────────────
+// Why: speakResponse는 매 응답마다 호출되는데, 매번 /api/config/tts_general을
+// fetch하면 latency만 늘고 별 의미가 없다. 30초 TTL로 충분히 신선.
+interface TTSGeneralSnapshot {
+  streamingMode: 'off' | 'auto' | 'always';
+  streamingMinChars: number;
+  fetchedAt: number;
+}
+let _ttsGeneralCache: TTSGeneralSnapshot | null = null;
+const _TTS_GENERAL_TTL_MS = 30_000;
+
+async function getTTSGeneral(): Promise<TTSGeneralSnapshot> {
+  const now = Date.now();
+  if (_ttsGeneralCache && now - _ttsGeneralCache.fetchedAt < _TTS_GENERAL_TTL_MS) {
+    return _ttsGeneralCache;
+  }
+  try {
+    const res = await configApi.get('tts_general');
+    const v = res.values as Record<string, unknown>;
+    const mode = String(v.streaming_mode ?? 'off').toLowerCase();
+    _ttsGeneralCache = {
+      streamingMode: (mode === 'always' || mode === 'auto' ? mode : 'off') as TTSGeneralSnapshot['streamingMode'],
+      streamingMinChars: Number(v.streaming_min_chars ?? 80) || 80,
+      fetchedAt: now,
+    };
+  } catch (err) {
+    console.warn('[VTuber] failed to load tts_general, defaulting to off:', err);
+    _ttsGeneralCache = { streamingMode: 'off', streamingMinChars: 80, fetchedAt: now };
+  }
+  return _ttsGeneralCache;
+}
+
+/** 외부에서 streaming_mode 변경 직후 캐시 무효화하고 싶을 때 사용. */
+export function invalidateTTSGeneralCache(): void {
+  _ttsGeneralCache = null;
+}
 
 interface VTuberState {
   // Models
@@ -236,24 +273,35 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
       }));
       get().addLog(sessionId, 'info', 'TTS', `Speaking: "${text.slice(0, 50)}..." (${emotion})`);
 
-      // ── Sentence-streaming path (preferred) ─────────────────────
-      // 백엔드의 /speak/stream은 NDJSON으로 문장 단위 wav를 흘려보내고,
-      // 첫 문장이 합성되는 즉시 client에 도착하므로 체감 latency가
-      // 전체 합성 시간의 ~1/N로 줄어든다. 엔진이 sentence streaming을
-      // 지원하지 않는 경우 백엔드가 단일 ``seq=0`` 프레임으로 자동
-      // 폴백하므로 클라이언트 분기는 필요 없다.
+      // ── Decide path: legacy /speak vs /speak/stream ─────────────
+      // Off  → 단일 요청 (Pascal-class GPU에서 가장 빠름; 문장당 setup 오버헤드 없음)
+      // Auto → 길이 ≥ streamingMinChars일 때만 스트리밍
+      // Always → 항상 스트리밍 (체감 첫음성 지연 최단)
+      const ttsGeneral = await getTTSGeneral();
+      const wantStream =
+        ttsGeneral.streamingMode === 'always' ||
+        (ttsGeneral.streamingMode === 'auto' && text.length >= ttsGeneral.streamingMinChars);
+
+      get().addLog(
+        sessionId, 'debug', 'TTS',
+        `Path decision: streamingMode=${ttsGeneral.streamingMode} chars=${text.length} threshold=${ttsGeneral.streamingMinChars} -> ${wantStream ? 'stream' : 'single'}`,
+      );
+
+      // ── Sentence-streaming path ─────────────────────────────────
       let streamResponse: Response | null = null;
-      try {
-        streamResponse = await ttsApi.speakStream(
-          sessionId, text, emotion, undefined, undefined, controller.signal,
-        );
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') {
-          get().addLog(sessionId, 'debug', 'TTS', 'Previous TTS fetch aborted (new request)');
-          return;
+      if (wantStream) {
+        try {
+          streamResponse = await ttsApi.speakStream(
+            sessionId, text, emotion, undefined, undefined, controller.signal,
+          );
+        } catch (err) {
+          if (err instanceof DOMException && err.name === 'AbortError') {
+            get().addLog(sessionId, 'debug', 'TTS', 'Previous TTS fetch aborted (new request)');
+            return;
+          }
+          get().addLog(sessionId, 'warn', 'TTS', `speak/stream fetch failed, falling back: ${err}`);
+          streamResponse = null;
         }
-        get().addLog(sessionId, 'warn', 'TTS', `speak/stream fetch failed, falling back: ${err}`);
-        streamResponse = null;
       }
 
       // Stale 응답 방지

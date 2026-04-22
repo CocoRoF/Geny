@@ -47,6 +47,27 @@ class TTSGeneralConfig(BaseConfig):
     cache_max_size_mb: int = 500
     cache_ttl_hours: int = 24
 
+    # ─── Streaming (sentence-by-sentence delivery) ───
+    # ``off``     — always send the whole utterance as one request
+    #               (lowest TOTAL latency; client waits for full render).
+    # ``auto``    — stream only when text length ≥ streaming_min_chars
+    #               (best balance: short replies stay batched, long replies
+    #               start playing earlier).
+    # ``always``  — always stream sentence-by-sentence (lowest FIRST-byte
+    #               latency; total time slightly higher due to per-sentence
+    #               model setup overhead).
+    streaming_mode: str = "off"
+    streaming_min_chars: int = 80
+    # Minimum chunk length AFTER sentence splitting. Adjacent fragments
+    # in the same paragraph are merged until each chunk reaches this
+    # floor, so single-word interjections ("음...", "와!") don't each
+    # trigger their own model invocation. Only applies in `auto` /
+    # `always` modes. Set 0 to disable merging.
+    streaming_min_sentence_chars: int = 60
+    # Hard upper bound on per-chunk length (forwarded to the splitter).
+    # 240 chars ≈ ~12s of audio at default speed.
+    streaming_max_sentence_chars: int = 240
+
     @classmethod
     def get_config_name(cls) -> str:
         return "tts_general"
@@ -239,6 +260,64 @@ class TTSGeneralConfig(BaseConfig):
                 min_value=1,
                 max_value=168,
             ),
+
+            # ─── Streaming group ───
+            ConfigField(
+                name="streaming_mode",
+                field_type=FieldType.SELECT,
+                label="Sentence Streaming",
+                description=(
+                    "Off = one request per reply (lowest total latency). "
+                    "Auto = stream only for long replies. "
+                    "Always = always sentence-by-sentence (lowest first-byte "
+                    "latency, slightly higher total time)."
+                ),
+                group="streaming",
+                options=[
+                    {"value": "off", "label": "Off — single request (recommended)"},
+                    {"value": "auto", "label": "Auto — stream long replies only"},
+                    {"value": "always", "label": "Always — sentence-by-sentence"},
+                ],
+            ),
+            ConfigField(
+                name="streaming_min_chars",
+                field_type=FieldType.NUMBER,
+                label="Stream Threshold (chars)",
+                description="In Auto mode, stream only when text is at least this long.",
+                group="streaming",
+                min_value=20,
+                max_value=2000,
+            ),
+            ConfigField(
+                name="streaming_min_sentence_chars",
+                field_type=FieldType.NUMBER,
+                label="Min Chunk Size (chars)",
+                description=(
+                    "Minimum length per streamed chunk. Short sentences "
+                    "(“음...”, “와!”) are merged with the next sentence in "
+                    "the same paragraph until this floor is reached. "
+                    "Higher = fewer chunks = lower per-call overhead but "
+                    "longer first-byte latency. Recommended 40–100 for "
+                    "Korean / Japanese, 60–120 for English. 0 disables "
+                    "merging entirely."
+                ),
+                group="streaming",
+                min_value=0,
+                max_value=500,
+            ),
+            ConfigField(
+                name="streaming_max_sentence_chars",
+                field_type=FieldType.NUMBER,
+                label="Max Chunk Size (chars)",
+                description=(
+                    "Hard upper bound on per-chunk length. Sentences "
+                    "longer than this are soft-split on whitespace. "
+                    "240 chars ≈ ~12s of audio at default speed."
+                ),
+                group="streaming",
+                min_value=40,
+                max_value=2000,
+            ),
         ]
 
     @classmethod
@@ -252,6 +331,7 @@ class TTSGeneralConfig(BaseConfig):
                     "emotion_mapping": "감정 매핑",
                     "audio": "오디오",
                     "cache": "캐시",
+                    "streaming": "스트리밍",
                 },
                 "fields": {
                     "enabled": {
@@ -315,6 +395,37 @@ class TTSGeneralConfig(BaseConfig):
                     "cache_ttl_hours": {
                         "label": "캐시 유효 시간 (시간)",
                     },
+                    "streaming_mode": {
+                        "label": "문장 스트리밍",
+                        "description": (
+                            "Off = 응답 전체를 한 번에 요청 (총 합성 시간 최단). "
+                            "Auto = 긴 응답만 문장 단위 스트리밍. "
+                            "Always = 항상 문장 단위 (첫 음성 지연 최단, "
+                            "문장당 셋업 오버헤드로 총 시간은 약간 증가)."
+                        ),
+                    },
+                    "streaming_min_chars": {
+                        "label": "스트리밍 최소 글자 수",
+                        "description": "Auto 모드일 때, 이 길이 이상이면 문장 스트리밍 사용.",
+                    },
+                    "streaming_min_sentence_chars": {
+                        "label": "청크 최소 글자 수",
+                        "description": (
+                            "스트리밍 청크 하나의 최소 길이. “음...”, “와!” 같은 "
+                            "짧은 문장은 같은 문단 내 다음 문장과 병합되어 "
+                            "이 기준을 넘길 때까지 먹으합니다. 높이면 모델 호출 "
+                            "횟수가 줄어 총 합성이 빨라지지만 첫 음성 지연은 "
+                            "늘어납니다. 한/일 권장값 40–100, 영어 60–120. "
+                            "0으로 설정하면 병합 비활성화."
+                        ),
+                    },
+                    "streaming_max_sentence_chars": {
+                        "label": "청크 최대 글자 수",
+                        "description": (
+                            "청크 하나의 최대 길이. 이보다 긴 문장은 공백 기준으로 "
+                            "소프트 분할됩니다. 240자 ≈ 기본 속도 기준 약 12초 오디오."
+                        ),
+                    },
                 },
             },
             "en": {
@@ -325,6 +436,7 @@ class TTSGeneralConfig(BaseConfig):
                     "emotion_mapping": "Emotion Mapping",
                     "audio": "Audio",
                     "cache": "Cache",
+                    "streaming": "Streaming",
                 },
             },
         }

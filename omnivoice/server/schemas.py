@@ -99,6 +99,21 @@ class TTSStreamRequest(TTSRequest):
             "with very long compound sentences, lower for tighter latency."
         ),
     )
+    min_sentence_chars: int = Field(
+        default=60,
+        ge=0,
+        le=500,
+        description=(
+            "Minimum chunk length after splitting. Adjacent sentences in the "
+            "same paragraph are coalesced until each chunk reaches this "
+            "floor, which avoids the pathological case of one-word "
+            "interjections (“음...”, “와!”) each becoming a separate model "
+            "invocation. On Pascal-class GPUs the per-call setup cost "
+            "dominates, so a fragmented stream is *slower* than a single "
+            "shot. Set 0 to disable merging (legacy behaviour). Paragraph "
+            "breaks (blank lines) are never crossed by the merge pass."
+        ),
+    )
     seed_jitter: bool = Field(
         default=True,
         description=(

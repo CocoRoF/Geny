@@ -117,7 +117,11 @@ async def speak(session_id: str, body: SpeakRequest):
         current_provider = "edge_tts"
 
     async def audio_generator():
+        import time as _time
         has_data = False
+        bytes_sent = 0
+        t0 = _time.monotonic()
+        first_byte_at = None
         try:
             async for chunk in tts.speak(
                 text=cleaned_text,
@@ -127,17 +131,25 @@ async def speak(session_id: str, body: SpeakRequest):
                 voice_profile=session_voice_profile,
             ):
                 if chunk.audio_data:
+                    if first_byte_at is None:
+                        first_byte_at = _time.monotonic() - t0
                     has_data = True
+                    bytes_sent += len(chunk.audio_data)
                     yield chunk.audio_data
         except RuntimeError as e:
             logger.error(f"TTS speak error: {e}")
-            # 제너레이터 안에서 HTTP 응답을 바꿀 수 없으므로 에러 로그만 남김
-            # 아래에서 has_data 체크로 처리
 
+        total_dt = _time.monotonic() - t0
         if not has_data:
             logger.warning(
                 f"TTS produced no audio for text='{cleaned_text[:50]}...' "
-                f"engine={current_provider}"
+                f"engine={current_provider} elapsed={total_dt:.2f}s"
+            )
+        else:
+            logger.info(
+                "speak: done engine=%s chars=%d bytes=%d total=%.2fs first_byte=%.2fs",
+                current_provider, len(cleaned_text), bytes_sent, total_dt,
+                first_byte_at if first_byte_at is not None else -1.0,
             )
 
     # speak() 내부에서 health check + fallback 처리하므로 별도 pre-flight 불필요
@@ -163,18 +175,24 @@ async def speak_stream(session_id: str, body: SpeakRequest):
       "audio_b64": str}`` — one fully-rendered sentence
     * ``{"seq": N, "text": str, "error": str}`` — per-sentence failure
       (stream continues)
-    * ``{"done": true, "total": int}`` — terminator
+    * ``{"done": true, "total": int, "elapsed_seconds": float}`` — terminator
 
-    Latency win: client gets sentence #1 once it's synthesised
-    (typically ~1/3 of total render time for a 3-sentence reply) and
-    can start playback immediately while later sentences are still
-    rendering on the GPU.
+    Whether to actually stream sentence-by-sentence is governed by
+    ``tts_general.streaming_mode``:
 
-    Engines that don't natively support sentence streaming (Edge TTS,
-    OpenAI TTS, etc.) transparently emit a single ``seq=0`` frame
-    containing the entire utterance — no client-side branching needed.
+    * ``off``    — return a single ``seq=0`` frame containing the whole
+                   utterance (lowest TOTAL latency; no per-sentence
+                   model setup overhead).
+    * ``auto``   — stream only when text length ≥ ``streaming_min_chars``.
+    * ``always`` — always sentence-by-sentence (lowest first-byte
+                   latency).
+
+    Engines that don't natively support sentence streaming
+    transparently emit a single ``seq=0`` frame regardless of mode —
+    no client-side branching needed.
     """
     import base64
+    import time
 
     cleaned_text = sanitize_tts_text(body.text)
     if not cleaned_text:
@@ -198,6 +216,8 @@ async def speak_stream(session_id: str, body: SpeakRequest):
 
     default_language = "ko"
     current_provider = "edge_tts"
+    streaming_mode = "off"
+    streaming_min_chars = 80
     try:
         from service.config.manager import get_config_manager
         from service.config.sub_config.tts.tts_general_config import TTSGeneralConfig
@@ -205,45 +225,114 @@ async def speak_stream(session_id: str, body: SpeakRequest):
         general = get_config_manager().load_config(TTSGeneralConfig)
         default_language = general.default_language
         current_provider = general.provider
+        streaming_mode = (general.streaming_mode or "off").lower()
+        streaming_min_chars = int(general.streaming_min_chars or 80)
     except Exception:
         pass
 
+    # Decide whether to actually stream sentence-by-sentence or batch
+    # the whole utterance. Single-shot is faster end-to-end on
+    # Pascal-class GPUs because there's no per-sentence model setup
+    # overhead — we keep this as the default.
+    use_sentence_stream = False
+    if streaming_mode == "always":
+        use_sentence_stream = True
+    elif streaming_mode == "auto":
+        use_sentence_stream = len(cleaned_text) >= streaming_min_chars
+
+    logger.info(
+        "speak/stream: session=%s engine=%s chars=%d mode=%s -> sentence_stream=%s",
+        session_id, body.engine or current_provider, len(cleaned_text),
+        streaming_mode, use_sentence_stream,
+    )
+
     async def ndjson_generator():
         emitted = 0
+        t0 = time.monotonic()
+        first_emit_at = None
         try:
-            async for chunk in tts.speak_sentences(
-                text=cleaned_text,
-                emotion=body.emotion,
-                language=body.language or default_language,
-                engine_name=body.engine,
-                voice_profile=session_voice_profile,
-            ):
-                if chunk.is_final and not chunk.audio_data and chunk.error is None:
-                    # Defer terminator until after the loop so we can
-                    # report ``total`` accurately.
-                    continue
-                if chunk.error is not None:
-                    frame = {
-                        "seq": chunk.seq,
-                        "text": chunk.text,
-                        "error": chunk.error,
-                    }
-                else:
-                    frame = {
-                        "seq": chunk.seq,
-                        "text": chunk.text,
-                        "format": chunk.audio_format,
-                        "sample_rate": chunk.sample_rate,
-                        "audio_b64": base64.b64encode(chunk.audio_data).decode("ascii"),
-                    }
-                    emitted += 1
+            if use_sentence_stream:
+                async for chunk in tts.speak_sentences(
+                    text=cleaned_text,
+                    emotion=body.emotion,
+                    language=body.language or default_language,
+                    engine_name=body.engine,
+                    voice_profile=session_voice_profile,
+                ):
+                    if chunk.is_final and not chunk.audio_data and chunk.error is None:
+                        continue
+                    if chunk.error is not None:
+                        frame = {
+                            "seq": chunk.seq,
+                            "text": chunk.text,
+                            "error": chunk.error,
+                        }
+                    else:
+                        frame = {
+                            "seq": chunk.seq,
+                            "text": chunk.text,
+                            "format": chunk.audio_format,
+                            "sample_rate": chunk.sample_rate,
+                            "audio_b64": base64.b64encode(chunk.audio_data).decode("ascii"),
+                        }
+                        emitted += 1
+                        if first_emit_at is None:
+                            first_emit_at = time.monotonic() - t0
+                            logger.info(
+                                "speak/stream: first sentence emitted at %.2fs",
+                                first_emit_at,
+                            )
+                    yield (json.dumps(frame, ensure_ascii=False) + "\n").encode("utf-8")
+            else:
+                # Single-shot path — collect the whole utterance via
+                # legacy ``speak`` and emit it as one ``seq=0`` frame.
+                # Same wire format, so the client doesn't care.
+                engine = tts.get_engine(body.engine)
+                if engine is None:
+                    raise RuntimeError("No TTS engine available")
+                from service.vtuber.tts.base import (
+                    AudioFormat as _AF, TTSRequest as _TR,
+                )
+                req = _TR(
+                    text=cleaned_text,
+                    emotion=body.emotion,
+                    language=(body.language or default_language) or "ko",
+                    audio_format=_AF.WAV,
+                    voice_profile=session_voice_profile,
+                )
+                req = await engine.apply_emotion(req)
+                audio = await engine.synthesize(req)
+                first_emit_at = time.monotonic() - t0
+                emitted = 1
+                logger.info(
+                    "speak/stream: single-shot synthesis done in %.2fs "
+                    "(%d audio bytes)", first_emit_at, len(audio),
+                )
+                frame = {
+                    "seq": 0,
+                    "text": cleaned_text,
+                    "format": req.audio_format.value,
+                    "sample_rate": req.sample_rate,
+                    "audio_b64": base64.b64encode(audio).decode("ascii"),
+                }
                 yield (json.dumps(frame, ensure_ascii=False) + "\n").encode("utf-8")
         except Exception as e:
             logger.exception("speak_stream generator failed: %r", e)
             err_frame = {"seq": -1, "error": f"{type(e).__name__}: {e}"}
             yield (json.dumps(err_frame) + "\n").encode("utf-8")
 
-        terminator = {"done": True, "total": emitted}
+        total_dt = time.monotonic() - t0
+        logger.info(
+            "speak/stream: done emitted=%d total=%.2fs first_emit=%.2fs",
+            emitted, total_dt, first_emit_at if first_emit_at is not None else -1.0,
+        )
+        terminator = {
+            "done": True,
+            "total": emitted,
+            "elapsed_seconds": round(total_dt, 3),
+            "first_emit_seconds": round(first_emit_at, 3) if first_emit_at is not None else None,
+            "mode": "sentence" if use_sentence_stream else "single",
+        }
         yield (json.dumps(terminator) + "\n").encode("utf-8")
 
     return StreamingResponse(
@@ -252,7 +341,8 @@ async def speak_stream(session_id: str, body: SpeakRequest):
         headers={
             "Cache-Control": "no-cache",
             "X-TTS-Engine": current_provider,
-            "X-TTS-Streaming": "sentence-ndjson",
+            "X-TTS-Streaming": "sentence-ndjson" if use_sentence_stream else "single-ndjson",
+            "X-TTS-Streaming-Mode": streaming_mode,
         },
     )
 
