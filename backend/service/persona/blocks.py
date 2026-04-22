@@ -1,17 +1,21 @@
 """CreatureState-backed prompt blocks.
 
-Three of these (``MoodBlock`` / ``RelationshipBlock`` / ``VitalsBlock``)
-read the hydrated :class:`CreatureState` out of ``state.shared`` and
-render a compact system-prompt fragment. When no creature state is
-hydrated (classic-mode sessions, or hydrate failed), ``render`` returns
-``""`` — the ``ComposablePromptBuilder`` drops empty fragments, keeping
-the prompt surface unchanged so non-game sessions are untouched.
+All four blocks (``MoodBlock`` / ``RelationshipBlock`` / ``VitalsBlock`` /
+``ProgressionBlock``) read the hydrated :class:`CreatureState` out of
+``state.shared`` and render a compact system-prompt fragment. When no
+creature state is hydrated (classic-mode sessions, or hydrate failed),
+``render`` returns ``""`` — the ``ComposablePromptBuilder`` drops empty
+fragments, keeping the prompt surface unchanged so non-game sessions
+are untouched.
 
-``ProgressionBlock`` remains a no-op; X4 fills it from
-``CreatureState.progression`` when manifest selection goes live.
+``ProgressionBlock`` went live in PR-X4-3 alongside the manifest selector
+(PR-X4-1) and stage-specific manifests (PR-X4-2). It surfaces the life
+stage and age so the LLM's per-turn voice aligns with whichever stage
+manifest the selector chose at session start.
 
 The block identity (class names, ``name`` property) is stable across
-X1 → X3 so the builder slot order that X1 already reserved is preserved.
+X1 → X3 → X4 so the builder slot order that X1 already reserved is
+preserved.
 """
 
 from __future__ import annotations
@@ -194,12 +198,55 @@ class VitalsBlock(PromptBlock):
         )
 
 
+_STAGE_DESCRIPTORS: dict[str, str] = {
+    "infant": "just a baby",
+    "child": "curious and learning",
+    "teen": "emotionally in flux",
+    "adult": "mature",
+}
+
+
 class ProgressionBlock(PromptBlock):
-    """Life-stage / manifest hints. No-op in X3; X4 fills from CreatureState.progression."""
+    """Life stage + age — single-line prompt fragment.
+
+    Renders as ``"[Stage] child (curious and learning) — 4 days old."``
+    when the creature has a hydrated :class:`Progression`; drops to
+    ``""`` otherwise (classic mode / no creature). Keeps the output to
+    one line so the system prompt stays scannable — the LLM's stage-
+    specific register is mostly driven by the manifest (PR-X4-2's
+    ``loop.max_turns`` / tool roster) and the persona prompt; this
+    block is just the narrative anchor.
+
+    Unknown ``life_stage`` values (future stages or misconfigured data)
+    still render with the bare stage keyword — no descriptor — so a
+    turn never fails because of a schema drift. ``age_days`` singular
+    uses ``"day"``; everything else uses ``"days"``.
+    """
 
     @property
     def name(self) -> str:
         return "progression"
 
     def render(self, state: PipelineState) -> str:
-        return ""
+        creature = _get_creature_state(state)
+        progression = (
+            getattr(creature, "progression", None) if creature is not None else None
+        )
+        if progression is None:
+            return ""
+
+        life_stage = getattr(progression, "life_stage", "") or ""
+        age_days_raw = getattr(progression, "age_days", 0)
+        try:
+            age_days = int(age_days_raw)
+        except (TypeError, ValueError):
+            age_days = 0
+
+        day_word = "day" if age_days == 1 else "days"
+        descriptor = _STAGE_DESCRIPTORS.get(life_stage)
+
+        if not life_stage:
+            return f"[Stage] unknown — {age_days} {day_word} old."
+        if descriptor is None:
+            return f"[Stage] {life_stage} — {age_days} {day_word} old."
+        return f"[Stage] {life_stage} ({descriptor}) — {age_days} {day_word} old."

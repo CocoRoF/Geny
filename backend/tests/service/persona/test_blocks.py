@@ -1,14 +1,17 @@
 """CreatureState-backed prompt blocks — stub + live rendering.
 
-PR-X3-1 introduced stub blocks. PR-X3-8 (cycle 20260421_9) gives
+PR-X3-1 introduced stub blocks. PR-X3-8 (cycle 20260421_9) gave
 MoodBlock / RelationshipBlock / VitalsBlock live ``render`` logic that
-reads from ``state.shared[CREATURE_STATE_KEY]`` while ProgressionBlock
-stays a no-op until X4. These tests pin both:
+reads from ``state.shared[CREATURE_STATE_KEY]``. PR-X4-3 (cycle
+20260421_10) fills in ProgressionBlock so the LLM gets a narrative
+anchor (life stage + age) aligned with the manifest the selector
+chose. These tests pin:
 
 1. The classic-mode contract (no creature state in shared → empty
    fragment, composed prompt unchanged). X1's original guarantee.
-2. The live-mode output shape: band adjective + raw value per axis,
-   compact mood line, graceful fall-through when fields are missing.
+2. The live-mode output shape for all four blocks: band adjective +
+   raw value per axis (Mood/Rel/Vitals), stage + descriptor + age
+   (Progression), graceful fall-through when fields are missing.
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ from backend.service.state import CREATURE_STATE_KEY
 from backend.service.state.schema.creature_state import (
     Bond,
     CreatureState,
+    Progression,
     Vitals,
 )
 from backend.service.state.schema.mood import MoodVector
@@ -45,14 +49,18 @@ def _creature(
     mood: MoodVector | None = None,
     bond: Bond | None = None,
     vitals: Vitals | None = None,
+    progression: Progression | None = None,
 ) -> CreatureState:
-    return CreatureState(
+    kwargs = dict(
         character_id="c1",
         owner_user_id="u1",
         mood=mood or MoodVector(),
         bond=bond or Bond(),
         vitals=vitals or Vitals(),
     )
+    if progression is not None:
+        kwargs["progression"] = progression
+    return CreatureState(**kwargs)
 
 
 # ── Classic-mode (no hydrated state) ───────────────────────────────
@@ -85,10 +93,14 @@ def test_empty_blocks_are_dropped_from_composed_prompt() -> None:
     assert out == "persona-A\n\npersona-B"
 
 
-def test_progression_block_is_still_a_noop_in_x3() -> None:
-    """ProgressionBlock fills in X4; until then it stays empty even when
-    the creature is fully hydrated."""
-    state = _state_with_creature(_creature())
+def test_progression_block_empty_when_creature_has_no_progression_attr() -> None:
+    """Defensive: a programmatic corruption (progression set to None on
+    the creature) must not crash render — other live blocks follow the
+    same attr-none fall-through."""
+
+    creature = _creature()
+    creature.progression = None  # type: ignore[assignment]
+    state = _state_with_creature(creature)
     assert ProgressionBlock().render(state) == ""
 
 
@@ -202,17 +214,106 @@ def test_vitals_block_empty_when_creature_has_no_vitals_attr() -> None:
     assert VitalsBlock().render(state) == ""
 
 
+# ── ProgressionBlock — live ────────────────────────────────────────
+
+
+def test_progression_block_renders_infant_default_creature() -> None:
+    """Default creature is infant at 0 days — the selector starts here
+    before any transition fires (PR-X4-1 default tree)."""
+    state = _state_with_creature(_creature())
+    out = ProgressionBlock().render(state)
+    assert out == "[Stage] infant (just a baby) — 0 days old."
+
+
+def test_progression_block_pluralises_day_correctly() -> None:
+    """``age_days == 1`` uses the singular 'day'; everything else uses
+    'days'. Bad English in prompts nudges LLMs toward mimicking the
+    same mistake in their output."""
+    one_day = _creature(
+        progression=Progression(life_stage="infant", age_days=1)
+    )
+    zero_days = _creature(
+        progression=Progression(life_stage="infant", age_days=0)
+    )
+    many_days = _creature(
+        progression=Progression(life_stage="child", age_days=4)
+    )
+
+    assert "1 day old" in ProgressionBlock().render(_state_with_creature(one_day))
+    assert "0 days old" in ProgressionBlock().render(_state_with_creature(zero_days))
+    assert "4 days old" in ProgressionBlock().render(_state_with_creature(many_days))
+
+
+def test_progression_block_renders_each_documented_stage() -> None:
+    """All four plan/04 §7.3 stages have a descriptor. The descriptor
+    is what differentiates turns once the manifest (PR-X4-2) has
+    picked its knobs — block is the narrative counterpart."""
+    cases = [
+        ("infant", 2, "just a baby"),
+        ("child", 5, "curious and learning"),
+        ("teen", 18, "emotionally in flux"),
+        ("adult", 60, "mature"),
+    ]
+    for stage, age, descriptor in cases:
+        creature = _creature(
+            progression=Progression(life_stage=stage, age_days=age)
+        )
+        out = ProgressionBlock().render(_state_with_creature(creature))
+        assert out == f"[Stage] {stage} ({descriptor}) — {age} days old.", (
+            f"{stage}: got {out!r}"
+        )
+
+
+def test_progression_block_unknown_stage_falls_back_to_bare_keyword() -> None:
+    """Future stages (e.g. ``"elder"``) or drift-corrupted values must
+    not crash render — the block should degrade to the bare keyword
+    without a descriptor. Same "never raises in render" stance the
+    selector itself takes."""
+    creature = _creature(
+        progression=Progression(life_stage="elder", age_days=120)
+    )
+    out = ProgressionBlock().render(_state_with_creature(creature))
+    assert out == "[Stage] elder — 120 days old."
+    # Descriptor parens explicitly absent — don't leak an empty " ()".
+    assert "()" not in out
+
+
+def test_progression_block_blank_life_stage_reports_unknown() -> None:
+    """Creature hydrated with empty ``life_stage`` (pre-seed legacy row):
+    render carries an explicit ``unknown`` anchor so the LLM isn't
+    silently told it has no stage at all."""
+    creature = _creature(
+        progression=Progression(life_stage="", age_days=3)
+    )
+    out = ProgressionBlock().render(_state_with_creature(creature))
+    assert out == "[Stage] unknown — 3 days old."
+
+
+def test_progression_block_tolerates_non_int_age_days() -> None:
+    """Guard against schema drift / storage coercion returning
+    something odd (None, a string). Block renders ``0 days old``
+    rather than propagating TypeError into the turn."""
+    creature = _creature()
+    # Bypass dataclass typing on purpose — the guard is the point.
+    creature.progression.age_days = None  # type: ignore[assignment]
+    state = _state_with_creature(creature)
+    assert ProgressionBlock().render(state) == (
+        "[Stage] infant (just a baby) — 0 days old."
+    )
+
+
 # ── Composition ────────────────────────────────────────────────────
 
 
 def test_live_blocks_compose_in_order_without_extra_blank_lines() -> None:
-    """With a live creature, three live blocks contribute three non-empty
+    """With a live creature, all four live blocks contribute non-empty
     fragments plus any persona bookends; ComposablePromptBuilder must not
     emit stray double-blank separators."""
     creature = _creature(
         mood=MoodVector(joy=0.8),
         bond=Bond(affection=4.0, trust=1.0),
         vitals=Vitals(hunger=50.0, energy=60.0, stress=20.0, cleanliness=80.0),
+        progression=Progression(life_stage="child", age_days=4),
     )
     state = _state_with_creature(creature)
 
@@ -231,5 +332,6 @@ def test_live_blocks_compose_in_order_without_extra_blank_lines() -> None:
     assert "[Mood] joy" in out
     assert "[Bond with Owner]" in out
     assert "[Vitals]" in out
+    assert "[Stage] child (curious and learning) — 4 days old." in out
     # No run of three+ newlines (triple-blank from accidental stray ""):
     assert "\n\n\n" not in out
