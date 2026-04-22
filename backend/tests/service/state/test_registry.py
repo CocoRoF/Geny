@@ -249,3 +249,241 @@ async def test_state_without_shared_raises_attribute_error() -> None:
     reg, _ = _mk_registry()
     with pytest.raises(AttributeError):
         await reg.hydrate(_Broken())  # type: ignore[arg-type]
+
+
+# ── Manifest selector integration (PR-X4-5) ───────────────────────────────
+
+
+class _CharStub:
+    """Minimal :class:`CharacterLike` for the selector."""
+
+    def __init__(
+        self,
+        *,
+        species: str = "generic",
+        growth_tree_id: str = "default",
+        personality_archetype: str = "",
+    ) -> None:
+        self.species = species
+        self.growth_tree_id = growth_tree_id
+        self.personality_archetype = personality_archetype
+
+
+class _StubSelector:
+    """Async ``select`` returning a preset id. Optionally raises."""
+
+    def __init__(self, new_id: str, *, raises: Exception | None = None) -> None:
+        self._new_id = new_id
+        self._raises = raises
+
+    async def select(self, creature, character) -> str:
+        if self._raises is not None:
+            raise self._raises
+        return self._new_id
+
+
+async def _prime_snapshot(
+    prov: InMemoryCreatureStateProvider,
+    *,
+    character_id: str = "c1",
+    owner_user_id: str = "u1",
+    manifest_id: str = "infant_cheerful",
+    life_stage: str = "infant",
+    age_days: int = 3,
+    familiarity: float = 25.0,
+) -> None:
+    """Load the base snapshot and apply enough mutations to satisfy the
+    infant→child predicate (age≥3 and familiarity≥20)."""
+    from backend.service.state.schema.mutation import MutationBuffer as _MB
+
+    base = await prov.load(character_id, owner_user_id=owner_user_id)
+    buf = _MB()
+    buf.append(op="set", path="progression.manifest_id", value=manifest_id, source="fixture")
+    buf.append(op="set", path="progression.life_stage", value=life_stage, source="fixture")
+    buf.append(op="set", path="progression.age_days", value=age_days, source="fixture")
+    buf.append(op="set", path="bond.familiarity", value=familiarity, source="fixture")
+    await prov.apply(base, buf.items)
+
+
+@pytest.mark.asyncio
+async def test_no_selector_keeps_manifest_id_unchanged() -> None:
+    prov = InMemoryCreatureStateProvider()
+    await _prime_snapshot(prov, manifest_id="infant_cheerful")
+    reg, _ = _mk_registry(provider=prov)
+    state = _StubState()
+
+    snap = await reg.hydrate(state)
+    assert snap.progression.manifest_id == "infant_cheerful"
+    # No mutations were appended — buffer is empty.
+    assert len(state.shared[MUTATION_BUFFER_KEY]) == 0
+
+
+@pytest.mark.asyncio
+async def test_selector_transition_appends_three_mutations() -> None:
+    prov = InMemoryCreatureStateProvider()
+    await _prime_snapshot(prov, manifest_id="infant_cheerful")
+    selector = _StubSelector("child_curious")
+    reg = SessionRuntimeRegistry(
+        session_id="s1",
+        character_id="c1",
+        owner_user_id="u1",
+        provider=prov,
+        manifest_selector=selector,
+        character=_CharStub(personality_archetype="curious"),
+    )
+    state = _StubState()
+    await reg.hydrate(state)
+
+    buf: MutationBuffer = state.shared[MUTATION_BUFFER_KEY]
+    assert len(buf) == 3
+    ops = [(m.op, m.path, m.value, m.source) for m in buf.items]
+    assert ops[0] == ("set", "progression.manifest_id", "child_curious", "selector:transition")
+    assert ops[1] == ("set", "progression.life_stage", "child", "selector:transition")
+    assert ops[2] == ("append", "progression.milestones", "enter:child_curious", "selector:transition")
+
+
+@pytest.mark.asyncio
+async def test_selector_transition_stamps_new_milestone_on_session_meta() -> None:
+    prov = InMemoryCreatureStateProvider()
+    await _prime_snapshot(prov, manifest_id="infant_cheerful")
+    reg = SessionRuntimeRegistry(
+        session_id="s1",
+        character_id="c1",
+        owner_user_id="u1",
+        provider=prov,
+        manifest_selector=_StubSelector("child_curious"),
+        character=_CharStub(personality_archetype="curious"),
+    )
+    state = _StubState()
+    await reg.hydrate(state)
+
+    meta = state.shared[SESSION_META_KEY]
+    assert meta["new_milestone"] == "enter:child_curious"
+
+
+@pytest.mark.asyncio
+async def test_selector_transition_emits_manifest_transition_event() -> None:
+    prov = InMemoryCreatureStateProvider()
+    await _prime_snapshot(prov, manifest_id="infant_cheerful")
+    reg = SessionRuntimeRegistry(
+        session_id="s1",
+        character_id="c1",
+        owner_user_id="u1",
+        provider=prov,
+        manifest_selector=_StubSelector("teen_introvert"),
+        character=_CharStub(personality_archetype="introvert"),
+    )
+    state = _StubState()
+    await reg.hydrate(state)
+
+    transitions = [p for n, p in state.events if n == "state.manifest_transition"]
+    assert len(transitions) == 1
+    t = transitions[0]
+    assert t["from_manifest_id"] == "infant_cheerful"
+    assert t["to_manifest_id"] == "teen_introvert"
+    assert t["new_life_stage"] == "teen"
+
+
+@pytest.mark.asyncio
+async def test_selector_same_id_is_noop() -> None:
+    """Selector returning the current id must not queue mutations."""
+    prov = InMemoryCreatureStateProvider()
+    await _prime_snapshot(prov, manifest_id="infant_cheerful")
+    reg = SessionRuntimeRegistry(
+        session_id="s1",
+        character_id="c1",
+        owner_user_id="u1",
+        provider=prov,
+        manifest_selector=_StubSelector("infant_cheerful"),
+        character=_CharStub(personality_archetype="cheerful"),
+    )
+    state = _StubState()
+    await reg.hydrate(state)
+
+    assert len(state.shared[MUTATION_BUFFER_KEY]) == 0
+    meta = state.shared[SESSION_META_KEY]
+    assert "new_milestone" not in meta
+    assert not [n for n, _ in state.events if n == "state.manifest_transition"]
+
+
+@pytest.mark.asyncio
+async def test_selector_exception_leaves_state_alone() -> None:
+    """A selector that raises must not crash hydrate or queue mutations."""
+    prov = InMemoryCreatureStateProvider()
+    await _prime_snapshot(prov, manifest_id="infant_cheerful")
+    reg = SessionRuntimeRegistry(
+        session_id="s1",
+        character_id="c1",
+        owner_user_id="u1",
+        provider=prov,
+        manifest_selector=_StubSelector("ignored", raises=RuntimeError("boom")),
+        character=_CharStub(),
+    )
+    state = _StubState()
+    snap = await reg.hydrate(state)
+
+    assert snap.progression.manifest_id == "infant_cheerful"
+    assert len(state.shared[MUTATION_BUFFER_KEY]) == 0
+
+
+@pytest.mark.asyncio
+async def test_selector_unknown_stage_skips_life_stage_mutation() -> None:
+    """An id the parser can't map to a known stage updates manifest_id +
+    milestones but leaves life_stage alone — avoids writing a bogus
+    stage keyword like ``"legacy"``."""
+    prov = InMemoryCreatureStateProvider()
+    await _prime_snapshot(prov, manifest_id="infant_cheerful")
+    reg = SessionRuntimeRegistry(
+        session_id="s1",
+        character_id="c1",
+        owner_user_id="u1",
+        provider=prov,
+        manifest_selector=_StubSelector("legacy_custom"),
+        character=_CharStub(),
+    )
+    state = _StubState()
+    await reg.hydrate(state)
+
+    buf: MutationBuffer = state.shared[MUTATION_BUFFER_KEY]
+    paths = [m.path for m in buf.items]
+    assert "progression.manifest_id" in paths
+    assert "progression.life_stage" not in paths
+    assert "progression.milestones" in paths
+
+
+@pytest.mark.asyncio
+async def test_selector_requires_both_selector_and_character() -> None:
+    """Missing character → selector isn't consulted (and doesn't raise)."""
+    prov = InMemoryCreatureStateProvider()
+    await _prime_snapshot(prov, manifest_id="infant_cheerful")
+    reg = SessionRuntimeRegistry(
+        session_id="s1",
+        character_id="c1",
+        owner_user_id="u1",
+        provider=prov,
+        manifest_selector=_StubSelector("child_curious"),
+        character=None,
+    )
+    state = _StubState()
+    await reg.hydrate(state)
+
+    assert len(state.shared[MUTATION_BUFFER_KEY]) == 0
+
+
+@pytest.mark.asyncio
+async def test_selector_empty_new_id_is_noop() -> None:
+    """Selector returning ``""`` is a "no opinion" — don't queue
+    mutations."""
+    prov = InMemoryCreatureStateProvider()
+    await _prime_snapshot(prov, manifest_id="infant_cheerful")
+    reg = SessionRuntimeRegistry(
+        session_id="s1",
+        character_id="c1",
+        owner_user_id="u1",
+        provider=prov,
+        manifest_selector=_StubSelector(""),
+        character=_CharStub(),
+    )
+    state = _StubState()
+    await reg.hydrate(state)
+    assert len(state.shared[MUTATION_BUFFER_KEY]) == 0

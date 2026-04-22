@@ -21,6 +21,27 @@ Hydrate also performs **catch-up decay** (plan/02 §5.4): if the stored
 are reflected in this turn's prompt. Catch-up failures do not block the
 turn — stages fall back to the stale snapshot and the scheduled decay
 service will correct on its next run.
+
+Manifest transition (plan/04 §7.4, PR-X4-5)
+-------------------------------------------
+
+When a :class:`~backend.service.progression.selector.ManifestSelector`
+and a matching :class:`CharacterLike` are supplied, hydrate also runs
+the selector against the freshly loaded snapshot. A selector decision
+that differs from the stored ``progression.manifest_id`` produces three
+mutations on the turn's buffer:
+
+- ``set progression.manifest_id = <new_id>``
+- ``set progression.life_stage = <stage-from-new_id>`` (when parseable)
+- ``append progression.milestones = "enter:<new_id>"``
+
+The registry also stamps ``session_meta["new_milestone"] =
+"enter:<new_id>"`` so the :class:`EventSeedBlock`'s
+``milestone_just_hit`` trigger (weight 3.0) fires on the *same* turn the
+transition lands — the prompt feels the milestone the moment it
+happens, not only on the next session. The pipeline itself isn't
+rebuilt mid-session (plan/04 §7.4 makes that a session-start-only
+action); the persisted mutations take effect on the next session.
 """
 
 from __future__ import annotations
@@ -35,6 +56,8 @@ from .schema.creature_state import CreatureState
 from .schema.mutation import MutationBuffer
 
 logger = logging.getLogger(__name__)
+
+_SELECTOR_SOURCE = "selector:transition"
 
 # Keys we write into ``state.shared`` — exported as constants so stages
 # don't fight over spelling.
@@ -52,12 +75,16 @@ class SessionRuntimeRegistry:
         owner_user_id: str,
         provider: CreatureStateProvider,
         catchup_policy: DecayPolicy = DEFAULT_DECAY,
+        manifest_selector: Any = None,
+        character: Any = None,
     ) -> None:
         self.session_id = session_id
         self.character_id = character_id
         self.owner_user_id = owner_user_id
         self._provider = provider
         self._catchup_policy = catchup_policy
+        self._manifest_selector = manifest_selector
+        self._character = character
         self._snapshot: Optional[CreatureState] = None
 
     @property
@@ -83,7 +110,88 @@ class SessionRuntimeRegistry:
             "row_version": getattr(snap, "_row_version", None),
             "last_tick_at": snap.last_tick_at.isoformat(),
         })
+
+        await self._maybe_apply_manifest_transition(state, snap)
         return snap
+
+    async def _maybe_apply_manifest_transition(
+        self, state: Any, snap: CreatureState,
+    ) -> None:
+        """Run the selector and stage transition mutations when warranted.
+
+        Plan/04 §7.4 runs the selector at session start. The registry is
+        the only component that has (a) the hydrated snapshot, (b) the
+        mutation buffer, and (c) the shared session_meta dict, so it's
+        the natural home — placing the call here also means test
+        harnesses that exercise hydrate get selector coverage for free.
+
+        Silent on every failure mode (missing selector, missing
+        character, selector exception, non-parseable id): a
+        misconfigured growth tree must not cost a turn.
+        """
+        if self._manifest_selector is None or self._character is None:
+            return
+        try:
+            new_id = await self._manifest_selector.select(snap, self._character)
+        except Exception:
+            logger.debug(
+                "manifest selector raised during hydrate — keeping current id",
+                exc_info=True,
+            )
+            return
+
+        current_id = self._current_manifest_id(snap)
+        if not isinstance(new_id, str) or not new_id or new_id == current_id:
+            return
+
+        buf = _get_shared(state, MUTATION_BUFFER_KEY)
+        if not isinstance(buf, MutationBuffer):
+            logger.debug(
+                "selector transition: mutation buffer missing — skipping",
+            )
+            return
+
+        buf.append(
+            op="set",
+            path="progression.manifest_id",
+            value=new_id,
+            source=_SELECTOR_SOURCE,
+        )
+        new_stage = _stage_from_manifest_id(new_id)
+        if new_stage:
+            buf.append(
+                op="set",
+                path="progression.life_stage",
+                value=new_stage,
+                source=_SELECTOR_SOURCE,
+            )
+        milestone = f"enter:{new_id}"
+        buf.append(
+            op="append",
+            path="progression.milestones",
+            value=milestone,
+            source=_SELECTOR_SOURCE,
+        )
+
+        meta = _get_shared(state, SESSION_META_KEY)
+        if isinstance(meta, dict):
+            meta["new_milestone"] = milestone
+
+        _emit(state, "state.manifest_transition", {
+            "character_id": self.character_id,
+            "session_id": self.session_id,
+            "from_manifest_id": current_id,
+            "to_manifest_id": new_id,
+            "new_life_stage": new_stage,
+        })
+
+    @staticmethod
+    def _current_manifest_id(snap: CreatureState) -> str:
+        progression = getattr(snap, "progression", None)
+        if progression is None:
+            return ""
+        manifest_id = getattr(progression, "manifest_id", "")
+        return manifest_id if isinstance(manifest_id, str) else ""
 
     async def _maybe_catchup(
         self, state: Any, snap: CreatureState,
@@ -159,6 +267,26 @@ class SessionRuntimeRegistry:
             "row_version": getattr(new_state, "_row_version", None),
         })
         return new_state
+
+
+_KNOWN_LIFE_STAGES: frozenset[str] = frozenset(
+    {"infant", "child", "teen", "adult"}
+)
+
+
+def _stage_from_manifest_id(manifest_id: str) -> str:
+    """Parse a manifest id's leading stage keyword.
+
+    Accepts both bare (``"child"``) and archetype-suffixed (``"child_curious"``)
+    forms — mirrors :func:`~backend.service.progression.selector.default_manifest_naming`.
+    Returns ``""`` for unparseable ids (``"base"``, future stages, empty);
+    the caller treats empty as "don't mutate life_stage" so a custom-named
+    manifest doesn't flip the creature into a bogus stage.
+    """
+    if not manifest_id:
+        return ""
+    head = manifest_id.split("_", 1)[0]
+    return head if head in _KNOWN_LIFE_STAGES else ""
 
 
 def _put_shared(state: Any, key: str, value: Any) -> None:

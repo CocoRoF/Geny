@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, Mapping
 
 import pytest
 
 from geny_executor.core.state import PipelineState
 from geny_executor.stages.s03_system.artifact.default.builders import PersonaBlock
+from geny_executor.stages.s03_system.interface import PromptBlock
 
+from backend.service.game.events import EventSeed, EventSeedBlock, EventSeedPool
 from backend.service.persona import CharacterPersonaProvider, PersonaProvider
+from backend.service.state import CREATURE_STATE_KEY, SESSION_META_KEY
+from backend.service.state.schema.creature_state import CreatureState
 
 
 _VTUBER_DEFAULT = "VDEFAULT"
@@ -157,3 +162,163 @@ def test_character_file_is_cached_after_first_read(provider, chars_dir: Path) ->
     provider.set_character("s2", "catgirl")
     r = provider.resolve(PipelineState(), session_meta={"session_id": "s2", "is_vtuber": True})
     assert "catgirl-body" in _persona_text(r)
+
+
+# ── live_blocks + event_seed_pool integration (PR-X4-5) ───────────────
+
+
+class _StubBlock(PromptBlock):
+    """Stateless block with a fixed name + render string — used in place of
+    the real Mood/Vitals/Relationship/Progression blocks so these tests
+    don't depend on CreatureState field plumbing."""
+
+    def __init__(self, name: str, text: str = "") -> None:
+        self._name = name
+        self._text = text
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def render(self, state: PipelineState) -> str:
+        return self._text
+
+
+def _make_provider_with_blocks(
+    chars_dir: Path,
+    *,
+    live_blocks=None,
+    event_seed_pool=None,
+) -> CharacterPersonaProvider:
+    return CharacterPersonaProvider(
+        characters_dir=chars_dir,
+        default_vtuber_prompt=_VTUBER_DEFAULT,
+        default_worker_prompt=_WORKER_DEFAULT,
+        adaptive_prompt=_ADAPTIVE,
+        live_blocks=live_blocks,
+        event_seed_pool=event_seed_pool,
+    )
+
+
+def test_live_blocks_appended_after_persona(chars_dir: Path) -> None:
+    """live_blocks follow the PersonaBlock in the returned block list."""
+    b1 = _StubBlock("mood", "[Mood] calm")
+    b2 = _StubBlock("vitals", "[Vitals] ok")
+    p = _make_provider_with_blocks(chars_dir, live_blocks=[b1, b2])
+    r = p.resolve(PipelineState(), session_meta={"session_id": "s", "is_vtuber": True})
+    assert len(r.persona_blocks) == 3
+    assert isinstance(r.persona_blocks[0], PersonaBlock)
+    assert r.persona_blocks[1] is b1
+    assert r.persona_blocks[2] is b2
+
+
+def test_live_blocks_stay_intact_without_creature_state(chars_dir: Path) -> None:
+    """The provider does not gate live blocks on creature_state — blocks
+    themselves are expected to render empty when unhydrated (plan/04 §5)."""
+    b = _StubBlock("mood", "")
+    p = _make_provider_with_blocks(chars_dir, live_blocks=[b])
+    state = PipelineState()  # .shared empty — no creature_state
+    r = p.resolve(state, session_meta={"session_id": "s", "is_vtuber": True})
+    assert len(r.persona_blocks) == 2  # persona + live block
+    assert r.persona_blocks[1] is b
+
+
+def _fresh_creature() -> CreatureState:
+    """CreatureState with sensible defaults — only used as a non-None
+    marker in state.shared so the pool path fires."""
+    return CreatureState(character_id="c1", owner_user_id="u1")
+
+
+def test_event_seed_pool_appends_block_when_creature_present(chars_dir: Path) -> None:
+    """With a firing seed + hydrated creature, an EventSeedBlock is appended."""
+    seed = EventSeed(
+        id="always",
+        trigger=lambda c, m: True,
+        hint_text="always fires",
+        weight=1.0,
+    )
+    pool = EventSeedPool([seed])
+    p = _make_provider_with_blocks(chars_dir, event_seed_pool=pool)
+
+    state = PipelineState()
+    state.shared[CREATURE_STATE_KEY] = _fresh_creature()
+    state.shared[SESSION_META_KEY] = {"session_id": "s", "is_vtuber": True}
+    r = p.resolve(state, session_meta={"session_id": "s", "is_vtuber": True})
+
+    assert len(r.persona_blocks) == 2
+    assert isinstance(r.persona_blocks[1], EventSeedBlock)
+    assert r.persona_blocks[1].seed.id == "always"
+
+
+def test_event_seed_pool_skipped_without_creature_state(chars_dir: Path) -> None:
+    """No creature_state in state.shared → no EventSeedBlock appended."""
+    seed = EventSeed(id="always", trigger=lambda c, m: True, hint_text="hi")
+    p = _make_provider_with_blocks(chars_dir, event_seed_pool=EventSeedPool([seed]))
+    r = p.resolve(PipelineState(), session_meta={"session_id": "s", "is_vtuber": True})
+    assert len(r.persona_blocks) == 1
+
+
+def test_event_seed_pool_skipped_when_no_seed_fires(chars_dir: Path) -> None:
+    """Creature present but every trigger returns False → no EventSeedBlock."""
+    seed = EventSeed(id="never", trigger=lambda c, m: False, hint_text="nope")
+    p = _make_provider_with_blocks(chars_dir, event_seed_pool=EventSeedPool([seed]))
+    state = PipelineState()
+    state.shared[CREATURE_STATE_KEY] = _fresh_creature()
+    r = p.resolve(state, session_meta={"session_id": "s", "is_vtuber": True})
+    assert len(r.persona_blocks) == 1
+
+
+def test_event_seed_pool_exception_is_swallowed(chars_dir: Path) -> None:
+    """A pool whose ``pick`` raises must not break the persona resolve —
+    turn continues with no EventSeedBlock."""
+
+    class _BoomPool:
+        def pick(self, creature: Any, meta: Mapping[str, Any]):
+            raise RuntimeError("pool exploded")
+
+    p = _make_provider_with_blocks(chars_dir, event_seed_pool=_BoomPool())
+    state = PipelineState()
+    state.shared[CREATURE_STATE_KEY] = _fresh_creature()
+    # Must not raise.
+    r = p.resolve(state, session_meta={"session_id": "s", "is_vtuber": True})
+    assert len(r.persona_blocks) == 1
+
+
+def test_cache_key_includes_picked_seed_id(chars_dir: Path) -> None:
+    """Picked seed's id is folded into cache_key so a different seed
+    doesn't hit a stale entry."""
+    seed = EventSeed(
+        id="quiet_night", trigger=lambda c, m: True, hint_text="shh", weight=1.0,
+    )
+    p = _make_provider_with_blocks(chars_dir, event_seed_pool=EventSeedPool([seed]))
+
+    state = PipelineState()
+    state.shared[CREATURE_STATE_KEY] = _fresh_creature()
+    r = p.resolve(state, session_meta={"session_id": "s", "is_vtuber": True})
+    assert r.cache_key.endswith("+E:quiet_night")
+
+
+def test_cache_key_unchanged_when_pool_picks_nothing(chars_dir: Path) -> None:
+    """No seed fires → cache_key keeps the baseline shape (no +E: suffix)."""
+    seed = EventSeed(id="nope", trigger=lambda c, m: False, hint_text="x")
+    p = _make_provider_with_blocks(chars_dir, event_seed_pool=EventSeedPool([seed]))
+    state = PipelineState()
+    state.shared[CREATURE_STATE_KEY] = _fresh_creature()
+    r = p.resolve(state, session_meta={"session_id": "s", "is_vtuber": True})
+    assert "+E:" not in r.cache_key
+
+
+def test_live_blocks_and_event_seed_coexist(chars_dir: Path) -> None:
+    """PersonaBlock → live_blocks → EventSeedBlock ordering is stable."""
+    live = _StubBlock("mood", "[Mood] calm")
+    seed = EventSeed(id="ev", trigger=lambda c, m: True, hint_text="pop")
+    p = _make_provider_with_blocks(
+        chars_dir, live_blocks=[live], event_seed_pool=EventSeedPool([seed]),
+    )
+    state = PipelineState()
+    state.shared[CREATURE_STATE_KEY] = _fresh_creature()
+    r = p.resolve(state, session_meta={"session_id": "s", "is_vtuber": True})
+    assert len(r.persona_blocks) == 3
+    assert isinstance(r.persona_blocks[0], PersonaBlock)
+    assert r.persona_blocks[1] is live
+    assert isinstance(r.persona_blocks[2], EventSeedBlock)

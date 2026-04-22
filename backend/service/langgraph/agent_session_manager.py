@@ -121,11 +121,34 @@ class AgentSessionManager(SessionManager):
         # Persona provider — single manager-scoped instance, keys state on
         # session_id. Created eagerly so controllers can inject per-session
         # persona edits without reaching into AgentSession internals.
+        #
+        # Live CreatureState blocks (Mood / Vitals / Bond / Progression)
+        # and the EventSeedPool are wired unconditionally: they drop to
+        # empty output when ``creature_state`` isn't hydrated, so
+        # classic-mode sessions remain byte-identical to pre-X4 prompt
+        # output. The seed pool is the default baseline catalogue from
+        # PR-X4-4 (``DEFAULT_SEEDS``). Game-specific overrides will ride
+        # the X5 plugin registry.
+        from backend.service.persona.blocks import (
+            MoodBlock,
+            ProgressionBlock,
+            RelationshipBlock,
+            VitalsBlock,
+        )
+        from backend.service.game.events import DEFAULT_SEEDS, EventSeedPool
+
         self._persona_provider = CharacterPersonaProvider(
             characters_dir=_VTUBER_CHARACTERS_DIR,
             default_vtuber_prompt=_DEFAULT_VTUBER_PROMPT,
             default_worker_prompt=_DEFAULT_WORKER_PROMPT,
             adaptive_prompt=_ADAPTIVE_PROMPT,
+            live_blocks=(
+                MoodBlock(),
+                VitalsBlock(),
+                RelationshipBlock(),
+                ProgressionBlock(),
+            ),
+            event_seed_pool=EventSeedPool(DEFAULT_SEEDS),
         )
 
         # Session lifecycle bus — manager-scoped pub/sub rail (cycle
@@ -201,6 +224,23 @@ class AgentSessionManager(SessionManager):
     def state_provider(self):
         """Currently-wired ``CreatureStateProvider`` or ``None``."""
         return self._state_provider
+
+    def _build_manifest_selector(self):
+        """Construct the baseline :class:`ManifestSelector` (PR-X4-5).
+
+        One selector per session: selector state (tree snapshots) is
+        immutable post-construction, so sharing would work too, but
+        per-session instances make test isolation easier and cost is
+        negligible. Trees / naming defaults come from
+        :mod:`backend.service.progression.trees.default`.
+        """
+        from backend.service.progression.selector import ManifestSelector
+        from backend.service.progression.trees.default import (
+            DEFAULT_TREE,
+            DEFAULT_TREE_ID,
+        )
+
+        return ManifestSelector(trees={DEFAULT_TREE_ID: DEFAULT_TREE})
 
     @property
     def state_decay_service(self):
@@ -611,6 +651,11 @@ class AgentSessionManager(SessionManager):
             # MVP: one creature per session — character_id tracks session_id.
             # PR-X4 replaces this with owner-driven multi-character lookup.
             character_id=(session_id if self._state_provider else None),
+            manifest_selector=(
+                self._build_manifest_selector()
+                if self._state_provider is not None
+                else None
+            ),
         )
 
         session_id = agent.session_id
