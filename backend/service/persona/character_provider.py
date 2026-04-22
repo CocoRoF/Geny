@@ -21,15 +21,34 @@ The role default (VTuber vs worker) is decided per turn from
 
 State keyed on ``session_id``; no locking — controllers already serialise
 writes per session and the pipeline runs single-threaded per session.
+
+Live game blocks
+----------------
+
+When ``live_blocks`` is supplied, those :class:`PromptBlock` instances
+are appended after the assembled persona text on every ``resolve``
+call. They are expected to be stateless readers of ``state.shared`` —
+typically :class:`MoodBlock` / :class:`RelationshipBlock` /
+:class:`VitalsBlock` / :class:`ProgressionBlock` — and drop to an empty
+string when ``creature_state`` isn't hydrated, which keeps classic
+(non-game) sessions visually identical to pre-X4 output.
+
+When ``event_seed_pool`` is supplied **and** ``creature_state`` is
+present in ``state.shared``, the provider picks one seed per turn and
+appends an :class:`EventSeedBlock` at the end. The pool itself is
+never-raises (plan/04 §6.2), so a misconfigured seed can't break a
+turn. The picked seed id is folded into ``cache_key`` so downstream
+caches don't serve stale hints.
 """
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
 
 from geny_executor.stages.s03_system.artifact.default.builders import PersonaBlock
+from geny_executor.stages.s03_system.interface import PromptBlock
 
 from backend.service.persona.provider import PersonaResolution
 
@@ -48,11 +67,15 @@ class CharacterPersonaProvider:
         default_vtuber_prompt: str,
         default_worker_prompt: str,
         adaptive_prompt: str,
+        live_blocks: Optional[Sequence[PromptBlock]] = None,
+        event_seed_pool: Optional[Any] = None,
     ):
         self._characters_dir = Path(characters_dir)
         self._default_vtuber = default_vtuber_prompt
         self._default_worker = default_worker_prompt
         self._adaptive = adaptive_prompt
+        self._live_blocks: tuple[PromptBlock, ...] = tuple(live_blocks or ())
+        self._event_seed_pool = event_seed_pool
 
         self._static_override: Dict[str, Optional[str]] = {}
         self._character_append: Dict[str, str] = {}
@@ -153,11 +176,55 @@ class CharacterPersonaProvider:
             parts.append(ctx_text)
 
         persona_text = "\n\n".join(p for p in parts if p)
+
+        blocks: list[PromptBlock] = [PersonaBlock(persona_text)]
+        blocks.extend(self._live_blocks)
+
+        picked_seed_id: Optional[str] = None
+        if self._event_seed_pool is not None:
+            picked = self._pick_event_seed(state)
+            if picked is not None:
+                from backend.service.game.events import EventSeedBlock
+
+                blocks.append(EventSeedBlock(picked))
+                picked_seed_id = getattr(picked, "id", None)
+
         cache_key = self._compose_cache_key(session_id, is_vtuber)
+        if picked_seed_id:
+            cache_key = f"{cache_key}+E:{picked_seed_id}"
         return PersonaResolution(
-            persona_blocks=[PersonaBlock(persona_text)],
+            persona_blocks=blocks,
             cache_key=cache_key,
         )
+
+    def _pick_event_seed(self, state: Any) -> Any:
+        """Invoke the event-seed pool against the hydrated creature state.
+
+        Returns ``None`` when the pool raises, when no ``creature_state``
+        is in ``state.shared``, or when no seed fires. Pool construction
+        already wraps trigger exceptions (plan/04 §6.2); this layer only
+        handles the surrounding read.
+        """
+        from backend.service.state import (
+            CREATURE_STATE_KEY,
+            SESSION_META_KEY,
+        )
+
+        shared = getattr(state, "shared", None)
+        if not isinstance(shared, dict):
+            return None
+        creature = shared.get(CREATURE_STATE_KEY)
+        if creature is None:
+            return None
+        meta = shared.get(SESSION_META_KEY) or {}
+        try:
+            return self._event_seed_pool.pick(creature, meta)
+        except Exception:
+            logger.debug(
+                "event seed pool raised during pick — suppressing",
+                exc_info=True,
+            )
+            return None
 
     # ── Internals ─────────────────────────────────────────────────────
 

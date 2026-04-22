@@ -143,6 +143,25 @@ indicate that you will delegate it.
 Keep responses conversational and natural."""
 
 
+class _SessionCharacterLike:
+    """Minimal :class:`CharacterLike` carrier for the manifest selector.
+
+    Until the Character repo lands (plan/04 §1.1) the selector needs
+    *something* with ``species`` / ``growth_tree_id`` /
+    ``personality_archetype``. Defaults live on :class:`AgentSession`,
+    which constructs this on demand inside ``_build_state_registry``.
+    """
+
+    __slots__ = ("species", "growth_tree_id", "personality_archetype")
+
+    def __init__(
+        self, *, species: str, growth_tree_id: str, personality_archetype: str,
+    ) -> None:
+        self.species = species
+        self.growth_tree_id = growth_tree_id
+        self.personality_archetype = personality_archetype
+
+
 class AgentSession:
     """geny-executor Pipeline-based agent session.
 
@@ -183,6 +202,10 @@ class AgentSession:
         state_provider: Optional[Any] = None,
         character_id: Optional[str] = None,
         catchup_policy: Optional[Any] = None,
+        manifest_selector: Optional[Any] = None,
+        species: Optional[str] = None,
+        growth_tree_id: Optional[str] = None,
+        personality_archetype: Optional[str] = None,
     ):
         """Initialize AgentSession.
 
@@ -291,6 +314,17 @@ class AgentSession:
         self._state_provider = state_provider
         self._character_id = character_id
         self._catchup_policy = catchup_policy
+
+        # Manifest selector / character identity (PR-X4-5). Selector is
+        # consulted inside ``SessionRuntimeRegistry.hydrate`` to stage a
+        # transition mutation when the life-stage predicate fires.
+        # species / growth_tree_id / personality_archetype are read by
+        # the selector through the ``CharacterLike`` protocol; defaults
+        # keep classic sessions safe (selector is ``None`` there anyway).
+        self._manifest_selector = manifest_selector
+        self._species = species or "generic"
+        self._growth_tree_id = growth_tree_id or "default"
+        self._personality_archetype = personality_archetype or ""
 
         # Initial status
         self._status = SessionStatus.STARTING
@@ -1160,6 +1194,12 @@ class AgentSession:
         supply one — MVP assumption of one creature per session. PR-X4
         will replace this with an owner-driven lookup once multi-character
         ownership lands.
+
+        When ``manifest_selector`` was wired in, the registry carries a
+        synthesized :class:`CharacterLike` (species / growth_tree_id /
+        personality_archetype) so it can run the selector at hydrate
+        time — the character data source (repo / admin UI) hasn't
+        landed yet, so PR-X4-5 uses the session-scoped defaults.
         """
         if self._state_provider is None:
             return None
@@ -1167,12 +1207,21 @@ class AgentSession:
             DEFAULT_DECAY,
             SessionRuntimeRegistry,
         )
+        character = None
+        if self._manifest_selector is not None:
+            character = _SessionCharacterLike(
+                species=self._species,
+                growth_tree_id=self._growth_tree_id,
+                personality_archetype=self._personality_archetype,
+            )
         return SessionRuntimeRegistry(
             session_id=self._session_id,
             character_id=self._character_id or self._session_id,
             owner_user_id=self._owner_username or "",
             provider=self._state_provider,
             catchup_policy=self._catchup_policy or DEFAULT_DECAY,
+            manifest_selector=self._manifest_selector,
+            character=character,
         )
 
     async def _hydrate_state_safely(
