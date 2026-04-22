@@ -149,10 +149,14 @@ class AgentSessionManager(SessionManager):
 
         # Creature state provider (cycle 20260421_9 PR-X3-5). None until
         # ``set_state_provider`` is called at boot. Gated in ``main.py``
-        # by ``GENY_GAME_FEATURES`` — when the flag is off every session
-        # runs in classic (no-state) mode.
+        # by ``GameConfig.enabled`` (Settings UI → Tamagotchi). When
+        # the flag is off every session runs in classic (no-state) mode.
+        # ``_state_provider_vtuber_only`` decides whether non-VTuber
+        # sessions also get the provider (default: VTuber-only, so
+        # ordinary Workers don't spawn orphan creature rows).
         self._state_provider = None
         self._state_decay_service = None
+        self._state_provider_vtuber_only: bool = True
 
         logger.info("✅ AgentSessionManager initialized")
 
@@ -192,6 +196,7 @@ class AgentSessionManager(SessionManager):
         state_provider,
         *,
         decay_service=None,
+        vtuber_only: bool = True,
     ) -> None:
         """Wire the creature ``CreatureStateProvider`` + its decay service.
 
@@ -201,13 +206,22 @@ class AgentSessionManager(SessionManager):
         the reference — main.py lifespan uses ``state_decay_service``
         for start/stop. Leaving both as ``None`` (the default) keeps
         the session stack in classic mode.
+
+        ``vtuber_only`` (cycle 20260422_5 follow-up): when True, only
+        sessions whose role is ``SessionRole.VTUBER`` actually get the
+        provider passed to ``AgentSession``. Non-VTuber roles keep
+        ``state_provider=None`` so plain workers / sub-workers don't
+        spawn orphan creature rows. Toggle off for deployments where a
+        non-VTuber role legitimately needs creature state.
         """
         self._state_provider = state_provider
         self._state_decay_service = decay_service
+        self._state_provider_vtuber_only = vtuber_only
         logger.info(
             "AgentSessionManager: state_provider set "
             f"({type(state_provider).__name__}; "
-            f"decay_service={'yes' if decay_service else 'no'})"
+            f"decay_service={'yes' if decay_service else 'no'}; "
+            f"vtuber_only={vtuber_only})"
         )
 
     @property
@@ -599,11 +613,26 @@ class AgentSessionManager(SessionManager):
             f"(adhoc_providers={len(adhoc_providers)})"
         )
 
+        # Role-gate the creature-state provider wiring. GameConfig
+        # (``vtuber_only=True`` by default) means only ``VTUBER`` role
+        # sessions get the provider — plain Worker / sub-Worker keep
+        # ``state_provider=None`` (classic mode) so they don't spawn
+        # orphan creature rows in the state DB. When ``vtuber_only``
+        # is False, every session gets the provider.
+        _has_state_provider = self._state_provider is not None
+        _role_allows_state = (
+            (not self._state_provider_vtuber_only)
+            or request.role == SessionRole.VTUBER
+        )
+        _session_state_provider = (
+            self._state_provider if (_has_state_provider and _role_allows_state) else None
+        )
+
         # With CreatureState wired up, prepend the AffectTagEmitter so
         # LLM ``[emotion]`` cues fold into mood/bond mutations on the
-        # same turn. Gated on ``state_provider`` presence so classic
-        # (non-game) sessions never see their final_text rewritten.
-        if self._state_provider is not None:
+        # same turn. Gated on the resolved per-session provider so a
+        # classic worker session never has its final_text rewritten.
+        if _session_state_provider is not None:
             from service.emit import install_affect_tag_emitter
 
             install_affect_tag_emitter(prebuilt_pipeline)
@@ -637,13 +666,13 @@ class AgentSessionManager(SessionManager):
             prebuilt_pipeline=prebuilt_pipeline,
             persona_provider=self._persona_provider,
             lifecycle_bus=self._lifecycle_bus,
-            state_provider=self._state_provider,
+            state_provider=_session_state_provider,
             # MVP: one creature per session — character_id tracks session_id.
             # PR-X4 replaces this with owner-driven multi-character lookup.
-            character_id=(session_id if self._state_provider else None),
+            character_id=(session_id if _session_state_provider else None),
             manifest_selector=(
                 self._build_manifest_selector()
-                if self._state_provider is not None
+                if _session_state_provider is not None
                 else None
             ),
         )

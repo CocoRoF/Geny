@@ -20,6 +20,7 @@ def _manager_skeleton() -> AgentSessionManager:
     mgr = object.__new__(AgentSessionManager)
     mgr._state_provider = None
     mgr._state_decay_service = None
+    mgr._state_provider_vtuber_only = True
     return mgr
 
 
@@ -59,3 +60,24 @@ def test_set_state_provider_overrides_previous() -> None:
     mgr.set_state_provider(first)
     mgr.set_state_provider(second)
     assert mgr.state_provider is second
+
+
+def test_set_state_provider_stores_vtuber_only_flag() -> None:
+    """Cycle 20260422_5 follow-up — role gating flag survives across
+    set_state_provider calls so create_agent_session can read it."""
+    mgr = _manager_skeleton()
+    prov = InMemoryCreatureStateProvider()
+    mgr.set_state_provider(prov, vtuber_only=False)
+    assert mgr._state_provider_vtuber_only is False
+    mgr.set_state_provider(prov, vtuber_only=True)
+    assert mgr._state_provider_vtuber_only is True
+
+
+def test_set_state_provider_defaults_vtuber_only_true() -> None:
+    """Default for vtuber_only must be True — the safer behavior,
+    matching the intent that plain Worker sessions don't spawn
+    orphan creature rows."""
+    mgr = _manager_skeleton()
+    prov = InMemoryCreatureStateProvider()
+    mgr.set_state_provider(prov)
+    assert mgr._state_provider_vtuber_only is True
