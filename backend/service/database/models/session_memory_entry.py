@@ -4,8 +4,20 @@ Session Memory Entry Model — Database model for memory entries.
 Stores both long-term memory (markdown content) and short-term memory
 (JSONL transcript entries) in a unified table, so that memory survives
 container restarts and can be queried/searched via SQL.
+
+Affect fields
+-------------
+
+Cycle 20260422_2 PR-X6-1 adds two nullable affect fields
+(``emotion_vec`` as JSON-encoded list of floats, ``emotion_intensity``
+as scalar) that downstream retrievers use to score emotional
+similarity alongside text similarity. Both columns are nullable with
+no default — NULL distinguishes "no emotion captured for this record"
+from "neutral emotion (all zeros)". Existing write paths that do not
+populate these fields leave them NULL; the AffectAwareRetrieverMixin
+(PR-X6-2) falls back to text-only ranking when either side is NULL.
 """
-from typing import Dict, Any
+from typing import Any, Dict, Optional
 from service.database.models.base_model import BaseModel
 
 
@@ -35,6 +47,10 @@ class SessionMemoryEntryModel(BaseModel):
         source_type: str = "system",     # system | agent | user | execution
         summary: str = "",               # brief summary for search/display
         is_global: bool = False,         # True if promoted to global memory
+        # Affect fields (cycle 20260422_2 PR-X6-1) — nullable, NULL means
+        # "no emotion data captured".
+        emotion_vec: Optional[str] = None,       # JSON-encoded list[float]
+        emotion_intensity: Optional[float] = None,  # scalar 0.0..1.0
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -58,6 +74,8 @@ class SessionMemoryEntryModel(BaseModel):
         self.source_type = source_type
         self.summary = summary
         self.is_global = is_global
+        self.emotion_vec = emotion_vec
+        self.emotion_intensity = emotion_intensity
 
     def get_table_name(self) -> str:
         return "session_memory_entries"
@@ -84,6 +102,9 @@ class SessionMemoryEntryModel(BaseModel):
             "source_type": "VARCHAR(30) DEFAULT 'system'",
             "summary": "TEXT DEFAULT ''",
             "is_global": "BOOLEAN DEFAULT FALSE",
+            # Affect fields — nullable, NULL means "no emotion captured"
+            "emotion_vec": "TEXT DEFAULT NULL",
+            "emotion_intensity": "REAL DEFAULT NULL",
         }
 
     @classmethod
