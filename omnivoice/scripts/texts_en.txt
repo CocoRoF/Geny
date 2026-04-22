@@ -1,0 +1,42 @@
+# English prompts for the bench / compare_audio sweep.
+# 5 length tiers × 6 = 30 entries. Comments and blank lines are skipped.
+
+# ── tier 1 (≤ 5 words) ──────────────────────────────────────────────
+Hi.
+Thanks.
+See you.
+Of course.
+Welcome back.
+Got it.
+
+# ── tier 2 (≤ 12 words) ─────────────────────────────────────────────
+The weather is unusually nice today.
+I went out for a quick run this morning.
+Could you pass me the salt, please?
+Let's grab coffee after the meeting tomorrow.
+The build finally finished without any errors.
+What time should we leave for the airport?
+
+# ── tier 3 (≤ 30 words) ─────────────────────────────────────────────
+After a long week of debugging, the team finally pinpointed the source of the latency spike and rolled out a fix to production.
+Walking through the city center on a cool autumn evening always reminds me of how much I enjoy the small details of everyday life.
+The conference talk introduced a clever caching strategy that several teams in the audience said they would prototype the following week.
+Although the deadline was tight, the entire group stayed late, divided the remaining tasks evenly, and shipped the release on schedule.
+Once the documentation was rewritten with concrete examples, new contributors started landing their first pull requests within a few days.
+Reading code carefully before changing it is one of those habits that pays off many times over the course of a project.
+
+# ── tier 4 (≤ 70 words) ─────────────────────────────────────────────
+The latest release notes describe several incremental improvements: faster cold starts, more accurate language detection, and a refreshed admin dashboard. None of the changes are particularly flashy on their own, but together they make the day-to-day operator experience noticeably smoother, and they pave the way for the larger streaming-mode work that has been planned for the next quarter.
+Our team spent the morning walking through a new architecture proposal that splits the legacy monolith into three smaller services. The design preserves backward compatibility through a thin compatibility shim, but it allows each service to be deployed independently. We agreed to prototype the most contentious boundary first so we can flush out integration issues before committing to the full plan.
+On the way home from the office I stopped at the small bookshop near the river and picked up a novel I had been meaning to read for months. The owner remembered my last purchase and recommended a sequel from the same author, which made the visit feel a lot more personal than the usual transaction at a chain store.
+The synthetic benchmark we put together last sprint did a reasonable job of approximating production traffic, but it missed an important pattern: bursts of very short utterances that arrive within a few milliseconds of each other. Once we extended the harness to model that case, the regressed numbers matched what users had been quietly reporting for weeks.
+Although it took several iterations, the final design strikes a careful balance between simplicity and flexibility. The single-process default keeps deployment straightforward for new users, while the optional worker mode preserves the throughput that larger installations rely on. Documentation now walks through both paths with a small example each.
+We agreed during the retrospective that the most valuable change of the quarter was not any single feature shipped, but the new habit of writing a short design note before starting any non-trivial work. The notes catch alignment issues early and double as a record of why a particular trade-off was made.
+
+# ── tier 5 (≤ 150 words, multi-sentence) ────────────────────────────
+The morning meeting started with a quick recap of yesterday's outage. Engineering walked through the timeline minute by minute, pointed out the alert that fired but went unnoticed, and the queue saturation that followed. Several action items came out of it: a new dashboard panel for queue depth, a paging policy change, and a small change to the deployment script that should make rollbacks faster the next time something similar happens. Nobody enjoys postmortems, but this one was unusually constructive.
+We had been debating for weeks whether to ship the new clustering algorithm with default parameters tuned for accuracy or for throughput. After a long discussion this morning we decided to default to accuracy, because users overwhelmingly asked for predictable behavior, and to expose the throughput-tuned configuration behind a clearly documented option. The release notes will spell out the trade-off so operators can make an informed choice without surprises later on.
+After three solid days of profiling, we finally identified the bottleneck: a single innocuous lookup that was being repeated thousands of times per request because of an oversight in the caching layer. Fixing it brought tail latency down by an order of magnitude, and the rest of the system, which had been compensating for the slow path, suddenly looked dramatically healthier on every dashboard.
+The proposal sounds straightforward at first glance, but each of its three components carries subtle implications for the rest of the codebase. Migrating the storage layer would force a rewrite of two adjacent services. Adopting the new transport would change the failure modes that operators currently understand well. And the new authentication flow, however clean, would invalidate cached credentials across every client. We should sequence these changes carefully.
+The new contributor onboarding document had been rewritten three times before anyone was happy with it, and even then it landed with a long list of small follow-ups. The next two newcomers used it from day one and gave invaluable feedback, which fed straight into another revision. By the end of the quarter the document had stabilized, and the average time to a first merged pull request had dropped considerably.
+We launched the experimental streaming endpoint with a deliberately conservative rollout: only a small fraction of internal traffic, behind a feature flag, with extensive structured logging. Within the first hour we caught two issues that the synthetic load tests had not surfaced, fixed them, and let the feature soak overnight. By the end of the week the endpoint was carrying meaningful production traffic and behaving exactly like the design predicted.

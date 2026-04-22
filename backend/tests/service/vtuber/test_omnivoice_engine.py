@@ -86,6 +86,15 @@ def voices_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
+@pytest.fixture(autouse=True)
+def _reset_persistent_http_clients():
+    """The adapter caches httpx clients across calls; clear between tests
+    so each test exercises its own MockTransport."""
+    ove._clients.clear()
+    yield
+    ove._clients.clear()
+
+
 # ── Tests ────────────────────────────────────────────────────────────
 
 
@@ -226,3 +235,160 @@ async def test_get_voices_proxies_remote_response(voices_dir):
     assert len(voices) == 1
     assert voices[0].id == "paimon_ko"
     assert voices[0].engine == "omnivoice"
+
+
+# ── Phase 1 regression: persistent client + phase-aware health ───────
+
+
+@pytest.mark.asyncio
+async def test_health_check_phase_ok_returns_true():
+    """New /health body uses ``phase``; ``ok`` must be honoured."""
+    cfg = _Cfg()
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "status": "ok", "phase": "ok",
+            "model": "x", "device": "cpu", "dtype": "float16",
+            "sampling_rate": 24000, "auto_asr": False, "max_concurrency": 1,
+        })
+
+    with _direct_patch(cfg), patch.object(
+        httpx, "AsyncClient",
+        lambda *a, **kw: httpx.AsyncClient(transport=httpx.MockTransport(handler), **kw)
+    ):
+        engine = ove.OmniVoiceEngine()
+        assert await engine.health_check() is True
+
+
+@pytest.mark.asyncio
+async def test_health_check_phase_warming_returns_false():
+    """``phase=warming`` is not yet ready, even though HTTP is 200."""
+    cfg = _Cfg()
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "status": "loading", "phase": "warming",
+            "model": "x", "device": "cuda:0", "dtype": "float16",
+            "sampling_rate": 24000, "auto_asr": False, "max_concurrency": 1,
+        })
+
+    with _direct_patch(cfg), patch.object(
+        httpx, "AsyncClient",
+        lambda *a, **kw: httpx.AsyncClient(transport=httpx.MockTransport(handler), **kw)
+    ):
+        engine = ove.OmniVoiceEngine()
+        assert await engine.health_check() is False
+
+
+@pytest.mark.asyncio
+async def test_health_check_legacy_status_only_still_ready():
+    """Old servers without ``phase`` must still report ready via ``status``."""
+    cfg = _Cfg()
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "status": "ok",  # no phase field at all
+            "model": "x", "device": "cpu", "dtype": "float16",
+            "sampling_rate": 24000, "auto_asr": False, "max_concurrency": 1,
+        })
+
+    with _direct_patch(cfg), patch.object(
+        httpx, "AsyncClient",
+        lambda *a, **kw: httpx.AsyncClient(transport=httpx.MockTransport(handler), **kw)
+    ):
+        engine = ove.OmniVoiceEngine()
+        assert await engine.health_check() is True
+
+
+@pytest.mark.asyncio
+async def test_synthesize_concurrent_calls_do_not_serialise_in_adapter(voices_dir):
+    """The module-level adapter lock has been removed (Phase 1b).
+
+    Two concurrent ``synthesize_stream`` calls must both reach the
+    upstream handler concurrently. We assert this by counting the peak
+    number of in-flight requests observed inside the mock handler.
+    """
+    import asyncio as _asyncio
+
+    cfg = _Cfg(mode="clone", timeout_seconds=10.0)
+    in_flight = 0
+    peak = 0
+    lock = _asyncio.Lock()
+    seen = _asyncio.Event()
+
+    async def handler(req: httpx.Request) -> httpx.Response:
+        nonlocal in_flight, peak
+        async with lock:
+            in_flight += 1
+            peak = max(peak, in_flight)
+            if in_flight >= 2:
+                seen.set()
+        try:
+            # Hold the connection long enough for the second caller to land.
+            await _asyncio.wait_for(seen.wait(), timeout=2.0)
+        except _asyncio.TimeoutError:
+            pass
+        async with lock:
+            in_flight -= 1
+        return httpx.Response(200, content=b"WAV", headers={"content-type": "audio/wav"})
+
+    transport = httpx.MockTransport(handler)
+    with _direct_patch(cfg), patch.object(
+        httpx, "AsyncClient",
+        lambda *a, **kw: httpx.AsyncClient(transport=transport, **kw)
+    ):
+        engine = ove.OmniVoiceEngine()
+        req1 = TTSRequest(text="첫 번째", emotion="neutral", language="ko")
+        req2 = TTSRequest(text="두 번째", emotion="neutral", language="ko")
+
+        async def _drain(r):
+            return [c async for c in engine.synthesize_stream(r)]
+
+        results = await _asyncio.gather(_drain(req1), _drain(req2))
+
+    assert all(any(c.audio_data == b"WAV" for c in chunks) for chunks in results)
+    assert peak >= 2, (
+        f"adapter still serialising calls; peak in-flight={peak} "
+        "(expected ≥ 2 after lock removal)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_persistent_client_is_reused_across_calls(voices_dir):
+    """Phase 1: per-call AsyncClient construction was costing one TCP
+    setup per synthesis. Verify that two sequential calls share the
+    same cached client instance."""
+    cfg = _Cfg(mode="clone", timeout_seconds=10.0)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"WAV", headers={"content-type": "audio/wav"})
+
+    transport = httpx.MockTransport(handler)
+    with _direct_patch(cfg), patch.object(
+        httpx, "AsyncClient",
+        lambda *a, **kw: httpx.AsyncClient(transport=transport, **kw)
+    ):
+        engine = ove.OmniVoiceEngine()
+        req = TTSRequest(text="hi", emotion="neutral", language="ko")
+
+        async for _ in engine.synthesize_stream(req):
+            pass
+        snapshot = dict(ove._clients)
+        assert len(snapshot) == 1
+        first_client = next(iter(snapshot.values()))
+
+        async for _ in engine.synthesize_stream(req):
+            pass
+        assert len(ove._clients) == 1
+        assert next(iter(ove._clients.values())) is first_client
+
+
+@pytest.mark.asyncio
+async def test_aclose_clients_clears_pool():
+    cfg = _Cfg()
+    with _direct_patch(cfg):
+        client = await ove._get_client("http://x:1", read_timeout=1.0)
+        assert ove._clients
+        assert not client.is_closed
+        await ove.aclose_clients()
+        assert ove._clients == {}

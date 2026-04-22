@@ -83,6 +83,89 @@ class Settings(BaseSettings):
         description="HuggingFace cache directory; mirrored to HF_HOME at startup.",
     )
 
+    # ── Persistent residency policy (Phase 1d) ───────────────────────
+    # We are the sole GPU tenant: pre-allocate everything we'll need at
+    # startup and never release it. Runtime should observe *zero* new
+    # large allocations. See dev_docs/20260422_OmniVoice_Perf/.
+    gpu_memory_fraction: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "If > 0, cap this process at this fraction of total VRAM via "
+            "torch.cuda.set_per_process_memory_fraction(). 0 disables the cap. "
+            "Recommended: 0.7 on hosts that share the GPU with a desktop, "
+            "0.9 on dedicated hosts. GTX 1070 (8GB) → ~5.5GB at 0.7."
+        ),
+    )
+    cudnn_benchmark: bool = Field(
+        default=True,
+        description=(
+            "Enable cudnn.benchmark — algorithm selection cache for fixed "
+            "input shapes. Safe for OmniVoice because _generate_iterative "
+            "keeps shapes constant within a generation."
+        ),
+    )
+
+    # ── Warmup (Phase 1a + 1d-4) ────────────────────────────────────
+    warmup_enabled: bool = Field(
+        default=True,
+        description="Run multi-shape warmup syntheses inside lifespan.",
+    )
+    warmup_voice_profile: str = Field(
+        default="",
+        description=(
+            "Container-relative profile name (e.g. 'paimon_ko'). Empty = use "
+            "auto mode (no voice clone). Warmup falls back to auto on lookup miss."
+        ),
+    )
+    warmup_buckets_seconds: tuple[float, float, float] = Field(
+        default=(1.5, 4.0, 9.0),
+        description=(
+            "Target audio durations for short / medium / long warmup buckets. "
+            "These exercise the cuDNN algorithm cache for the bucket sizes "
+            "that real traffic will hit."
+        ),
+    )
+
+    # ── Output buffer pool (Phase 1d-3) ─────────────────────────────
+    pinned_pool_slots: int = Field(
+        default=4,
+        ge=0,
+        le=64,
+        description=(
+            "Number of pre-allocated pinned host buffers used for D2H "
+            "copies of synthesised PCM. 0 disables the pool."
+        ),
+    )
+    max_audio_seconds: float = Field(
+        default=30.0,
+        gt=0.0,
+        le=600.0,
+        description=(
+            "Upper bound on a single synthesised utterance. Drives sizing "
+            "of the pinned pool and (in PR-2) the GenerationWorkspace."
+        ),
+    )
+
+    # ── Forward-looking guards (defaults intentionally conservative) ─
+    use_compile: Literal["auto", "always", "never"] = Field(
+        default="auto",
+        description=(
+            "torch.compile policy. 'auto' enables on cap >= (7,0). On Pascal "
+            "(sm_61) this is a no-op regardless. Reserved for Phase 3."
+        ),
+    )
+    ref_cache_size: int = Field(
+        default=0,
+        ge=0,
+        le=64,
+        description=(
+            "Voice-reference embedding LRU cache size. Reserved for Phase 2b; "
+            "0 disables (current behaviour)."
+        ),
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

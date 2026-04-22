@@ -1,0 +1,7 @@
+# Smoke set — 5 short prompts mixing Korean and English.
+# Used by staging_gate.sh and CI sanity checks.
+안녕하세요. 오늘 날씨가 정말 좋네요.
+오미니보이스 합성기는 한국어와 영어 모두 자연스럽게 말합니다.
+이 문장은 큐 테스트를 위한 중간 길이 발화입니다.
+Hello, this is a quick warmup utterance for OmniVoice.
+The benchmark script measures real-time factor and time-to-first-audio.

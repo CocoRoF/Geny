@@ -67,8 +67,20 @@ class TTSRequest(BaseModel):
     sample_rate: int = Field(default=24000)
 
 
+EnginePhase = Literal["loading", "warming", "compiling", "ok", "error"]
+
+
 class HealthResponse(BaseModel):
+    """Service health.
+
+    ``status`` is preserved for backward compatibility with older clients
+    (it collapses ``warming``/``compiling`` to ``loading``). New clients
+    should consume ``phase`` directly: it distinguishes "still bringing
+    weights up" from "warming the algorithm cache" from "ready to serve".
+    """
+
     status: Literal["ok", "loading", "error"]
+    phase: EnginePhase = "loading"
     model: str
     device: str
     dtype: str

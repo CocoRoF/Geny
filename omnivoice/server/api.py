@@ -44,9 +44,21 @@ def root(settings: Annotated[Settings, Depends(get_settings)]) -> ServiceInfoRes
 
 @router.get("/health", response_model=HealthResponse)
 def health(settings: Annotated[Settings, Depends(get_settings)]) -> HealthResponse:
+    phase = engine.get_phase()
+    # ``status`` is the legacy field; collapse intermediate phases to
+    # ``loading`` so old clients that only inspect ``status`` keep
+    # working. New clients should consume ``phase`` directly.
+    if phase == "ok":
+        legacy_status: str = "ok"
+    elif phase == "error":
+        legacy_status = "error"
+    else:
+        legacy_status = "loading"
+
     if not engine.is_loaded():
         return HealthResponse(
-            status="loading",
+            status=legacy_status,  # type: ignore[arg-type]
+            phase=phase,  # type: ignore[arg-type]
             model=settings.model,
             device=settings.device,
             dtype=settings.dtype,
@@ -56,7 +68,8 @@ def health(settings: Annotated[Settings, Depends(get_settings)]) -> HealthRespon
         )
     state = engine.get_state()
     return HealthResponse(
-        status="ok",
+        status=legacy_status,  # type: ignore[arg-type]
+        phase=phase,  # type: ignore[arg-type]
         model=settings.model,
         device=settings.device,
         dtype=settings.dtype,
