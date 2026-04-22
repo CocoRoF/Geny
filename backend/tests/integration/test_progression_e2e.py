@@ -184,8 +184,12 @@ async def test_s1_under_age_gate_stays_infant_even_with_bond_satisfied() -> None
     assert persisted.progression.manifest_id == "infant_cheerful"
     # No transition mutation queued during hydrate.
     assert "enter:child_curious" not in persisted.progression.milestones
-    # ProgressionBlock still reads "infant".
-    assert "[Stage] infant" in ProgressionBlock().render(state)
+    # ProgressionBlock surfaces the storage key as the ``newcomer``
+    # adaptation register (cycle 20260422_6 PR1) and never leaks the
+    # internal ``infant`` keyword to the prompt surface.
+    rendered = ProgressionBlock().render(state)
+    assert "register: newcomer" in rendered
+    assert "infant" not in rendered
 
 
 # ── S2 — day 3 with familiarity ≥ 20 — infant→child fires ─────────────

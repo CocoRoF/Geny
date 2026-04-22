@@ -238,6 +238,20 @@ class CreateSessionRequest(BaseModel):
                     "When None, resolve_env_id(role=WORKER) picks the default worker env."
     )
 
+    # Cycle 20260422_6 PR3 — name separation
+    character_display_name: Optional[str] = Field(
+        default=None,
+        description=(
+            "In-character display name for VTuber sessions. When set, the "
+            "VTuber persona is told 'Your character name is X.' When unset, "
+            "the persona stays anonymous and (per the first-encounter "
+            "overlay) will ask the user how to be addressed. This is "
+            "intentionally separate from `session_name`, which is treated "
+            "as an internal handle and never exposed as the persona's "
+            "name. Ignored by non-VTuber roles."
+        ),
+    )
+
 
 class SessionInfo(BaseModel):
     """

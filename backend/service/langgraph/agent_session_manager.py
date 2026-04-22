@@ -70,6 +70,27 @@ logger = getLogger(__name__)
 _VTUBER_CHARACTERS_DIR = _Path(__file__).resolve().parent.parent.parent / "prompts" / "vtuber_characters"
 
 
+# Single source of truth for the VTuber's "you have a Sub-Worker" notice.
+# Layered onto VTuber sessions through ``PersonaProvider.append_context``
+# (cycle 20260422_6 PR4 — see ``_build_system_prompt``'s long comment).
+# ``append_context`` is idempotent on identical text, so re-registering
+# this string for an already-paired VTuber is a no-op.
+_VTUBER_SUB_WORKER_NOTICE = (
+    "\n\n## Sub-Worker Agent\n"
+    "You have a Worker agent bound to you by the runtime. "
+    "For complex tasks (coding, file operations, research, "
+    "multi-step execution), delegate via the "
+    "`send_direct_message_internal` tool — pass only the "
+    "`content` argument. The runtime routes the message to "
+    "your paired Sub-Worker automatically; you do NOT need "
+    "(and must not attempt to create) a target session. "
+    "The Worker's reply arrives as a `[SUB_WORKER_RESULT]` "
+    "trigger message; parse the structured fields per the "
+    "`## Triggers` section of your role prompt and summarize "
+    "the result for the user."
+)
+
+
 class AgentSessionManager(SessionManager):
     """
     AgentSession manager.
@@ -386,6 +407,7 @@ class AgentSessionManager(SessionManager):
             model=request.model,
             session_id=session_id,
             session_name=request.session_name,
+            character_display_name=request.character_display_name,
             mode=mode,
             context_files=context_files if context_files else None,
             extra_system_prompt=request.system_prompt,
@@ -396,36 +418,28 @@ class AgentSessionManager(SessionManager):
         if memory_context:
             prompt = prompt + "\n\n" + memory_context
 
-        # Append VTuber-specific context (Sub-Worker session info).
-        # Fires only when the VTuber was reconstituted with a
-        # pre-existing linked_session_id (e.g. warm restart). The
-        # initial-create path builds the Sub-Worker *after* this
-        # method and injects the block directly on the agent.
-        if role == "vtuber" and request.linked_session_id:
-            vtuber_ctx = (
-                "\n\n## Sub-Worker Agent\n"
-                "You have a Worker agent bound to you by the runtime. "
-                "For complex tasks (coding, file operations, research, "
-                "multi-step execution), delegate via the "
-                "`send_direct_message_internal` tool — pass only the "
-                "`content` argument. The runtime routes the message to "
-                "your paired Sub-Worker automatically; you do NOT need "
-                "(and must not attempt to create) a target session. "
-                "The Worker's reply arrives as a `[SUB_WORKER_RESULT]` "
-                "trigger message; summarize it for the user."
-            )
-            prompt = prompt + vtuber_ctx
-
-        # Append Sub-Worker context (paired VTuber session info)
-        if request.session_type == "sub" and request.linked_session_id:
-            sub_ctx = (
-                "\n\n## Paired VTuber Agent\n"
-                "You are the Worker bound to a VTuber persona. "
-                "Report results via `send_direct_message_internal` — pass "
-                "only the `content` argument; the runtime routes it to "
-                "your paired VTuber automatically."
-            )
-            prompt = prompt + sub_ctx
+        # Cycle 20260422_6 PR4 — single-source delegation notices.
+        #
+        # Earlier code appended `## Sub-Worker Agent` / `## Paired
+        # VTuber Agent` blocks here. Both moved out of `_build_system_prompt`:
+        #
+        #   * VTuber side (`## Sub-Worker Agent`) — owned by
+        #     `PersonaProvider.append_context`. The new-pair create
+        #     path calls it after the Sub-Worker is spawned; the
+        #     warm-restart path calls it from `create_agent_session`
+        #     after `set_static_override` (search for `_VTUBER_SUB_WORKER_NOTICE`
+        #     in this file). `append_context` is idempotent so
+        #     re-registration cannot duplicate the section.
+        #   * Sub-Worker side (`## Paired VTuber Agent` /
+        #     `## Replying to Your Paired VTuber`) — owned by
+        #     `prompts/worker.md`, gated by an explicit
+        #     "When you are a paired Sub-Worker..." opener so an
+        #     unpaired Worker reading it is told to ignore the section.
+        #
+        # The result: the invariants in
+        # `dev_docs/20260422_6/progress/pr4_strip_worker_persona.md`
+        # §4 (table of `vtuber.md` / `worker.md` / pair-block counts)
+        # hold structurally instead of by accident.
 
         logger.debug(f"  PromptBuilder: mode={mode.value}, role={role}, length={len(prompt)} chars")
 
@@ -643,6 +657,21 @@ class AgentSessionManager(SessionManager):
         # system-prompt, sub-worker ctx) then layer on top via the provider.
         self._persona_provider.set_static_override(session_id, system_prompt or None)
 
+        # Cycle 20260422_6 PR4 — warm-restart hookup for the VTuber's
+        # "## Sub-Worker Agent" notice. New-pair create handles this
+        # later (after the Sub-Worker is actually spawned). Warm
+        # restart enters here with ``request.linked_session_id``
+        # already set; without this call the persona provider would
+        # never learn about the existing pair after a restart.
+        # ``append_context`` is idempotent on identical text.
+        if (
+            request.role == SessionRole.VTUBER
+            and request.linked_session_id
+        ):
+            self._persona_provider.append_context(
+                session_id, _VTUBER_SUB_WORKER_NOTICE
+            )
+
         # Create AgentSession
         agent = await AgentSession.create(
             working_dir=request.working_dir,
@@ -842,27 +871,17 @@ class AgentSessionManager(SessionManager):
                 # target itself, so we do not expose the Sub-Worker's
                 # session_id to the LLM (it doesn't need to copy a
                 # UUID and we don't want it to treat the header as a
-                # name to recreate).
-                vtuber_ctx = (
-                    "\n\n## Sub-Worker Agent\n"
-                    "You have a Worker agent bound to you by the "
-                    "runtime. For complex tasks (coding, file "
-                    "operations, research, multi-step execution), "
-                    "delegate via the `send_direct_message_internal` "
-                    "tool — pass only the `content` argument. The "
-                    "runtime routes the message to your paired "
-                    "Sub-Worker automatically; you do NOT need (and "
-                    "must not attempt to create) a target session. "
-                    "The Worker's reply arrives as a "
-                    "`[SUB_WORKER_RESULT]` trigger message; "
-                    "summarize it for the user."
-                )
+                # name to recreate). The notice text is the
+                # module-level ``_VTUBER_SUB_WORKER_NOTICE`` constant
+                # (single source of truth — cycle 20260422_6 PR4).
                 # Stage the sub-worker delegation block through the
                 # PersonaProvider instead of mutating ``agent._system_prompt``
                 # directly. ``append_context`` is idempotent on identical
                 # text, so re-registration of an already-paired VTuber is
                 # safe.
-                self._persona_provider.append_context(session_id, vtuber_ctx)
+                self._persona_provider.append_context(
+                    session_id, _VTUBER_SUB_WORKER_NOTICE
+                )
 
                 # SESSION_PAIRED — fires once per pair, after both sides'
                 # SESSION_CREATED events have already fired. session_id

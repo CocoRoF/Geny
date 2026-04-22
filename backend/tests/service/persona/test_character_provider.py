@@ -322,3 +322,254 @@ def test_live_blocks_and_event_seed_coexist(chars_dir: Path) -> None:
     assert isinstance(r.persona_blocks[0], PersonaBlock)
     assert r.persona_blocks[1] is live
     assert isinstance(r.persona_blocks[2], EventSeedBlock)
+
+
+# ── First-encounter overlay (cycle 20260422_6 PR2) ─────────────────
+
+
+def _make_provider_with_overlay(
+    chars_dir: Path, overlay_path: Path,
+) -> CharacterPersonaProvider:
+    return CharacterPersonaProvider(
+        characters_dir=chars_dir,
+        default_vtuber_prompt=_VTUBER_DEFAULT,
+        default_worker_prompt=_WORKER_DEFAULT,
+        adaptive_prompt=_ADAPTIVE,
+        first_encounter_overlay_path=overlay_path,
+    )
+
+
+def _state_with_familiarity(familiarity: float) -> PipelineState:
+    state = PipelineState()
+    creature = CreatureState(character_id="c1", owner_user_id="u1")
+    creature.bond.familiarity = familiarity
+    state.shared[CREATURE_STATE_KEY] = creature
+    return state
+
+
+def test_overlay_appended_for_vtuber_at_low_familiarity(
+    chars_dir: Path, tmp_path: Path,
+) -> None:
+    overlay = tmp_path / "overlay.md"
+    overlay.write_text("FIRST-ENCOUNTER-BODY", encoding="utf-8")
+    p = _make_provider_with_overlay(chars_dir, overlay)
+
+    r = p.resolve(
+        _state_with_familiarity(0.0),
+        session_meta={"session_id": "s", "is_vtuber": True},
+    )
+    text = _persona_text(r)
+    assert "FIRST-ENCOUNTER-BODY" in text
+    assert r.cache_key.endswith("+FE")
+
+
+def test_overlay_omitted_above_threshold(chars_dir: Path, tmp_path: Path) -> None:
+    overlay = tmp_path / "overlay.md"
+    overlay.write_text("FE", encoding="utf-8")
+    p = _make_provider_with_overlay(chars_dir, overlay)
+
+    r = p.resolve(
+        _state_with_familiarity(1.0),
+        session_meta={"session_id": "s", "is_vtuber": True},
+    )
+    assert "FE" not in _persona_text(r)
+    assert "+FE" not in r.cache_key
+
+
+def test_overlay_threshold_is_inclusive_at_half(
+    chars_dir: Path, tmp_path: Path,
+) -> None:
+    """``familiarity == 0.5`` is the upper bound of the first-encounter
+    band (consistent with AcclimationBlock); overlay must still fire."""
+    overlay = tmp_path / "overlay.md"
+    overlay.write_text("FE", encoding="utf-8")
+    p = _make_provider_with_overlay(chars_dir, overlay)
+
+    r = p.resolve(
+        _state_with_familiarity(0.5),
+        session_meta={"session_id": "s", "is_vtuber": True},
+    )
+    assert "FE" in _persona_text(r)
+    assert r.cache_key.endswith("+FE")
+
+
+def test_overlay_omitted_for_worker_even_at_low_familiarity(
+    chars_dir: Path, tmp_path: Path,
+) -> None:
+    """Worker sessions never receive the overlay — consistent with
+    Principle B (Worker has no persona). Even with a hydrated bond,
+    is_vtuber=False short-circuits the overlay."""
+    overlay = tmp_path / "overlay.md"
+    overlay.write_text("FE", encoding="utf-8")
+    p = _make_provider_with_overlay(chars_dir, overlay)
+
+    r = p.resolve(
+        _state_with_familiarity(0.0),
+        session_meta={"session_id": "s", "is_vtuber": False},
+    )
+    assert "FE" not in _persona_text(r)
+    assert "+FE" not in r.cache_key
+
+
+def test_overlay_omitted_when_no_creature_state(
+    chars_dir: Path, tmp_path: Path,
+) -> None:
+    """Classic-mode VTuber (no creature_state in shared) gets no overlay
+    — there is no familiarity signal to act on."""
+    overlay = tmp_path / "overlay.md"
+    overlay.write_text("FE", encoding="utf-8")
+    p = _make_provider_with_overlay(chars_dir, overlay)
+
+    r = p.resolve(
+        PipelineState(),
+        session_meta={"session_id": "s", "is_vtuber": True},
+    )
+    assert "FE" not in _persona_text(r)
+    assert "+FE" not in r.cache_key
+
+
+def test_overlay_cache_key_changes_when_threshold_crossed(
+    chars_dir: Path, tmp_path: Path,
+) -> None:
+    """cache_key must invalidate when familiarity crosses 0.5 → cached
+    persona text doesn't get reused after first-encounter ends."""
+    overlay = tmp_path / "overlay.md"
+    overlay.write_text("FE", encoding="utf-8")
+    p = _make_provider_with_overlay(chars_dir, overlay)
+
+    low = p.resolve(
+        _state_with_familiarity(0.0),
+        session_meta={"session_id": "s", "is_vtuber": True},
+    )
+    high = p.resolve(
+        _state_with_familiarity(1.0),
+        session_meta={"session_id": "s", "is_vtuber": True},
+    )
+    assert low.cache_key != high.cache_key
+
+
+def test_missing_overlay_path_disables_feature_silently(
+    chars_dir: Path, tmp_path: Path,
+) -> None:
+    """A misconfigured overlay path must not break session construction
+    or resolve — the feature simply turns off."""
+    p = _make_provider_with_overlay(chars_dir, tmp_path / "does-not-exist.md")
+    r = p.resolve(
+        _state_with_familiarity(0.0),
+        session_meta={"session_id": "s", "is_vtuber": True},
+    )
+    assert "+FE" not in r.cache_key
+
+
+def test_overlay_auto_loaded_from_default_filename(
+    chars_dir: Path,
+) -> None:
+    """When no explicit overlay path is given, the provider auto-loads
+    ``<characters_dir>/_shared_first_encounter.md`` if present."""
+    (chars_dir / "_shared_first_encounter.md").write_text(
+        "AUTO-OVERLAY", encoding="utf-8",
+    )
+    p = CharacterPersonaProvider(
+        characters_dir=chars_dir,
+        default_vtuber_prompt=_VTUBER_DEFAULT,
+        default_worker_prompt=_WORKER_DEFAULT,
+        adaptive_prompt=_ADAPTIVE,
+    )
+    r = p.resolve(
+        _state_with_familiarity(0.0),
+        session_meta={"session_id": "s", "is_vtuber": True},
+    )
+    assert "AUTO-OVERLAY" in _persona_text(r)
+
+
+# ── PR4: Worker strip — Principle B (worker is a tool, not persona) ─
+
+
+def test_resolve_worker_omits_live_blocks(chars_dir: Path) -> None:
+    """is_vtuber=False → live_blocks must NOT be appended.
+
+    The base PersonaBlock (the assembled worker prompt + adaptive tail)
+    survives — this is what carries identity, geny_platform, worker.md
+    behavior, etc. Only the persona-layer signals are stripped.
+    """
+    b1 = _StubBlock("mood", "[Mood] would-leak")
+    b2 = _StubBlock("vitals", "[Vitals] would-leak")
+    p = _make_provider_with_blocks(chars_dir, live_blocks=[b1, b2])
+    r = p.resolve(
+        PipelineState(),
+        session_meta={"session_id": "s", "is_vtuber": False},
+    )
+    # Only the persona block — no live blocks dragged in.
+    assert len(r.persona_blocks) == 1
+    assert isinstance(r.persona_blocks[0], PersonaBlock)
+    text = _persona_text(r)
+    # Worker base + adaptive tail must still be there.
+    assert _WORKER_DEFAULT in text
+    assert _ADAPTIVE in text
+    # Live block content must not have been folded into the persona text.
+    assert "would-leak" not in text
+
+
+def test_resolve_worker_omits_event_seed(chars_dir: Path) -> None:
+    """A firing event seed must not produce an EventSeedBlock for workers."""
+    seed = EventSeed(
+        id="ev",
+        trigger=lambda c, m: True,
+        hint_text="should-not-appear",
+        weight=1.0,
+    )
+    p = _make_provider_with_blocks(
+        chars_dir, event_seed_pool=EventSeedPool([seed]),
+    )
+    state = PipelineState()
+    state.shared[CREATURE_STATE_KEY] = _fresh_creature()
+    r = p.resolve(state, session_meta={"session_id": "s", "is_vtuber": False})
+    assert len(r.persona_blocks) == 1
+    assert "+E:" not in r.cache_key
+
+
+def test_resolve_worker_cache_key_carries_w_marker(provider) -> None:
+    """Worker resolutions must be distinguishable in cache from a (
+    hypothetical) VTuber resolution sharing the same session_id."""
+    r_w = provider.resolve(
+        PipelineState(),
+        session_meta={"session_id": "s", "is_vtuber": False},
+    )
+    r_v = provider.resolve(
+        PipelineState(),
+        session_meta={"session_id": "s", "is_vtuber": True},
+    )
+    assert r_w.cache_key.endswith("+W")
+    assert "+W" not in r_v.cache_key
+    assert r_w.cache_key != r_v.cache_key
+
+
+def test_resolve_worker_skips_first_encounter_overlay(
+    chars_dir: Path, tmp_path: Path,
+) -> None:
+    """Even with a hydrated low-familiarity bond, workers receive no overlay.
+    (Already covered indirectly by another test; explicit assertion here for
+    PR4 completeness.)"""
+    overlay = tmp_path / "overlay.md"
+    overlay.write_text("FE-WORKER-LEAK", encoding="utf-8")
+    p = _make_provider_with_overlay(chars_dir, overlay)
+    r = p.resolve(
+        _state_with_familiarity(0.0),
+        session_meta={"session_id": "s", "is_vtuber": False},
+    )
+    text = _persona_text(r)
+    assert "FE-WORKER-LEAK" not in text
+    assert "+FE" not in r.cache_key
+
+
+def test_resolve_vtuber_path_keeps_live_blocks(chars_dir: Path) -> None:
+    """Regression guard: PR4's worker-strip must not also strip VTuber
+    live_blocks. The VTuber path stays intact."""
+    b = _StubBlock("mood", "[Mood] kept")
+    p = _make_provider_with_blocks(chars_dir, live_blocks=[b])
+    r = p.resolve(
+        PipelineState(),
+        session_meta={"session_id": "s", "is_vtuber": True},
+    )
+    assert len(r.persona_blocks) == 2
+    assert r.persona_blocks[1] is b

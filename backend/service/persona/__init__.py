@@ -11,6 +11,7 @@ Public API:
 """
 
 from service.persona.blocks import (
+    AcclimationBlock,
     MoodBlock,
     ProgressionBlock,
     RelationshipBlock,
@@ -29,4 +30,5 @@ __all__ = [
     "RelationshipBlock",
     "VitalsBlock",
     "ProgressionBlock",
+    "AcclimationBlock",
 ]

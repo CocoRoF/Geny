@@ -55,6 +55,7 @@ from service.game.events import (
     EventSeedPool,
 )
 from service.persona.blocks import (
+    AcclimationBlock,
     MoodBlock,
     ProgressionBlock,
     RelationshipBlock,
@@ -108,9 +109,15 @@ class TamagotchiPlugin(PluginBase):
     def contribute_prompt_blocks(
         self, session_ctx: SessionContext,
     ) -> Sequence[PromptBlock]:
+        # ProgressionBlock (world-adaptation) sits before AcclimationBlock
+        # (relationship-adaptation) so the narrower / more situational
+        # block lands later in the rendered prompt — LLMs follow guidance
+        # they read last more strongly, and Acclimation is the override
+        # surface (cycle 20260422_6 PR2).
         return (
             MoodBlock(),
             VitalsBlock(),
             RelationshipBlock(),
             ProgressionBlock(),
+            AcclimationBlock(),
         )

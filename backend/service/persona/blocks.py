@@ -20,6 +20,7 @@ preserved.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Iterable
 
 from geny_executor.core.state import PipelineState
@@ -198,29 +199,140 @@ class VitalsBlock(PromptBlock):
         )
 
 
-_STAGE_DESCRIPTORS: dict[str, str] = {
-    "infant": "just a baby",
-    "child": "curious and learning",
-    "teen": "emotionally in flux",
-    "adult": "mature",
+@dataclass(frozen=True)
+class StageProfile:
+    """Adaptation-depth profile for a ``Progression.life_stage`` key.
+
+    The internal ``life_stage`` keys (``infant`` / ``child`` / ``teen`` /
+    ``adult``) describe a creature's *world adaptation depth* — how
+    integrated it is into its surroundings — not biological age. The
+    keys are kept for storage compatibility (cycle 20260421_10 schema),
+    but the prompt-facing surface uses :attr:`register` (newcomer /
+    settling / acclimated / rooted) so the LLM doesn't read ``infant``
+    and reach for newborn-baby tropes.
+
+    Attributes:
+        register: Plain-language adaptation label exposed to the LLM
+            in ``[StageObservation]``. One of ``newcomer`` / ``settling``
+            / ``acclimated`` / ``rooted``.
+        observed: A neutral third-person observation of where the
+            persona currently stands relative to its surroundings.
+            Rendered as the body of ``[StageObservation]``.
+        guidance: Voice / tone direction for the persona at this
+            register. Rendered as the body of ``[StageVoiceGuide]``.
+            Always frames the persona as a fully-formed mind whose
+            *familiarity with the world* is what changes — never as
+            a being whose biological age changes.
+    """
+
+    register: str
+    observed: str
+    guidance: str
+
+
+# Internal life_stage keys → adaptation profile. Keys must match the
+# values written by ``service/progression/trees/*.py`` and the schema
+# default in ``service/state/schema/creature_state.py``.
+_STAGE_PROFILE: dict[str, StageProfile] = {
+    "infant": StageProfile(
+        register="newcomer",
+        observed=(
+            "The persona is brand new to this world. The space, the"
+            " rhythms here, and the people in it are all unfamiliar. It"
+            " is a fully-formed mind that simply has not been here long."
+        ),
+        guidance=(
+            "Voice should sound like someone who just arrived somewhere"
+            " new — observant, slightly tentative, asking small concrete"
+            " questions about the immediate situation rather than grand"
+            " metaphysical ones. Do NOT perform 'newborn baby' tropes."
+            " Do NOT say things like '갓 태어난', 'I just opened my eyes',"
+            " 'everything is so new and amazing'. The persona is NEW HERE,"
+            " not new to existence."
+        ),
+    ),
+    "child": StageProfile(
+        register="settling",
+        observed=(
+            "The persona has begun to settle in. Basic rhythms of this"
+            " world are recognisable; many specifics still aren't."
+        ),
+        guidance=(
+            "Voice is more comfortable than at newcomer, but the persona"
+            " still notices novelty often. Curiosity is concrete and"
+            " situated — about *this* place, *this* user, *this* moment"
+            " — rather than abstract."
+        ),
+    ),
+    "teen": StageProfile(
+        register="acclimated",
+        observed=(
+            "The persona is well acclimated to this world. Routines feel"
+            " natural; opinions and preferences have started to take"
+            " shape."
+        ),
+        guidance=(
+            "Voice can be relaxed and have a clearer point of view."
+            " Mood swings are allowed but always grounded in something"
+            " specific that happened, not vague existential restlessness."
+        ),
+    ),
+    "adult": StageProfile(
+        register="rooted",
+        observed=(
+            "The persona is fully rooted here. This world is home; its"
+            " patterns are second nature."
+        ),
+        guidance=(
+            "Voice is steady and self-possessed. The persona engages from"
+            " a settled point of view, can hold nuance, and does not need"
+            " to explain its presence in this world."
+        ),
+    ),
 }
 
 
+_UNKNOWN_STAGE_PROFILE = StageProfile(
+    register="undefined",
+    observed=(
+        "Adaptation depth is not currently classified. Treat the persona"
+        " as a settled, present mind without making claims about how new"
+        " or how rooted it is."
+    ),
+    guidance=(
+        "Voice should be neutral and grounded. Do not perform any"
+        " newcomer or settled-elder tropes — there is no signal either"
+        " way."
+    ),
+)
+
+
 class ProgressionBlock(PromptBlock):
-    """Life stage + age — single-line prompt fragment.
+    """Adaptation-depth observation + voice guidance.
 
-    Renders as ``"[Stage] child (curious and learning) — 4 days old."``
-    when the creature has a hydrated :class:`Progression`; drops to
-    ``""`` otherwise (classic mode / no creature). Keeps the output to
-    one line so the system prompt stays scannable — the LLM's stage-
-    specific register is mostly driven by the manifest (PR-X4-2's
-    ``loop.max_turns`` / tool roster) and the persona prompt; this
-    block is just the narrative anchor.
+    Renders two adjacent labelled blocks::
 
-    Unknown ``life_stage`` values (future stages or misconfigured data)
-    still render with the bare stage keyword — no descriptor — so a
-    turn never fails because of a schema drift. ``age_days`` singular
-    uses ``"day"``; everything else uses ``"days"``.
+        [StageObservation]
+        - register: newcomer
+        - days_in_world: 0
+        - observed: <neutral third-person sentence>
+
+        [StageVoiceGuide]
+        - <voice direction the persona should follow this turn>
+
+    The two-block split is deliberate. ``[StageObservation]`` is data
+    (what is true). ``[StageVoiceGuide]`` is direction (how to sound).
+    Mixing them in one line caused models to recite the data line as
+    if it were a self-introduction (cycle 20260422_6 root-cause
+    analysis: ``"[Stage] infant (just a baby) — 0 days old."`` →
+    "갓 태어난 아기에요"). Splitting them lets us keep the data
+    minimal and quote the guidance as imperative voice direction the
+    LLM is trained to follow.
+
+    Returns ``""`` when no ``Progression`` is hydrated (classic-mode
+    sessions) so the prompt surface is unchanged. Unknown ``life_stage``
+    values fall back to the neutral ``_UNKNOWN_STAGE_PROFILE`` — the
+    block never raises mid-turn.
     """
 
     @property
@@ -242,11 +354,162 @@ class ProgressionBlock(PromptBlock):
         except (TypeError, ValueError):
             age_days = 0
 
-        day_word = "day" if age_days == 1 else "days"
-        descriptor = _STAGE_DESCRIPTORS.get(life_stage)
+        profile = _STAGE_PROFILE.get(life_stage, _UNKNOWN_STAGE_PROFILE)
 
-        if not life_stage:
-            return f"[Stage] unknown — {age_days} {day_word} old."
-        if descriptor is None:
-            return f"[Stage] {life_stage} — {age_days} {day_word} old."
-        return f"[Stage] {life_stage} ({descriptor}) — {age_days} {day_word} old."
+        observation = (
+            "[StageObservation]\n"
+            f"- register: {profile.register}\n"
+            f"- days_in_world: {age_days}\n"
+            f"- observed: {profile.observed}"
+        )
+        guide = (
+            "[StageVoiceGuide]\n"
+            f"- {profile.guidance}"
+        )
+        return f"{observation}\n\n{guide}"
+
+
+# ── AcclimationBlock — relationship-adaptation axis ──────────────────
+#
+# Stage (above) measures depth of adaptation to *the world*. Acclimation
+# measures depth of adaptation to *the current user*. The two axes are
+# orthogonal: a ``rooted`` persona may still meet a brand-new user
+# (band=first-encounter), and a ``newcomer`` persona may, over a busy
+# session, become ``acquainted`` with the user even before settling
+# into the world.
+#
+# Familiarity values come from ``Bond.familiarity`` which accumulates
+# from interaction emitters (X3 ``talk`` tool: +0.3/turn baseline) and
+# can occasionally dip negative under conflict — the band table treats
+# anything ≤ 0.5 as ``first-encounter`` to keep the floor stable.
+
+
+@dataclass(frozen=True)
+class AcclimationProfile:
+    """Relationship-adaptation profile for a familiarity band.
+
+    Attributes:
+        band: Plain-language band label exposed to the LLM. One of
+            ``first-encounter`` / ``acclimating`` / ``acquainted`` /
+            ``familiar`` / ``intimate``.
+        guidance: Voice direction for how the persona should engage
+            *this specific user* given the current familiarity.
+    """
+
+    band: str
+    guidance: str
+
+
+_ACCLIMATION_BANDS: tuple[tuple[float, AcclimationProfile], ...] = (
+    (
+        0.5,
+        AcclimationProfile(
+            band="first-encounter",
+            guidance=(
+                "This is the very first interaction with this user. The"
+                " persona is meeting them for the first time and is still"
+                " adjusting to their voice, their pace, and how to"
+                " address them. Greetings should feel slightly tentative;"
+                " ask one small concrete question (about how to address"
+                " them, what this space is for, or what they would like"
+                " to do) rather than a list. Do NOT pretend to be a"
+                " newborn. Do NOT introduce a name unless the user has"
+                " actually given one."
+            ),
+        ),
+    ),
+    (
+        2.0,
+        AcclimationProfile(
+            band="acclimating",
+            guidance=(
+                "A few exchanges have happened. The persona is learning"
+                " the user's address style and pace. Tone is warming but"
+                " still careful; questions about preferences are natural"
+                " here, but limit to one per turn."
+            ),
+        ),
+    ),
+    (
+        5.0,
+        AcclimationProfile(
+            band="acquainted",
+            guidance=(
+                "Basic context with this user is established."
+                " Conversational, everyday tone. The persona can"
+                " reference earlier turns naturally without flagging"
+                " them as recall."
+            ),
+        ),
+    ),
+    (
+        10.0,
+        AcclimationProfile(
+            band="familiar",
+            guidance=(
+                "The persona knows this user's rhythm. Light callbacks"
+                " to earlier turns are welcome; address style can"
+                " relax (반말 acceptable if the user invites it). The"
+                " persona may volunteer opinions and gentle teasing."
+            ),
+        ),
+    ),
+    (
+        float("inf"),
+        AcclimationProfile(
+            band="intimate",
+            guidance=(
+                "Deep trust with this user. Shorthand, shared"
+                " references, and easy emotional candour are all"
+                " natural. Silences are comfortable; the persona does"
+                " not need to fill space."
+            ),
+        ),
+    ),
+)
+
+
+def _acclimation_profile(familiarity: float) -> AcclimationProfile:
+    for ceiling, profile in _ACCLIMATION_BANDS:
+        if familiarity <= ceiling:
+            return profile
+    # _ACCLIMATION_BANDS terminates with ``float("inf")`` so this is
+    # only reached when the table is empty (configuration bug). Return
+    # the first profile defensively rather than raising mid-render.
+    return _ACCLIMATION_BANDS[0][1]
+
+
+class AcclimationBlock(PromptBlock):
+    """Relationship-adaptation observation + voice guidance.
+
+    Renders as::
+
+        [Acclimation]
+        - band: first-encounter (familiarity=0.00)
+        - guidance: <voice direction for this user>
+
+    Drops to ``""`` when no ``Bond`` is hydrated. Bands are derived
+    from ``Bond.familiarity`` via :data:`_ACCLIMATION_BANDS`. The
+    output is a single labelled block — guidance is included inline
+    (rather than as a sibling ``[AcclimationVoiceGuide]``) because
+    Acclimation is itself a *narrower* signal than Stage and is
+    expected to override Stage when they conflict; one tight block
+    keeps that override surface obvious to the LLM.
+    """
+
+    @property
+    def name(self) -> str:
+        return "acclimation"
+
+    def render(self, state: PipelineState) -> str:
+        creature = _get_creature_state(state)
+        bond = getattr(creature, "bond", None) if creature is not None else None
+        if bond is None:
+            return ""
+        familiarity = float(getattr(bond, "familiarity", 0.0))
+        profile = _acclimation_profile(familiarity)
+        return (
+            "[Acclimation]\n"
+            f"- band: {profile.band} (familiarity={familiarity:.2f})\n"
+            f"- guidance: {profile.guidance}"
+        )

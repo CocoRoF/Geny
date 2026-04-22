@@ -48,12 +48,42 @@ class SectionLibrary:
         role: str = "worker",
         agent_id: Optional[str] = None,
         session_name: Optional[str] = None,
+        character_display_name: Optional[str] = None,
     ) -> PromptSection:
-        """Agent identity section (concise one-liner)."""
-        identity_line = SectionLibrary._ROLE_IDENTITY.get(role, f"You are a Geny agent (role: {role}).")
+        """Agent identity section (concise one-liner).
+
+        Naming policy (cycle 20260422_6, principle E ─ "name is data"):
+
+        * ``character_display_name`` — authoritative in-character name.
+          When set, presented as ``Your character name is "X".`` so the
+          model adopts it as its own name.
+        * ``session_name`` — operational handle (user-typed slug,
+          e.g. ``"ertsdfg"``). When ``character_display_name`` is unset,
+          the handle is *not* exposed as a name. It is exposed as
+          ``Session handle: "X"`` with an explicit disclaimer so the
+          model does not adopt it. When *both* are set, the handle line
+          is omitted so only the in-character name remains.
+        * When neither is set, no name lines are emitted; the persona is
+          anonymous until the user gives it a name (handled by the PR2
+          first-encounter overlay, which instructs the persona to ask).
+
+        This separation structurally blocks the failure mode where a
+        random session slug like ``"ertsdfg"`` was being recited by the
+        VTuber as its own name.
+        """
+        identity_line = SectionLibrary._ROLE_IDENTITY.get(
+            role, f"You are a Geny agent (role: {role})."
+        )
         parts = [identity_line]
-        if session_name:
-            parts.append(f"Your name is \"{session_name}\".")
+
+        if character_display_name:
+            parts.append(f'Your character name is "{character_display_name}".')
+        elif session_name:
+            parts.append(
+                f'Session handle: "{session_name}" '
+                "(internal identifier; this is NOT your character name)."
+            )
+
         if agent_id:
             parts.append(f"Agent ID: {agent_id}")
 
@@ -651,6 +681,7 @@ def build_agent_prompt(
     model: Optional[str] = None,
     session_id: Optional[str] = None,
     session_name: Optional[str] = None,
+    character_display_name: Optional[str] = None,
     mode: PromptMode = PromptMode.FULL,
     context_files: Optional[Dict[str, str]] = None,
     extra_system_prompt: Optional[str] = None,
@@ -691,7 +722,15 @@ def build_agent_prompt(
         working_dir: Working directory path.
         model: Model name.
         session_id: Session identifier.
-        session_name: Session display name — the agent recognizes it as its own name.
+        session_name: Operational session slug (e.g. user-typed ID). Exposed
+            in the system prompt only as a labelled handle, NOT as the
+            persona's name. See ``SectionLibrary.identity`` docstring for
+            the full naming policy (cycle 20260422_6, principle E).
+        character_display_name: Authoritative in-character display name.
+            When set, the persona is told to use this as its own name.
+            When unset, the persona is anonymous and (per first-encounter
+            overlay) will ask the user how to be addressed. Ignored by
+            non-VTuber roles.
         mode: Prompt detail level.
         context_files: Bootstrap file dict ``{filename: content}``.
         extra_system_prompt: Additional specialization prompt (from template or manual input).
@@ -705,7 +744,15 @@ def build_agent_prompt(
     builder = PromptBuilder(mode=mode)
 
     # §1 Identity (1 line)
-    builder.add_section(SectionLibrary.identity(agent_name, role, agent_id, session_name))
+    builder.add_section(
+        SectionLibrary.identity(
+            agent_name,
+            role,
+            agent_id,
+            session_name,
+            character_display_name=character_display_name,
+        )
+    )
 
     # §1.5 User context (who the user is)
     user_section = SectionLibrary.user_context()
@@ -715,13 +762,18 @@ def build_agent_prompt(
     # §1.7 Geny platform awareness
     builder.add_section(SectionLibrary.geny_platform(session_id=session_id))
 
-    # §2 Role behavior — always from prompts/{role}.md (worker = none)
-    if role != "worker":
-        builder.add_section(SectionLibrary.role_protocol(role))
-        loader = PromptTemplateLoader()
-        md_template = loader.load_role_template(role)
-        if md_template:
-            builder.override_section("role_protocol", md_template)
+    # §2 Role behavior — always from prompts/{role}.md.
+    # Cycle 20260422_6 PR4 dropped the prior "worker = no role_protocol"
+    # special-case: prompts/worker.md now carries the Worker output
+    # discipline (and the conditional "## When You Are a Paired
+    # Sub-Worker" section that replaces the old hard-coded ## Paired
+    # VTuber Agent block in agent_session_manager). VTuber's role file
+    # carries the persona contract.
+    builder.add_section(SectionLibrary.role_protocol(role))
+    loader = PromptTemplateLoader()
+    md_template = loader.load_role_template(role)
+    if md_template:
+        builder.override_section("role_protocol", md_template)
 
     # §3 Workspace
     if working_dir:

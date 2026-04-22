@@ -23,6 +23,7 @@ from geny_executor.stages.s03_system.artifact.default.builders import (
 )
 
 from service.persona import (
+    AcclimationBlock,
     MoodBlock,
     ProgressionBlock,
     RelationshipBlock,
@@ -68,13 +69,28 @@ def _creature(
 
 def test_all_blocks_render_empty_when_no_creature_state() -> None:
     state = PipelineState()
-    for block in (MoodBlock(), RelationshipBlock(), VitalsBlock(), ProgressionBlock()):
+    for block in (
+        MoodBlock(),
+        RelationshipBlock(),
+        VitalsBlock(),
+        ProgressionBlock(),
+        AcclimationBlock(),
+    ):
         assert block.render(state) == ""
 
 
 def test_names_are_stable_and_unique() -> None:
-    names = [b.name for b in (MoodBlock(), RelationshipBlock(), VitalsBlock(), ProgressionBlock())]
-    assert names == ["mood", "relationship", "vitals", "progression"]
+    names = [
+        b.name
+        for b in (
+            MoodBlock(),
+            RelationshipBlock(),
+            VitalsBlock(),
+            ProgressionBlock(),
+            AcclimationBlock(),
+        )
+    ]
+    assert names == ["mood", "relationship", "vitals", "progression", "acclimation"]
     assert len(set(names)) == len(names)
 
 
@@ -86,6 +102,7 @@ def test_empty_blocks_are_dropped_from_composed_prompt() -> None:
             RelationshipBlock(),
             VitalsBlock(),
             ProgressionBlock(),
+            AcclimationBlock(),
             PersonaBlock("persona-B"),
         ]
     )
@@ -217,89 +234,92 @@ def test_vitals_block_empty_when_creature_has_no_vitals_attr() -> None:
 # ── ProgressionBlock — live ────────────────────────────────────────
 
 
-def test_progression_block_renders_infant_default_creature() -> None:
-    """Default creature is infant at 0 days — the selector starts here
-    before any transition fires (PR-X4-1 default tree)."""
+def test_progression_block_renders_newcomer_register_for_default_creature() -> None:
+    """Default creature has ``life_stage="infant"`` (storage key) which
+    must surface to the LLM as ``register: newcomer`` — NEVER as
+    ``infant`` — so the model doesn't recite newborn-baby tropes
+    (cycle 20260422_6 root-cause)."""
     state = _state_with_creature(_creature())
     out = ProgressionBlock().render(state)
-    assert out == "[Stage] infant (just a baby) — 0 days old."
+
+    assert "[StageObservation]" in out
+    assert "[StageVoiceGuide]" in out
+    assert "register: newcomer" in out
+    assert "days_in_world: 0" in out
+    # The internal storage key must NOT leak to the prompt surface.
+    assert "infant" not in out
+    # The voice guide must explicitly forbid newborn-baby tropes.
+    assert "NEW HERE" in out
+    assert "newborn" in out.lower()
 
 
-def test_progression_block_pluralises_day_correctly() -> None:
-    """``age_days == 1`` uses the singular 'day'; everything else uses
-    'days'. Bad English in prompts nudges LLMs toward mimicking the
-    same mistake in their output."""
-    one_day = _creature(
-        progression=Progression(life_stage="infant", age_days=1)
-    )
-    zero_days = _creature(
-        progression=Progression(life_stage="infant", age_days=0)
-    )
-    many_days = _creature(
-        progression=Progression(life_stage="child", age_days=4)
-    )
-
-    assert "1 day old" in ProgressionBlock().render(_state_with_creature(one_day))
-    assert "0 days old" in ProgressionBlock().render(_state_with_creature(zero_days))
-    assert "4 days old" in ProgressionBlock().render(_state_with_creature(many_days))
-
-
-def test_progression_block_renders_each_documented_stage() -> None:
-    """All four plan/04 §7.3 stages have a descriptor. The descriptor
-    is what differentiates turns once the manifest (PR-X4-2) has
-    picked its knobs — block is the narrative counterpart."""
-    cases = [
-        ("infant", 2, "just a baby"),
-        ("child", 5, "curious and learning"),
-        ("teen", 18, "emotionally in flux"),
-        ("adult", 60, "mature"),
-    ]
-    for stage, age, descriptor in cases:
-        creature = _creature(
-            progression=Progression(life_stage=stage, age_days=age)
-        )
+def test_progression_block_days_in_world_reflects_age_days() -> None:
+    """``days_in_world`` is a neutral counter — not a biological age.
+    The render passes the integer through but never frames it as
+    'X days old' (which a model can map onto biological age)."""
+    cases = [(0, "days_in_world: 0"), (1, "days_in_world: 1"), (4, "days_in_world: 4")]
+    for age, expected in cases:
+        creature = _creature(progression=Progression(life_stage="infant", age_days=age))
         out = ProgressionBlock().render(_state_with_creature(creature))
-        assert out == f"[Stage] {stage} ({descriptor}) — {age} days old.", (
-            f"{stage}: got {out!r}"
-        )
+        assert expected in out
+        # Never 'X day(s) old' — that phrasing implies biological age.
+        assert " old." not in out
+        assert " days old" not in out
 
 
-def test_progression_block_unknown_stage_falls_back_to_bare_keyword() -> None:
-    """Future stages (e.g. ``"elder"``) or drift-corrupted values must
-    not crash render — the block should degrade to the bare keyword
-    without a descriptor. Same "never raises in render" stance the
-    selector itself takes."""
-    creature = _creature(
-        progression=Progression(life_stage="elder", age_days=120)
-    )
+def test_progression_block_each_stage_maps_to_adaptation_register() -> None:
+    """All four storage stages must surface as adaptation registers, not
+    as biological labels. The mapping is the contract the persona
+    files (``vtuber.md``, ``vtuber_characters/*.md``) rely on."""
+    cases = [
+        ("infant", "newcomer"),
+        ("child", "settling"),
+        ("teen", "acclimated"),
+        ("adult", "rooted"),
+    ]
+    for stage, expected_register in cases:
+        creature = _creature(progression=Progression(life_stage=stage, age_days=2))
+        out = ProgressionBlock().render(_state_with_creature(creature))
+        assert f"register: {expected_register}" in out, (stage, out)
+        # Internal key never leaks.
+        assert stage not in out, (stage, out)
+
+
+def test_progression_block_unknown_stage_falls_back_to_neutral_profile() -> None:
+    """Future stages (``"elder"``) or drift-corrupted values must not
+    crash render and must NOT leak the unknown key. They fall back to
+    the neutral ``undefined`` profile that makes no register claim."""
+    creature = _creature(progression=Progression(life_stage="elder", age_days=120))
     out = ProgressionBlock().render(_state_with_creature(creature))
-    assert out == "[Stage] elder — 120 days old."
-    # Descriptor parens explicitly absent — don't leak an empty " ()".
-    assert "()" not in out
+    assert "register: undefined" in out
+    assert "days_in_world: 120" in out
+    # Internal key must not appear as a register or in the observed line.
+    assert "register: elder" not in out
+    assert "life_stage: elder" not in out
+    assert "[StageVoiceGuide]" in out
 
 
-def test_progression_block_blank_life_stage_reports_unknown() -> None:
-    """Creature hydrated with empty ``life_stage`` (pre-seed legacy row):
-    render carries an explicit ``unknown`` anchor so the LLM isn't
-    silently told it has no stage at all."""
-    creature = _creature(
-        progression=Progression(life_stage="", age_days=3)
-    )
+def test_progression_block_blank_life_stage_uses_undefined_profile() -> None:
+    """Empty ``life_stage`` (pre-seed legacy row) is treated identically
+    to an unknown key — neutral profile, no register claim."""
+    creature = _creature(progression=Progression(life_stage="", age_days=3))
     out = ProgressionBlock().render(_state_with_creature(creature))
-    assert out == "[Stage] unknown — 3 days old."
+    assert "register: undefined" in out
+    assert "days_in_world: 3" in out
 
 
 def test_progression_block_tolerates_non_int_age_days() -> None:
     """Guard against schema drift / storage coercion returning
-    something odd (None, a string). Block renders ``0 days old``
-    rather than propagating TypeError into the turn."""
+    something odd (None, a string). Block must render with
+    ``days_in_world: 0`` rather than propagating TypeError into the
+    turn."""
     creature = _creature()
     # Bypass dataclass typing on purpose — the guard is the point.
     creature.progression.age_days = None  # type: ignore[assignment]
     state = _state_with_creature(creature)
-    assert ProgressionBlock().render(state) == (
-        "[Stage] infant (just a baby) — 0 days old."
-    )
+    out = ProgressionBlock().render(state)
+    assert "register: newcomer" in out
+    assert "days_in_world: 0" in out
 
 
 # ── Composition ────────────────────────────────────────────────────
@@ -332,6 +352,70 @@ def test_live_blocks_compose_in_order_without_extra_blank_lines() -> None:
     assert "[Mood] joy" in out
     assert "[Bond with Owner]" in out
     assert "[Vitals]" in out
-    assert "[Stage] child (curious and learning) — 4 days old." in out
+    assert "[StageObservation]" in out
+    assert "[StageVoiceGuide]" in out
+    assert "register: settling" in out
     # No run of three+ newlines (triple-blank from accidental stray ""):
     assert "\n\n\n" not in out
+
+
+# ── AcclimationBlock — live ────────────────────────────────────────
+
+
+def test_acclimation_block_first_encounter_band_at_zero_familiarity() -> None:
+    """Default Bond (familiarity=0) sits in the ``first-encounter`` band.
+    The render must include the band label and the anti-newborn guard
+    so the LLM has a concrete instruction to avoid the 갓-태어난 trope."""
+    creature = _creature(bond=Bond(familiarity=0.0))
+    out = AcclimationBlock().render(_state_with_creature(creature))
+    assert "[Acclimation]" in out
+    assert "band: first-encounter" in out
+    assert "familiarity=0.00" in out
+    assert "newborn" in out.lower()
+    assert "tentative" in out.lower()
+
+
+def test_acclimation_block_band_boundaries() -> None:
+    """Boundary values land in the *lower* band (≤ ceil)."""
+    cases = [
+        (0.5, "first-encounter"),
+        (0.51, "acclimating"),
+        (2.0, "acclimating"),
+        (2.01, "acquainted"),
+        (5.0, "acquainted"),
+        (5.01, "familiar"),
+        (10.0, "familiar"),
+        (10.01, "intimate"),
+        (100.0, "intimate"),
+    ]
+    for familiarity, expected_band in cases:
+        creature = _creature(bond=Bond(familiarity=familiarity))
+        out = AcclimationBlock().render(_state_with_creature(creature))
+        assert f"band: {expected_band}" in out, (familiarity, expected_band, out)
+
+
+def test_acclimation_block_negative_familiarity_clamps_to_first_encounter() -> None:
+    """Conflict can drive familiarity briefly negative — must not crash
+    or fall through to ``unknown``; treat as ``first-encounter`` so the
+    safety guidance still applies."""
+    creature = _creature(bond=Bond(familiarity=-1.5))
+    out = AcclimationBlock().render(_state_with_creature(creature))
+    assert "band: first-encounter" in out
+    assert "familiarity=-1.50" in out
+
+
+def test_acclimation_block_empty_when_creature_has_no_bond_attr() -> None:
+    """Defensive: bond=None must not blow render up — return empty so
+    the prompt surface stays unchanged."""
+
+    class _Partial:
+        bond = None
+
+    state = PipelineState()
+    state.shared[CREATURE_STATE_KEY] = _Partial()
+    assert AcclimationBlock().render(state) == ""
+
+
+def test_acclimation_block_empty_when_no_creature_state() -> None:
+    """Classic-mode (no creature in shared) returns empty string."""
+    assert AcclimationBlock().render(PipelineState()) == ""

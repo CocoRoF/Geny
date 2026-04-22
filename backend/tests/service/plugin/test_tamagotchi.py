@@ -16,6 +16,7 @@ from service.game.events import (
     EventSeedPool,
 )
 from service.persona.blocks import (
+    AcclimationBlock,
     MoodBlock,
     ProgressionBlock,
     RelationshipBlock,
@@ -36,7 +37,7 @@ def test_tamagotchi_plugin_satisfies_protocol() -> None:
     assert plugin.version  # non-empty
 
 
-def test_contribute_prompt_blocks_returns_four_live_blocks_in_order() -> None:
+def test_contribute_prompt_blocks_returns_live_blocks_in_order() -> None:
     plugin = TamagotchiPlugin()
     blocks = plugin.contribute_prompt_blocks({})
     assert [type(b) for b in blocks] == [
@@ -44,6 +45,7 @@ def test_contribute_prompt_blocks_returns_four_live_blocks_in_order() -> None:
         VitalsBlock,
         RelationshipBlock,
         ProgressionBlock,
+        AcclimationBlock,
     ]
 
 
@@ -116,6 +118,7 @@ def test_tamagotchi_plugin_in_registry_fans_out_blocks() -> None:
         VitalsBlock,
         RelationshipBlock,
         ProgressionBlock,
+        AcclimationBlock,
     ]
 
 
