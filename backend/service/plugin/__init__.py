@@ -14,11 +14,21 @@ from .protocol import (
     SessionContext,
     SessionListener,
 )
+from .registry import (
+    AttachRuntimeKeyConflict,
+    DuplicatePluginError,
+    PluginRegistry,
+    UnknownLifecycleEventError,
+)
 
 __all__ = [
+    "AttachRuntimeKeyConflict",
+    "DuplicatePluginError",
     "GenyPlugin",
     "PluginBase",
     "PluginLike",
+    "PluginRegistry",
     "SessionContext",
     "SessionListener",
+    "UnknownLifecycleEventError",
 ]
