@@ -357,44 +357,51 @@ async def lifespan(app: FastAPI):
     logger.info(f"   - Environment templates installed: {env_templates_installed}")
     logger.info(f"   - Total environments: {len(environment_service.list_all())}")
 
-    # ── CreatureState (cycle 20260421_9 PR-X3-5) ────────────────────────
-    # Feature-gated via ``GENY_GAME_FEATURES`` (default off so classic
-    # sessions stay unaffected). When enabled we:
+    # ── CreatureState (cycle 20260421_9 PR-X3-5, toggled by GameConfig) ──
+    # Controlled via ``GameConfig`` (Settings UI → Tamagotchi).
+    # When ``enabled`` we:
     #   1. Build a process-wide ``SqliteCreatureStateProvider``.
     #   2. Launch ``CreatureStateDecayService`` on its own TickEngine.
     #   3. Wire the provider into ``agent_manager`` so new sessions
-    #      hydrate/persist around every pipeline turn.
+    #      hydrate/persist around every pipeline turn. Role gating
+    #      (``vtuber_only``) is applied per-session inside the manager.
+    # Legacy ``GENY_GAME_FEATURES`` / ``GENY_STATE_DB`` env vars are
+    # still honored by ``GameConfig.get_default_instance`` on first
+    # boot (one-cycle back-compat); after the first save to the config
+    # store the persisted value wins.
     # Shutdown mirrors: stop the decay service, close the provider.
-    geny_game_features = (
-        os.environ.get("GENY_GAME_FEATURES", "0").strip().lower()
-        in ("1", "true", "yes", "on")
-    )
+    from service.config.sub_config.general.game_config import GameConfig
+    game_cfg = config_manager.load_config(GameConfig)
     app.state.state_provider = None
     app.state.state_decay_service = None
-    if geny_game_features:
+    if game_cfg.enabled:
         from service.state import (
             CreatureStateDecayService,
             SqliteCreatureStateProvider,
         )
 
-        state_db_path = os.environ.get(
-            "GENY_STATE_DB", str(Path(__file__).parent / "data" / "geny_state.sqlite3"),
+        resolved_db_path = (
+            game_cfg.state_db_path.strip()
+            if game_cfg.state_db_path
+            else str(Path(__file__).parent / "data" / "geny_state.sqlite3")
         )
-        Path(state_db_path).parent.mkdir(parents=True, exist_ok=True)
-        state_provider = SqliteCreatureStateProvider(db_path=state_db_path)
+        Path(resolved_db_path).parent.mkdir(parents=True, exist_ok=True)
+        state_provider = SqliteCreatureStateProvider(db_path=resolved_db_path)
         decay_service = CreatureStateDecayService(provider=state_provider)
         await decay_service.start()
         agent_manager.set_state_provider(
-            state_provider, decay_service=decay_service,
+            state_provider,
+            decay_service=decay_service,
+            vtuber_only=game_cfg.vtuber_only,
         )
         app.state.state_provider = state_provider
         app.state.state_decay_service = decay_service
         logger.info(
-            f"   - CreatureState: enabled (sqlite={state_db_path}, "
-            f"decay interval=15m)"
+            f"   - CreatureState: enabled (sqlite={resolved_db_path}, "
+            f"decay interval=15m, vtuber_only={game_cfg.vtuber_only})"
         )
     else:
-        logger.info("   - CreatureState: disabled (GENY_GAME_FEATURES not set)")
+        logger.info("   - CreatureState: disabled (GameConfig.enabled=False)")
 
     # ── ArtifactService (Phase 3) ───────────────────────────────────────
     # Session-less catalog of executor stage/artifact introspection.
