@@ -1298,6 +1298,33 @@ export const ttsApi = {
     });
   },
 
+  /**
+   * POST /api/tts/agents/{sessionId}/speak/stream — 문장 단위 NDJSON 스트림.
+   *
+   * 각 줄이 한 문장의 완성된 wav 오디오(base64). 첫 문장이 도착하는
+   * 즉시 재생을 시작하면 전체 합성 종료까지 기다리지 않고도 화자가
+   * 말하기 시작하므로 체감 latency가 크게 줄어든다.
+   *
+   * 응답 본문 파싱은 호출자(ttsClient.consumeSentenceStream)에서 처리.
+   * 이 메서드는 단순히 fetch Response를 반환한다.
+   */
+  speakStream: async (
+    sessionId: string,
+    text: string,
+    emotion: string = 'neutral',
+    language?: string,
+    engine?: string,
+    signal?: AbortSignal,
+  ): Promise<Response> => {
+    const backendUrl = getBackendUrl();
+    return fetch(`${backendUrl}/api/tts/agents/${sessionId}/speak/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, emotion, language, engine }),
+      signal,
+    });
+  },
+
   /** GET /api/tts/voices — 보이스 목록 */
   voices: (language?: string) =>
     apiCall<Record<string, VoiceInfo[]>>(

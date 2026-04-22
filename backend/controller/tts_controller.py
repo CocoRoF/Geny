@@ -153,6 +153,110 @@ async def speak(session_id: str, body: SpeakRequest):
     )
 
 
+@router.post("/agents/{session_id}/speak/stream")
+async def speak_stream(session_id: str, body: SpeakRequest):
+    """Sentence-streaming TTS — NDJSON envelope.
+
+    Each line is a complete JSON object:
+
+    * ``{"seq": N, "text": str, "format": "wav", "sample_rate": int,
+      "audio_b64": str}`` — one fully-rendered sentence
+    * ``{"seq": N, "text": str, "error": str}`` — per-sentence failure
+      (stream continues)
+    * ``{"done": true, "total": int}`` — terminator
+
+    Latency win: client gets sentence #1 once it's synthesised
+    (typically ~1/3 of total render time for a 3-sentence reply) and
+    can start playback immediately while later sentences are still
+    rendering on the GPU.
+
+    Engines that don't natively support sentence streaming (Edge TTS,
+    OpenAI TTS, etc.) transparently emit a single ``seq=0`` frame
+    containing the entire utterance — no client-side branching needed.
+    """
+    import base64
+
+    cleaned_text = sanitize_tts_text(body.text)
+    if not cleaned_text:
+        return JSONResponse(
+            status_code=204, content={"detail": "No speakable text after sanitization"}
+        )
+
+    from service.vtuber.tts.tts_service import get_tts_service
+
+    tts = get_tts_service()
+
+    # Per-session voice profile lookup (same as /speak).
+    session_voice_profile = None
+    try:
+        from service.claude_manager.session_store import get_session_store
+        session = get_session_store().get(session_id)
+        if session:
+            session_voice_profile = session.get("tts_voice_profile")
+    except Exception as e:
+        logger.debug(f"Failed to look up session voice profile: {e}")
+
+    default_language = "ko"
+    current_provider = "edge_tts"
+    try:
+        from service.config.manager import get_config_manager
+        from service.config.sub_config.tts.tts_general_config import TTSGeneralConfig
+
+        general = get_config_manager().load_config(TTSGeneralConfig)
+        default_language = general.default_language
+        current_provider = general.provider
+    except Exception:
+        pass
+
+    async def ndjson_generator():
+        emitted = 0
+        try:
+            async for chunk in tts.speak_sentences(
+                text=cleaned_text,
+                emotion=body.emotion,
+                language=body.language or default_language,
+                engine_name=body.engine,
+                voice_profile=session_voice_profile,
+            ):
+                if chunk.is_final and not chunk.audio_data and chunk.error is None:
+                    # Defer terminator until after the loop so we can
+                    # report ``total`` accurately.
+                    continue
+                if chunk.error is not None:
+                    frame = {
+                        "seq": chunk.seq,
+                        "text": chunk.text,
+                        "error": chunk.error,
+                    }
+                else:
+                    frame = {
+                        "seq": chunk.seq,
+                        "text": chunk.text,
+                        "format": chunk.audio_format,
+                        "sample_rate": chunk.sample_rate,
+                        "audio_b64": base64.b64encode(chunk.audio_data).decode("ascii"),
+                    }
+                    emitted += 1
+                yield (json.dumps(frame, ensure_ascii=False) + "\n").encode("utf-8")
+        except Exception as e:
+            logger.exception("speak_stream generator failed: %r", e)
+            err_frame = {"seq": -1, "error": f"{type(e).__name__}: {e}"}
+            yield (json.dumps(err_frame) + "\n").encode("utf-8")
+
+        terminator = {"done": True, "total": emitted}
+        yield (json.dumps(terminator) + "\n").encode("utf-8")
+
+    return StreamingResponse(
+        ndjson_generator(),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-TTS-Engine": current_provider,
+            "X-TTS-Streaming": "sentence-ndjson",
+        },
+    )
+
+
 # ==================== Per-Session Voice Profile ====================
 
 class AssignProfileRequest(BaseModel):

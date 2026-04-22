@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { vtuberApi, ttsApi } from '@/lib/api';
 import { getAudioManager } from '@/lib/audioManager';
+import { consumeSentenceStream } from '@/lib/ttsSentenceStream';
 import type { Live2dModelInfo, AvatarState, VTuberLogEntry } from '@/types';
 
 const MAX_LOGS = 500;
@@ -223,36 +224,110 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
     const controller = new AbortController();
     _ttsAbortControllers.set(sessionId, controller);
 
+    const markEnd = () => {
+      set((s) => ({
+        ttsSpeaking: { ...s.ttsSpeaking, [sessionId]: false },
+      }));
+    };
+
     try {
       set((s) => ({
         ttsSpeaking: { ...s.ttsSpeaking, [sessionId]: true },
       }));
       get().addLog(sessionId, 'info', 'TTS', `Speaking: "${text.slice(0, 50)}..." (${emotion})`);
 
-      const response = await ttsApi.speak(sessionId, text, emotion, undefined, undefined, controller.signal);
+      // ── Sentence-streaming path (preferred) ─────────────────────
+      // 백엔드의 /speak/stream은 NDJSON으로 문장 단위 wav를 흘려보내고,
+      // 첫 문장이 합성되는 즉시 client에 도착하므로 체감 latency가
+      // 전체 합성 시간의 ~1/N로 줄어든다. 엔진이 sentence streaming을
+      // 지원하지 않는 경우 백엔드가 단일 ``seq=0`` 프레임으로 자동
+      // 폴백하므로 클라이언트 분기는 필요 없다.
+      let streamResponse: Response | null = null;
+      try {
+        streamResponse = await ttsApi.speakStream(
+          sessionId, text, emotion, undefined, undefined, controller.signal,
+        );
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          get().addLog(sessionId, 'debug', 'TTS', 'Previous TTS fetch aborted (new request)');
+          return;
+        }
+        get().addLog(sessionId, 'warn', 'TTS', `speak/stream fetch failed, falling back: ${err}`);
+        streamResponse = null;
+      }
 
-      // Stale 응답 방지: fetch 완료 후 이 controller가 아직 "현재" 요청인지 확인.
-      // 다른 speakResponse가 이미 새 controller를 등록했다면 이 응답은 stale이므로 버림.
+      // Stale 응답 방지
       if (_ttsAbortControllers.get(sessionId) !== controller) {
         get().addLog(sessionId, 'debug', 'TTS', 'Stale TTS response discarded (newer request in flight)');
-        set((s) => ({
-          ttsSpeaking: { ...s.ttsSpeaking, [sessionId]: false },
-        }));
-        return;
-      }
-      _ttsAbortControllers.delete(sessionId);
-
-      // 204 (sanitize 후 빈 텍스트) 또는 에러 응답 → enqueue 스킵
-      if (response.status === 204 || !response.ok) {
-        get().addLog(sessionId, 'debug', 'TTS', `TTS skipped: status=${response.status}`);
-        set((s) => ({
-          ttsSpeaking: { ...s.ttsSpeaking, [sessionId]: false },
-        }));
+        markEnd();
         return;
       }
 
       const audioManager = getAudioManager();
       audioManager.setVolume(get().ttsVolume);
+
+      if (streamResponse && streamResponse.ok) {
+        try {
+          const { enqueued, errors } = await consumeSentenceStream(streamResponse, {
+            sessionId,
+            onFirstSentence: () => {
+              get().addLog(sessionId, 'debug', 'TTS', 'First sentence enqueued (streaming)');
+            },
+            onSentenceError: (seq, err) => {
+              get().addLog(sessionId, 'warn', 'TTS', `Sentence ${seq} failed: ${err}`);
+            },
+            onClipEnd: () => {
+              // AudioManager가 큐의 클립을 순서대로 재생하므로 마지막
+              // 클립의 onEnd가 곧 전체 음성 종료. set은 idempotent하니
+              // 중간 클립 종료마다 호출돼도 안전.
+              markEnd();
+            },
+            onComplete: (total) => {
+              get().addLog(sessionId, 'debug', 'TTS', `Sentence stream complete: ${total} clips enqueued`);
+              if (total === 0) markEnd();
+            },
+          });
+          if (enqueued === 0 && errors === 0) {
+            // 빈 응답 (sanitize 후 empty 등) — 즉시 풀어줌.
+            markEnd();
+          }
+          return;
+        } catch (err) {
+          if (err instanceof DOMException && err.name === 'AbortError') {
+            return;
+          }
+          get().addLog(sessionId, 'warn', 'TTS', `Sentence stream consume failed, retrying single-shot: ${err}`);
+          // fall through to legacy path
+        }
+      } else if (streamResponse && streamResponse.status === 204) {
+        // No speakable text after sanitization
+        markEnd();
+        return;
+      } else if (streamResponse && streamResponse.status !== 404) {
+        get().addLog(
+          sessionId, 'warn', 'TTS',
+          `speak/stream HTTP ${streamResponse.status}, falling back to /speak`,
+        );
+      }
+
+      // ── Fallback: legacy single-clip /speak ─────────────────────
+      // 백엔드가 구버전이거나 sentence-stream 라우트가 일시적으로 실패한 경우.
+      const response = await ttsApi.speak(
+        sessionId, text, emotion, undefined, undefined, controller.signal,
+      );
+
+      if (_ttsAbortControllers.get(sessionId) !== controller) {
+        get().addLog(sessionId, 'debug', 'TTS', 'Stale TTS response discarded (newer request in flight)');
+        markEnd();
+        return;
+      }
+      _ttsAbortControllers.delete(sessionId);
+
+      if (response.status === 204 || !response.ok) {
+        get().addLog(sessionId, 'debug', 'TTS', `TTS skipped: status=${response.status}`);
+        markEnd();
+        return;
+      }
 
       // 큐에 추가 — 이전 재생을 중단하지 않고 순차 재생
       await audioManager.enqueue(
@@ -262,9 +337,7 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
           get().addLog(sessionId, 'debug', 'TTS', 'Audio playback started');
         },
         () => {
-          set((s) => ({
-            ttsSpeaking: { ...s.ttsSpeaking, [sessionId]: false },
-          }));
+          markEnd();
           get().addLog(sessionId, 'debug', 'TTS', 'Audio playback ended');
         },
       );
@@ -275,9 +348,7 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
         return;
       }
       console.error('[VTuber] TTS speak error:', err);
-      set((s) => ({
-        ttsSpeaking: { ...s.ttsSpeaking, [sessionId]: false },
-      }));
+      markEnd();
       get().addLog(sessionId, 'error', 'TTS', `Speak failed: ${err}`);
     }
   },

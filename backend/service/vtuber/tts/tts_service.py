@@ -13,6 +13,7 @@ from service.vtuber.tts.base import (
     TTSChunk,
     TTSEngine,
     TTSRequest,
+    TTSSentenceChunk,
     VoiceInfo,
 )
 
@@ -177,6 +178,88 @@ class TTSService:
                     text, emotion, engine.engine_name, voice_id,
                     full_audio, audio_format.value,
                 )
+
+    async def speak_sentences(
+        self,
+        text: str,
+        emotion: str = "neutral",
+        language: str = "ko",
+        engine_name: Optional[str] = None,
+        voice_profile: Optional[str] = None,
+    ) -> AsyncIterator[TTSSentenceChunk]:
+        """Sentence-streaming TTS — yields one playable clip per sentence.
+
+        Differs from :meth:`speak` in that the audio payload is split
+        on sentence boundaries server-side and emitted as
+        :class:`TTSSentenceChunk` (each clip self-contained, with its
+        own header). The first sentence is available to the client
+        long before the full utterance finishes synthesising — this is
+        the latency win.
+
+        Engines that don't natively support sentence streaming
+        transparently fall back to a single ``seq=0`` chunk via the
+        default :meth:`TTSEngine.synthesize_sentence_stream`
+        implementation, so callers can use this method unconditionally.
+        """
+        from service.config.manager import get_config_manager
+        from service.config.sub_config.tts.tts_general_config import TTSGeneralConfig
+
+        try:
+            general = get_config_manager().load_config(TTSGeneralConfig)
+        except Exception as e:
+            logger.warning(f"Failed to load TTS general config: {e}")
+            general = None
+
+        if general and not general.enabled:
+            logger.info("TTS is disabled in config")
+            return
+
+        engine = self.get_engine(engine_name)
+        if not engine:
+            raise RuntimeError("No TTS engine available")
+
+        if not await engine.health_check():
+            logger.warning(
+                "%s health check failed, trying fallback for sentence stream",
+                engine.engine_name,
+            )
+            engine = self._engines.get("edge_tts")
+            if not engine or not await engine.health_check():
+                raise RuntimeError(
+                    "All TTS engines unavailable for sentence stream"
+                )
+
+        audio_format = AudioFormat.WAV  # WAV per-sentence (independently playable)
+        sample_rate = 24000
+        if general:
+            sample_rate = general.sample_rate
+            if not language:
+                language = general.default_language
+
+        request = TTSRequest(
+            text=text,
+            emotion=emotion,
+            language=language or "ko",
+            audio_format=audio_format,
+            sample_rate=sample_rate,
+            voice_profile=voice_profile,
+        )
+        request = await engine.apply_emotion(request)
+
+        try:
+            async for chunk in engine.synthesize_sentence_stream(request):
+                yield chunk
+        except Exception as e:
+            logger.exception(
+                "Sentence-stream synthesis failed (engine=%s type=%s repr=%r)",
+                engine.engine_name, type(e).__name__, e,
+            )
+            # Surface as a final error chunk so clients can finalise UI.
+            yield TTSSentenceChunk(
+                seq=0, text=text, audio_data=b"",
+                sample_rate=sample_rate, audio_format=audio_format.value,
+                is_final=True, error=f"{type(e).__name__}: {e}",
+            )
 
     async def get_all_voices(
         self, language: Optional[str] = None

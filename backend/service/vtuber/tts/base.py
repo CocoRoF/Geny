@@ -46,6 +46,31 @@ class TTSChunk:
 
 
 @dataclass
+class TTSSentenceChunk:
+    """A single fully-rendered sentence in a sentence-streaming response.
+
+    Distinct from :class:`TTSChunk` (which models opaque audio bytes
+    inside a single utterance): each ``TTSSentenceChunk`` carries one
+    *self-contained* audio clip — it has its own header (e.g. WAV) and
+    can be played independently. Sentences are emitted in ``seq``
+    order; on the engine side, sentence ``N`` is synthesised before
+    ``N+1`` (single-GPU semaphore prevents pipelining), so the client
+    starts hearing the speech as soon as sentence 0 finishes.
+
+    ``error`` is non-None for sentences that failed to synthesise; the
+    stream continues with subsequent sentences regardless.
+    """
+
+    seq: int
+    text: str
+    audio_data: bytes
+    sample_rate: int = 24000
+    audio_format: str = "wav"
+    is_final: bool = False
+    error: Optional[str] = None
+
+
+@dataclass
 class VoiceInfo:
     """Metadata for an available TTS voice"""
     id: str
@@ -66,10 +91,37 @@ class TTSEngine(ABC):
 
     engine_name: str = "base"
 
+    #: Whether this engine can synthesise text in sentence-by-sentence
+    #: streaming mode (one independently-playable audio clip per
+    #: sentence). Engines that override :meth:`synthesize_sentence_stream`
+    #: should set this to ``True``. Defaults to ``False`` so callers can
+    #: feature-detect cheaply without exception handling.
+    supports_sentence_stream: bool = False
+
     @abstractmethod
     async def synthesize_stream(self, request: TTSRequest) -> AsyncIterator[TTSChunk]:
         """Synthesize text to a stream of audio chunks"""
         ...
+
+    async def synthesize_sentence_stream(
+        self, request: TTSRequest
+    ) -> AsyncIterator["TTSSentenceChunk"]:
+        """Sentence-streaming synthesis (one playable clip per sentence).
+
+        Default implementation: synthesise the whole text as a single
+        clip and yield it as ``seq=0``. Engines that natively support
+        sentence streaming should override this method and set
+        :attr:`supports_sentence_stream` to ``True``.
+        """
+        audio = await self.synthesize(request)
+        yield TTSSentenceChunk(
+            seq=0,
+            text=request.text,
+            audio_data=audio,
+            sample_rate=request.sample_rate,
+            audio_format=request.audio_format.value,
+            is_final=True,
+        )
 
     async def synthesize(self, request: TTSRequest) -> bytes:
         """Synthesize text to complete audio bytes (batch mode)"""

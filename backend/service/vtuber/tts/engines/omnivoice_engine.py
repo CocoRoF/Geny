@@ -24,6 +24,7 @@ from service.vtuber.tts.base import (
     TTSChunk,
     TTSEngine,
     TTSRequest,
+    TTSSentenceChunk,
     VoiceInfo,
 )
 
@@ -161,17 +162,16 @@ class OmniVoiceEngine(TTSEngine):
     """OmniVoice engine — calls the in-cluster geny-omnivoice service."""
 
     engine_name = "omnivoice"
+    supports_sentence_stream = True
 
-    async def synthesize_stream(self, request: TTSRequest) -> AsyncIterator[TTSChunk]:
-        from service.config.manager import get_config_manager
-        from service.config.sub_config.tts.omnivoice_config import OmniVoiceConfig
+    # ── Internal: payload builder shared by /tts and /tts/stream ────
+    def _build_payload(self, request: TTSRequest, config) -> tuple[dict, str]:
+        """Return ``(payload, profile_name)`` for the upstream request.
 
-        config = get_config_manager().load_config(OmniVoiceConfig)
-
-        if not config.enabled:
-            raise ValueError("OmniVoice is not enabled")
-
-        # Per-session voice_profile override wins over Config.
+        Pulled out of :meth:`synthesize_stream` so the sentence-streaming
+        path can build the same body without duplicating the
+        profile-resolution / mode-fallback logic.
+        """
         profile = request.voice_profile or config.voice_profile or ""
         mode = (config.mode or "clone").lower()
 
@@ -214,8 +214,20 @@ class OmniVoiceEngine(TTSEngine):
                 raise ValueError("OmniVoice mode=design requires Config.instruct to be set")
             payload["instruct"] = instruct
         elif config.instruct:
-            # Optional design hint on top of clone/auto modes.
             payload["instruct"] = config.instruct.strip()
+
+        return payload, profile
+
+    async def synthesize_stream(self, request: TTSRequest) -> AsyncIterator[TTSChunk]:
+        from service.config.manager import get_config_manager
+        from service.config.sub_config.tts.omnivoice_config import OmniVoiceConfig
+
+        config = get_config_manager().load_config(OmniVoiceConfig)
+
+        if not config.enabled:
+            raise ValueError("OmniVoice is not enabled")
+
+        payload, profile = self._build_payload(request, config)
 
         api_url = config.api_url.rstrip("/")
         # First-time CUDA inference on Pascal GPUs (e.g. GTX 1070) can
@@ -269,6 +281,147 @@ class OmniVoiceEngine(TTSEngine):
         if audio_data:
             yield TTSChunk(audio_data=audio_data, chunk_index=0)
         yield TTSChunk(audio_data=b"", is_final=True, chunk_index=1)
+
+    async def synthesize_sentence_stream(
+        self, request: TTSRequest
+    ) -> AsyncIterator[TTSSentenceChunk]:
+        """Stream one fully-rendered sentence at a time via ``/tts/stream``.
+
+        Wire format (NDJSON, one JSON object per line):
+
+        * sentence frames: ``{"seq": N, "text": str, "format": "wav",
+          "sample_rate": int, "audio_b64": str, ...}``
+        * per-sentence error: ``{"seq": N, "error": str}``
+        * terminator: ``{"done": true, "total": int, ...}``
+
+        Each yielded :class:`TTSSentenceChunk` is independently playable
+        — the client can hand each one to its audio queue immediately,
+        which is the whole point of this code path. The terminator
+        frame is converted into a final chunk with ``is_final=True``
+        and an empty payload so callers have a deterministic end signal.
+        """
+        import base64
+
+        from service.config.manager import get_config_manager
+        from service.config.sub_config.tts.omnivoice_config import OmniVoiceConfig
+
+        config = get_config_manager().load_config(OmniVoiceConfig)
+        if not config.enabled:
+            raise ValueError("OmniVoice is not enabled")
+
+        payload, profile = self._build_payload(request, config)
+
+        api_url = config.api_url.rstrip("/")
+        # Sentence stream can take longer end-to-end than a single /tts
+        # call (it synthesises N sentences sequentially). Use the same
+        # 180s floor as the single-clip path; the TCP connection is
+        # held open for the full duration.
+        timeout = max(float(config.timeout_seconds or 0.0), 180.0)
+
+        client = await _get_client(api_url, read_timeout=timeout)
+        logger.info(
+            "OmniVoice stream request: url=%s/tts/stream mode=%s profile=%s lang=%s timeout=%.1fs text_len=%d",
+            api_url, payload["mode"], profile, payload.get("language"),
+            timeout, len(request.text or ""),
+        )
+
+        sample_rate = int(payload.get("sample_rate") or 24000)
+        audio_format_str = str(payload.get("audio_format") or "wav")
+        last_seq = -1
+        try:
+            async with client.stream(
+                "POST", f"{api_url}/tts/stream", json=payload
+            ) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    line = (line or "").strip()
+                    if not line:
+                        continue
+                    try:
+                        frame = json.loads(line)
+                    except json.JSONDecodeError:
+                        logger.warning("OmniVoice /tts/stream: skipping malformed frame: %r", line[:120])
+                        continue
+
+                    if frame.get("done"):
+                        # Terminator frame — synthesise an empty final
+                        # chunk so callers can release UI state.
+                        yield TTSSentenceChunk(
+                            seq=last_seq + 1,
+                            text="",
+                            audio_data=b"",
+                            sample_rate=sample_rate,
+                            audio_format=audio_format_str,
+                            is_final=True,
+                        )
+                        return
+
+                    seq = int(frame.get("seq", last_seq + 1))
+                    last_seq = max(last_seq, seq)
+                    text = str(frame.get("text") or "")
+                    err = frame.get("error")
+                    if err is not None:
+                        logger.warning(
+                            "OmniVoice /tts/stream: sentence %d failed upstream: %s",
+                            seq, err,
+                        )
+                        yield TTSSentenceChunk(
+                            seq=seq, text=text, audio_data=b"",
+                            sample_rate=sample_rate,
+                            audio_format=audio_format_str,
+                            error=str(err),
+                        )
+                        continue
+
+                    audio_b64 = frame.get("audio_b64") or ""
+                    try:
+                        audio_bytes = base64.b64decode(audio_b64) if audio_b64 else b""
+                    except Exception:
+                        logger.exception("OmniVoice /tts/stream: base64 decode failed for seq=%d", seq)
+                        yield TTSSentenceChunk(
+                            seq=seq, text=text, audio_data=b"",
+                            sample_rate=sample_rate,
+                            audio_format=audio_format_str,
+                            error="base64_decode_failed",
+                        )
+                        continue
+
+                    yield TTSSentenceChunk(
+                        seq=seq,
+                        text=text,
+                        audio_data=audio_bytes,
+                        sample_rate=int(frame.get("sample_rate") or sample_rate),
+                        audio_format=str(frame.get("format") or audio_format_str),
+                    )
+
+            # Stream ended without an explicit terminator — emit one so
+            # downstream consumers can finalise UI state.
+            yield TTSSentenceChunk(
+                seq=last_seq + 1, text="", audio_data=b"",
+                sample_rate=sample_rate, audio_format=audio_format_str,
+                is_final=True,
+            )
+        except httpx.HTTPStatusError as e:
+            body = e.response.text[:500] if e.response is not None else ""
+            logger.error("OmniVoice /tts/stream API error %s: %s", e.response.status_code, body)
+            raise ValueError(
+                f"OmniVoice /tts/stream error {e.response.status_code}: {body}"
+            ) from e
+        except httpx.TimeoutException as e:
+            logger.exception(
+                "OmniVoice /tts/stream timeout after %.1fs (type=%s) url=%s",
+                timeout, type(e).__name__, api_url,
+            )
+            raise RuntimeError(
+                f"OmniVoice /tts/stream timed out after {timeout:.0f}s "
+                f"(type={type(e).__name__})."
+            ) from e
+        except Exception as e:
+            logger.exception(
+                "OmniVoice /tts/stream error (type=%s repr=%r) url=%s",
+                type(e).__name__, e, api_url,
+            )
+            raise
 
     async def get_voices(self, language: Optional[str] = None) -> list[VoiceInfo]:
         try:
