@@ -202,6 +202,48 @@ services:
     networks:
       - geny-net-prod
 
+  # ── OmniVoice (Optional — Geny 자체 TTS 마이크로서비스, GPU 필요) ─
+  # geny-monorepo 내 omnivoice/ 에서 빌드. 외부 노출 없이 backend 가
+  # http://omnivoice:9881 로 호출. HF 모델 캐시는 영구 볼륨에.
+  omnivoice:
+    build:
+      context: ./omnivoice
+      dockerfile: Dockerfile
+    image: geny-omnivoice:prod
+    container_name: geny-omnivoice-prod
+    profiles: ["tts-local"]
+    init: true
+    restart: unless-stopped
+    expose:
+      - "9881"
+    environment:
+      - OMNIVOICE_MODEL=${OMNIVOICE_MODEL:-k2-fsa/OmniVoice}
+      - OMNIVOICE_DEVICE=${OMNIVOICE_DEVICE:-cuda:0}
+      - OMNIVOICE_DTYPE=${OMNIVOICE_DTYPE:-float16}
+      - OMNIVOICE_MAX_CONCURRENCY=${OMNIVOICE_MAX_CONCURRENCY:-1}
+      - OMNIVOICE_AUTO_ASR=${OMNIVOICE_AUTO_ASR:-false}
+      - OMNIVOICE_LOG_LEVEL=${OMNIVOICE_LOG_LEVEL:-info}
+      - HF_ENDPOINT=${HF_ENDPOINT:-https://huggingface.co}
+    volumes:
+      - geny-voices-prod:/voices:ro
+      - geny-omnivoice-models-prod:/models
+    shm_size: 8G
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9881/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+    networks:
+      - geny-net-prod
+
 
 networks:
   geny-net-prod:
@@ -213,4 +255,6 @@ volumes:
   geny-tts-cache-prod:
     driver: local
   geny-voices-prod:
+    driver: local
+  geny-omnivoice-models-prod:
     driver: local

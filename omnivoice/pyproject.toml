@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "geny-omnivoice"
+version = "0.1.0"
+description = "Geny's FastAPI wrapper around a vendored snapshot of k2-fsa/OmniVoice for in-cluster TTS."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "Geny" }]
+keywords = ["tts", "omnivoice", "geny"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Operating System :: OS Independent",
+]
+
+# NOTE: torch / torchaudio are installed separately in the Dockerfile with
+# the matching CUDA wheel index. They are intentionally NOT pinned here so
+# that local CPU/MPS development can pick whichever wheel is convenient.
+dependencies = [
+    "torch>=2.4",
+    "torchaudio>=2.4",
+    "transformers>=5.3.0",
+    "accelerate",
+    "huggingface_hub",
+    "pydub",
+    "tensorboardX",
+    "numpy",
+    "soundfile",
+    "librosa",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "python-multipart",
+    "httpx",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff",
+]
+
+[project.scripts]
+geny-omnivoice-server = "server.main:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["omnivoice_core", "server"]

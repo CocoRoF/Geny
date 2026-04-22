@@ -89,6 +89,7 @@ class TTSGeneralConfig(BaseConfig):
                     {"value": "openai", "label": "OpenAI TTS"},
                     {"value": "elevenlabs", "label": "ElevenLabs"},
                     {"value": "gpt_sovits", "label": "GPT-SoVITS (Open Source)"},
+                    {"value": "omnivoice", "label": "OmniVoice (Open Source · 600+ langs)"},
                     {"value": "azure", "label": "Azure Speech"},
                     {"value": "google", "label": "Google Cloud TTS"},
                     {"value": "clova", "label": "NAVER CLOVA Voice"},

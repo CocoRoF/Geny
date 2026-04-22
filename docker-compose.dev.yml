@@ -176,10 +176,66 @@ services:
     networks:
       - geny-net-dev
 
+  # ── OmniVoice (Optional · Dev Mode — server/ hot-reload) ─────────
+  omnivoice:
+    build:
+      context: ./omnivoice
+      dockerfile: Dockerfile
+    image: geny-omnivoice:dev
+    container_name: geny-omnivoice-dev
+    profiles: ["tts-local"]
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${OMNIVOICE_PORT:-9881}:9881"
+    environment:
+      - OMNIVOICE_MODEL=${OMNIVOICE_MODEL:-k2-fsa/OmniVoice}
+      - OMNIVOICE_DEVICE=${OMNIVOICE_DEVICE:-cuda:0}
+      - OMNIVOICE_DTYPE=${OMNIVOICE_DTYPE:-float16}
+      - OMNIVOICE_MAX_CONCURRENCY=${OMNIVOICE_MAX_CONCURRENCY:-1}
+      - OMNIVOICE_AUTO_ASR=${OMNIVOICE_AUTO_ASR:-false}
+      - OMNIVOICE_LOG_LEVEL=${OMNIVOICE_LOG_LEVEL:-debug}
+      - HF_ENDPOINT=${HF_ENDPOINT:-https://huggingface.co}
+    volumes:
+      # ── Bind mount: server/ hot-reload 만 활성. omnivoice_core/ 는 빌드 시 고정.
+      - ./omnivoice/server:/app/server
+      - ./backend/static/voices:/voices:ro
+      - geny-omnivoice-models-dev:/models
+    command:
+      - python
+      - -m
+      - uvicorn
+      - server.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "9881"
+      - --reload
+      - --reload-dir
+      - /app/server
+    shm_size: 8G
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9881/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+    networks:
+      - geny-net-dev
+
 networks:
   geny-net-dev:
     driver: bridge
 
 volumes:
   geny-pgdata-dev:
+    driver: local
+  geny-omnivoice-models-dev:
     driver: local
