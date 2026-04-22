@@ -487,3 +487,59 @@ async def test_selector_empty_new_id_is_noop() -> None:
     state = _StubState()
     await reg.hydrate(state)
     assert len(state.shared[MUTATION_BUFFER_KEY]) == 0
+
+
+# ── PR-X5F-3: session_runtime attribute exposure ────────────────────
+
+
+@pytest.mark.asyncio
+async def test_hydrate_exposes_registry_on_session_runtime_attr() -> None:
+    """``state.session_runtime`` holds the registry after hydrate.
+
+    Pins the typed-attribute path introduced by geny-executor 0.30.0's
+    ``PipelineState.session_runtime`` slot. Stages / plugins can reach
+    the registry (and its ``snapshot`` / ``session_id`` /
+    ``character_id`` attrs) without going through ``state.shared``.
+    """
+    reg, _ = _mk_registry()
+    state = _StubState()
+    await reg.hydrate(state)
+    assert state.session_runtime is reg
+    # Typed attrs reachable via the new surface
+    assert state.session_runtime.session_id == "sess-1"
+    assert state.session_runtime.character_id == "c1"
+    assert state.session_runtime.snapshot is state.shared[CREATURE_STATE_KEY]
+
+
+@pytest.mark.asyncio
+async def test_hydrate_shared_dict_still_authoritative() -> None:
+    """Adding the session_runtime attribute must not remove or alter
+    any existing ``state.shared`` key — shared-dict consumers remain
+    byte-identical."""
+    reg, _ = _mk_registry()
+    state = _StubState()
+    snap = await reg.hydrate(state)
+    # Every existing key remains exactly as before
+    assert state.shared[CREATURE_STATE_KEY] is snap
+    assert isinstance(state.shared[MUTATION_BUFFER_KEY], MutationBuffer)
+    assert state.shared[SESSION_META_KEY]["session_id"] == "sess-1"
+
+
+@pytest.mark.asyncio
+async def test_hydrate_tolerates_state_that_rejects_attribute_writes() -> None:
+    """A state stub using ``__slots__`` without ``session_runtime`` must
+    not crash hydrate — the shared-dict path stays authoritative."""
+
+    class _SlottedState:
+        __slots__ = ("shared",)
+
+        def __init__(self) -> None:
+            self.shared: Dict[str, Any] = {}
+
+    reg, _ = _mk_registry()
+    st: Any = _SlottedState()
+    snap = await reg.hydrate(st)
+    assert snap is not None
+    assert st.shared[CREATURE_STATE_KEY] is snap
+    # No session_runtime attribute (and no raise); shared-dict path intact
+    assert not hasattr(st, "session_runtime")
