@@ -181,6 +181,44 @@ def test_catch_all_preserves_short_or_numeric_brackets() -> None:
     assert sanitize_for_display("tag [hi]") == "tag [hi]"
 
 
+# ─────────────────────────────────────────────────────────────────
+# X7-follow-up (cycle 20260422_5): ``:strength`` suffix coverage
+# ─────────────────────────────────────────────────────────────────
+# User reported raw ``[excitement:0.7]`` leaking to the VTuber chat —
+# the display sanitizer regexes were missing optional-strength support.
+# Pin both the whitelisted path AND the catch-all here.
+
+
+def test_recognized_tag_with_strength_is_stripped() -> None:
+    """Tags decorated with ``:N`` or ``:N.N`` strength still strip."""
+    assert sanitize_for_display("[excitement:0.7] 좋아") == "좋아"
+    assert sanitize_for_display("[joy:1.5] hi") == "hi"
+    assert sanitize_for_display("mid [fear:2] end") == "mid end"
+    # Negative strength + no fraction
+    assert sanitize_for_display("[calm:-1] sedated") == "sedated"
+
+
+def test_recognized_tag_with_whitespace_inside_bracket() -> None:
+    """Slightly sloppy LLM output — spaces inside the bracket — strips."""
+    assert sanitize_for_display("[ joy ] yo") == "yo"
+    assert sanitize_for_display("[joy : 0.5] yo") == "yo"
+    assert sanitize_for_display("[ excitement:0.7 ] 좋아") == "좋아"
+
+
+def test_unknown_tag_with_strength_is_stripped() -> None:
+    """Catch-all must also tolerate ``:strength`` on unknown tags."""
+    assert sanitize_for_display("[bewildered:0.3] thinking") == "thinking"
+    assert sanitize_for_display("[melancholy:1.5] mood") == "mood"
+
+
+def test_strength_does_not_unlock_routing_tags() -> None:
+    """Uppercase routing tags must stay bypassed even with a colon
+    payload — the catch-all is narrow on the identifier side."""
+    # Routing tags already strip via SYSTEM_TAG_PATTERN; strength should
+    # still land on the existing cases (THINKING_TRIGGER:first_idle).
+    assert sanitize_for_display("[THINKING_TRIGGER:x] ok") == "ok"
+
+
 def test_recognized_tags_imported_from_taxonomy() -> None:
     """Canonical list must be the taxonomy, not an in-file duplicate."""
     from service.affect.taxonomy import RECOGNIZED_TAGS as canonical

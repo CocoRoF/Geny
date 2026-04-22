@@ -60,14 +60,15 @@ AFFECT_TAG_RE: Final[re.Pattern[str]] = re.compile(
 )
 
 #: Safety net: matches *any* bracketed lowercase identifier that looks
-#: like an emotion tag (3–20 chars, alphabetic + underscore only). Used
-#: only for stripping — never for mutation. Uppercase-only routing
+#: like an emotion tag (3–20 chars, alphabetic + underscore only),
+#: with an optional *numeric* ``:strength`` suffix so entries like
+#: ``[bewildered:0.7]`` get stripped. Non-numeric payloads like
+#: ``[note: todo]`` don't match and stay (protects legitimate text).
+#: Used only for stripping — never for mutation. Uppercase-only routing
 #: tokens like ``[THINKING_TRIGGER]`` / ``[SUB_WORKER_RESULT]`` do NOT
 #: match by design; they stay for the downstream router / sanitizer.
-#: Multi-word brackets like ``[a, b]`` or ``[INBOX from X]`` also don't
-#: match because of the word-boundary anchor at both ends.
 UNKNOWN_EMOTION_TAG_RE: Final[re.Pattern[str]] = re.compile(
-    r"\[([a-z][a-z_]{2,19})\]"
+    r"\[\s*([a-z][a-z_]{2,19})(?:\s*:\s*-?\d+(?:\.\d+)?)?\s*\]"
 )
 
 MOOD_ALPHA: Final[float] = 0.15

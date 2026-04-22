@@ -53,9 +53,16 @@ class EmotionResult:
         return len(self.emotions) > 0
 
 
-# Regex pattern to match emotion tags: [emotion_name]
-# Matches bracketed lowercase words including underscores
-_EMOTION_TAG_PATTERN = re.compile(r"\[([a-zA-Z_]+)\]")
+# Regex pattern to match emotion tags: [emotion_name] or [emotion_name:strength].
+# Matches bracketed letter-and-underscore identifiers with an optional
+# *numeric* ``:strength`` suffix. Strict numeric payload so
+# legitimate text like ``[note: todo]`` is not stripped here. Allows
+# whitespace inside the bracket (``[joy : 0.7]``) for lightly malformed
+# LLM output. The VTuber layer ignores the value — it only uses the
+# identifier — so we don't capture strength.
+_EMOTION_TAG_PATTERN = re.compile(
+    r"\[\s*([a-zA-Z_]+)(?:\s*:\s*-?\d+(?:\.\d+)?)?\s*\]"
+)
 
 
 class EmotionExtractor:

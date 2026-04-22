@@ -393,6 +393,21 @@ async def test_unknown_lowercase_tag_is_stripped_without_mutation() -> None:
 
 
 @pytest.mark.asyncio
+async def test_unknown_tag_with_strength_suffix_is_stripped() -> None:
+    """User-reported leak: `[bewildered:0.7]` must also be stripped by
+    the safety-net. The catch-all regex tolerates an optional
+    ``:strength`` suffix and any whitespace inside the brackets."""
+    state, buf = _state_with_buffer("hmm [bewildered:0.7] interesting")
+    result = await AffectTagEmitter().emit(state)
+
+    assert len(buf.items) == 0
+    assert "[bewildered:0.7]" not in state.final_text
+    assert "hmm" in state.final_text
+    assert "interesting" in state.final_text
+    assert result.metadata.get("unknown_stripped") == 1
+
+
+@pytest.mark.asyncio
 async def test_uppercase_routing_tag_is_not_stripped_by_catch_all() -> None:
     """`[THINKING_TRIGGER]` / `[SUB_WORKER_RESULT]` must survive — they
     are system routing tokens consumed downstream by the router."""

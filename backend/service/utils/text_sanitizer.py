@@ -55,18 +55,30 @@ SYSTEM_TAG_PATTERN = re.compile(
 # the prompt instruction can't drift apart. See the taxonomy module
 # docstring for the governance rule.
 EMOTION_TAGS = RECOGNIZED_TAGS
+# The optional ``:strength`` suffix matches the grammar documented in
+# ``backend/prompts/vtuber.md`` — a decimal number (optional leading
+# ``-``, optional fractional part). Strict numeric payload on purpose:
+# legitimate bracketed text like ``[note: todo]`` or ``[DM to Bob]``
+# must survive this pass (the router / catch-all below handle other
+# cases). Allow whitespace inside the bracket (``[joy : 0.7]``,
+# ``[joy:1.5 ]``) so lightly malformed LLM output still strips.
+_STRENGTH_RE = r"(?:\s*:\s*-?\d+(?:\.\d+)?)?"
+
 EMOTION_TAG_PATTERN = re.compile(
-    r"\[(?:" + "|".join(EMOTION_TAGS) + r")\]\s*",
+    r"\[\s*(?:" + "|".join(EMOTION_TAGS) + r")" + _STRENGTH_RE + r"\s*\]\s*",
     re.IGNORECASE,
 )
 
 # Narrow catch-all mirroring ``AffectTagEmitter.UNKNOWN_EMOTION_TAG_RE``
 # — any *remaining* lowercase single-word bracket tag that isn't on the
-# canonical list is also stripped from display. Matches the emitter's
-# safety-net so user-facing text never carries raw ``[something]``.
-# Uppercase routing tags (already handled above) don't match.
+# canonical list is also stripped from display, including an optional
+# ``:strength`` numeric suffix. Matches the emitter's safety-net so
+# user-facing text never carries raw ``[something]`` or ``[something:0.7]``.
+# Uppercase routing tags (already handled above) don't match. Non-numeric
+# payloads like ``[note: todo]`` are preserved by the strict numeric
+# strength rule.
 UNKNOWN_EMOTION_TAG_PATTERN = re.compile(
-    r"\[[a-z][a-z_]{2,19}\]\s*",
+    r"\[\s*[a-z][a-z_]{2,19}" + _STRENGTH_RE + r"\s*\]\s*",
 )
 
 THINK_BLOCK_PATTERN = re.compile(

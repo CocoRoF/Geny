@@ -176,3 +176,42 @@ def test_resolve_mood_kwarg_is_keyword_only() -> None:
     callers accidentally drifting into the new mood slot."""
     with pytest.raises(TypeError):
         _make().resolve_emotion("x", "completed", MoodVector(joy=0.6))  # type: ignore[misc]
+
+
+# ── Cycle 20260422_5 follow-up: ``:strength`` suffix tolerance ──────
+
+
+def test_strength_decorated_tag_is_recognized() -> None:
+    """``[joy:0.7]`` must register as joy, not be ignored. User-reported
+    leak: before this fix the regex only matched ``[joy]``, so strength-
+    decorated tags were neither counted nor stripped."""
+    extractor = _make()
+    result = extractor.extract("[joy:0.7] hello")
+    assert result.primary_emotion == "joy"
+    assert "[joy:0.7]" not in result.cleaned_text
+    assert result.cleaned_text == "hello"
+
+
+def test_strength_decorated_tag_is_stripped_from_cleaned_text() -> None:
+    """Even when the tag is *invalid* (not in the emotion_map), the
+    bracket + strength must still be removed from display text."""
+    extractor = _make()
+    result = extractor.extract("[wonder:1.5] cool")
+    # "wonder" isn't in _EMOTION_MAP → no emotion, but text must be clean
+    assert "[wonder:1.5]" not in result.cleaned_text
+    assert result.cleaned_text == "cool"
+
+
+def test_remove_tags_also_strips_strength_suffix() -> None:
+    extractor = _make()
+    assert (
+        extractor.remove_tags("[excitement:0.7] 좋아 [calm] 차분")
+        == "좋아 차분"
+    )
+
+
+def test_whitespace_inside_bracket_still_strips() -> None:
+    extractor = _make()
+    result = extractor.extract("[ joy : 0.5 ] hi")
+    assert result.primary_emotion == "joy"
+    assert result.cleaned_text == "hi"
