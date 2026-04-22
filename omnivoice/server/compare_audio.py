@@ -217,6 +217,7 @@ def _post_tts(
     num_step: int,
     guidance_scale: float,
     voices_root: str,
+    seed: Optional[int] = None,
 ) -> tuple[np.ndarray, int]:
     import httpx  # lazy import
 
@@ -227,6 +228,8 @@ def _post_tts(
         "guidance_scale": guidance_scale,
         "audio_format": "wav",
     }
+    if seed is not None:
+        payload["seed"] = int(seed)
     if voice:
         # Default reference filename mirrors GPTSoVITSEngine convention.
         payload["mode"] = "clone"
@@ -273,6 +276,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "--voices-root",
         default="/voices",
         help="Container path that the omnivoice service sees voice profiles under.",
+    )
+    common.add_argument(
+        "--seed",
+        type=int,
+        default=1234,
+        help=(
+            "Deterministic RNG seed sent in every /tts call. The same "
+            "value MUST be used at capture and check time, otherwise "
+            "OmniVoice's MaskGIT sampler will pick different durations "
+            "and the equivalence gate will spuriously fail."
+        ),
     )
 
     cap = sub.add_parser("capture", parents=[common], help="Record a fresh baseline.")
@@ -328,6 +342,7 @@ def _cmd_capture(args) -> int:
                 num_step=args.num_step,
                 guidance_scale=args.guidance_scale,
                 voices_root=args.voices_root,
+                seed=args.seed,
             )
             save_baseline(
                 out,
@@ -340,6 +355,7 @@ def _cmd_capture(args) -> int:
                 extra_meta={
                     "num_step": args.num_step,
                     "guidance_scale": args.guidance_scale,
+                    "seed": int(args.seed),
                 },
             )
             n += 1
@@ -380,6 +396,7 @@ def _cmd_check(args) -> int:
                 num_step=args.num_step,
                 guidance_scale=args.guidance_scale,
                 voices_root=args.voices_root,
+                seed=args.seed,
             )
             r = compare_pcm(
                 base_audio,

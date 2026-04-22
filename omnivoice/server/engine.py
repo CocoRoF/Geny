@@ -335,8 +335,24 @@ def _generate_sync(
     denoise: bool,
     preprocess_prompt: bool,
     postprocess_output: bool,
+    seed: Optional[int] = None,
 ) -> np.ndarray:
     """Blocking synthesis. Runs inside an executor thread."""
+    if seed is not None:
+        # Deterministic mode: seed every RNG OmniVoice can pull from
+        # right before generation. Required by the output-equivalence
+        # regression gate; without this the MaskGIT sampler picks a
+        # different duration / token sequence on every call.
+        import random as _py_random
+        _py_random.seed(int(seed))
+        np.random.seed(int(seed) & 0xFFFFFFFF)
+        try:
+            import torch as _torch
+            _torch.manual_seed(int(seed))
+            if _torch.cuda.is_available():
+                _torch.cuda.manual_seed_all(int(seed))
+        except Exception:  # pragma: no cover - torch missing on dev box
+            pass
     gen_config = _build_gen_config(
         num_step, guidance_scale, denoise, preprocess_prompt, postprocess_output,
     )
@@ -397,6 +413,7 @@ async def synthesize(
     denoise: bool,
     preprocess_prompt: bool,
     postprocess_output: bool,
+    seed: Optional[int] = None,
 ) -> tuple[np.ndarray, int]:
     """Public async entry point. Returns (audio_ndarray, sampling_rate)."""
     state = get_state()
@@ -419,6 +436,7 @@ async def synthesize(
                 denoise=denoise,
                 preprocess_prompt=preprocess_prompt,
                 postprocess_output=postprocess_output,
+                seed=seed,
             ),
         )
     return audio, state.sampling_rate

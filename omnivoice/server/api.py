@@ -111,6 +111,7 @@ async def tts(req: TTSRequest) -> Response:
             denoise=req.denoise,
             preprocess_prompt=req.preprocess_prompt,
             postprocess_output=req.postprocess_output,
+            seed=req.seed,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

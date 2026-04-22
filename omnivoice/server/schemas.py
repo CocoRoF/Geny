@@ -58,6 +58,16 @@ class TTSRequest(BaseModel):
     denoise: bool = True
     preprocess_prompt: bool = True
     postprocess_output: bool = True
+    seed: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description=(
+            "If set, seeds torch / torch.cuda / numpy RNGs immediately "
+            "before generation, making the output deterministic for the "
+            "same (text, voice, params, seed) tuple. Used by the "
+            "output-equivalence regression gate."
+        ),
+    )
 
     # Wire format
     audio_format: AudioFormat = Field(
