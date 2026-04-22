@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Sequence, Union, TYPE_CHECKING
 
-from service.affect import encode_emotion_vec
+from service.affect import decode_emotion_vec, encode_emotion_vec
 
 if TYPE_CHECKING:
     from service.database.app_database_manager import AppDatabaseManager
@@ -577,7 +577,8 @@ def db_stm_search(
         params = [session_id] + [f"%{kw}%" for kw in keywords] + [max_results]
 
         query = (
-            f"SELECT entry_id, content, role, metadata_json, entry_timestamp "
+            f"SELECT entry_id, content, role, metadata_json, entry_timestamp, "
+            f"emotion_vec, emotion_intensity "
             f"FROM {TABLE} "
             f"WHERE session_id = %s AND source = 'short_term' "
             f"AND entry_type = 'message' AND ({conditions}) "
@@ -596,12 +597,17 @@ def db_stm_search(
                     meta = json.loads(meta_str)
                 except (json.JSONDecodeError, TypeError):
                     pass
+            # PR-X6F-4: decode stored emotion_vec to a list for
+            # AffectAwareRetrieverMixin consumers; corrupt or NULL
+            # rows collapse to None so ranking falls back to text-only.
             entries.append({
                 "entry_id": row.get("entry_id", ""),
                 "content": row.get("content", ""),
                 "role": row.get("role", ""),
                 "metadata": meta,
                 "entry_timestamp": row.get("entry_timestamp", ""),
+                "emotion_vec": decode_emotion_vec(row.get("emotion_vec")),
+                "emotion_intensity": row.get("emotion_intensity"),
             })
         return entries
     except Exception as e:
