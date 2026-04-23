@@ -104,6 +104,72 @@ def _classify_input_role(input_text: str) -> str:
     return "user"
 
 
+# Plan/Phase02 §4 — loneliness drift constants. A single autonomous
+# (THINKING_TRIGGER) turn debits affection / familiarity by a fixed
+# amount on the active VTuber's bond, modeling "talking to myself
+# corrodes the felt closeness". Magnitudes are deliberately small
+# (0.10 / 0.05) so the drift is felt over many turns rather than
+# punching the bond down on a single trigger. The `Bond` clamp policy
+# (0.0–100.0) caps the floor — affection won't go negative.
+_LONELINESS_AFFECTION_LOSS = -0.10
+_LONELINESS_FAMILIARITY_LOSS = -0.05
+
+# Plan/Phase01 §3.2 — attention recovery constants. Hunger now models
+# attention deprivation (see Plan/01); every user-initiated turn
+# refunds a chunk of it, while autonomous (TRIGGER) turns do not. The
+# user-message familiarity gain is the *only* automatic familiarity
+# bump from plain dialogue (game tools / loneliness drift handle the
+# other channels). Magnitudes chosen via Plan/01 §7 (~30min/day user
+# keeps hunger < 50, idle user reaches >= 80 by 24h).
+_USER_MSG_HUNGER_RECOVERY = -3.0
+_USER_MSG_FAMILIARITY_GAIN = +0.05
+
+
+def _apply_loneliness_drift(buf: Any) -> None:
+    """Push the trigger-turn loneliness debit onto the current buffer.
+
+    The caller is responsible for the gate (vtuber + trigger turn +
+    buffer present); this helper is intentionally thin so it stays
+    trivially testable.
+    """
+    buf.append(
+        op="add",
+        path="bond.affection",
+        value=_LONELINESS_AFFECTION_LOSS,
+        source="loneliness:thinking_trigger",
+    )
+    buf.append(
+        op="add",
+        path="bond.familiarity",
+        value=_LONELINESS_FAMILIARITY_LOSS,
+        source="loneliness:thinking_trigger",
+    )
+
+
+def _apply_attention_recovery(buf: Any) -> None:
+    """Push the user-message attention recovery onto the current buffer.
+
+    Counterpart to :func:`_apply_loneliness_drift` — runs only on
+    user-initiated turns. Caller is responsible for the role / turn
+    gate. The hunger refund is large (-3) and the familiarity bump is
+    tiny (+0.05) so dialogue feels rewarding for upkeep but the bond
+    only meaningfully grows through richer interactions (game tools,
+    affect tags).
+    """
+    buf.append(
+        op="add",
+        path="vitals.hunger",
+        value=_USER_MSG_HUNGER_RECOVERY,
+        source="attention:user_message",
+    )
+    buf.append(
+        op="add",
+        path="bond.familiarity",
+        value=_USER_MSG_FAMILIARITY_GAIN,
+        source="attention:user_message",
+    )
+
+
 # ============================================================================
 # AgentSession Class
 # ============================================================================
@@ -1261,20 +1327,75 @@ class AgentSession:
         tolerant of ``None``, so we avoid branching here.
         """
         from service.state import (
+            CREATURE_STATE_KEY,
             MUTATION_BUFFER_KEY,
+            SESSION_META_KEY,
+            TURN_KIND_TRIGGER,
+            TURN_KIND_USER,
+            bind_creature_role,
             bind_mutation_buffer,
+            reset_creature_role,
             reset_mutation_buffer,
+            role_of,
         )
+        # Plan/Phase02 §2.2 — classify the turn kind once per turn so
+        # AffectTagEmitter (and the loneliness-drift logic) can branch
+        # on user-vs-trigger semantics. Reuses ``_classify_input_role``
+        # so we have a single source of truth: "internal_trigger" maps
+        # to TURN_KIND_TRIGGER, everything else to TURN_KIND_USER.
+        # ``assistant_dm`` (sub-worker / DM follow-ups) also collapse
+        # to USER here — those carry user-equivalent affective intent.
+        stm_role = _classify_input_role(input_text)
+        turn_kind = TURN_KIND_TRIGGER if stm_role == "internal_trigger" else TURN_KIND_USER
+        meta = state.shared.get(SESSION_META_KEY)
+        if isinstance(meta, dict):
+            meta["turn_kind"] = turn_kind
+        else:
+            # No registry hydrate ran (classic mode). Stash a minimal
+            # meta so downstream stages can still read turn_kind without
+            # NPE-ing on a missing dict.
+            state.shared[SESSION_META_KEY] = {"turn_kind": turn_kind}
+
         token = None
+        role_token = None
         if hydrated:
             buf = state.shared.get(MUTATION_BUFFER_KEY)
             if buf is not None:
                 token = bind_mutation_buffer(buf)
+            # Plan/Phase04 §4.2 — bind the current-turn creature role
+            # alongside the buffer so game tools can read it without
+            # touching ``state.shared``. The contextvar default is
+            # VTuber, so omitting this bind would silently treat
+            # workers as VTubers — pair it with the buffer bind.
+            snap = state.shared.get(CREATURE_STATE_KEY)
+            role_token = bind_creature_role(role_of(snap))
+
+            # Plan/Phase02 §4 — loneliness drift: a TRIGGER turn on a
+            # VTuber session decrements affection / familiarity by a
+            # fixed amount, modeling the "talking to myself" tax. Apply
+            # via the same mutation buffer the pipeline writes to so it
+            # commits in one OCC cycle. Skip when no buffer / no
+            # snapshot / non-VTuber / non-trigger turn.
+            is_vtuber_creature = (
+                buf is not None
+                and snap is not None
+                and getattr(snap, "character_role", "vtuber") == "vtuber"
+            )
+            if is_vtuber_creature and turn_kind == TURN_KIND_TRIGGER:
+                _apply_loneliness_drift(buf)
+            # Plan/Phase01 §3.2 — attention recovery: a USER turn on a
+            # VTuber session refunds a chunk of the attention deficit
+            # (hunger -= 3) and bumps familiarity by a tiny amount.
+            # Mirrors the loneliness-drift gate so the two policies are
+            # never both active on the same turn.
+            elif is_vtuber_creature and turn_kind == TURN_KIND_USER:
+                _apply_attention_recovery(buf)
         try:
             async for event in self._pipeline.run_stream(input_text, state):
                 yield event
         finally:
             reset_mutation_buffer(token)
+            reset_creature_role(role_token)
 
     async def _persist_state_safely(
         self, registry: Any, state: Any,

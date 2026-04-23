@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any, Dict
 
 from ..schema.creature_state import (
+    CHARACTER_ROLE_VTUBER,
     SCHEMA_VERSION,
     Bond,
     CreatureState,
@@ -55,9 +56,18 @@ def from_dict(raw: Dict[str, Any]) -> CreatureState:
     last_tick_at = _parse_dt(raw.get("last_tick_at"))
     if last_tick_at is None:
         raise ValueError("creature_state blob missing last_tick_at")
+    # Plan/Phase04 §2.2 — character_role landed in schema v2. v1 blobs
+    # have no ``character_role`` key; default them to VTUBER (every
+    # pre-v2 row was written by the VTuber pipeline). Unknown values
+    # are kept as-is so an admin override or future role rolls forward
+    # without a migration churn — apply_decay / role guards treat
+    # anything other than VTUBER as "skip".
+    role_raw = raw.get("character_role", CHARACTER_ROLE_VTUBER)
+    character_role = role_raw if isinstance(role_raw, str) and role_raw else CHARACTER_ROLE_VTUBER
     return CreatureState(
         character_id=raw["character_id"],
         owner_user_id=raw["owner_user_id"],
+        character_role=character_role,
         vitals=vitals,
         bond=bond,
         mood=mood,

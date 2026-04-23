@@ -182,23 +182,28 @@ async def test_s1_greet_twice_accumulates_familiarity() -> None:
 
 @pytest.mark.asyncio
 async def test_s2_long_gap_drives_vitals_block_to_starving() -> None:
-    """~20h between turns pushes hunger past the ``hungry`` band.
+    """~40h between turns pushes hunger past the ``neglected`` band.
 
     The in-process catch-up is what makes time-of-day storytelling
     possible: the LLM didn't have to call a decay tool, yet the next
     prompt reflects the creature has grown hungry while the user was
-    away. If hydrate silently skipped catch-up we'd render ``peckish``
-    off the stale snapshot and the narration would sound off.
+    away. If hydrate silently skipped catch-up we'd render the prior
+    band off the stale snapshot and the narration would sound off.
+
+    Plan/Phase01 §3.1 — passive hunger rate is now +1.0/hr (down
+    from +2.5/hr) because user messages refund attention on every
+    turn. ~40h of absence still drives the band past 80 (50 + 40 =
+    90 → ``craving_attention``).
     """
     provider = InMemoryCreatureStateProvider()
     registry = _registry(provider)
 
     # First, materialize the character so we can pin its state.
     await provider.load("rico", owner_user_id="player-1")
-    # Arrange: fed yesterday, last_tick pushed ~20h into the past so
-    # DEFAULT_DECAY's +2.5/h hunger drift saturates past the ``hungry``
-    # band (80) even from a comfortable starting hunger.
-    stale_tick = datetime.now(timezone.utc) - timedelta(hours=20)
+    # Arrange: fed earlier, last_tick pushed ~40h into the past so
+    # DEFAULT_DECAY's +1.0/h hunger drift saturates past the
+    # ``neglected`` band (80) even from a comfortable starting hunger.
+    stale_tick = datetime.now(timezone.utc) - timedelta(hours=40)
     await provider.set_absolute(
         "rico",
         {
@@ -217,7 +222,9 @@ async def test_s2_long_gap_drives_vitals_block_to_starving() -> None:
 
     rendered = VitalsBlock().render(state)
     assert "[Vitals]" in rendered
-    assert ("hunger: hungry" in rendered) or ("hunger: starving" in rendered)
+    # Plan/Phase01 §2 — hunger labels rebadged to attention deprivation.
+    # 80→neglected; 100→craving_attention. Render label is "attention".
+    assert ("attention: neglected" in rendered) or ("attention: craving_attention" in rendered)
 
 
 # ── S3 — 재접속 ─────────────────────────────────────────────────────

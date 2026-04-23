@@ -103,6 +103,11 @@ class SessionRuntimeRegistry:
             "session_id": self.session_id,
             "character_id": self.character_id,
             "owner_user_id": self.owner_user_id,
+            # Plan/Phase04 §3.2 — surface the role on session_meta so
+            # stages and tools can read it without re-reaching for the
+            # full snapshot. Defaults to VTuber for legacy snapshots
+            # where the field was never set explicitly.
+            "character_role": getattr(snap, "character_role", "vtuber"),
         })
         # PR-X5F-3: also expose the registry on the typed
         # ``state.session_runtime`` slot (geny-executor >= 0.30.0), so

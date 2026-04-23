@@ -30,6 +30,18 @@ from .decay_service import (
     DEFAULT_DECAY_JITTER_SECONDS,
     CreatureStateDecayService,
 )
+from .flags import (
+    KNOWN_TURN_KINDS,
+    TURN_KIND_SYSTEM,
+    TURN_KIND_TOOL,
+    TURN_KIND_TRIGGER,
+    TURN_KIND_USER,
+    get_turn_kind,
+    is_user_turn,
+    is_vtuber_role,
+    is_vtuber_state,
+    role_of,
+)
 from .hydrator import hydrate_state, persist_state
 from .provider import (
     CreatureStateProvider,
@@ -48,7 +60,11 @@ from .registry import (
 from .schema import (
     SCHEMA_VERSION,
     Bond,
+    CHARACTER_ROLE_OTHER,
+    CHARACTER_ROLE_VTUBER,
+    CHARACTER_ROLE_WORKER,
     CreatureState,
+    KNOWN_CHARACTER_ROLES,
     MoodVector,
     Mutation,
     MutationBuffer,
@@ -57,13 +73,19 @@ from .schema import (
     Vitals,
 )
 from .tool_context import (
+    bind_creature_role,
     bind_mutation_buffer,
+    current_creature_role,
     current_mutation_buffer,
+    reset_creature_role,
     reset_mutation_buffer,
 )
 
 __all__ = [
     "CATCHUP_THRESHOLD",
+    "CHARACTER_ROLE_OTHER",
+    "CHARACTER_ROLE_VTUBER",
+    "CHARACTER_ROLE_WORKER",
     "CREATURE_STATE_KEY",
     "CreatureStateDecayService",
     "DEFAULT_DECAY",
@@ -71,9 +93,15 @@ __all__ = [
     "DEFAULT_DECAY_JITTER_SECONDS",
     "DecayPolicy",
     "DecayRule",
+    "KNOWN_CHARACTER_ROLES",
+    "KNOWN_TURN_KINDS",
     "MUTATION_BUFFER_KEY",
     "SCHEMA_VERSION",
     "SESSION_META_KEY",
+    "TURN_KIND_SYSTEM",
+    "TURN_KIND_TOOL",
+    "TURN_KIND_TRIGGER",
+    "TURN_KIND_USER",
     "Bond",
     "CreatureState",
     "CreatureStateProvider",
@@ -90,9 +118,17 @@ __all__ = [
     "Vitals",
     "apply_decay",
     "apply_mutations",
+    "bind_creature_role",
     "bind_mutation_buffer",
+    "current_creature_role",
     "current_mutation_buffer",
+    "get_turn_kind",
     "hydrate_state",
+    "is_user_turn",
+    "is_vtuber_role",
+    "is_vtuber_state",
     "persist_state",
+    "reset_creature_role",
     "reset_mutation_buffer",
+    "role_of",
 ]

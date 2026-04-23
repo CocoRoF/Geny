@@ -22,7 +22,11 @@ from __future__ import annotations
 
 from logging import getLogger
 
-from service.state import current_mutation_buffer
+from service.state import (
+    current_creature_role,
+    current_mutation_buffer,
+    is_vtuber_role,
+)
 from tools.base import BaseTool
 
 from .rules import feed_rule_for
@@ -61,6 +65,15 @@ class FeedTool(BaseTool):
             return (
                 f"FEED_NARRATED_ONLY kind={kind} pleasure={rule.pleasure} "
                 "(state unavailable — no mutation recorded)"
+            )
+        # Plan/Phase04 §4.2 — VTuber-only gate. Worker / planner
+        # creatures don't carry vitals / bond, so the tool degrades to
+        # a narrated-only response just like the no-buffer path.
+        if not is_vtuber_role(current_creature_role()):
+            logger.debug("feed: non-VTuber role — running narrated-only")
+            return (
+                f"FEED_NARRATED_ONLY kind={kind} pleasure={rule.pleasure} "
+                "(role=non-vtuber — no mutation recorded)"
             )
 
         source = "tool:feed"

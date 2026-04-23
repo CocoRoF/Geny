@@ -451,9 +451,19 @@ async def test_mixed_recognized_and_unknown_tags() -> None:
 @pytest.mark.asyncio
 async def test_original_six_tags_preserve_exact_pre_x7_magnitudes() -> None:
     """Regression pin: primary 6 tags apply the exact same values as
-    before the X7 taxonomy expansion."""
+    before the X7 taxonomy expansion.
+
+    Plan/Phase03 §3.2 — same-path deltas across multiple tags now
+    coalesce into a single mutation per path. The numeric totals are
+    unchanged; only the entry count collapses (joy + calm both push
+    bond.affection ⇒ one entry of 0.5 + 0.5 = 1.0).
+
+    Plan/Phase03 §3.7 — default cap is now 2; this test feeds 3 tags
+    so we must bump the cap explicitly to keep exercising the
+    pre-cap magnitudes.
+    """
     state, buf = _state_with_buffer("[joy] [fear:2] [calm]")
-    await AffectTagEmitter().emit(state)
+    await AffectTagEmitter(max_tags_per_turn=3).emit(state)
 
     by_path_values: dict[str, list[float]] = {}
     for m in buf.items:
@@ -464,5 +474,5 @@ async def test_original_six_tags_preserve_exact_pre_x7_magnitudes() -> None:
     assert by_path_values["mood.fear"] == pytest.approx([2 * MOOD_ALPHA])
     assert by_path_values["bond.trust"] == pytest.approx([-0.6])
     assert by_path_values["mood.calm"] == pytest.approx([MOOD_ALPHA])
-    # bond.affection accumulates joy(0.5) + calm(0.5) — two entries
-    assert by_path_values["bond.affection"] == pytest.approx([0.5, 0.5])
+    # bond.affection coalesces joy(0.5) + calm(0.5) into one entry of 1.0.
+    assert by_path_values["bond.affection"] == pytest.approx([1.0])

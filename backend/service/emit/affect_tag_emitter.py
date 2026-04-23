@@ -42,7 +42,15 @@ from geny_executor.stages.s14_emit.types import EmitResult
 
 from service.affect.summary import stash_affect_summary
 from service.affect.taxonomy import RECOGNIZED_TAGS, coefficients_for
-from service.state import MUTATION_BUFFER_KEY
+from service.state import (
+    CREATURE_STATE_KEY,
+    MUTATION_BUFFER_KEY,
+    SESSION_META_KEY,
+    TURN_KIND_USER,
+    get_turn_kind,
+    is_vtuber_role,
+    is_vtuber_state,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +81,11 @@ UNKNOWN_EMOTION_TAG_RE: Final[re.Pattern[str]] = re.compile(
 
 MOOD_ALPHA: Final[float] = 0.15
 
-DEFAULT_MAX_TAG_MUTATIONS_PER_TURN: Final[int] = 3
+# Plan/Phase03 §3.7 — lowered from 3 → 2 so a single LLM turn can move
+# at most two affect axes meaningfully. Combined with §3.2 coalescing
+# (same-path tags sum to one mutation) and §3.3 saturation, this caps
+# total per-turn mood movement to roughly 0.30 in any one direction.
+DEFAULT_MAX_TAG_MUTATIONS_PER_TURN: Final[int] = 2
 
 #: Base scale for ``bond.affection`` coefficients from the taxonomy —
 #: a coefficient of 1.0 reproduces the pre-X7 joy/calm magnitude.
@@ -84,6 +96,53 @@ _BOND_AFFECTION_SCALE: Final[float] = 0.5
 #: encodes magnitudes as positive coefficients and the emitter applies
 #: the sign here, keeping the mapping table visually direction-neutral.
 _BOND_TRUST_SCALE: Final[float] = -0.3
+
+
+_MOOD_PATH_PREFIX: Final[str] = "mood."
+
+
+def _saturation_factor(current: float) -> float:
+    """Plan/Phase03 §3.3 — diminishing returns near the [0,1] cap.
+
+    Returns a multiplier in ``[0.0, 1.0]`` for an incoming positive
+    delta on a mood axis, based on the *current* value of that axis.
+    The factor is identity (1.0) below 0.5, ramps linearly to 0.5 at
+    current=0.8, then linearly to 0.0 at current=1.0. Above 1.0 the
+    delta is fully suppressed — the clamp in ``_clamp_for_path``
+    would clip it anyway, but we want the *upstream* signal to be
+    near-zero so the saturating axis doesn't waste a coalesce slot.
+
+    Negative deltas (regressing toward neutral) are not saturated by
+    this function — the caller checks ``delta > 0`` before applying
+    the factor. That asymmetry is intentional: it should always be
+    *easy* for an axis to come down from saturation, so the system
+    doesn't get stuck.
+    """
+    if current < 0.5:
+        return 1.0
+    if current < 0.8:
+        return 1.0 - (current - 0.5) / 0.3 * 0.5
+    if current < 1.0:
+        return 0.5 - (current - 0.8) / 0.2 * 0.5
+    return 0.0
+
+
+def _read_mood_axis(snap: Any, path: str) -> float:
+    """Best-effort read of a ``mood.<axis>`` value off a hydrated
+    snapshot. Returns 0.0 when the snapshot is missing the axis (so
+    a fresh creature with no mood block doesn't blow up the emitter).
+    """
+    if snap is None or not path.startswith(_MOOD_PATH_PREFIX):
+        return 0.0
+    axis = path[len(_MOOD_PATH_PREFIX):]
+    mood = getattr(snap, "mood", None)
+    if mood is None:
+        return 0.0
+    val = getattr(mood, axis, 0.0)
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 class AffectTagEmitter(Emitter):
@@ -113,6 +172,26 @@ class AffectTagEmitter(Emitter):
         return "affect_tag"
 
     async def emit(self, state: PipelineState) -> EmitResult:
+        # Plan/Phase04 §4.1 — VTuber-only gate. Worker / planner
+        # pipelines may use the same emitter chain but must not have
+        # their `final_text` carrying mood/bond mutations. We still
+        # strip recognized tags from the visible text below; the gate
+        # only suppresses mutation emission. Two sources of truth are
+        # consulted (snapshot + session_meta) so a mis-wired hydrate
+        # path can't accidentally bypass the guard.
+        snap = state.shared.get(CREATURE_STATE_KEY)
+        meta = state.shared.get(SESSION_META_KEY)
+        meta_role = meta.get("character_role") if isinstance(meta, dict) else None
+        role_is_vtuber = is_vtuber_state(snap) and (
+            meta_role is None or is_vtuber_role(meta_role)
+        )
+        # When *no* CreatureState was hydrated at all (classic mode),
+        # we still want to strip tags from the visible text — but
+        # there's no buffer to mutate either, so the existing buf-None
+        # branch handles that case cleanly. Only set the suppress flag
+        # for the explicit "hydrated state, but not VTuber" case.
+        suppress_mutations = snap is not None and not role_is_vtuber
+
         text = state.final_text or ""
         matches = AFFECT_TAG_RE.findall(text)
 
@@ -167,8 +246,38 @@ class AffectTagEmitter(Emitter):
                 },
             )
 
+        if suppress_mutations:
+            # Plan/Phase04 §4.1 — non-VTuber turn: tags were stripped
+            # from the visible text above, but no mood/bond mutations
+            # are emitted. Surfaced via metadata for telemetry.
+            return EmitResult(
+                emitted=False,
+                channels=["affect_tag"],
+                metadata={
+                    "matches": len(matches),
+                    "unknown_stripped": len(unknown_hits),
+                    "applied": 0,
+                    "stripped": True,
+                    "reason": "non_vtuber_role",
+                },
+            )
+
         applied = 0
         dropped = 0
+        # Plan/Phase02 §3.1 — read the current turn kind. Defaults to
+        # USER when the classifier didn't run (legacy tests / classic
+        # mode), preserving today's behavior of "always count bond".
+        turn_kind = get_turn_kind(meta) if isinstance(meta, dict) else TURN_KIND_USER
+
+        # Plan/Phase03 §3.2 — coalesce per path within a turn so
+        # ``[joy] [joy] [joy]`` produces *one* mood.joy mutation
+        # whose value is the sum of the three contributions, not
+        # three independent appends. ``deltas`` is the running sum,
+        # ``sources`` records up to three contributing tags per path
+        # so the audit log retains provenance.
+        deltas: dict[str, float] = {}
+        sources: dict[str, list[str]] = {}
+
         for tag_raw, strength_raw in matches:
             if applied >= self._max_tags_per_turn:
                 dropped += 1
@@ -185,8 +294,43 @@ class AffectTagEmitter(Emitter):
                 )
                 strength = 1.0
 
-            self._apply_tag(buf, tag, strength)
+            contributions = self._compute_tag_deltas(
+                tag, strength, turn_kind=turn_kind,
+            )
+            if not contributions:
+                # Tag known to taxonomy but every coefficient was
+                # gated out (e.g. only bond.* contributions on a
+                # non-user turn). Don't count toward applied — we
+                # didn't actually move the state.
+                continue
+
+            for path, delta in contributions.items():
+                if delta == 0.0:
+                    continue
+                deltas[path] = deltas.get(path, 0.0) + delta
+                bucket = sources.setdefault(path, [])
+                if tag not in bucket and len(bucket) < 3:
+                    bucket.append(tag)
             applied += 1
+
+        # Plan/Phase03 §3.3 — apply saturation per mood axis using
+        # the hydrated snapshot's *current* value. Done after
+        # coalescing so the saturation factor reflects the pre-turn
+        # state, not a half-applied accumulator. Bond / vitals axes
+        # are not saturated here (they have their own clamp policies
+        # in ``_clamp_for_path``).
+        for path, total in deltas.items():
+            if total == 0.0:
+                continue
+            if total > 0.0 and path.startswith(_MOOD_PATH_PREFIX):
+                current = _read_mood_axis(snap, path)
+                sat = _saturation_factor(current)
+                total *= sat
+                if total == 0.0:
+                    continue
+            tags_used = sources.get(path) or ["unknown"]
+            src = "emit:affect_tag/" + "+".join(tags_used)
+            buf.append(op="add", path=path, value=total, source=src)
 
         if dropped:
             logger.debug(
@@ -216,19 +360,35 @@ class AffectTagEmitter(Emitter):
             },
         )
 
-    def _apply_tag(self, buf: Any, tag: str, strength: float) -> None:
-        """Emit mutations for every coefficient in the tag's taxonomy entry.
+    def _compute_tag_deltas(
+        self,
+        tag: str,
+        strength: float,
+        *,
+        turn_kind: str = TURN_KIND_USER,
+    ) -> dict[str, float]:
+        """Return ``{path: delta}`` contributions for a single tag.
 
-        Unknown tags (absent from ``AFFECT_TAG_MAPPING``) produce no
-        mutations — they're still stripped from ``final_text`` by the
-        regex match, but contribute nothing to creature state. This
-        mirrors the design intent: display cleanliness first, mutation
-        correctness second.
+        Pure helper — no buffer side effects. Lets ``emit()`` coalesce
+        same-path deltas across multiple tags before flushing them as
+        one mutation each.
+
+        Unknown tags (absent from ``AFFECT_TAG_MAPPING``) return an
+        empty dict — they're still stripped from ``final_text`` by the
+        regex match, but contribute nothing to creature state.
+
+        ``turn_kind`` (Plan/Phase02 §3.1) gates bond contributions: on
+        autonomous (TRIGGER) turns ``bond.affection`` and ``bond.trust``
+        are skipped entirely so the character only earns relational
+        deltas from real user interaction. Mood deltas land on every
+        turn — the inner emotional life is allowed to drift even when
+        no one is watching.
         """
         coeffs = coefficients_for(tag)
         if not coeffs:
-            return
-        source = f"emit:affect_tag/{tag}"
+            return {}
+        is_user_turn = turn_kind == TURN_KIND_USER
+        out: dict[str, float] = {}
         for path, coeff in coeffs.items():
             # Scale depends on the axis family. Mood axes use MOOD_ALPHA
             # so a coefficient of 1.0 matches the historical delta; bond
@@ -237,8 +397,12 @@ class AffectTagEmitter(Emitter):
             if path.startswith("mood."):
                 delta = strength * coeff * MOOD_ALPHA
             elif path == "bond.affection":
+                if not is_user_turn:
+                    continue  # Plan/Phase02 §3.1 — autonomous turns can't grow affection.
                 delta = strength * coeff * _BOND_AFFECTION_SCALE
             elif path == "bond.trust":
+                if not is_user_turn:
+                    continue  # Plan/Phase02 §3.1 — autonomous turns can't move trust either.
                 delta = strength * coeff * _BOND_TRUST_SCALE
             else:
                 # Unknown bond / vitals path in the taxonomy — fall back
@@ -250,9 +414,5 @@ class AffectTagEmitter(Emitter):
                     tag, path,
                 )
                 delta = strength * coeff * MOOD_ALPHA
-            buf.append(
-                op="add",
-                path=path,
-                value=delta,
-                source=source,
-            )
+            out[path] = delta
+        return out

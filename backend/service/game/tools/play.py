@@ -24,7 +24,11 @@ from __future__ import annotations
 
 from logging import getLogger
 
-from service.state import current_mutation_buffer
+from service.state import (
+    current_creature_role,
+    current_mutation_buffer,
+    is_vtuber_role,
+)
 from tools.base import BaseTool
 
 from .rules import play_rule_for
@@ -63,6 +67,13 @@ class PlayTool(BaseTool):
             return (
                 f"PLAY_NARRATED_ONLY kind={kind} pleasure={rule.pleasure} "
                 "(state unavailable — no mutation recorded)"
+            )
+        # Plan/Phase04 §4.2 — VTuber-only gate.
+        if not is_vtuber_role(current_creature_role()):
+            logger.debug("play: non-VTuber role — running narrated-only")
+            return (
+                f"PLAY_NARRATED_ONLY kind={kind} pleasure={rule.pleasure} "
+                "(role=non-vtuber — no mutation recorded)"
             )
 
         source = "tool:play"

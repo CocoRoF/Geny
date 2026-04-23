@@ -28,7 +28,11 @@ from geny_executor.stages.s03_system.interface import PromptBlock
 
 from service.state import CREATURE_STATE_KEY
 
-_MOOD_DOMINANT_THRESHOLD: float = 0.15
+# Plan/Phase03 §3.5 — dominant threshold raised 0.15 → 0.30 to stop
+# weak EMA noise from flipping the surfaced dominant emotion every
+# turn. Secondary stays at 0.25 so an emotion just under the dominant
+# threshold can still appear as flavor (joy(0.4) with excitement(0.28)).
+_MOOD_DOMINANT_THRESHOLD: float = 0.30
 _MOOD_SECONDARY_THRESHOLD: float = 0.25
 
 _BOND_BANDS: tuple[tuple[float, str], ...] = (
@@ -40,11 +44,15 @@ _BOND_BANDS: tuple[tuple[float, str], ...] = (
 )
 
 _HUNGER_BANDS: tuple[tuple[float, str], ...] = (
-    (20.0, "sated"),
-    (40.0, "satisfied"),
-    (60.0, "peckish"),
-    (80.0, "hungry"),
-    (float("inf"), "starving"),
+    # Plan/Phase01 §2 — relabel from physical-hunger to attention
+    # deprivation. Internal field name stays ``hunger`` (avoid
+    # storage churn); only the prompt-facing label changes. Numeric
+    # band edges unchanged so existing decay/recovery math is intact.
+    (20.0, "attended"),
+    (40.0, "content"),
+    (60.0, "slightly_lonely"),
+    (80.0, "neglected"),
+    (float("inf"), "craving_attention"),
 )
 
 _ENERGY_BANDS: tuple[tuple[float, str], ...] = (
@@ -192,7 +200,12 @@ class VitalsBlock(PromptBlock):
 
         return (
             "[Vitals]\n"
-            f"- hunger: {_band(hunger, _HUNGER_BANDS)} ({hunger:.0f}/100)\n"
+            # Plan/Phase01 §3.5 — surface as "attention" so the LLM
+            # interprets the band ("neglected" / "craving_attention")
+            # as an emotional/relational signal rather than physical
+            # hunger. Field name stays ``hunger`` internally; only the
+            # rendered label changes.
+            f"- attention: {_band(hunger, _HUNGER_BANDS)} ({hunger:.0f}/100)\n"
             f"- energy: {_band(energy, _ENERGY_BANDS)} ({energy:.0f}/100)\n"
             f"- stress: {_band(stress, _STRESS_BANDS)} ({stress:.0f}/100)\n"
             f"- cleanliness: {_band(cleanliness, _CLEANLINESS_BANDS)} ({cleanliness:.0f}/100)"

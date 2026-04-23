@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from .creature_state import (
+    CHARACTER_ROLE_OTHER,
+    CHARACTER_ROLE_VTUBER,
+    CHARACTER_ROLE_WORKER,
+    KNOWN_CHARACTER_ROLES,
     SCHEMA_VERSION,
     Bond,
     CreatureState,
@@ -13,6 +17,10 @@ from .mood import MoodVector
 from .mutation import Mutation, MutationBuffer, MutationOp
 
 __all__ = [
+    "CHARACTER_ROLE_OTHER",
+    "CHARACTER_ROLE_VTUBER",
+    "CHARACTER_ROLE_WORKER",
+    "KNOWN_CHARACTER_ROLES",
     "SCHEMA_VERSION",
     "Bond",
     "CreatureState",

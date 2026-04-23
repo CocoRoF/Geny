@@ -201,13 +201,18 @@ def test_relationship_block_negative_bond_clamps_to_none_label() -> None:
 
 
 def test_vitals_block_uses_per_axis_band_semantics() -> None:
-    """hunger low = good (sated); energy low = bad (exhausted) — band
-    adjective must reflect *felt* state, not raw magnitude."""
+    """hunger low = good (attended); energy low = bad (exhausted) — band
+    adjective must reflect *felt* state, not raw magnitude.
+
+    Plan/Phase01 §2 — hunger labels were relabeled to attention
+    deprivation (sated→attended, hungry→neglected, etc.) and the
+    rendered key is now "attention".
+    """
     vitals = Vitals(hunger=5.0, energy=15.0, stress=10.0, cleanliness=95.0)
     out = VitalsBlock().render(_state_with_creature(_creature(vitals=vitals)))
     lines = out.splitlines()
     assert lines[0] == "[Vitals]"
-    assert "hunger: sated (5/100)" in lines[1]
+    assert "attention: attended (5/100)" in lines[1]
     assert "energy: exhausted (15/100)" in lines[2]
     assert "stress: calm (10/100)" in lines[3]
     assert "cleanliness: pristine (95/100)" in lines[4]
@@ -216,7 +221,7 @@ def test_vitals_block_uses_per_axis_band_semantics() -> None:
 def test_vitals_block_extreme_highs_use_right_labels() -> None:
     vitals = Vitals(hunger=95.0, energy=95.0, stress=95.0, cleanliness=5.0)
     out = VitalsBlock().render(_state_with_creature(_creature(vitals=vitals)))
-    assert "hunger: starving" in out
+    assert "attention: craving_attention" in out
     assert "energy: peak" in out
     assert "stress: overwhelmed" in out
     assert "cleanliness: filthy" in out

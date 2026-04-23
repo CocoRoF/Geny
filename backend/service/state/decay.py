@@ -28,9 +28,9 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Tuple
+from typing import Optional, Tuple
 
-from .schema.creature_state import CreatureState
+from .schema.creature_state import CHARACTER_ROLE_VTUBER, CreatureState
 
 
 # Hydrate-side catch-up threshold: if a user returns after this long,
@@ -44,16 +44,28 @@ CATCHUP_THRESHOLD = timedelta(minutes=30)
 class DecayRule:
     """One decay term — a numeric path drifting at ``rate_per_hour``.
 
-    ``rate_per_hour`` is signed: positive values grow the target
-    (``hunger`` climbs toward starving), negative values shrink it
-    (``energy`` falls toward exhausted). Results are clamped to
-    ``[clamp_min, clamp_max]``.
+    Two operating modes:
+
+    * **Linear drift** (default, ``regress_to is None``): the value
+      changes by ``rate_per_hour * elapsed_hours`` per tick. ``rate``
+      is signed — positive grows the target (``hunger`` → starving),
+      negative shrinks it (``energy`` → exhausted).
+    * **Regression to target** (``regress_to`` set, Plan/Phase03 §3.1):
+      the value is *pulled toward* ``regress_to`` with magnitude
+      ``|rate_per_hour| * elapsed_hours`` per tick, never overshooting.
+      Used for ``mood.*`` axes which must drift back to a neutral
+      equilibrium so emotions don't fixate. ``rate_per_hour``'s sign
+      is ignored in this mode — only its magnitude controls the pull
+      strength.
+
+    Results are clamped to ``[clamp_min, clamp_max]``.
     """
 
     path: str
     rate_per_hour: float
     clamp_min: float = 0.0
     clamp_max: float = 100.0
+    regress_to: Optional[float] = None
 
     def __post_init__(self) -> None:
         if not self.path:
@@ -80,11 +92,44 @@ class DecayPolicy:
 
 
 DEFAULT_DECAY = DecayPolicy(rules=(
-    DecayRule("vitals.hunger", +2.5),       # ~40h unattended → sated to starving
+    # Plan/Phase01 §3.1 — hunger now models *attention deprivation*
+    # rather than physical hunger. Recovery happens on every user
+    # message via the attention_recovery hook in AgentSession, so the
+    # passive drift is dialed down from +2.5 → +1.0 to keep the
+    # equilibrium roughly the same for an active user (~30 min/day).
+    DecayRule("vitals.hunger", +1.0),       # ~100h unattended → attended to craving
     DecayRule("vitals.energy", -1.5),       # fatigue accumulates
     DecayRule("vitals.cleanliness", -1.0),
     DecayRule("vitals.stress", +0.5),
     DecayRule("bond.familiarity", -0.1),    # very slow forgetting
+
+    # Plan/Phase03 §3.1 — mood natural drift. Each basic emotion is
+    # pulled back to 0 (neutral) so a transient spike doesn't stay
+    # pinned at 1.0 forever; ``calm`` is pulled toward 0.5 so the
+    # baseline is "mildly composed" rather than "deeply tranquil".
+    # Magnitudes per plan §3.1: anger/excitement decay fastest
+    # (intense emotions burn out), sadness slowest (lingers), joy/fear
+    # in the middle. The clamp [0.0, 1.0] is critical because mood is
+    # an EMA-style distribution — values outside that range break the
+    # ``dominant()`` contract.
+    DecayRule("mood.joy",
+              rate_per_hour=-0.15, clamp_min=0.0, clamp_max=1.0,
+              regress_to=0.0),
+    DecayRule("mood.sadness",
+              rate_per_hour=-0.10, clamp_min=0.0, clamp_max=1.0,
+              regress_to=0.0),
+    DecayRule("mood.anger",
+              rate_per_hour=-0.20, clamp_min=0.0, clamp_max=1.0,
+              regress_to=0.0),
+    DecayRule("mood.fear",
+              rate_per_hour=-0.15, clamp_min=0.0, clamp_max=1.0,
+              regress_to=0.0),
+    DecayRule("mood.excitement",
+              rate_per_hour=-0.20, clamp_min=0.0, clamp_max=1.0,
+              regress_to=0.0),
+    DecayRule("mood.calm",
+              rate_per_hour=+0.05, clamp_min=0.0, clamp_max=1.0,
+              regress_to=0.5),
 ))
 
 
@@ -128,10 +173,41 @@ def apply_decay(
     elapsed_hours = max(0.0, elapsed_seconds / 3600.0)
 
     new_state = copy.deepcopy(state)
+    # Plan/Phase04 §2.4 — VTuber-only gate. Worker / planner creatures
+    # share the same dataclass shape but must NOT see vitals drift
+    # (their "vitals" are meaningless and would only confuse downstream
+    # prompts). Bump the tick boundary so the next call computes elapsed
+    # from here, but skip the rule loop. Putting the guard inside the
+    # pure function means *both* call paths (decay service tick AND
+    # registry catch-up) inherit it without duplication.
+    role = getattr(state, "character_role", CHARACTER_ROLE_VTUBER)
+    if role != CHARACTER_ROLE_VTUBER:
+        new_state.last_tick_at = now
+        token = getattr(state, "_row_version", None)
+        if token is not None:
+            setattr(new_state, "_row_version", token)
+        return new_state
+
     if elapsed_hours > 0:
         for rule in policy.rules:
             current = _read_path(new_state, rule.path)
-            drifted = current + rule.rate_per_hour * elapsed_hours
+            if rule.regress_to is not None:
+                # Plan/Phase03 §3.1 — pull-toward-target mode. The pull
+                # magnitude per tick is |rate| * elapsed_hours, but
+                # never overshoots the target — once we hit ``regress_to``
+                # the value sits there. ``rate``'s sign is ignored: only
+                # its magnitude controls how *fast* we drift.
+                diff = rule.regress_to - current
+                if diff == 0.0:
+                    continue
+                step_max = abs(rule.rate_per_hour) * elapsed_hours
+                if abs(diff) <= step_max:
+                    drifted = rule.regress_to
+                else:
+                    direction = 1.0 if diff > 0 else -1.0
+                    drifted = current + direction * step_max
+            else:
+                drifted = current + rule.rate_per_hour * elapsed_hours
             if drifted < rule.clamp_min:
                 drifted = rule.clamp_min
             elif drifted > rule.clamp_max:

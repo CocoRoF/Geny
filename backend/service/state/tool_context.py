@@ -35,9 +35,19 @@ from contextvars import ContextVar, Token
 from typing import Optional
 
 from .schema import MutationBuffer
+from .schema.creature_state import CHARACTER_ROLE_VTUBER
 
 _current_mutation_buffer: ContextVar[Optional[MutationBuffer]] = ContextVar(
     "geny_current_mutation_buffer", default=None
+)
+
+# Plan/Phase04 §4.2 — current-turn role contextvar so game tools can
+# refuse to mutate when the active session belongs to a non-VTuber
+# character. Default is VTuber so legacy / classic-mode invocations
+# (where AgentSession never calls ``bind_creature_role``) preserve
+# today's behavior — mutate when a buffer is bound, no-op otherwise.
+_current_creature_role: ContextVar[str] = ContextVar(
+    "geny_current_creature_role", default=CHARACTER_ROLE_VTUBER
 )
 
 
@@ -52,6 +62,16 @@ def current_mutation_buffer() -> Optional[MutationBuffer]:
     return _current_mutation_buffer.get()
 
 
+def current_creature_role() -> str:
+    """Return the role string for the current-turn creature.
+
+    Defaults to :data:`CHARACTER_ROLE_VTUBER` when nothing was bound.
+    Game tools should treat any non-VTuber role as "skip the mutation"
+    and degrade to narrated-only (mirrors the buffer-None path).
+    """
+    return _current_creature_role.get()
+
+
 def bind_mutation_buffer(buffer: MutationBuffer) -> Token:
     """Publish *buffer* as the current-turn buffer and return a token.
 
@@ -60,6 +80,16 @@ def bind_mutation_buffer(buffer: MutationBuffer) -> Token:
     does not leak into sibling tasks that inherit the caller's context.
     """
     return _current_mutation_buffer.set(buffer)
+
+
+def bind_creature_role(role: str) -> Token:
+    """Publish *role* as the current-turn creature role.
+
+    Paired with :func:`reset_creature_role`. Falsy strings collapse to
+    the VTuber default — preserves the legacy contract where untagged
+    sessions are treated as VTuber.
+    """
+    return _current_creature_role.set(role or CHARACTER_ROLE_VTUBER)
 
 
 def reset_mutation_buffer(token: Optional[Token]) -> None:
@@ -75,8 +105,18 @@ def reset_mutation_buffer(token: Optional[Token]) -> None:
     _current_mutation_buffer.reset(token)
 
 
+def reset_creature_role(token: Optional[Token]) -> None:
+    """Counterpart to :func:`bind_creature_role`. Tolerates ``None``."""
+    if token is None:
+        return
+    _current_creature_role.reset(token)
+
+
 __all__ = [
+    "bind_creature_role",
     "bind_mutation_buffer",
+    "current_creature_role",
     "current_mutation_buffer",
+    "reset_creature_role",
     "reset_mutation_buffer",
 ]

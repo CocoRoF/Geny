@@ -46,19 +46,33 @@ class MoodVector:
             }
         )
 
-    def dominant(self, *, threshold: float = 0.15) -> str:
+    def dominant(self, *, threshold: float = 0.30) -> str:
         """Return the name of the strongest emotion above ``threshold``.
 
-        If no basic emotion (joy/sadness/anger/fear/excitement) exceeds the
-        threshold, returns ``"calm"`` regardless of the stored ``calm`` value —
-        neutral mood is the fallback.
+        If no basic emotion (joy/excitement/anger/fear/sadness) exceeds
+        the threshold, returns ``"calm"`` regardless of the stored
+        ``calm`` value — neutral mood is the fallback.
+
+        Plan/Phase03 §3.5 — the default threshold was raised from 0.15
+        to 0.30 so weak transient noise in the EMA doesn't flip the
+        reported dominant emotion every turn (the symptom from the
+        screenshot in the plan: joy=excitement=calm all near the cap,
+        dominant flickering between them). Iteration order is the
+        explicit tie-breaker — when two basic emotions are *exactly*
+        equal, the first one in the canonical list wins. The
+        ``+ 1e-9`` slack on the comparison guards against
+        floating-point round-trip causing the same input to flip
+        dominants between runs.
         """
-        basic: Iterable[str] = ("joy", "sadness", "anger", "fear", "excitement")
+        # Canonical priority order (Plan/Phase03 §3.5): outward-facing
+        # emotions before inward-facing ones, so a true tie surfaces
+        # the more legible one.
+        basic: Iterable[str] = ("joy", "excitement", "anger", "fear", "sadness")
         best_key = None
         best_val = -1.0
         for k in basic:
             v = getattr(self, k)
-            if v > best_val:
+            if v > best_val + 1e-9:
                 best_val = v
                 best_key = k
         if best_key is None or best_val <= threshold:

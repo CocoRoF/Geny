@@ -37,6 +37,39 @@ def _resolve_parent(state: CreatureState, path: str) -> tuple[Any, str]:
     return obj, leaf
 
 
+def _clamp_for_path(path: str, value: float) -> float:
+    """Apply path-aware bounds to a numeric mutation result.
+
+    Plan/Phase03 §3.4 — ``mood.*`` is an EMA-style distribution and
+    must stay in ``[0.0, 1.0]``; without this clamp a runaway
+    ``add`` (or coalesced sum) can push joy past 1.0 and break the
+    ``dominant()`` / saturation contracts. ``vitals.*`` is the
+    classic 0–100 scale used by every UI band. ``bond.*`` is left
+    open-ended (only floored at 0) — affection / trust grow without
+    a hard cap by design.
+
+    Non-prefixed paths fall through unchanged so other dataclass
+    fields can carry whatever they need.
+    """
+    if path.startswith("mood."):
+        if value < 0.0:
+            return 0.0
+        if value > 1.0:
+            return 1.0
+        return value
+    if path.startswith("vitals."):
+        if value < 0.0:
+            return 0.0
+        if value > 100.0:
+            return 100.0
+        return value
+    if path.startswith("bond."):
+        if value < 0.0:
+            return 0.0
+        return value
+    return value
+
+
 def _apply_add(state: CreatureState, path: str, value: Any) -> None:
     parent, leaf = _resolve_parent(state, path)
     current = getattr(parent, leaf)
@@ -48,11 +81,18 @@ def _apply_add(state: CreatureState, path: str, value: Any) -> None:
         raise TypeError(
             f"add op requires numeric delta, got {type(value).__name__}"
         )
-    setattr(parent, leaf, float(current) + float(value))
+    raw = float(current) + float(value)
+    setattr(parent, leaf, _clamp_for_path(path, raw))
 
 
 def _apply_set(state: CreatureState, path: str, value: Any) -> None:
     parent, leaf = _resolve_parent(state, path)
+    # Plan/Phase03 §3.4 — apply the same path-aware bounds on `set` so
+    # an absolute reset (e.g. set mood.joy = 1.5) can't bypass the
+    # clamp that `add` honors.
+    if isinstance(value, (int, float)):
+        setattr(parent, leaf, _clamp_for_path(path, float(value)))
+        return
     setattr(parent, leaf, value)
 
 

@@ -10,6 +10,10 @@ from dataclasses import is_dataclass
 from datetime import datetime, timezone
 
 from service.state.schema.creature_state import (
+    CHARACTER_ROLE_OTHER,
+    CHARACTER_ROLE_VTUBER,
+    CHARACTER_ROLE_WORKER,
+    KNOWN_CHARACTER_ROLES,
     SCHEMA_VERSION,
     Bond,
     CreatureState,
@@ -19,8 +23,9 @@ from service.state.schema.creature_state import (
 from service.state.schema.mood import MoodVector
 
 
-def test_schema_version_is_one() -> None:
-    assert SCHEMA_VERSION == 1
+def test_schema_version_is_two() -> None:
+    # Bumped from 1 → 2 in Plan/Phase04 (character_role addition).
+    assert SCHEMA_VERSION == 2
 
 
 def test_vitals_defaults() -> None:
@@ -98,3 +103,33 @@ def test_last_tick_at_is_utc_aware_and_recent() -> None:
 def test_all_schema_types_are_dataclasses() -> None:
     for t in (Vitals, Bond, Progression, CreatureState, MoodVector):
         assert is_dataclass(t)
+
+
+def test_character_role_default_is_vtuber() -> None:
+    """Plan/Phase04: default role is VTuber for backward compat."""
+    s = CreatureState(character_id="c", owner_user_id="u")
+    assert s.character_role == CHARACTER_ROLE_VTUBER
+
+
+def test_character_role_constants_distinct() -> None:
+    assert CHARACTER_ROLE_VTUBER == "vtuber"
+    assert CHARACTER_ROLE_WORKER == "worker"
+    assert CHARACTER_ROLE_OTHER == "other"
+    assert len({CHARACTER_ROLE_VTUBER, CHARACTER_ROLE_WORKER, CHARACTER_ROLE_OTHER}) == 3
+
+
+def test_known_character_roles_complete() -> None:
+    assert set(KNOWN_CHARACTER_ROLES) == {
+        CHARACTER_ROLE_VTUBER,
+        CHARACTER_ROLE_WORKER,
+        CHARACTER_ROLE_OTHER,
+    }
+
+
+def test_character_role_explicit_assignment() -> None:
+    worker = CreatureState(
+        character_id="w1",
+        owner_user_id="u",
+        character_role=CHARACTER_ROLE_WORKER,
+    )
+    assert worker.character_role == CHARACTER_ROLE_WORKER

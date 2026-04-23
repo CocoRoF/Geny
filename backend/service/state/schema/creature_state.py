@@ -8,7 +8,31 @@ from typing import List, Optional
 
 from .mood import MoodVector
 
-SCHEMA_VERSION = 1
+# Plan/Phase04 §2.1 — bumped from 1 → 2 with the addition of
+# ``character_role``. Existing v1 rows deserialize via the field
+# default below ("vtuber"), so the bump is informational rather than
+# destructive — the migration script (provider/migrations/v1_to_v2)
+# upgrades on first read so the persisted ``schema_version`` matches.
+SCHEMA_VERSION = 2
+
+# Role discriminator for "VTuber-only" gating (Plan/Phase04). Worker /
+# Researcher / Planner agents reuse the same pipeline plumbing but must
+# NOT trigger creature-state side-effects (decay, affect tag mutations,
+# loneliness drift). Existing rows default to VTUBER for backward
+# compatibility — non-VTuber characters are explicitly tagged at
+# creation time by the agent-session bootstrap.
+CHARACTER_ROLE_VTUBER = "vtuber"
+CHARACTER_ROLE_WORKER = "worker"
+CHARACTER_ROLE_OTHER = "other"
+
+# Frozen tuple of accepted role values — used by the flags helpers and
+# by the migration script to validate persisted blobs without importing
+# the constants individually.
+KNOWN_CHARACTER_ROLES = (
+    CHARACTER_ROLE_VTUBER,
+    CHARACTER_ROLE_WORKER,
+    CHARACTER_ROLE_OTHER,
+)
 
 
 def _utcnow() -> datetime:
@@ -51,6 +75,15 @@ class CreatureState:
     # Identity
     character_id: str
     owner_user_id: str
+
+    # Role discriminator (Plan/Phase04). Defaults to VTuber for backward
+    # compat — every existing row in the wild was created before the
+    # field existed, and they're all VTubers by construction (only the
+    # VTuber pipeline wires the state provider). Worker / planner
+    # creatures (if ever introduced) must be tagged explicitly at
+    # creation time so the role guards in apply_decay /
+    # AffectTagEmitter / game tools skip them cleanly.
+    character_role: str = CHARACTER_ROLE_VTUBER
 
     # Mutable game state
     vitals: Vitals = field(default_factory=Vitals)

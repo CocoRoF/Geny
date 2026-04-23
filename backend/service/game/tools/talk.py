@@ -19,7 +19,11 @@ from __future__ import annotations
 
 from logging import getLogger
 
-from service.state import current_mutation_buffer
+from service.state import (
+    current_creature_role,
+    current_mutation_buffer,
+    is_vtuber_role,
+)
 from tools.base import BaseTool
 
 from .rules import TALK_KINDS
@@ -67,6 +71,10 @@ class TalkTool(BaseTool):
         if buf is None:
             logger.debug("talk: no mutation buffer bound — running narrated-only")
             return f"TALK_NARRATED_ONLY kind={kind_clean} (state unavailable)"
+        # Plan/Phase04 §4.2 — VTuber-only gate.
+        if not is_vtuber_role(current_creature_role()):
+            logger.debug("talk: non-VTuber role — running narrated-only")
+            return f"TALK_NARRATED_ONLY kind={kind_clean} (role=non-vtuber)"
 
         source = "tool:talk"
         buf.append(op="add", path="bond.familiarity", value=FAMILIARITY_DELTA, source=source)

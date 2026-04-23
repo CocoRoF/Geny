@@ -74,6 +74,9 @@ async def test_hydrate_installs_keys_on_shared() -> None:
     assert meta["session_id"] == "sess-1"
     assert meta["character_id"] == "c1"
     assert meta["owner_user_id"] == "u1"
+    # Plan/Phase04: role surfaced on session_meta. Default snapshot
+    # carries the VTuber default.
+    assert meta["character_role"] == "vtuber"
 
 
 @pytest.mark.asyncio

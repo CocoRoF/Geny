@@ -49,13 +49,20 @@ def test_decay_policy_rejects_duplicate_paths() -> None:
 
 def test_default_decay_shape() -> None:
     paths = {r.path for r in DEFAULT_DECAY.rules}
-    # Plan §5.2 — exactly these five paths.
+    # Plan §5.2 — vitals & familiarity baseline.
+    # Plan/Phase03 §3.1 — mood axes added with regress_to mode.
     assert paths == {
         "vitals.hunger",
         "vitals.energy",
         "vitals.cleanliness",
         "vitals.stress",
         "bond.familiarity",
+        "mood.joy",
+        "mood.sadness",
+        "mood.anger",
+        "mood.fear",
+        "mood.excitement",
+        "mood.calm",
     }
     # Affection / trust / dependency deliberately excluded.
     assert "bond.affection" not in paths
