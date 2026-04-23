@@ -105,4 +105,3 @@ def test_attention_recovery_does_not_touch_affection() -> None:
     buf = MutationBuffer()
     _apply_attention_recovery(buf)
     assert _by_path(buf, "bond.affection") == []
-
