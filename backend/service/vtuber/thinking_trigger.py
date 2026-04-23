@@ -602,6 +602,47 @@ class ThinkingTriggerService:
             "max_threshold_seconds": self._max_threshold,
         }
 
+    @staticmethod
+    def _safe_inbox_unread_count(session_id: str) -> int:
+        """Return the unread inbox count for *session_id*, swallowing errors.
+
+        Used by ``scan_all`` and ``_fire_trigger`` to choose between
+        firing a synthetic thinking trigger and draining a real queued
+        message (typically a ``[SUB_WORKER_RESULT]`` from the linked
+        Sub-Worker that landed while the VTuber was busy). Any failure
+        in inbox lookup is logged at debug level and treated as
+        "0 unread" so a misbehaving inbox subsystem never blocks the
+        thinking-trigger loop.
+        """
+        try:
+            from service.chat.inbox import get_inbox_manager
+            return int(get_inbox_manager().unread_count(session_id))
+        except Exception:
+            logger.debug(
+                "inbox unread_count failed for %s", session_id, exc_info=True,
+            )
+            return 0
+
+    @staticmethod
+    async def _kick_inbox_drain(session_id: str) -> None:
+        """Run the agent-executor drain for *session_id*, swallowing errors.
+
+        Wraps :func:`service.execution.agent_executor._drain_inbox` so
+        the thinking-trigger loop can defer to real queued work when
+        ``_safe_inbox_unread_count`` reports unread messages. The
+        drain has its own ``_draining_sessions`` re-entry guard, so
+        it is safe to fire concurrently with other drains scheduled
+        from execution finally-blocks; the second invocation will
+        just no-op.
+        """
+        try:
+            from service.execution.agent_executor import _drain_inbox
+            await _drain_inbox(session_id)
+        except Exception:
+            logger.debug(
+                "inbox drain kick failed for %s", session_id, exc_info=True,
+            )
+
     def _get_adaptive_threshold(self, session_id: str) -> float:
         """Calculate adaptive idle threshold using log scale.
 
@@ -638,6 +679,23 @@ class ThinkingTriggerService:
             if sid in self._disabled_sessions:
                 continue
 
+            # Inbox priority — if there are unread messages (typically a
+            # queued [SUB_WORKER_RESULT] from the linked Sub-Worker that
+            # arrived while the VTuber was busy), drain the inbox
+            # instead of firing a synthetic idle trigger. The drain
+            # itself will route each message through `execute_command`
+            # which records activity, so the next scan correctly
+            # accounts for the work that was done. Without this guard
+            # the VTuber would keep narrating "still waiting" while a
+            # real result was sitting unread.
+            if self._safe_inbox_unread_count(sid) > 0:
+                trigger_tasks.append((sid, self._kick_inbox_drain(sid)))
+                # Bump activity so we don't immediately try again next
+                # tick if drain is slow — the drain's own executions
+                # will refresh activity once they actually run.
+                self._activity[sid] = now
+                continue
+
             idle = now - last
             threshold = self._get_adaptive_threshold(sid)
             if idle < threshold:
@@ -671,6 +729,19 @@ class ThinkingTriggerService:
                 execute_command,
                 is_executing,
             )
+
+            # Last-mile inbox guard — the unread count may have flipped
+            # to non-zero between `scan_all` and now (e.g. a Sub-Worker
+            # finished mid-tick). Prefer real inbox content over a
+            # synthetic idle prompt so the VTuber never narrates
+            # "still waiting" while a queued result is in the inbox.
+            if self._safe_inbox_unread_count(session_id) > 0:
+                logger.debug(
+                    "thinking trigger deferred — inbox has unread for %s",
+                    session_id,
+                )
+                await self._kick_inbox_drain(session_id)
+                return
 
             # Check if the linked Sub-Worker is busy
             prompt = self._build_trigger_prompt(session_id, is_executing)

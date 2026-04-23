@@ -890,8 +890,17 @@ async def execute_command(
         cleanup_execution(session_id, exec_id=exec_id)
 
         # 7. Post-execution inbox drain (fire-and-forget, best-effort)
-        #    Only for non-trigger, non-drain executions to avoid recursion.
-        if not is_trigger and session_id not in _draining_sessions:
+        #    Runs after EVERY execution (including thinking triggers).
+        #    Without this the Worker→VTuber [SUB_WORKER_RESULT] queued
+        #    via `_notify_linked_vtuber`'s inbox fallback would only be
+        #    drained when the user sent a fresh message — leaving the
+        #    VTuber narrating "still waiting" while the result sits in
+        #    the inbox. Re-entry is prevented by the `_draining_sessions`
+        #    guard inside `_drain_inbox`; the drain itself invokes
+        #    `execute_command` *without* `is_trigger=True`, so the
+        #    drain's child execution can in turn drain again only after
+        #    the guard releases at the outer drain's `finally`.
+        if session_id not in _draining_sessions:
             asyncio.create_task(_drain_inbox(session_id))
 
 
