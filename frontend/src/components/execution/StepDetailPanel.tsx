@@ -296,12 +296,39 @@ function StageEventDetail({ entry }: { entry: LogEntry }) {
 // Generic Detail (COMMAND, RESPONSE, ERROR, etc.)
 // ════════════════════════════════════════════════════════════════
 function GenericDetail({ entry }: { entry: LogEntry }) {
-  const meta = entry.metadata as LogEntryMetadata;
+  const meta = entry.metadata as LogEntryMetadata | undefined;
   const displayMsg = entry.message
     .replace(/^PROMPT:\s*/, '')
     .replace(/^SUCCESS:\s*/, '')
     .replace(/^ERROR:\s*/, '')
     .replace(/^FAILED:\s*/, '');
+
+  // Pull a few high-signal fields out of the metadata for a quick
+  // top-of-panel summary; the full metadata blob is rendered below as
+  // formatted JSON so nothing is hidden. This is what surfaces the
+  // routing details on entries like "[SUB_WORKER_RESULT] → d12cd2e2…"
+  // (event=delegation.sent, to_session_id=…, tag=…) and
+  // "Recipient busy — message queued to inbox" (event=inbox.delivered).
+  const metaRecord = (meta ?? {}) as Record<string, unknown>;
+  const event =
+    typeof metaRecord.event === 'string' ? (metaRecord.event as string) : undefined;
+  const tag =
+    typeof metaRecord.tag === 'string' ? (metaRecord.tag as string) : undefined;
+  const fromId =
+    typeof metaRecord.from_session_id === 'string' ? (metaRecord.from_session_id as string) : undefined;
+  const toId =
+    typeof metaRecord.to_session_id === 'string' ? (metaRecord.to_session_id as string) : undefined;
+  const errorField =
+    typeof metaRecord.error === 'string' ? (metaRecord.error as string) : undefined;
+  const fullMessageLen = entry.message?.length ?? 0;
+
+  // Only render the JSON section when there's *more* metadata than
+  // the small structured rows we already display, otherwise it's
+  // visual noise.
+  const interestingMetaKeys = Object.keys(metaRecord).filter(
+    (k) => !['event', 'tag', 'from_session_id', 'to_session_id', 'error'].includes(k),
+  );
+  const hasExtraMeta = interestingMetaKeys.length > 0;
 
   return (
     <div className="space-y-4">
@@ -309,18 +336,41 @@ function GenericDetail({ entry }: { entry: LogEntry }) {
         <div className="bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)] p-3">
           <MetaRow label="Level" value={entry.level} />
           <MetaRow label="Time" value={formatTime(entry.timestamp)} mono />
+          {event && <MetaRow label="Event" value={event} mono />}
+          {tag && <MetaRow label="Tag" value={tag} mono />}
+          {fromId && <MetaRow label="From" value={fromId} mono />}
+          {toId && <MetaRow label="To" value={toId} mono />}
           {meta?.duration_ms != null && <MetaRow label="Duration" value={`${meta.duration_ms}ms`} mono />}
           {meta?.cost_usd != null && <MetaRow label="Cost" value={`$${meta.cost_usd.toFixed(6)}`} mono />}
+          {fullMessageLen > 0 && (
+            <MetaRow label="Message len" value={`${fullMessageLen} chars`} mono />
+          )}
+          {errorField && (
+            <MetaRow
+              label="Error"
+              value={<span className="text-[var(--danger-color)]">{errorField}</span>}
+            />
+          )}
         </div>
       </Section>
 
       <Section title="Content" icon={<Eye size={12} className="text-[var(--text-muted)]" />}>
         <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2 max-h-[600px] overflow-auto">
           <pre className="text-[0.75rem] leading-relaxed text-[var(--text-primary)] whitespace-pre-wrap break-words m-0">
-            {displayMsg}
+            {displayMsg || <span className="text-[var(--text-muted)] italic">(no message body)</span>}
           </pre>
         </div>
       </Section>
+
+      {hasExtraMeta && (
+        <Section title="Metadata" icon={<Hash size={12} className="text-[var(--text-muted)]" />}>
+          <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2 max-h-[400px] overflow-auto">
+            <pre className="text-[0.6875rem] leading-relaxed text-[var(--text-secondary)] whitespace-pre-wrap break-words m-0 font-mono">
+              {JSON.stringify(metaRecord, null, 2)}
+            </pre>
+          </div>
+        </Section>
+      )}
     </div>
   );
 }

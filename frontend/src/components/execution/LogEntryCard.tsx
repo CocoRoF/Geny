@@ -170,7 +170,20 @@ export default function LogEntryCard({ entry, isSelected, onClick }: LogEntryCar
   const Icon = config.icon;
   const meta = entry.metadata as LogEntryMetadata | undefined;
   const description = useMemo(() => getEntryDescription(entry), [entry]);
-  const hasDetail = ['TOOL', 'ITER', 'STAGE', 'GRAPH', 'COMMAND', 'RESPONSE', 'ERROR', 'TOOL_RES'].includes(entry.level);
+  // Any entry that carries either a non-trivial message body or rich
+  // metadata is worth opening in the detail panel. INFO / WARNING
+  // were historically excluded which made delegation events like
+  // "[SUB_WORKER_RESULT] → d12cd2e2…" and "Recipient busy — message
+  // queued to inbox" look like dead-end summaries; they actually
+  // carry the full target session id, tag and routing reason in
+  // metadata. Open them through GenericDetail so the user can drill
+  // in.
+  const hasRichMeta = !!meta && Object.keys(meta).length > 0;
+  const hasLongMessage = (entry.message?.length ?? 0) > 80;
+  const hasDetail =
+    ['TOOL', 'ITER', 'STAGE', 'GRAPH', 'COMMAND', 'RESPONSE', 'ERROR', 'TOOL_RES'].includes(entry.level)
+    || ((entry.level === 'INFO' || entry.level === 'WARNING' || entry.level === 'DEBUG')
+        && (hasRichMeta || hasLongMessage));
 
   return (
     <div
@@ -230,6 +243,7 @@ export default function LogEntryCard({ entry, isSelected, onClick }: LogEntryCar
         {/* Description */}
         <div
           className="text-[0.75rem] leading-snug truncate"
+          title={hasDetail ? entry.message : undefined}
           style={{
             color: entry.level === 'ERROR' ? 'var(--danger-color)' :
               entry.level === 'WARNING' ? 'var(--warning-color)' :
