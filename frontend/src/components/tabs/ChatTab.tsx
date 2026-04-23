@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { chatApi } from '@/lib/api';
 import { getChatWSManager } from '@/lib/chatWsManager';
+import { useCreatureStateStore } from '@/store/useCreatureStateStore';
 import { useI18n } from '@/lib/i18n';
 import {
   Send, Loader2, MessageCircle, Users, Bot, User,
@@ -98,6 +99,13 @@ export default function ChatTab() {
             lastMsgIdRef.current = msg.id;
             return [...prev, msg];
           });
+          // Refresh the creature-state snapshot for the originating
+          // session as soon as an agent reply lands. Mirrors the
+          // VTuberChatPanel behavior so InfoTab's Status sub-tab and
+          // the VTuberTab badge update in real time after each turn.
+          if (msg.type === 'agent' && msg.session_id) {
+            void useCreatureStateStore.getState().fetch(msg.session_id);
+          }
           break;
         }
         case 'broadcast_status': {

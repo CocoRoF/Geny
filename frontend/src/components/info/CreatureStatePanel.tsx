@@ -121,6 +121,15 @@ export default function CreatureStatePanel({
     ['excitement', t('info.creatureState.moodAxes.excitement')],
   ];
 
+  // Plan/Phase01 — dominant-mood string returned by the backend is
+  // an English key ("calm", "joy", ...). Look it up in the i18n
+  // moodDominant map so the UI shows a localized label; fall back to
+  // the raw key when the translation table doesn't cover it (forward
+  // compat for new emotions).
+  const dominantLabel = mood_dominant
+    ? (t(`info.creatureState.moodDominant.${mood_dominant}`) || mood_dominant)
+    : '—';
+
   const bondAxes: Array<[keyof typeof bond, string]> = [
     ['affection', t('info.creatureState.bondAxes.affection')],
     ['trust', t('info.creatureState.bondAxes.trust')],
@@ -170,7 +179,7 @@ export default function CreatureStatePanel({
           <span className="uppercase tracking-[0.8px] text-[#a5b4fc]">
             {t('info.creatureState.dominantMood')}
           </span>
-          <span className="font-mono text-[#fde68a] uppercase">{mood_dominant}</span>
+          <span className="font-mono text-[#fde68a] uppercase">{dominantLabel}</span>
         </div>
 
         {/* Vitals */}
@@ -282,7 +291,7 @@ export default function CreatureStatePanel({
             className="text-[13px] text-[var(--text-primary)]"
             style={{ fontFamily: "'SF Mono', 'Fira Code', monospace" }}
           >
-            {mood_dominant}
+            {dominantLabel}
           </span>
         </div>
         <div className="flex flex-col gap-0.5 py-2 px-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)]">

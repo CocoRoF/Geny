@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { chatApi } from '@/lib/api';
 import { getChatWSManager } from '@/lib/chatWsManager';
+import { useCreatureStateStore } from './useCreatureStateStore';
 import type { ChatRoom, ChatRoomMessage, BroadcastStatus, AgentProgressState, FileChanges } from '@/types';
 
 interface MessengerState {
@@ -259,6 +260,11 @@ export const useMessengerStore = create<MessengerState>((set, get) => ({
               _lastMsgId: msg.id,
             };
           });
+          // Refresh the originating session's creature-state snapshot
+          // so InfoTab Status / VTuberTab badge reflect the new turn.
+          if (msg.type === 'agent' && msg.session_id) {
+            void useCreatureStateStore.getState().fetch(msg.session_id);
+          }
           break;
         }
         case 'broadcast_status': {

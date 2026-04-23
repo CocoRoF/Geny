@@ -53,6 +53,25 @@ export default function InfoTab() {
   // Mirror creature_state into the shared store so the VTuberTab
   // status badge stays in sync with whatever InfoTab last fetched.
   const setCreatureSnapshot = useCreatureStateStore((s) => s.setSnapshot);
+  // Also *read* the live snapshot from the store so this tab
+  // re-renders the moment another consumer (chat WS handler,
+  // VTuberTab badge) refreshes it after a turn lands. Without
+  // this subscription the Status sub-tab stayed pinned to the
+  // value captured by the initial fetchDetail() and never moved.
+  const liveSnapshot = useCreatureStateStore((s) =>
+    selectedSessionId ? s.states[selectedSessionId] : null,
+  );
+  const fetchCreatureState = useCreatureStateStore((s) => s.fetch);
+
+  // Refresh the live creature snapshot whenever the user switches
+  // *into* the Status sub-tab. The store is otherwise only refreshed
+  // by chat panels (after each assistant turn) or the VTuberTab badge
+  // (on mount), so opening Status on a long-idle session would show
+  // stale data without this nudge.
+  useEffect(() => {
+    if (subTab !== 'status' || !selectedSessionId) return;
+    void fetchCreatureState(selectedSessionId);
+  }, [subTab, selectedSessionId, fetchCreatureState]);
 
   const fetchDetail = useCallback(async () => {
     if (!selectedSessionId) { setData(null); return; }
@@ -293,10 +312,14 @@ export default function InfoTab() {
       )}
 
       {/* ── Tamagotchi Creature State (X7) ─── */}
-      {subTab === 'status' && !isDeleted && data.creature_state && (
-        <CreatureStatePanel snapshot={data.creature_state} t={t} />
+      {/* Prefer the live snapshot from useCreatureStateStore so chat
+          turns and badge refreshes propagate here without re-fetching
+          the whole agent payload. Fall back to data.creature_state for
+          the very first render before the store has been populated. */}
+      {subTab === 'status' && !isDeleted && (liveSnapshot ?? data.creature_state) && (
+        <CreatureStatePanel snapshot={liveSnapshot ?? data.creature_state} t={t} />
       )}
-      {subTab === 'status' && !isDeleted && !data.creature_state && (
+      {subTab === 'status' && !isDeleted && !(liveSnapshot ?? data.creature_state) && (
         <div className="text-[12px] text-[var(--text-muted)] italic py-3">
           {t('common.noData') ?? '—'}
         </div>

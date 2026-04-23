@@ -329,7 +329,7 @@ const en = {
       bond: 'Bond',
       mood: 'Mood',
       vitalsAxes: {
-        hunger: 'Hunger',
+        hunger: 'Attention',
         energy: 'Energy',
         stress: 'Stress',
         cleanliness: 'Cleanliness',
@@ -341,6 +341,22 @@ const en = {
         dependency: 'Dependency',
       },
       moodAxes: {
+        joy: 'Joy',
+        sadness: 'Sadness',
+        anger: 'Anger',
+        fear: 'Fear',
+        calm: 'Calm',
+        excitement: 'Excitement',
+      },
+      // Plan/Phase01 §2 — hunger band labels rebadged to attention deprivation.
+      hungerBands: {
+        attended: 'Attended',
+        content: 'Content',
+        slightly_lonely: 'Slightly lonely',
+        neglected: 'Neglected',
+        craving_attention: 'Craving attention',
+      },
+      moodDominant: {
         joy: 'Joy',
         sadness: 'Sadness',
         anger: 'Anger',

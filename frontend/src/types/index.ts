@@ -50,7 +50,7 @@ export interface CreatureStateSnapshot {
     dependency: number;
   };
   vitals: {
-    hunger: number;      // 0=sated, 100=starving
+    hunger: number;      // 0=fully attended, 100=craving attention (Plan/Phase01)
     energy: number;      // 0=exhausted, 100=peak
     stress: number;      // 0=calm, 100=extreme
     cleanliness: number; // 0=filthy, 100=spotless

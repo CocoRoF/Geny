@@ -348,6 +348,24 @@ const ko: Translations = {
         calm: '평온',
         excitement: '흥분',
       },
+      // Plan/Phase01 §2 — hunger band labels rebadged to attention deprivation.
+      // Keys match _HUNGER_BANDS in service/persona/blocks.py and the
+      // dominant-mood string returned by MoodVector.dominant().
+      hungerBands: {
+        attended: '관심 충만',
+        content: '안정',
+        slightly_lonely: '약간 외로움',
+        neglected: '방치됨',
+        craving_attention: '관심에 굶주림',
+      },
+      moodDominant: {
+        joy: '기쁨',
+        sadness: '슬픔',
+        anger: '분노',
+        fear: '두려움',
+        calm: '평온',
+        excitement: '흥분',
+      },
     },
     systemPrompt: {
       title: '시스템 프롬프트',
