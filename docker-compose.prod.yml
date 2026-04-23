@@ -223,7 +223,7 @@ services:
       - OMNIVOICE_DTYPE=${OMNIVOICE_DTYPE:-float16}
       # GPU 병렬 합성 개수. GTX 1070 (8GB, float16, ~2-3GB 모델) 기준 4 권장.
       # OOM 발생 시 3 → 2 로 내리고, 여유 있으면 6까지 시도 가능.
-      - OMNIVOICE_MAX_CONCURRENCY=${OMNIVOICE_MAX_CONCURRENCY:-4}
+      - OMNIVOICE_MAX_CONCURRENCY=${OMNIVOICE_MAX_CONCURRENCY:-8}
       - OMNIVOICE_AUTO_ASR=${OMNIVOICE_AUTO_ASR:-false}
       - OMNIVOICE_LOG_LEVEL=${OMNIVOICE_LOG_LEVEL:-info}
       - HF_ENDPOINT=${HF_ENDPOINT:-https://huggingface.co}
