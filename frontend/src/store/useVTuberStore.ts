@@ -547,13 +547,32 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
 
   //
   // 턴 종료. agent_message 가 도착한 시점이거나 user abort 시점.
-  // extractor 에서 꼬리를 강제로 뽑아 마지막 문장까지 전송한다.
+  // 1) live 로 이미 클립을 뿌렸으면: extractor 의 꼬리만 flush 하여 마지막
+  //    문장(들)까지 전송한다.
+  // 2) live 로 아무것도 안 뿌렸으면 (스트리밍 미진입 / agent.session_id
+  //    불일치 / 토큰이 한꺼번에 도착해 push 가 한 번도 호출 안 됨 등):
+  //    fullText 전체를 한 클립으로 합성해 큐에 넣는다. 이 경우 별도의
+  //    speakResponse 를 부르면 같은 텍스트가 두 번 발화되므로 절대 금지.
   finalizeTTSTurn: (sessionId, fullText, emotion) => {
     if (!get().ttsEnabled) return;
     const turnId = _currentTurnId(sessionId);
-    const tail = _liveExtractor.flush(turnId, fullText);
-    if (tail.length === 0) return;
-    for (const sentence of tail) {
+    const emittedSoFar = _liveEmittedByTurn.get(turnId) ?? 0;
+
+    // extractor 잔여 + 미발화 fallback 분기
+    let toSend: string[];
+    if (emittedSoFar === 0) {
+      // live 미발화 → fullText 전체를 한 발에. extractor 버퍼를 명시적으로
+      // 비워서 이후 호출의 holding 잔여를 차단.
+      _liveExtractor.reset(turnId);
+      const trimmed = (fullText ?? '').trim();
+      if (!trimmed) return;
+      toSend = [trimmed];
+    } else {
+      toSend = _liveExtractor.flush(turnId, fullText);
+      if (toSend.length === 0) return;
+    }
+
+    for (const sentence of toSend) {
       const nextSeq = _liveEmittedByTurn.get(turnId) ?? 0;
       _liveEmittedByTurn.set(turnId, nextSeq + 1);
       let controller = _liveAbortControllers.get(sessionId);
@@ -567,6 +586,12 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
         {
           sessionId,
           seqOffset: nextSeq,
+          onFirstClip: () => {
+            get().addLog(sessionId, 'debug', 'TTS', `Finalize chunk enqueued seq=${nextSeq} (${sentence.slice(0, 40)}...)`);
+          },
+          onClipError: (_s, err) => {
+            get().addLog(sessionId, 'warn', 'TTS', `Finalize chunk error seq=${nextSeq}: ${err}`);
+          },
           onClipEnd: () => {
             const am = getAudioManager();
             if (am.queueLength === 0 && !am.isPlaying) {

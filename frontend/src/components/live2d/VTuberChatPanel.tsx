@@ -5,7 +5,6 @@ import { chatApi } from '@/lib/api';
 import { getChatWSManager } from '@/lib/chatWsManager';
 import { getAudioManager } from '@/lib/audioManager';
 import { useVTuberStore } from '@/store/useVTuberStore';
-import { hasLiveChunksThisTurn } from '@/store/useVTuberStore';
 import { useCreatureStateStore } from '@/store/useCreatureStateStore';
 import { useI18n } from '@/lib/i18n';
 import { parseEmotion, EMOTION_COLORS, ChatMarkdown, FileChangeSummary, AgentBadge, ExecutionMeta, MessageBubble } from '@/components/chat';
@@ -241,15 +240,15 @@ export default function VTuberChatPanel({
                   const store = useVTuberStore.getState();
                   if (store.ttsEnabled) {
                     if (isTabVisibleRef.current) {
-                      // Live chat-stream pre-emit 경로를 이미 탄 턴이면,
-                      // 완성된 최종 텍스트로 꼬리 문장만 flush 하고 종결.
-                      // 아직 live 로 아무것도 안 뿌렸으면 (스트리밍 미진입 경로)
-                      // 레거시 단발 speakResponse 로 fallback.
-                      if (hasLiveChunksThisTurn(sessionId)) {
-                        store.finalizeTTSTurn(sessionId, cleanText, emotion);
-                      } else {
-                        store.speakResponse(sessionId, cleanText, emotion);
-                      }
+                      // beginTTSTurn 이 handleSend 시점에 호출되어 새 턴이
+                      // 이미 열렸다. live 가 한 클립이라도 뿌렸으면 finalize
+                      // 가 꼬리만 flush 하고, 뿌린 게 없으면 (스트리밍 미진입
+                      // / agent.session_id 불일치 / 토큰이 한꺼번에 도착해
+                      // push 가 한 번도 호출 안 됨 등) finalize 가 fullText
+                      // 전체를 한 클립으로 합성한다. 어느 경로든 단일 발화
+                      // 보장. 절대 speakResponse 와 함께 호출하지 말 것
+                      // (= 같은 텍스트 중복 발화의 원인).
+                      store.finalizeTTSTurn(sessionId, cleanText, emotion);
                     } else {
                       // 백그라운드 탭: 마지막 메시지만 기록 (탭 복귀 시 재생)
                       pendingTTSRef.current = { text: cleanText, emotion };
@@ -279,10 +278,16 @@ export default function VTuberChatPanel({
                   // streaming_text 가 비어있거나 한 글자여도 extractor 가
                   // 내부적으로 no-op 처리하므로 안전하다. parseEmotion 으로
                   // [tag] 접두부 제거.
-                  if (ttsLive) {
+                  //
+                  // **중요**: 이 panel 의 sessionId 와 일치하는 agent 만
+                  // pushStreamingText 호출. 그렇지 않으면 _liveEmittedByTurn
+                  // 카운터가 다른 키 (agent.session_id) 에 적혀 turn 추적이
+                  // 무너지고 finalizeTTSTurn 이 turn 에 클립이 없는 줄 알고
+                  // fullText 를 한번 더 합성 → 중복 발화 발생.
+                  if (ttsLive && agent.session_id === sessionId) {
                     const [liveEmotion, liveClean] = parseEmotion(agent.streaming_text);
                     if (liveClean.trim()) {
-                      store.pushStreamingText(agent.session_id, liveClean, liveEmotion);
+                      store.pushStreamingText(sessionId, liveClean, liveEmotion);
                     }
                   }
                 }
