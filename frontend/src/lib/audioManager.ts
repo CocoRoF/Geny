@@ -391,12 +391,18 @@ export class AudioManager {
         if (head.turnId && typeof head.seq === 'number') {
           const expected = this._nextSeqByTurn.get(head.turnId);
           if (expected !== undefined && head.seq > expected) {
-            // 비는 seq 있음 — 짧게 대기 (next enqueue 가 깨워줌)
-            // Deadlock 방지: 2초 이상 비어있으면 그냥 건너뛰기
-            const waited = await this._waitForSeq(head.turnId, expected, 2000);
+            // 비는 seq 있음 — 합성이 아직 진행 중이거나 곧 dispatch 될 가능성이
+            // 있으면 무조건 기다린다. "in-flight 가 있는데 2초 안에 안 오면 건너
+            // 뛴다" 는 종전 로직은 GPU 큐가 막혔을 때 (parallel 8 dispatch 등)
+            // 영구적으로 순서를 깨트렸다.
+            //
+            // _turnPending / _turnFinalized 를 사용해 "정말로 안 올 것" 인지
+            // 정확히 판정한다. Hard ceiling (120s) 은 백엔드 실종 등 이상
+            // 상황 방어용.
+            const waited = await this._waitForSeq(head.turnId, expected, 120_000);
             if (!waited) {
               console.warn(
-                `[AudioManager] seq gap timeout: turn=${head.turnId} expected=${expected} head=${head.seq}, skipping gap`,
+                `[AudioManager] seq gap permanent: turn=${head.turnId} expected=${expected} head=${head.seq}, skipping gap`,
               );
               this._nextSeqByTurn.set(head.turnId, head.seq);
             }
@@ -730,13 +736,26 @@ export class AudioManager {
   }
 
   /**
-   * 같은 턴의 다음 기대 seq 가 도착할 때까지 대기 (poll 방식, 10ms 간격).
+   * 같은 턴의 다음 기대 seq 가 도착할 때까지 대기 (poll 방식, 25ms 간격).
    *
-   * Deadlock 방지용 `timeoutMs` — 타임아웃 발생 시 ``false`` 를 반환하고
-   * 호출자가 gap 을 skip 하도록 유도한다.
+   * **종료 조건** (둘 중 하나):
+   *  1. 성공 (`true` 반환):
+   *     - 큐 head 가 바뀌었거나 (= 비는 seq 가 enqueue 되어 정렬 삽입됨)
+   *     - 큐 head 가 다른 턴으로 바뀜
+   *     - 턴이 retired
+   *  2. 실패 (`false` 반환) — gap skip 유도:
+   *     - **턴이 finalized AND in-flight HTTP 가 0** → 빠진 seq 의 합성
+   *       자체가 실패했거나 영영 안 올 것이 확실. 즉시 skip.
+   *     - hardDeadlineMs 를 초과 → 백엔드 실종 등 이상 상황 방어.
+   *
+   * **왜 hardDeadline 을 길게 (120s) 잡는가**: parallel 8-dispatch 시
+   * GPU 큐 적체로 한 클립 합성이 10초를 넘는 것은 정상 범위. 이전 2 초
+   * 타임아웃은 무조건 gap skip 을 유발해 순서를 영구히 깨트렸다.
+   * pending+finalized 신호로 정확히 판정하므로 hardDeadline 은 실제로는
+   * 거의 도달하지 않는 안전망이다.
    */
-  private async _waitForSeq(turnId: string, expected: number, timeoutMs: number): Promise<boolean> {
-    const deadline = Date.now() + timeoutMs;
+  private async _waitForSeq(turnId: string, expected: number, hardDeadlineMs: number): Promise<boolean> {
+    const deadline = Date.now() + hardDeadlineMs;
     while (Date.now() < deadline) {
       // 큐의 맨 앞 아이템이 바뀌었으면 즉시 빠져나감 (재평가)
       const head = this._queue[0];
@@ -744,7 +763,14 @@ export class AudioManager {
       if (typeof head.seq !== 'number' || head.seq <= expected) return true;
       // 폐기된 턴이면 더 기다릴 필요 없음
       if (this._retiredTurns.includes(turnId)) return true;
-      await new Promise((r) => setTimeout(r, 10));
+      // **핵심**: 더 이상 합성이 진행 중이지 않고 finalize 됐는데도
+      // expected 가 안 왔다면 — 이 seq 는 영영 안 옴. 즉시 skip.
+      const pending = this._turnPending.get(turnId) ?? 0;
+      const finalized = this._turnFinalized.has(turnId);
+      if (finalized && pending === 0) {
+        return false;
+      }
+      await new Promise((r) => setTimeout(r, 25));
     }
     return false;
   }
