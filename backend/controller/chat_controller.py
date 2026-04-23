@@ -230,6 +230,7 @@ class MessageResponse(BaseModel):
     duration_ms: Optional[int] = None
     cost_usd: Optional[float] = None
     file_changes: Optional[List[Dict[str, Any]]] = None
+    attachments: Optional[List[Dict[str, Any]]] = None
     meta: Optional[Dict[str, Any]] = None
 
 
@@ -242,8 +243,34 @@ class MessageListResponse(BaseModel):
 
 # -- Broadcast models --
 
+class BroadcastAttachment(BaseModel):
+    """Reference to an uploaded file (see ``upload_controller``).
+
+    The frontend uploads files via ``POST /api/uploads`` first and only
+    sends back the lightweight metadata here. The actual bytes never
+    travel through the broadcast endpoint, keeping JSON payloads small.
+
+    Either ``attachment_id`` (preferred) or ``url`` is required so the
+    backend can locate the stored file. ``data`` (inline base64) is
+    accepted for tiny pasted images that bypass the upload step.
+    """
+
+    kind: str = Field(..., description="image | file")
+    name: Optional[str] = None
+    mime_type: Optional[str] = None
+    size: Optional[int] = None
+    sha256: Optional[str] = None
+    attachment_id: Optional[str] = None  # sha256 hex from POST /api/uploads
+    url: Optional[str] = None             # /static/uploads/.../<sha>.<ext>
+    data: Optional[str] = None            # base64 fallback (small inline pastes)
+
+
 class RoomBroadcastRequest(BaseModel):
-    message: str = Field(..., description="Chat message to send")
+    message: str = Field("", description="Chat message to send (may be empty if attachments present)")
+    attachments: Optional[List[BroadcastAttachment]] = Field(
+        default=None,
+        description="Optional list of image/file references uploaded via /api/uploads.",
+    )
 
 
 # ============================================================================
@@ -389,12 +416,31 @@ async def broadcast_to_room(room_id: str, request: RoomBroadcastRequest):
     if not room:
         raise HTTPException(status_code=404, detail=f"Room not found: {room_id}")
 
+    # Reject empty broadcasts: must have either text or at least one attachment.
+    has_attachments = bool(request.attachments)
+    if not request.message.strip() and not has_attachments:
+        raise HTTPException(status_code=400, detail="Message or attachments required")
+
+    # Materialize attachments to plain dicts for the background runner —
+    # Pydantic models don't survive ``asyncio.create_task`` boundaries cleanly
+    # when executors thread them through ``**invoke_kwargs``.
+    attachments_payload: Optional[List[Dict[str, Any]]] = None
+    if has_attachments:
+        attachments_payload = [a.model_dump(exclude_none=True) for a in request.attachments]
+
     # 1. Save user message
     try:
-        user_msg = store.add_message(room_id, {
+        user_msg_data: Dict[str, Any] = {
             "type": "user",
             "content": request.message,
-        })
+        }
+        if attachments_payload:
+            # Store attachment metadata on the user turn for replay /
+            # rendering. Raw bytes are NOT stored here — only the URL
+            # / attachment_id references that point back at
+            # ``backend/static/uploads``.
+            user_msg_data["attachments"] = attachments_payload
+        user_msg = store.add_message(room_id, user_msg_data)
     except Exception as e:
         logger.error("Failed to save user message: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="\uba54\uc2dc\uc9c0 \uc800\uc7a5\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4")
@@ -489,6 +535,7 @@ async def broadcast_to_room(room_id: str, request: RoomBroadcastRequest):
         _run_broadcast(
             room_id, broadcast_id, broadcast_state,
             room_session_ids, agent_info, request.message, store,
+            attachments=attachments_payload,
         )
     )
 
@@ -543,6 +590,8 @@ async def _run_broadcast(
     agent_info: Dict[str, Dict[str, str]],
     message: str,
     store,
+    *,
+    attachments: Optional[List[Dict[str, Any]]] = None,
 ):
     """
     Background task: runs one command per agent and persists results.
@@ -668,6 +717,7 @@ async def _run_broadcast(
                 session_id=session_id,
                 prompt=message,
                 is_chat_message=True,
+                attachments=attachments,
             )
             logger.info(
                 "[Broadcast:%s] execute_command returned for session=%s: success=%s, output_len=%d, duration=%dms, cost=%s",

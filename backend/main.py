@@ -32,6 +32,7 @@ from controller.agent_controller import router as agent_router, agent_manager
 from controller.config_controller import router as config_router
 from controller.shared_folder_controller import router as shared_folder_router
 from controller.chat_controller import router as chat_router
+from controller.upload_controller import router as upload_router
 from controller.tool_preset_controller import router as tool_preset_router
 from controller.tool_controller import router as tool_catalog_router
 from controller.docs_controller import router as docs_router
@@ -588,6 +589,7 @@ app.include_router(agent_router)  # LangGraph agent sessions
 app.include_router(config_router)  # Configuration management
 app.include_router(shared_folder_router)  # Shared folder
 app.include_router(chat_router)  # Chat broadcast
+app.include_router(upload_router)  # File / image uploads (multipart)
 app.include_router(tool_preset_router)  # Tool preset management
 app.include_router(tool_catalog_router)  # Tool catalog API
 app.include_router(docs_router)  # Documentation API

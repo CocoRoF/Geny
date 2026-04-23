@@ -143,7 +143,32 @@ export interface ChatRoomMessage {
   role?: string | null;
   duration_ms?: number | null;
   file_changes?: FileChanges[];
+  /** Attachment metadata (image / file refs uploaded via POST /api/uploads). */
+  attachments?: ChatAttachment[];
   meta?: Record<string, unknown>;
+}
+
+/**
+ * Attachment metadata stored on user chat messages and forwarded to the
+ * agent pipeline. Mirrors the backend ``UploadedFile`` /
+ * ``BroadcastAttachment`` schemas.
+ *
+ * The frontend uploads files via ``POST /api/uploads`` first and only
+ * passes back the metadata reference here — raw bytes never go through
+ * the broadcast endpoint.
+ */
+export interface ChatAttachment {
+  kind: 'image' | 'file';
+  name?: string;
+  mime_type?: string;
+  size?: number;
+  sha256?: string;
+  /** sha256 hex returned by POST /api/uploads. */
+  attachment_id?: string;
+  /** Static URL such as /static/uploads/ab/<sha>.<ext>. */
+  url?: string;
+  /** Inline base64 fallback (for tiny pasted images). */
+  data?: string;
 }
 
 export interface ChatRoomMessageListResponse {
@@ -155,6 +180,7 @@ export interface ChatRoomMessageListResponse {
 
 export interface ChatRoomBroadcastRequest {
   message: string;
+  attachments?: ChatAttachment[];
 }
 
 export interface ChatRoomBroadcastResponse {

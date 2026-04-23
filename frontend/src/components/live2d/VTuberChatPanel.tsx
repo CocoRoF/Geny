@@ -2,14 +2,15 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { chatApi } from '@/lib/api';
+import { resizeImageIfNeeded, isImageFile } from '@/lib/imageAttachments';
 import { getChatWSManager } from '@/lib/chatWsManager';
 import { getAudioManager } from '@/lib/audioManager';
 import { useVTuberStore } from '@/store/useVTuberStore';
 import { useCreatureStateStore } from '@/store/useCreatureStateStore';
 import { useI18n } from '@/lib/i18n';
 import { parseEmotion, EMOTION_COLORS, ChatMarkdown, FileChangeSummary, AgentBadge, ExecutionMeta, MessageBubble } from '@/components/chat';
-import { ChevronDown, ChevronRight, XCircle } from 'lucide-react';
-import type { ChatRoomMessage, FileChanges, AgentProgressState, AgentLogEntry } from '@/types';
+import { ChevronDown, ChevronRight, XCircle, Paperclip, X as XIcon } from 'lucide-react';
+import type { ChatRoomMessage, ChatAttachment, FileChanges, AgentProgressState, AgentLogEntry } from '@/types';
 
 interface ChatMessage {
   id: string;
@@ -20,6 +21,7 @@ interface ChatMessage {
   sessionName?: string;
   durationMs?: number;
   fileChanges?: FileChanges[];
+  attachments?: ChatAttachment[];
 }
 
 // ── Compact execution log panel for VTuber ──
@@ -122,9 +124,16 @@ export default function VTuberChatPanel({
   const [agentProgress, setAgentProgress] = useState<AgentProgressState[] | null>(null);
   const [broadcastActive, setBroadcastActive] = useState(false);
   const [streamingTexts, setStreamingTexts] = useState<Record<string, { content: string; session_name: string; role: string }>>({});
+  // Pending image / file attachments for the next outgoing message.
+  // Each entry is the result of POST /api/uploads (already on disk).
+  const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
+  const [uploadingCount, setUploadingCount] = useState(0);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
   const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const lastMsgIdRef = useRef<string | null>(null);
   const sseRef = useRef<{ close: () => void } | null>(null);
 
@@ -171,6 +180,7 @@ export default function VTuberChatPanel({
       sessionName: msg.session_name ?? undefined,
       durationMs: msg.duration_ms ?? undefined,
       fileChanges: msg.file_changes,
+      attachments: msg.attachments,
     };
   }, []);
 
@@ -329,7 +339,9 @@ export default function VTuberChatPanel({
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
-    if (!text || sending || !roomId) return;
+    const hasAttachments = pendingAttachments.length > 0;
+    if ((!text && !hasAttachments) || sending || !roomId) return;
+    if (uploadingCount > 0) return;  // wait for in-flight uploads
 
     // iOS WebKit: 채팅 전송은 user gesture이므로 이 시점에 AudioContext를 활성화.
     // ttsEnabled가 기본 true인 경우 toggleTTS()가 호출되지 않으므로,
@@ -342,10 +354,16 @@ export default function VTuberChatPanel({
     }
 
     setInput('');
+    const attachmentsToSend = pendingAttachments;
+    setPendingAttachments([]);
+    setAttachmentError(null);
     setSending(true);
 
     try {
-      const resp = await chatApi.broadcastToRoom(roomId, { message: text });
+      const resp = await chatApi.broadcastToRoom(roomId, {
+        message: text,
+        attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
+      });
 
       if (resp.user_message) {
         const userMsg = toDisplayMessage(resp.user_message);
@@ -367,7 +385,94 @@ export default function VTuberChatPanel({
       setSending(false);
       inputRef.current?.focus();
     }
-  }, [input, sending, roomId, toDisplayMessage]);
+  }, [input, sending, roomId, toDisplayMessage, pendingAttachments, uploadingCount, sessionId, t]);
+
+  // ── Attachment helpers ────────────────────────────────────────────
+  const MAX_ATTACHMENTS = 8;
+  const MAX_FILE_BYTES = 10 * 1024 * 1024;
+
+  const addFiles = useCallback(async (files: File[]) => {
+    if (!files.length) return;
+    setAttachmentError(null);
+
+    const remaining = MAX_ATTACHMENTS - pendingAttachments.length;
+    const accepted = files.slice(0, Math.max(0, remaining));
+    if (accepted.length < files.length) {
+      setAttachmentError(t('vtuberChat.attachmentLimit') ?? `Up to ${MAX_ATTACHMENTS} attachments per message.`);
+    }
+    if (accepted.length === 0) return;
+
+    setUploadingCount((c) => c + accepted.length);
+    try {
+      // Resize images on the client side before uploading. Non-image
+      // files pass through untouched (resizeImageIfNeeded is a no-op).
+      const prepared = await Promise.all(
+        accepted.map(async (f) => {
+          if (f.size > MAX_FILE_BYTES && !isImageFile(f)) {
+            throw new Error(`${f.name}: file too large (>10 MiB)`);
+          }
+          return isImageFile(f) ? resizeImageIfNeeded(f) : f;
+        })
+      );
+      // Final guard after resize.
+      for (const f of prepared) {
+        if (f.size > MAX_FILE_BYTES) {
+          throw new Error(`${f.name}: still too large after resize`);
+        }
+      }
+      const uploaded = await chatApi.uploadAttachments(prepared);
+      setPendingAttachments((prev) => [...prev, ...uploaded].slice(0, MAX_ATTACHMENTS));
+    } catch (e) {
+      setAttachmentError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUploadingCount((c) => Math.max(0, c - accepted.length));
+    }
+  }, [pendingAttachments.length, t]);
+
+  const removeAttachment = useCallback((idx: number) => {
+    setPendingAttachments((prev) => prev.filter((_, i) => i !== idx));
+  }, []);
+
+  const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length) void addFiles(files);
+    // Reset so the same file can be picked again later.
+    if (e.target) e.target.value = '';
+  }, [addFiles]);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.kind === 'file') {
+        const f = it.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (files.length) {
+      e.preventDefault();
+      void addFiles(files);
+    }
+  }, [addFiles]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    setDragActive(true);
+  }, []);
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    // Only reset when leaving the panel boundary (relatedTarget outside).
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setDragActive(false);
+  }, []);
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragActive(false);
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (files.length) void addFiles(files);
+  }, [addFiles]);
 
   const handleCancelBroadcast = useCallback(async () => {
     if (!roomId) return;
@@ -401,7 +506,19 @@ export default function VTuberChatPanel({
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div
+      className="flex flex-col h-full relative"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {dragActive && (
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-[var(--primary-color)]/10 border-2 border-dashed border-[var(--primary-color)] rounded-md">
+          <span className="text-[0.875rem] font-medium text-[var(--primary-color)]">
+            {t('vtuberChat.dropToAttach') ?? 'Drop files to attach'}
+          </span>
+        </div>
+      )}
       {/* Messages area */}
       <div
         ref={scrollRef}
@@ -466,6 +583,42 @@ export default function VTuberChatPanel({
                   <span>{text}</span>
                 ) : (
                   <ChatMarkdown content={text} className="text-[0.875rem]" />
+                )}
+                {/* User attachments (images / files) — rendered as a small grid. */}
+                {isUser && msg.attachments && msg.attachments.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {msg.attachments.map((att, i) => (
+                      att.kind === 'image' && att.url ? (
+                        <a
+                          key={`${att.attachment_id ?? att.url ?? i}`}
+                          href={att.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block"
+                        >
+                          <img
+                            src={att.url}
+                            alt={att.name ?? 'image'}
+                            className="max-w-[160px] max-h-[160px] object-cover rounded-md border border-[var(--border-color)]"
+                          />
+                        </a>
+                      ) : (
+                        <div
+                          key={`${att.attachment_id ?? att.url ?? i}`}
+                          className="flex items-center gap-1.5 px-2 py-1 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md text-[0.6875rem] text-[var(--text-secondary)]"
+                        >
+                          <Paperclip size={12} />
+                          {att.url ? (
+                            <a href={att.url} target="_blank" rel="noopener noreferrer" className="underline truncate max-w-[160px]">
+                              {att.name ?? 'file'}
+                            </a>
+                          ) : (
+                            <span className="truncate max-w-[160px]">{att.name ?? 'file'}</span>
+                          )}
+                        </div>
+                      )
+                    ))}
+                  </div>
                 )}
                 {/* File changes */}
                 {!isUser && msg.fileChanges && msg.fileChanges.length > 0 && (
@@ -535,7 +688,67 @@ export default function VTuberChatPanel({
 
       {/* Input */}
       <div className="px-3 py-2.5 border-t border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
+        {/* Pending attachment chips */}
+        {(pendingAttachments.length > 0 || uploadingCount > 0 || attachmentError) && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {pendingAttachments.map((att, idx) => (
+              <div
+                key={`${att.attachment_id ?? att.url ?? idx}`}
+                className="relative group flex items-center gap-1.5 px-1.5 py-1 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md max-w-[160px]"
+              >
+                {att.kind === 'image' && att.url ? (
+                  <img
+                    src={att.url}
+                    alt={att.name ?? 'image'}
+                    className="w-8 h-8 object-cover rounded"
+                  />
+                ) : (
+                  <div className="w-8 h-8 flex items-center justify-center rounded bg-[var(--bg-primary)]">
+                    <Paperclip size={14} className="text-[var(--text-muted)]" />
+                  </div>
+                )}
+                <span className="text-[0.6875rem] text-[var(--text-secondary)] truncate">
+                  {att.name ?? att.kind}
+                </span>
+                <button
+                  type="button"
+                  className="ml-0.5 text-[var(--text-muted)] hover:text-red-400 cursor-pointer bg-transparent border-none p-0"
+                  onClick={() => removeAttachment(idx)}
+                  aria-label="Remove attachment"
+                >
+                  <XIcon size={12} />
+                </button>
+              </div>
+            ))}
+            {uploadingCount > 0 && (
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md text-[0.6875rem] text-[var(--text-muted)]">
+                <span className="animate-pulse">{t('vtuberChat.uploading') ?? 'Uploading\u2026'}</span>
+              </div>
+            )}
+            {attachmentError && (
+              <div className="text-[0.6875rem] text-red-400">{attachmentError}</div>
+            )}
+          </div>
+        )}
         <div className="flex items-end gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handleFileInputChange}
+          />
+          <button
+            type="button"
+            className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-[var(--bg-tertiary)] text-[var(--text-secondary)] cursor-pointer hover:text-[var(--text-primary)] disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={sending || pendingAttachments.length >= MAX_ATTACHMENTS}
+            title={t('vtuberChat.attachFile') ?? 'Attach image'}
+            aria-label="Attach image"
+          >
+            <Paperclip size={16} />
+          </button>
           <textarea
             ref={inputRef}
             className="flex-1 resize-none px-3 py-2 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl text-[0.875rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--primary-color)] transition-colors max-h-[120px]"
@@ -544,12 +757,13 @@ export default function VTuberChatPanel({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             disabled={sending}
           />
           <button
             className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-[var(--primary-color)] text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-90"
             onClick={handleSend}
-            disabled={sending || !input.trim()}
+            disabled={sending || uploadingCount > 0 || (!input.trim() && pendingAttachments.length === 0)}
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />

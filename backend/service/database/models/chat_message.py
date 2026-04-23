@@ -23,6 +23,7 @@ class ChatMessageModel(BaseModel):
         cost_usd: float = None,
         timestamp: str = "",
         file_changes: str = None,
+        attachments: str = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -37,6 +38,11 @@ class ChatMessageModel(BaseModel):
         self.cost_usd = cost_usd
         self.timestamp = timestamp
         self.file_changes = file_changes
+        # JSON-serialized list of attachment metadata (image / file refs).
+        # Schema mirrors the broadcast endpoint payload — see
+        # ``upload_controller.UploadedFile``. NULL when the user turn
+        # had no attachments.
+        self.attachments = attachments
 
     def get_table_name(self) -> str:
         return "chat_messages"
@@ -54,6 +60,7 @@ class ChatMessageModel(BaseModel):
             "cost_usd": "DOUBLE PRECISION DEFAULT NULL",
             "timestamp": "VARCHAR(100) DEFAULT ''",
             "file_changes": "TEXT DEFAULT NULL",
+            "attachments": "TEXT DEFAULT NULL",
         }
 
     @classmethod
@@ -79,7 +86,7 @@ class ChatMessageModel(BaseModel):
         known_fields = {
             "message_id", "room_id", "type", "content",
             "session_id", "session_name", "role", "duration_ms", "cost_usd", "timestamp",
-            "file_changes", "id", "created_at", "updated_at",
+            "file_changes", "attachments", "id", "created_at", "updated_at",
         }
         known_data = {k: v for k, v in data.items() if k in known_fields}
         return cls(**known_data)

@@ -1311,6 +1311,7 @@ class AgentSession:
 
     async def _pipeline_events_scoped(
         self, input_text: str, state: Any, hydrated: bool,
+        *, attachments: Optional[List[Dict[str, Any]]] = None,
     ) -> AsyncIterator[Any]:
         """Yield events from ``pipeline.run_stream`` with the current-turn
         mutation buffer bound as a contextvar.
@@ -1391,7 +1392,21 @@ class AgentSession:
             elif is_vtuber_creature and turn_kind == TURN_KIND_USER:
                 _apply_attention_recovery(buf)
         try:
-            async for event in self._pipeline.run_stream(input_text, state):
+            # Build the pipeline input. When attachments are present we
+            # promote the bare string to the canonical dict shape that
+            # geny-executor's ``MultimodalNormalizer`` consumes
+            # (see ``s01_input.MultimodalNormalizer.normalize``). The
+            # text branch — ``input_text`` alone — is kept for the
+            # text-only fast path so we don't perturb existing
+            # contracts when no attachments are sent.
+            if attachments:
+                pipeline_input: Any = {
+                    "text": input_text,
+                    "attachments": list(attachments),
+                }
+            else:
+                pipeline_input = input_text
+            async for event in self._pipeline.run_stream(pipeline_input, state):
                 yield event
         finally:
             reset_mutation_buffer(token)
@@ -1477,8 +1492,14 @@ class AgentSession:
         # underlying stream closes — keeps the ``async for`` body and
         # the post-stream accumulation logic at their current
         # indentation while still being exception-safe.
+        # ``attachments`` (image/file refs from the chat layer) are
+        # forwarded as-is; ``_pipeline_events_scoped`` is responsible
+        # for turning them into the canonical multimodal dict before
+        # handing off to ``pipeline.run_stream``.
+        attachments = kwargs.pop("attachments", None)
         async for event in self._pipeline_events_scoped(
             input_text, _state, _state_hydrated,
+            attachments=attachments,
         ):
             event_type = event.type if hasattr(event, "type") else ""
             event_data = event.data if hasattr(event, "data") else {}

@@ -92,6 +92,7 @@ import type {
   ChatRoomBroadcastRequest,
   ChatRoomBroadcastResponse,
   ChatRoomMessage,
+  ChatAttachment,
   Live2dModelInfo,
   AvatarState,
 } from '@/types';
@@ -558,6 +559,38 @@ export const chatApi = {
       `/api/chat/rooms/${roomId}/broadcast/cancel`,
       { method: 'POST' },
     ),
+
+  /**
+   * POST /api/uploads — multipart upload of one or more files.
+   *
+   * Returns ``ChatAttachment`` references that the caller embeds in a
+   * subsequent ``broadcastToRoom`` request via the ``attachments``
+   * field. Files are content-addressed (sha256) on the server, so
+   * uploading the same image twice is idempotent.
+   */
+  uploadAttachments: async (files: File[]): Promise<ChatAttachment[]> => {
+    if (!files || files.length === 0) return [];
+    const form = new FormData();
+    for (const f of files) form.append('files', f, f.name);
+
+    const token = getToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    // NB: do NOT set Content-Type — the browser fills in the multipart
+    // boundary automatically.
+
+    const res = await fetch('/api/uploads', {
+      method: 'POST',
+      headers,
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(body || `Upload failed: HTTP ${res.status}`);
+    }
+    const json = (await res.json()) as { files: ChatAttachment[] };
+    return json.files || [];
+  },
 
   /**
    * Subscribe to chat room events via WebSocket.
