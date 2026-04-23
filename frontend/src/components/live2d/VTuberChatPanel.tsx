@@ -245,12 +245,8 @@ export default function VTuberChatPanel({
                       // 완성된 최종 텍스트로 꼬리 문장만 flush 하고 종결.
                       // 아직 live 로 아무것도 안 뿌렸으면 (스트리밍 미진입 경로)
                       // 레거시 단발 speakResponse 로 fallback.
-                      if (hasLiveChunksThisTurn(displayMsg.session_id ?? sessionId)) {
-                        store.finalizeTTSTurn(
-                          displayMsg.session_id ?? sessionId,
-                          cleanText,
-                          emotion,
-                        );
+                      if (hasLiveChunksThisTurn(sessionId)) {
+                        store.finalizeTTSTurn(sessionId, cleanText, emotion);
                       } else {
                         store.speakResponse(sessionId, cleanText, emotion);
                       }
