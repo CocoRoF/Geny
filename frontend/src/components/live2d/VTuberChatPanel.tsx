@@ -5,6 +5,7 @@ import { chatApi } from '@/lib/api';
 import { getChatWSManager } from '@/lib/chatWsManager';
 import { getAudioManager } from '@/lib/audioManager';
 import { useVTuberStore } from '@/store/useVTuberStore';
+import { hasLiveChunksThisTurn } from '@/store/useVTuberStore';
 import { useCreatureStateStore } from '@/store/useCreatureStateStore';
 import { useI18n } from '@/lib/i18n';
 import { parseEmotion, EMOTION_COLORS, ChatMarkdown, FileChangeSummary, AgentBadge, ExecutionMeta, MessageBubble } from '@/components/chat';
@@ -240,8 +241,19 @@ export default function VTuberChatPanel({
                   const store = useVTuberStore.getState();
                   if (store.ttsEnabled) {
                     if (isTabVisibleRef.current) {
-                      // 탭이 보이면 즉시 TTS 큐에 추가
-                      store.speakResponse(sessionId, cleanText, emotion);
+                      // Live chat-stream pre-emit 경로를 이미 탄 턴이면,
+                      // 완성된 최종 텍스트로 꼬리 문장만 flush 하고 종결.
+                      // 아직 live 로 아무것도 안 뿌렸으면 (스트리밍 미진입 경로)
+                      // 레거시 단발 speakResponse 로 fallback.
+                      if (hasLiveChunksThisTurn(displayMsg.session_id ?? sessionId)) {
+                        store.finalizeTTSTurn(
+                          displayMsg.session_id ?? sessionId,
+                          cleanText,
+                          emotion,
+                        );
+                      } else {
+                        store.speakResponse(sessionId, cleanText, emotion);
+                      }
                     } else {
                       // 백그라운드 탭: 마지막 메시지만 기록 (탭 복귀 시 재생)
                       pendingTTSRef.current = { text: cleanText, emotion };
@@ -254,6 +266,8 @@ export default function VTuberChatPanel({
               setAgentProgress(progress.agents);
 
               // Update streaming text from agent progress
+              const store = useVTuberStore.getState();
+              const ttsLive = store.ttsEnabled && isTabVisibleRef.current;
               for (const agent of progress.agents) {
                 if (agent.streaming_text && agent.status === 'executing') {
                   setStreamingTexts((prev) => ({
@@ -264,6 +278,17 @@ export default function VTuberChatPanel({
                       role: agent.role,
                     },
                   }));
+
+                  // Live chat-stream pre-emit: 완성된 문장이 있으면 즉시 TTS.
+                  // streaming_text 가 비어있거나 한 글자여도 extractor 가
+                  // 내부적으로 no-op 처리하므로 안전하다. parseEmotion 으로
+                  // [tag] 접두부 제거.
+                  if (ttsLive) {
+                    const [liveEmotion, liveClean] = parseEmotion(agent.streaming_text);
+                    if (liveClean.trim()) {
+                      store.pushStreamingText(agent.session_id, liveClean, liveEmotion);
+                    }
+                  }
                 }
               }
             } else if (eventType === 'broadcast_status') {
@@ -310,6 +335,9 @@ export default function VTuberChatPanel({
     // 채팅 전송 시점에서 오디오를 언락해야 이후 auto-TTS가 작동한다.
     if (useVTuberStore.getState().ttsEnabled) {
       getAudioManager().ensureResumed();
+      // Live chat-stream pre-emit: 새 턴 시작을 TTS 파이프라인에 알림.
+      // 이전 턴의 잔여 클립이 있으면 overlap 방지를 위해 폐기된다.
+      useVTuberStore.getState().beginTTSTurn(sessionId);
     }
 
     setInput('');

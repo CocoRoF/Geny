@@ -34,7 +34,7 @@ async function apiCall<T = unknown>(endpoint: string, options: RequestInit = {})
 // ==================== Backend Direct URL ====================
 // In production behind a reverse proxy (nginx), NEXT_PUBLIC_API_URL should be
 // set to '' (empty) so that the browser uses relative paths through nginx.
-function getBackendUrl(): string {
+export function getBackendUrl(): string {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
   // Explicitly set (including empty string '' for reverse-proxy setups)
   if (envUrl !== undefined) return envUrl;

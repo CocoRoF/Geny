@@ -123,6 +123,33 @@ class TTSEngine(ABC):
             is_final=True,
         )
 
+    async def synthesize_single_sentence(
+        self, request: TTSRequest
+    ) -> "TTSSentenceChunk":
+        """Synthesise exactly one sentence as a single playable clip.
+
+        Unlike :meth:`synthesize_sentence_stream`, this does **not**
+        apply server-side sentence splitting — ``request.text`` is
+        treated as a single already-segmented chunk. Used by the
+        chunk-fed ``/speak/chunks`` path where the *frontend* detects
+        sentence boundaries from the LLM's streaming output and feeds
+        them one at a time, so we don't want the TTS server to merge
+        or re-split anything.
+
+        Default implementation: delegate to :meth:`synthesize`. Engines
+        with native per-sentence optimisations may override to skip
+        the adapter's sentence-stream wrapper.
+        """
+        audio = await self.synthesize(request)
+        return TTSSentenceChunk(
+            seq=0,
+            text=request.text,
+            audio_data=audio,
+            sample_rate=request.sample_rate,
+            audio_format=request.audio_format.value,
+            is_final=True,
+        )
+
     async def synthesize(self, request: TTSRequest) -> bytes:
         """Synthesize text to complete audio bytes (batch mode)"""
         chunks = []

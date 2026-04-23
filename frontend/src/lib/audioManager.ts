@@ -28,6 +28,20 @@ export interface TTSQueueItem {
   onEnd?: () => void;
   /** Pre-fetch된 Blob promise (큐 처리 시 다음 아이템 미리 준비) */
   _prefetchPromise?: Promise<Blob | null>;
+  /** 이 클립이 속한 "턴" 식별자. 새 턴이 시작되면 이전 턴의 잔여
+   *  아이템을 선별적으로 버릴 수 있다. null이면 legacy 단일 클립. */
+  turnId?: string;
+  /** 턴 내 seq — strict 순서 보장용. undefined면 도착 순서 재생. */
+  seq?: number;
+}
+
+export interface EnqueueOptions {
+  /** 이 클립이 속한 턴 식별자. 새 턴이 시작되면
+   *  ``clearTurn(oldTurnId)`` 로 잔여 아이템을 제거할 수 있다. */
+  turnId?: string;
+  /** 턴 내 seq — 같은 turnId 안에서는 낮은 seq부터 엄격한 순서로 재생.
+   *  중간 seq 가 아직 도착하지 않았으면 도착할 때까지 큐에서 대기. */
+  seq?: number;
 }
 
 export class AudioManager {
@@ -47,6 +61,16 @@ export class AudioManager {
   private _queue: TTSQueueItem[] = [];
   private _isProcessingQueue = false;
   private _currentOnEnd: (() => void) | null = null;
+  /** 현재 재생 중인 클립이 속한 turnId — overlap 방지 로직에서 사용 */
+  private _currentTurnId: string | null = null;
+  /** 턴별로 "다음에 재생해야 할 seq" 를 추적하여 strict ordering 보장.
+   *  같은 turnId 안에서 중간 seq 가 아직 도착하지 않았으면 큐를
+   *  건너뛰지 않고 대기한다. */
+  private _nextSeqByTurn: Map<string, number> = new Map();
+  /** 만료된 (이미 clearTurn 된) 턴 ID — 혹시 나중에 도착하는 지연
+   *  enqueue 를 조용히 버리기 위해 짧게 보관. LRU 크기 제한. */
+  private _retiredTurns: string[] = [];
+  private static _MAX_RETIRED = 32;
 
   // ── iOS WebKit user gesture 오디오 언락 ──
   private _gestureListenerAttached = false;
@@ -127,16 +151,89 @@ export class AudioManager {
   /**
    * TTS 응답을 큐에 추가. 현재 재생 중이면 대기, 아니면 즉시 재생.
    * 이전 재생을 중단하지 않고 순차적으로 재생한다.
+   *
+   * ``opts.turnId`` / ``opts.seq`` 를 지정하면 같은 턴 안에서 strict
+   * 순서로 재생된다. 중간 seq 가 아직 도착하지 않았으면 뒤따라 온
+   * 높은 seq 가 있어도 대기한다.
    */
   async enqueue(
     response: Response,
     sessionId: string,
     onStart?: () => void,
     onEnd?: () => void,
+    opts?: EnqueueOptions,
   ): Promise<void> {
-    this._queue.push({ response, sessionId, onStart, onEnd });
+    const turnId = opts?.turnId;
+    const seq = opts?.seq;
+
+    // 이미 폐기된 턴의 지연 클립은 조용히 무시 (네트워크로 뒤늦게 도착한 경우)
+    if (turnId && this._retiredTurns.includes(turnId)) {
+      return;
+    }
+
+    const item: TTSQueueItem = {
+      response,
+      sessionId,
+      onStart,
+      onEnd,
+      turnId,
+      seq,
+    };
+
+    // 같은 턴에서 seq 가 지정된 경우 순서 유지를 위해 정렬 삽입
+    if (turnId && typeof seq === 'number') {
+      let inserted = false;
+      for (let i = 0; i < this._queue.length; i += 1) {
+        const q = this._queue[i];
+        if (q.turnId === turnId && typeof q.seq === 'number' && q.seq > seq) {
+          this._queue.splice(i, 0, item);
+          // 정렬 삽입 시 이후 아이템의 pre-fetch 예약을 무효화
+          q._prefetchPromise = undefined;
+          inserted = true;
+          break;
+        }
+      }
+      if (!inserted) this._queue.push(item);
+      // 턴의 nextSeq 초기화 (가장 작은 seq 로 설정되도록 min 추적)
+      const currentNext = this._nextSeqByTurn.get(turnId);
+      if (currentNext === undefined || seq < currentNext) {
+        this._nextSeqByTurn.set(turnId, seq);
+      }
+    } else {
+      this._queue.push(item);
+    }
+
     if (!this._isProcessingQueue) {
       await this._processQueue();
+    }
+  }
+
+  /**
+   * 특정 턴의 **대기 중** 클립을 모두 버린다. 이미 재생 중인 클립은
+   * 계속 재생되도록 유지 (또는 ``stopCurrent=true`` 로 강제 중단).
+   *
+   * 새 유저 메시지가 들어와서 AI 턴이 바뀐 경우 호출.
+   */
+  clearTurn(turnId: string, stopCurrent = false): void {
+    const before = this._queue.length;
+    this._queue = this._queue.filter((q) => q.turnId !== turnId);
+    this._nextSeqByTurn.delete(turnId);
+
+    // retired 목록 업데이트 (LRU)
+    if (!this._retiredTurns.includes(turnId)) {
+      this._retiredTurns.push(turnId);
+      if (this._retiredTurns.length > AudioManager._MAX_RETIRED) {
+        this._retiredTurns.shift();
+      }
+    }
+
+    const dropped = before - this._queue.length;
+    if (dropped > 0) {
+      console.log(`[AudioManager] clearTurn(${turnId}): dropped ${dropped} queued clip(s)`);
+    }
+
+    if (stopCurrent && this._currentTurnId === turnId) {
+      this._stopCurrentOnly();
     }
   }
 
@@ -151,7 +248,30 @@ export class AudioManager {
 
     try {
       while (this._queue.length > 0) {
+        // Strict seq ordering: 맨 앞 아이템이 턴의 nextSeq 와 맞지 않으면
+        // 아직 비는 seq 가 도착할 때까지 잠시 대기 (최대 2초).
+        const head = this._queue[0];
+        if (head.turnId && typeof head.seq === 'number') {
+          const expected = this._nextSeqByTurn.get(head.turnId);
+          if (expected !== undefined && head.seq > expected) {
+            // 비는 seq 있음 — 짧게 대기 (next enqueue 가 깨워줌)
+            // Deadlock 방지: 2초 이상 비어있으면 그냥 건너뛰기
+            const waited = await this._waitForSeq(head.turnId, expected, 2000);
+            if (!waited) {
+              console.warn(
+                `[AudioManager] seq gap timeout: turn=${head.turnId} expected=${expected} head=${head.seq}, skipping gap`,
+              );
+              this._nextSeqByTurn.set(head.turnId, head.seq);
+            }
+            continue;
+          }
+        }
+
         const item = this._queue.shift()!;
+        if (item.turnId && typeof item.seq === 'number') {
+          this._nextSeqByTurn.set(item.turnId, item.seq + 1);
+        }
+        this._currentTurnId = item.turnId ?? null;
 
         // Pre-fetch: 다음 아이템이 있으면 Blob 준비를 미리 시작
         if (this._queue.length > 0 && !this._queue[0]._prefetchPromise) {
@@ -457,8 +577,35 @@ export class AudioManager {
       this.sourceNode = null;
     }
 
+    this._currentTurnId = null;
+
     // onEnd 콜백을 반드시 호출하여 외부 상태(ttsSpeaking 등)를 정리
     pendingOnEnd?.();
+  }
+
+  /** ``clearTurn(stopCurrent=true)`` 용 내부 별칭. */
+  private _stopCurrentOnly(): void {
+    this._stopCurrent();
+  }
+
+  /**
+   * 같은 턴의 다음 기대 seq 가 도착할 때까지 대기 (poll 방식, 10ms 간격).
+   *
+   * Deadlock 방지용 `timeoutMs` — 타임아웃 발생 시 ``false`` 를 반환하고
+   * 호출자가 gap 을 skip 하도록 유도한다.
+   */
+  private async _waitForSeq(turnId: string, expected: number, timeoutMs: number): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      // 큐의 맨 앞 아이템이 바뀌었으면 즉시 빠져나감 (재평가)
+      const head = this._queue[0];
+      if (!head || head.turnId !== turnId) return true;
+      if (typeof head.seq !== 'number' || head.seq <= expected) return true;
+      // 폐기된 턴이면 더 기다릴 필요 없음
+      if (this._retiredTurns.includes(turnId)) return true;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    return false;
   }
 
   /**

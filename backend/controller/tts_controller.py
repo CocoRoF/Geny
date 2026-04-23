@@ -347,6 +347,422 @@ async def speak_stream(session_id: str, body: SpeakRequest):
     )
 
 
+# ==================== Frontend-fed chunk streaming ====================
+
+class SpeakChunksRequest(BaseModel):
+    """Request body for ``/agents/:sid/speak/chunks``.
+
+    Batched version of the streaming path — the frontend supplies the
+    sentences it has already detected in the LLM's incremental output,
+    and the backend synthesises each one (with the OmniVoice
+    max-concurrency semaphore as the real parallelism cap). Response
+    is NDJSON with clips in strict ``seq`` order.
+
+    ``turn_id`` is an opaque string that the frontend uses to scope an
+    audio-queue "turn" — when the user sends a new message mid-reply,
+    the client can flush its queue and discard any in-flight clips
+    that belonged to the old turn. The server doesn't inspect it
+    beyond echoing it back on every frame + the terminator.
+    """
+
+    sentences: list[str]
+    emotion: str = "neutral"
+    language: Optional[str] = None
+    engine: Optional[str] = None
+    turn_id: Optional[str] = None
+
+
+@router.post("/agents/{session_id}/speak/chunks")
+async def speak_chunks(session_id: str, body: SpeakChunksRequest):
+    """Batched frontend-fed sentence streaming.
+
+    The frontend watches the LLM's incremental output, detects
+    sentence boundaries as they complete, and posts the *already
+    segmented* sentences here. This endpoint:
+
+    * Skips the server-side sentence splitter entirely — one input
+      sentence becomes exactly one output clip.
+    * Submits all sentences as concurrent async tasks. Real GPU
+      parallelism is capped by the OmniVoice semaphore
+      (``OMNIVOICE_MAX_CONCURRENCY``); when the cap is 1 the behaviour
+      is identical to sequential, when it's >1 the GPU pipelines.
+    * Yields clips in strict ``seq`` order (out-of-order completions
+      are buffered) so the client's audio queue plays them in the same
+      order the LLM produced them.
+
+    Wire format (NDJSON response lines):
+
+    * ``{"seq": N, "text": str, "format": "wav", "sample_rate": int,
+      "audio_b64": str, "turn_id": str}`` — one clip
+    * ``{"seq": N, "text": str, "error": str, "turn_id": str}`` —
+      per-sentence failure (stream continues)
+    * ``{"done": true, "total": int, "requested": int,
+      "elapsed_seconds": float, "turn_id": str}`` — terminator
+
+    Call pattern: typically invoked multiple times per LLM turn (e.g.
+    as each sentence becomes available), with the same ``turn_id`` so
+    the client can group them. One-shot callers can also post all
+    sentences at once.
+    """
+    import asyncio as _asyncio
+    import base64
+    import time
+
+    # Sanitize every chunk; drop empties after sanitation.
+    cleaned: list[tuple[int, str]] = []
+    for i, raw in enumerate(body.sentences or []):
+        clean = sanitize_tts_text(raw or "")
+        if clean.strip():
+            cleaned.append((i, clean))
+
+    if not cleaned:
+        return JSONResponse(
+            status_code=204,
+            content={"detail": "No speakable text after sanitization"},
+        )
+
+    from service.vtuber.tts.tts_service import get_tts_service
+
+    tts = get_tts_service()
+
+    session_voice_profile = None
+    try:
+        from service.claude_manager.session_store import get_session_store
+        session = get_session_store().get(session_id)
+        if session:
+            session_voice_profile = session.get("tts_voice_profile")
+    except Exception as e:
+        logger.debug(f"Failed to look up session voice profile: {e}")
+
+    default_language = "ko"
+    current_provider = "edge_tts"
+    try:
+        from service.config.manager import get_config_manager
+        from service.config.sub_config.tts.tts_general_config import TTSGeneralConfig
+
+        general = get_config_manager().load_config(TTSGeneralConfig)
+        default_language = general.default_language
+        current_provider = general.provider
+    except Exception:
+        pass
+
+    language = body.language or default_language
+    turn_id = body.turn_id or ""
+
+    logger.info(
+        "speak/chunks: session=%s engine=%s turn=%s count=%d total_chars=%d",
+        session_id, body.engine or current_provider, turn_id,
+        len(cleaned), sum(len(c) for _, c in cleaned),
+    )
+
+    async def _synth(seq: int, sentence: str) -> dict:
+        t0 = time.monotonic()
+        chunk = await tts.speak_single_sentence(
+            text=sentence,
+            emotion=body.emotion,
+            language=language,
+            engine_name=body.engine,
+            voice_profile=session_voice_profile,
+        )
+        dt = time.monotonic() - t0
+        if chunk.error:
+            logger.warning(
+                "speak/chunks: seq=%d failed in %.2fs err=%s", seq, dt, chunk.error,
+            )
+            return {
+                "seq": seq,
+                "text": sentence,
+                "error": chunk.error,
+                "turn_id": turn_id,
+            }
+        logger.info(
+            "speak/chunks: seq=%d synth=%.2fs audio_bytes=%d chars=%d",
+            seq, dt, len(chunk.audio_data or b""), len(sentence),
+        )
+        return {
+            "seq": seq,
+            "text": sentence,
+            "format": chunk.audio_format,
+            "sample_rate": chunk.sample_rate,
+            "audio_b64": base64.b64encode(chunk.audio_data or b"").decode("ascii"),
+            "turn_id": turn_id,
+        }
+
+    async def ndjson_generator():
+        t0 = time.monotonic()
+        first_emit_at: Optional[float] = None
+        success = 0
+        tasks: list[_asyncio.Task[dict]] = [
+            _asyncio.create_task(_synth(seq, text), name=f"speak-chunk-{seq}")
+            for seq, text in cleaned
+        ]
+        pending: dict[int, dict] = {}
+        # First expected seq is the lowest seq we passed in (frontend
+        # might batch seq=2,3 separately — we always emit in ascending
+        # numeric order of the seqs we received).
+        ordered_seqs = sorted(seq for seq, _ in cleaned)
+        next_idx = 0
+
+        try:
+            for coro in _asyncio.as_completed(tasks):
+                result = await coro
+                pending[int(result["seq"])] = result
+                while next_idx < len(ordered_seqs) and ordered_seqs[next_idx] in pending:
+                    frame = pending.pop(ordered_seqs[next_idx])
+                    if not frame.get("error"):
+                        success += 1
+                        if first_emit_at is None:
+                            first_emit_at = time.monotonic() - t0
+                    yield (json.dumps(frame, ensure_ascii=False) + "\n").encode("utf-8")
+                    next_idx += 1
+        except _asyncio.CancelledError:
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
+            raise
+        finally:
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
+
+        total_dt = time.monotonic() - t0
+        logger.info(
+            "speak/chunks: done turn=%s %d/%d success in %.2fs (first_emit=%.2fs)",
+            turn_id, success, len(cleaned), total_dt,
+            first_emit_at if first_emit_at is not None else -1.0,
+        )
+        terminator = {
+            "done": True,
+            "total": success,
+            "requested": len(cleaned),
+            "elapsed_seconds": round(total_dt, 3),
+            "first_emit_seconds": (
+                round(first_emit_at, 3) if first_emit_at is not None else None
+            ),
+            "turn_id": turn_id,
+        }
+        yield (json.dumps(terminator) + "\n").encode("utf-8")
+
+    return StreamingResponse(
+        ndjson_generator(),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-TTS-Engine": current_provider,
+            "X-TTS-Streaming": "chunks-ndjson-parallel",
+            "X-TTS-Turn-Id": turn_id,
+        },
+    )
+
+
+# ==================== Frontend-fed chunk streaming ====================
+
+class SpeakChunksRequest(BaseModel):
+    """Request body for ``/agents/:sid/speak/chunks``.
+
+    Batched version of the streaming path — the frontend supplies the
+    sentences it has already detected in the LLM's incremental output,
+    and the backend synthesises each one (with the OmniVoice
+    max-concurrency semaphore as the real parallelism cap). Response
+    is NDJSON with clips in strict ``seq`` order.
+
+    ``turn_id`` is an opaque string that the frontend uses to scope an
+    audio-queue "turn" — when the user sends a new message mid-reply,
+    the client can flush its queue and discard any in-flight clips
+    that belonged to the old turn. The server doesn't inspect it
+    beyond echoing it back on every frame + the terminator.
+    """
+
+    sentences: list[str]
+    emotion: str = "neutral"
+    language: Optional[str] = None
+    engine: Optional[str] = None
+    turn_id: Optional[str] = None
+
+
+@router.post("/agents/{session_id}/speak/chunks")
+async def speak_chunks(session_id: str, body: SpeakChunksRequest):
+    """Batched frontend-fed sentence streaming.
+
+    The frontend watches the LLM's incremental output, detects
+    sentence boundaries as they complete, and posts the *already
+    segmented* sentences here. This endpoint:
+
+    * Skips the server-side sentence splitter entirely — one input
+      sentence becomes exactly one output clip.
+    * Submits all sentences as concurrent async tasks. Real GPU
+      parallelism is capped by the OmniVoice semaphore
+      (``OMNIVOICE_MAX_CONCURRENCY``); when the cap is 1 the behaviour
+      is identical to sequential, when it's >1 the GPU pipelines.
+    * Yields clips in strict ``seq`` order (out-of-order completions
+      are buffered) so the client's audio queue plays them in the same
+      order the LLM produced them.
+
+    Wire format (NDJSON response lines):
+
+    * ``{"seq": N, "text": str, "format": "wav", "sample_rate": int,
+      "audio_b64": str, "turn_id": str}`` — one clip
+    * ``{"seq": N, "text": str, "error": str, "turn_id": str}`` —
+      per-sentence failure (stream continues)
+    * ``{"done": true, "total": int, "requested": int,
+      "elapsed_seconds": float, "turn_id": str}`` — terminator
+
+    Call pattern: typically invoked multiple times per LLM turn (e.g.
+    as each sentence becomes available), with the same ``turn_id`` so
+    the client can group them. One-shot callers can also post all
+    sentences at once.
+    """
+    import asyncio as _asyncio
+    import base64
+    import time
+
+    # Sanitize every chunk; drop empties after sanitation.
+    cleaned: list[tuple[int, str]] = []
+    for i, raw in enumerate(body.sentences or []):
+        clean = sanitize_tts_text(raw or "")
+        if clean.strip():
+            cleaned.append((i, clean))
+
+    if not cleaned:
+        return JSONResponse(
+            status_code=204,
+            content={"detail": "No speakable text after sanitization"},
+        )
+
+    from service.vtuber.tts.tts_service import get_tts_service
+
+    tts = get_tts_service()
+
+    session_voice_profile = None
+    try:
+        from service.claude_manager.session_store import get_session_store
+        session = get_session_store().get(session_id)
+        if session:
+            session_voice_profile = session.get("tts_voice_profile")
+    except Exception as e:
+        logger.debug(f"Failed to look up session voice profile: {e}")
+
+    default_language = "ko"
+    current_provider = "edge_tts"
+    try:
+        from service.config.manager import get_config_manager
+        from service.config.sub_config.tts.tts_general_config import TTSGeneralConfig
+
+        general = get_config_manager().load_config(TTSGeneralConfig)
+        default_language = general.default_language
+        current_provider = general.provider
+    except Exception:
+        pass
+
+    language = body.language or default_language
+    turn_id = body.turn_id or ""
+
+    logger.info(
+        "speak/chunks: session=%s engine=%s turn=%s count=%d total_chars=%d",
+        session_id, body.engine or current_provider, turn_id,
+        len(cleaned), sum(len(c) for _, c in cleaned),
+    )
+
+    async def _synth(seq: int, sentence: str) -> dict:
+        t0 = time.monotonic()
+        chunk = await tts.speak_single_sentence(
+            text=sentence,
+            emotion=body.emotion,
+            language=language,
+            engine_name=body.engine,
+            voice_profile=session_voice_profile,
+        )
+        dt = time.monotonic() - t0
+        if chunk.error:
+            logger.warning(
+                "speak/chunks: seq=%d failed in %.2fs err=%s", seq, dt, chunk.error,
+            )
+            return {
+                "seq": seq,
+                "text": sentence,
+                "error": chunk.error,
+                "turn_id": turn_id,
+            }
+        logger.info(
+            "speak/chunks: seq=%d synth=%.2fs audio_bytes=%d chars=%d",
+            seq, dt, len(chunk.audio_data or b""), len(sentence),
+        )
+        return {
+            "seq": seq,
+            "text": sentence,
+            "format": chunk.audio_format,
+            "sample_rate": chunk.sample_rate,
+            "audio_b64": base64.b64encode(chunk.audio_data or b"").decode("ascii"),
+            "turn_id": turn_id,
+        }
+
+    async def ndjson_generator():
+        t0 = time.monotonic()
+        first_emit_at: Optional[float] = None
+        success = 0
+        tasks: list[_asyncio.Task[dict]] = [
+            _asyncio.create_task(_synth(seq, text), name=f"speak-chunk-{seq}")
+            for seq, text in cleaned
+        ]
+        pending: dict[int, dict] = {}
+        # First expected seq is the lowest seq we passed in (frontend
+        # might batch seq=2,3 separately — we always emit in ascending
+        # numeric order of the seqs we received).
+        ordered_seqs = sorted(seq for seq, _ in cleaned)
+        next_idx = 0
+
+        try:
+            for coro in _asyncio.as_completed(tasks):
+                result = await coro
+                pending[int(result["seq"])] = result
+                while next_idx < len(ordered_seqs) and ordered_seqs[next_idx] in pending:
+                    frame = pending.pop(ordered_seqs[next_idx])
+                    if not frame.get("error"):
+                        success += 1
+                        if first_emit_at is None:
+                            first_emit_at = time.monotonic() - t0
+                    yield (json.dumps(frame, ensure_ascii=False) + "\n").encode("utf-8")
+                    next_idx += 1
+        except _asyncio.CancelledError:
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
+            raise
+        finally:
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
+
+        total_dt = time.monotonic() - t0
+        logger.info(
+            "speak/chunks: done turn=%s %d/%d success in %.2fs (first_emit=%.2fs)",
+            turn_id, success, len(cleaned), total_dt,
+            first_emit_at if first_emit_at is not None else -1.0,
+        )
+        terminator = {
+            "done": True,
+            "total": success,
+            "requested": len(cleaned),
+            "elapsed_seconds": round(total_dt, 3),
+            "first_emit_seconds": (
+                round(first_emit_at, 3) if first_emit_at is not None else None
+            ),
+            "turn_id": turn_id,
+        }
+        yield (json.dumps(terminator) + "\n").encode("utf-8")
+
+    return StreamingResponse(
+        ndjson_generator(),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-TTS-Engine": current_provider,
+            "X-TTS-Streaming": "chunks-ndjson-parallel",
+            "X-TTS-Turn-Id": turn_id,
+        },
+    )
+
+
 # ==================== Per-Session Voice Profile ====================
 
 class AssignProfileRequest(BaseModel):

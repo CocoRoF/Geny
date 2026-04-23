@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { vtuberApi, ttsApi, configApi } from '@/lib/api';
 import { getAudioManager } from '@/lib/audioManager';
 import { consumeSentenceStream } from '@/lib/ttsSentenceStream';
+import { dispatchSpeakChunks } from '@/lib/ttsChunkStream';
+import { SentenceStreamExtractor } from '@/lib/sentenceBoundaryDetector';
 import type { Live2dModelInfo, AvatarState, VTuberLogEntry } from '@/types';
 
 const MAX_LOGS = 500;
@@ -9,6 +11,32 @@ let _logIdCounter = 0;
 
 // TTS fetch 취소용 AbortController (세션별)
 const _ttsAbortControllers: Map<string, AbortController> = new Map();
+
+// ── Live-stream sentence TTS (chat-stream pre-emit) ──────────────
+// LLM 토큰이 쏟아지는 동안 이미 완성된 문장을 즉시 /speak/chunks 로 보내서
+// 사용자가 첫 음성을 듣는 시점을 agent_message turn-end 이전으로 앞당긴다.
+//
+// 턴 ID 규칙:  `${sessionId}:${turnIndex}`
+//   - 사용자가 새 메시지를 보낼 때 turnIndex++ 하고 이전 턴의 잔여 클립을
+//     AudioManager.clearTurn 으로 버림으로써 overlap 을 원천 차단.
+const _liveTurnIndex: Map<string, number> = new Map();
+const _liveAbortControllers: Map<string, AbortController> = new Map();
+const _liveEmittedByTurn: Map<string, number> = new Map(); // turnId → next seq
+const _liveExtractor = new SentenceStreamExtractor();
+
+function _currentTurnId(sessionId: string): string {
+  const idx = _liveTurnIndex.get(sessionId) ?? 0;
+  return `${sessionId}:${idx}`;
+}
+
+/**
+ * Debug/introspection — VTuberChatPanel 에서 "이번 턴에 이미 live 로 재생되고
+ * 있으니 agent_message 시점의 단발성 speakResponse 는 건너뛰자" 는 판단에 쓴다.
+ */
+export function hasLiveChunksThisTurn(sessionId: string): boolean {
+  const turnId = _currentTurnId(sessionId);
+  return (_liveEmittedByTurn.get(turnId) ?? 0) > 0;
+}
 
 // ── Cached tts_general settings (refresh every 30s) ──────────────
 // Why: speakResponse는 매 응답마다 호출되는데, 매번 /api/config/tts_general을
@@ -87,6 +115,14 @@ interface VTuberState {
   setTTSVolume: (vol: number) => void;
   speakResponse: (sessionId: string, text: string, emotion: string) => Promise<void>;
   stopSpeaking: (sessionId: string) => void;
+
+  // ── Live chat-stream pre-emit TTS ──
+  /** 새 유저 메시지 시작 시 호출 — 턴 인덱스 증가 + 이전 턴 잔여 클립 폐기. */
+  beginTTSTurn: (sessionId: string) => void;
+  /** 스트리밍 토큰 청크를 주입. 내부 extractor가 완성된 문장만 뽑아 /speak/chunks 로 전송. */
+  pushStreamingText: (sessionId: string, fullText: string, emotion: string) => void;
+  /** 턴 종료(=agent_message 도착) 시 호출 — 꼬리 문장 강제 flush. */
+  finalizeTTSTurn: (sessionId: string, fullText: string, emotion: string) => void;
 }
 
 export const useVTuberStore = create<VTuberState>((set, get) => ({
@@ -415,5 +451,123 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
       ttsSpeaking: { ...s.ttsSpeaking, [sessionId]: false },
     }));
     get().addLog(sessionId, 'info', 'TTS', 'Playback stopped (queue cleared)');
+  },
+
+  // ── Live chat-stream pre-emit TTS ─────────────────────────────────
+  //
+  // 새 유저 메시지 시작 시 호출. 이전 턴의 잔여 클립을 AudioManager 에서
+  // 제거하고 turnIndex++ 하여 새 스코프를 연다. extractor 버퍼도 리셋.
+  beginTTSTurn: (sessionId) => {
+    const prevTurn = _currentTurnId(sessionId);
+    // 이전 턴 고유 폐기
+    getAudioManager().clearTurn(prevTurn, /* stopCurrent */ false);
+    _liveAbortControllers.get(sessionId)?.abort();
+    _liveAbortControllers.delete(sessionId);
+    _liveEmittedByTurn.delete(prevTurn);
+    _liveExtractor.reset(prevTurn);
+
+    const nextIdx = (_liveTurnIndex.get(sessionId) ?? 0) + 1;
+    _liveTurnIndex.set(sessionId, nextIdx);
+    const newTurn = `${sessionId}:${nextIdx}`;
+    _liveEmittedByTurn.set(newTurn, 0);
+    get().addLog(sessionId, 'debug', 'TTS', `Live turn started: ${newTurn}`);
+  },
+
+  //
+  // 에이전트가 토큰을 쏟아낼 때마다 호출. 누적된 streaming_text 전체를
+  // 넘기면 SentenceStreamExtractor 가 이전 호출 이후 새로 완성된 문장만
+  // 추출한다. 문장별로 /speak/chunks 로 단일-문장 요청을 보내서 백엔드가
+  // 프런트엔드 분할을 그대로 1:1 클립으로 돌려주게 한다.
+  //
+  // Why 문장당 1 요청? — OmniVoice 서버 `/tts/stream` 의 parallel 구조가
+  // **한 번의 HTTP 요청 안에서** 동작하지만, 우리는 이미 문장을 따로따로
+  // 추출했으므로 요청 자체도 독립적으로 흘려보낼 수 있고, 그러면 TCP/HTTP
+  // 레이어에서 자연스러운 파이프라이닝을 얻는다. 게다가 문장 하나가 늦어도
+  // 다른 문장의 HTTP 응답은 영향을 받지 않는다 (큐 순서는 AudioManager 가
+  // seq 로 엄격히 보장).
+  pushStreamingText: (sessionId, fullText, emotion) => {
+    if (!get().ttsEnabled) return;
+    const turnId = _currentTurnId(sessionId);
+    const newSentences = _liveExtractor.push(turnId, fullText);
+    if (newSentences.length === 0) return;
+
+    for (const sentence of newSentences) {
+      const nextSeq = _liveEmittedByTurn.get(turnId) ?? 0;
+      _liveEmittedByTurn.set(turnId, nextSeq + 1);
+
+      // 세션당 단일 AbortController 로 턴 취소를 전파
+      let controller = _liveAbortControllers.get(sessionId);
+      if (!controller) {
+        controller = new AbortController();
+        _liveAbortControllers.set(sessionId, controller);
+      }
+
+      set((s) => ({ ttsSpeaking: { ...s.ttsSpeaking, [sessionId]: true } }));
+
+      // 문장당 1 HTTP 요청 — TCP 레이어에서 자연스러운 파이프라이닝을 얻고
+      // 한 요청의 지연이 다른 문장의 재생에 영향을 주지 않는다. 응답 seq
+      // 는 단일-문장이라 항상 0 이므로, `seqOffset` 으로 턴 전역 seq 공간
+      // 으로 매핑하여 AudioManager 가 엄격 순서로 재생하도록 한다.
+      void dispatchSpeakChunks(
+        { sentences: [sentence], emotion, turn_id: turnId },
+        {
+          sessionId,
+          seqOffset: nextSeq,
+          onFirstClip: () => {
+            get().addLog(sessionId, 'debug', 'TTS', `Live chunk enqueued seq=${nextSeq} (${sentence.slice(0, 40)}...)`);
+          },
+          onClipError: (_s, err) => {
+            get().addLog(sessionId, 'warn', 'TTS', `Live chunk error seq=${nextSeq}: ${err}`);
+          },
+          onClipEnd: () => {
+            const am = getAudioManager();
+            if (am.queueLength === 0 && !am.isPlaying) {
+              set((s) => ({ ttsSpeaking: { ...s.ttsSpeaking, [sessionId]: false } }));
+            }
+          },
+        },
+        controller.signal,
+      ).catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        console.warn('[VTuber] live chunk dispatch failed:', err);
+      });
+    }
+  },
+
+  //
+  // 턴 종료. agent_message 가 도착한 시점이거나 user abort 시점.
+  // extractor 에서 꼬리를 강제로 뽑아 마지막 문장까지 전송한다.
+  finalizeTTSTurn: (sessionId, fullText, emotion) => {
+    if (!get().ttsEnabled) return;
+    const turnId = _currentTurnId(sessionId);
+    const tail = _liveExtractor.flush(turnId, fullText);
+    if (tail.length === 0) return;
+    for (const sentence of tail) {
+      const nextSeq = _liveEmittedByTurn.get(turnId) ?? 0;
+      _liveEmittedByTurn.set(turnId, nextSeq + 1);
+      let controller = _liveAbortControllers.get(sessionId);
+      if (!controller) {
+        controller = new AbortController();
+        _liveAbortControllers.set(sessionId, controller);
+      }
+      set((s) => ({ ttsSpeaking: { ...s.ttsSpeaking, [sessionId]: true } }));
+      void dispatchSpeakChunks(
+        { sentences: [sentence], emotion, turn_id: turnId },
+        {
+          sessionId,
+          seqOffset: nextSeq,
+          onClipEnd: () => {
+            const am = getAudioManager();
+            if (am.queueLength === 0 && !am.isPlaying) {
+              set((s) => ({ ttsSpeaking: { ...s.ttsSpeaking, [sessionId]: false } }));
+            }
+          },
+        },
+        controller.signal,
+      ).catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        console.warn('[VTuber] live finalize dispatch failed:', err);
+      });
+    }
   },
 }));

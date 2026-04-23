@@ -154,53 +154,54 @@ services:
     networks:
       - geny-net-prod
 
-  # ── GPT-SoVITS (Optional — TTS 로컬 엔진, GPU 필요) ──────────────
+  # ── GPT-SoVITS (DISABLED — OmniVoice 로 전환, 2026-04-23) ────────
+  # 더 이상 사용하지 않음. 필요 시 아래 블록을 주석 해제하여 복구.
   # xxxxrt666/gpt-sovits (공식 이미지, v2 API, 한국어 지원)
   # api_v2.py → 포트 9880 서빙, webui.py → 포트 9874 (TTS Studio)
-  gpt-sovits:
-    image: xxxxrt666/gpt-sovits:latest-cu126
-    container_name: geny-gpt-sovits-prod
-    profiles: ["tts-local"]
-    init: true
-    restart: unless-stopped
-    working_dir: /workspace/GPT-SoVITS
-    command:
-      - /bin/bash
-      - "-c"
-      - |
-        echo '[1/3] Installing nvidia-npp-cu12...';
-        pip install --no-cache-dir nvidia-npp-cu12;
-        echo '[2/3] Fixing torchaudio...';
-        pip install --no-cache-dir --no-deps --force-reinstall torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu126;
-        echo '[3/3] Starting GPT-SoVITS...';
-        rm -rf GPT_SoVITS/pretrained_models GPT_SoVITS/text/G2PWModel tools/asr/models tools/uvr5/uvr5_weights 2>/dev/null;
-        ln -sf /workspace/models/pretrained_models GPT_SoVITS/pretrained_models;
-        ln -sf /workspace/models/G2PWModel       GPT_SoVITS/text/G2PWModel;
-        ln -sf /workspace/models/asr_models       tools/asr/models;
-        ln -sf /workspace/models/uvr5_weights     tools/uvr5/uvr5_weights;
-        python webui.py &
-        exec python api_v2.py -a 0.0.0.0 -p 9880
-    expose:
-      - "9880"
-      - "9874"
-    volumes:
-      - geny-voices-prod:/workspace/GPT-SoVITS/references:ro
-    tty: true
-    stdin_open: true
-    shm_size: 16G
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    environment:
-      - is_half=False
-      - GRADIO_ROOT_PATH=/tts-studio
-      - LD_LIBRARY_PATH=/root/conda/lib:/root/conda/lib/python3.12/site-packages/nvidia/npp/lib
-    networks:
-      - geny-net-prod
+  # gpt-sovits:
+  #   image: xxxxrt666/gpt-sovits:latest-cu126
+  #   container_name: geny-gpt-sovits-prod
+  #   profiles: ["tts-local"]
+  #   init: true
+  #   restart: unless-stopped
+  #   working_dir: /workspace/GPT-SoVITS
+  #   command:
+  #     - /bin/bash
+  #     - "-c"
+  #     - |
+  #       echo '[1/3] Installing nvidia-npp-cu12...';
+  #       pip install --no-cache-dir nvidia-npp-cu12;
+  #       echo '[2/3] Fixing torchaudio...';
+  #       pip install --no-cache-dir --no-deps --force-reinstall torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu126;
+  #       echo '[3/3] Starting GPT-SoVITS...';
+  #       rm -rf GPT_SoVITS/pretrained_models GPT_SoVITS/text/G2PWModel tools/asr/models tools/uvr5/uvr5_weights 2>/dev/null;
+  #       ln -sf /workspace/models/pretrained_models GPT_SoVITS/pretrained_models;
+  #       ln -sf /workspace/models/G2PWModel       GPT_SoVITS/text/G2PWModel;
+  #       ln -sf /workspace/models/asr_models       tools/asr/models;
+  #       ln -sf /workspace/models/uvr5_weights     tools/uvr5/uvr5_weights;
+  #       python webui.py &
+  #       exec python api_v2.py -a 0.0.0.0 -p 9880
+  #   expose:
+  #     - "9880"
+  #     - "9874"
+  #   volumes:
+  #     - geny-voices-prod:/workspace/GPT-SoVITS/references:ro
+  #   tty: true
+  #   stdin_open: true
+  #   shm_size: 16G
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+  #   environment:
+  #     - is_half=False
+  #     - GRADIO_ROOT_PATH=/tts-studio
+  #     - LD_LIBRARY_PATH=/root/conda/lib:/root/conda/lib/python3.12/site-packages/nvidia/npp/lib
+  #   networks:
+  #     - geny-net-prod
 
   # ── OmniVoice (Optional — Geny 자체 TTS 마이크로서비스, GPU 필요) ─
   # geny-monorepo 내 omnivoice/ 에서 빌드. 외부 노출 없이 backend 가
@@ -220,7 +221,9 @@ services:
       - OMNIVOICE_MODEL=${OMNIVOICE_MODEL:-k2-fsa/OmniVoice}
       - OMNIVOICE_DEVICE=${OMNIVOICE_DEVICE:-cuda:0}
       - OMNIVOICE_DTYPE=${OMNIVOICE_DTYPE:-float16}
-      - OMNIVOICE_MAX_CONCURRENCY=${OMNIVOICE_MAX_CONCURRENCY:-1}
+      # GPU 병렬 합성 개수. GTX 1070 (8GB, float16, ~2-3GB 모델) 기준 4 권장.
+      # OOM 발생 시 3 → 2 로 내리고, 여유 있으면 6까지 시도 가능.
+      - OMNIVOICE_MAX_CONCURRENCY=${OMNIVOICE_MAX_CONCURRENCY:-4}
       - OMNIVOICE_AUTO_ASR=${OMNIVOICE_AUTO_ASR:-false}
       - OMNIVOICE_LOG_LEVEL=${OMNIVOICE_LOG_LEVEL:-info}
       - HF_ENDPOINT=${HF_ENDPOINT:-https://huggingface.co}

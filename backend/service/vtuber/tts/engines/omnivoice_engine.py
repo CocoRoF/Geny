@@ -282,6 +282,69 @@ class OmniVoiceEngine(TTSEngine):
             yield TTSChunk(audio_data=audio_data, chunk_index=0)
         yield TTSChunk(audio_data=b"", is_final=True, chunk_index=1)
 
+    async def synthesize_single_sentence(
+        self, request: TTSRequest
+    ) -> TTSSentenceChunk:
+        """One already-segmented sentence → one wav clip, via ``/tts``.
+
+        Used by the frontend-fed chunk pipeline (``/api/tts/agents/:sid
+        /speak/chunks``) where the caller has already sliced the LLM
+        output into sentence-sized pieces and we just need the audio
+        for each. Sending the payload to ``/tts`` (single-shot)
+        bypasses the upstream sentence splitter entirely, so one input
+        chunk == one output clip — guaranteed.
+
+        Multiple concurrent callers are safe: the httpx client pool
+        supports up to 8 in-flight requests and the OmniVoice server
+        gates actual GPU execution via its own semaphore.
+        """
+        from service.config.manager import get_config_manager
+        from service.config.sub_config.tts.omnivoice_config import OmniVoiceConfig
+
+        config = get_config_manager().load_config(OmniVoiceConfig)
+        if not config.enabled:
+            raise ValueError("OmniVoice is not enabled")
+
+        payload, profile = self._build_payload(request, config)
+        api_url = config.api_url.rstrip("/")
+        timeout = max(float(config.timeout_seconds or 0.0), 180.0)
+        client = await _get_client(api_url, read_timeout=timeout)
+
+        logger.info(
+            "OmniVoice single-sentence: url=%s/tts mode=%s profile=%s lang=%s "
+            "chars=%d emotion=%s",
+            api_url, payload["mode"], profile, payload.get("language"),
+            len(request.text or ""), request.emotion,
+        )
+
+        try:
+            resp = await client.post(f"{api_url}/tts", json=payload)
+            resp.raise_for_status()
+            audio_data = resp.content
+            sr = int(resp.headers.get("X-OmniVoice-Sample-Rate") or payload.get("sample_rate") or 24000)
+        except httpx.HTTPStatusError as e:
+            body = e.response.text[:500] if e.response is not None else ""
+            logger.error("OmniVoice /tts error %s: %s", e.response.status_code, body)
+            raise ValueError(f"OmniVoice /tts error {e.response.status_code}: {body}") from e
+        except httpx.TimeoutException as e:
+            logger.exception(
+                "OmniVoice /tts timeout after %.1fs (type=%s)",
+                timeout, type(e).__name__,
+            )
+            raise RuntimeError(
+                f"OmniVoice /tts timed out after {timeout:.0f}s "
+                f"(type={type(e).__name__})."
+            ) from e
+
+        return TTSSentenceChunk(
+            seq=0,
+            text=request.text,
+            audio_data=audio_data or b"",
+            sample_rate=sr,
+            audio_format=str(payload.get("audio_format") or "wav"),
+            is_final=True,
+        )
+
     async def synthesize_sentence_stream(
         self, request: TTSRequest
     ) -> AsyncIterator[TTSSentenceChunk]:

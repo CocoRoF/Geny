@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -166,10 +167,27 @@ async def tts_stream(req: TTSStreamRequest) -> StreamingResponse:
     streamed. The terminator frame still includes the per-sentence
     success ``total``.
 
-    Latency model: client receives sentence #1 once it's fully
-    synthesised (single-GPU semaphore prevents pipelining), then #2,
-    etc. For a 3-sentence response that would take ~25s as a single
-    /tts call, the listener now hears speech start at ~8s instead.
+    Concurrency model (Phase 5 — parallel submission)
+    -------------------------------------------------
+    All sentences are submitted as concurrent ``asyncio`` tasks up
+    front. The engine's :class:`asyncio.Semaphore` (sized by
+    ``OMNIVOICE_MAX_CONCURRENCY``) is the *single* place we gate
+    actual GPU access, so:
+
+    * ``max_concurrency == 1`` (default, safe for single-GPU hosts):
+      effectively identical to the old sequential loop for total wall
+      time, but sentence ``N+1`` now starts the moment sentence ``N``
+      finishes — the old path paid ~1 event-loop tick + NDJSON encode
+      + network flush between each synthesis, which adds up on long
+      replies.
+    * ``max_concurrency >= 2`` (multi-GPU or high-VRAM hosts): real
+      pipelining — sentence 1 and 2 are generated on the GPU in
+      parallel, sentence 3 starts as soon as slot frees up.
+
+    Yield order is strictly ``seq=0, 1, 2, ...`` regardless of which
+    task finishes first: a small pending-buffer keeps out-of-order
+    completions until their turn. Clients (esp. Geny's audio queue)
+    rely on in-order delivery for sample-accurate playback.
     """
     if not engine.is_loaded():
         raise HTTPException(status_code=503, detail="model_not_ready")
@@ -199,59 +217,104 @@ async def tts_stream(req: TTSStreamRequest) -> StreamingResponse:
         [len(s) for s in sentences],
     )
 
+    async def _synth_one(seq: int, sentence: str) -> dict:
+        """Synthesise one sentence, never raises — errors become frames."""
+        import time as _time
+
+        sentence_seed = (
+            req.seed + seq if (req.seed is not None and req.seed_jitter)
+            else req.seed
+        )
+        sent_t0 = _time.monotonic()
+        try:
+            audio, sr = await engine.synthesize(
+                text=sentence,
+                mode=req.mode,
+                ref_audio_path=req.ref_audio_path,
+                ref_text=req.ref_text,
+                instruct=req.instruct,
+                language=req.language,
+                speed=req.speed,
+                duration=None,  # let model size each sentence naturally
+                num_step=req.num_step,
+                guidance_scale=req.guidance_scale,
+                denoise=req.denoise,
+                preprocess_prompt=req.preprocess_prompt,
+                postprocess_output=req.postprocess_output,
+                seed=sentence_seed,
+            )
+            synth_dt = _time.monotonic() - sent_t0
+            body = encode(audio, sr, req.audio_format)
+            audio_seconds = audio.size / float(sr) if sr else 0.0
+            rtf = synth_dt / audio_seconds if audio_seconds else float("inf")
+            logger.info(
+                "tts/stream: seq=%d/%d synth=%.2fs audio=%.2fs rtf=%.2f chars=%d text=%r",
+                seq, len(sentences) - 1, synth_dt, audio_seconds, rtf,
+                len(sentence), sentence[:60],
+            )
+            return {
+                "seq": seq,
+                "text": sentence,
+                "format": req.audio_format,
+                "media_type": media,
+                "sample_rate": int(sr),
+                "n_samples": int(audio.size),
+                "audio_b64": base64.b64encode(body).decode("ascii"),
+                "_ok": True,
+            }
+        except Exception as exc:  # pragma: no cover - logged below
+            logger.exception(
+                "tts/stream: seq=%d failed after %.2fs",
+                seq, _time.monotonic() - sent_t0,
+            )
+            return {"seq": seq, "text": sentence, "error": str(exc), "_ok": False}
+
     async def _gen():
         import time as _time
-        success = 0
         stream_t0 = _time.monotonic()
-        for seq, sentence in enumerate(sentences):
-            sentence_seed = (
-                req.seed + seq if (req.seed is not None and req.seed_jitter)
-                else req.seed
-            )
-            sent_t0 = _time.monotonic()
-            try:
-                audio, sr = await engine.synthesize(
-                    text=sentence,
-                    mode=req.mode,
-                    ref_audio_path=req.ref_audio_path,
-                    ref_text=req.ref_text,
-                    instruct=req.instruct,
-                    language=req.language,
-                    speed=req.speed,
-                    duration=None,  # let model size each sentence naturally
-                    num_step=req.num_step,
-                    guidance_scale=req.guidance_scale,
-                    denoise=req.denoise,
-                    preprocess_prompt=req.preprocess_prompt,
-                    postprocess_output=req.postprocess_output,
-                    seed=sentence_seed,
-                )
-                synth_dt = _time.monotonic() - sent_t0
-                body = encode(audio, sr, req.audio_format)
-                audio_seconds = audio.size / float(sr) if sr else 0.0
-                rtf = synth_dt / audio_seconds if audio_seconds else float("inf")
-                logger.info(
-                    "tts/stream: seq=%d/%d synth=%.2fs audio=%.2fs rtf=%.2f chars=%d text=%r",
-                    seq, len(sentences) - 1, synth_dt, audio_seconds, rtf,
-                    len(sentence), sentence[:60],
-                )
-                frame = {
-                    "seq": seq,
-                    "text": sentence,
-                    "format": req.audio_format,
-                    "media_type": media,
-                    "sample_rate": int(sr),
-                    "n_samples": int(audio.size),
-                    "audio_b64": base64.b64encode(body).decode("ascii"),
-                }
-                success += 1
-            except Exception as exc:  # pragma: no cover - logged below
-                logger.exception(
-                    "tts/stream: seq=%d failed after %.2fs",
-                    seq, _time.monotonic() - sent_t0,
-                )
-                frame = {"seq": seq, "text": sentence, "error": str(exc)}
-            yield (json.dumps(frame, ensure_ascii=False) + "\n").encode("utf-8")
+
+        # Submit every sentence as a concurrent task. The engine's own
+        # semaphore (``OMNIVOICE_MAX_CONCURRENCY``) caps real GPU
+        # parallelism, so oversubscribing here is safe: extra tasks
+        # simply park on ``semaphore.acquire()``.
+        tasks: list[asyncio.Task[dict]] = [
+            asyncio.create_task(_synth_one(i, s), name=f"tts-stream-{i}")
+            for i, s in enumerate(sentences)
+        ]
+
+        # Yield in strict seq order, buffering out-of-order completions.
+        pending: dict[int, dict] = {}
+        next_seq = 0
+        success = 0
+        try:
+            for coro in asyncio.as_completed(tasks):
+                result = await coro
+                pending[int(result["seq"])] = result
+                if result.pop("_ok", False):
+                    success += 1
+                else:
+                    # keep the error frame around, drop the marker
+                    result.pop("_ok", None)
+                while next_seq in pending:
+                    frame = pending.pop(next_seq)
+                    # _ok was already popped above; guard double-pop
+                    frame.pop("_ok", None)
+                    yield (json.dumps(frame, ensure_ascii=False) + "\n").encode("utf-8")
+                    next_seq += 1
+        except asyncio.CancelledError:
+            # Client disconnected — cancel any in-flight tasks so we
+            # don't keep the GPU busy for a listener that's gone.
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
+            raise
+        finally:
+            # Defensive: anything still pending (shouldn't happen, but
+            # protects against future refactors) is cancelled.
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
+
         total_dt = _time.monotonic() - stream_t0
         logger.info(
             "tts/stream: done %d/%d sentences in %.2fs (avg %.2fs/sentence)",
@@ -271,7 +334,7 @@ async def tts_stream(req: TTSStreamRequest) -> StreamingResponse:
         _gen(),
         media_type="application/x-ndjson",
         headers={
-            "X-OmniVoice-Streaming": "sentence-ndjson",
+            "X-OmniVoice-Streaming": "sentence-ndjson-parallel",
             "X-OmniVoice-Sample-Rate": str(sample_rate),
             "X-OmniVoice-Sentence-Count": str(len(sentences)),
             "Cache-Control": "no-cache",
