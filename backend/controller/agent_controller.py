@@ -127,16 +127,6 @@ class AgentStateResponse(BaseModel):
     is_complete: bool = False
 
 
-class UpgradeToAgentRequest(BaseModel):
-    """
-    Request to upgrade an existing session to an AgentSession.
-    """
-    enable_checkpointing: bool = Field(
-        default=False,
-        description="Enable state checkpointing"
-    )
-
-
 # ============================================================================
 # Agent Session Management API
 # ============================================================================
@@ -852,43 +842,6 @@ async def get_agent_history(
 
 
 # ============================================================================
-# Agent Upgrade API
-# ============================================================================
-
-
-@router.post("/{session_id}/upgrade", response_model=SessionInfo)
-async def upgrade_to_agent_session(
-    session_id: str = Path(..., description="Session ID"),
-    request: UpgradeToAgentRequest = UpgradeToAgentRequest(),
-    auth: dict = Depends(require_auth),
-):
-    """
-    Upgrade existing ClaudeProcess session to AgentSession.
-
-    Wraps the existing session's ClaudeProcess into an AgentSession while preserving it.
-    """
-    # Check if it is already an AgentSession
-    if agent_manager.has_agent(session_id):
-        agent = agent_manager.get_agent(session_id)
-        logger.info(f"Session {session_id} is already an AgentSession")
-        return agent.get_session_info()
-
-    # Attempt upgrade
-    agent = agent_manager.upgrade_to_agent(
-        session_id=session_id,
-        enable_checkpointing=request.enable_checkpointing,
-    )
-
-    if not agent:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Session not found or cannot be upgraded: {session_id}"
-        )
-
-    logger.info(f"✅ Session upgraded to AgentSession: {session_id}")
-    return agent.get_session_info()
-
-
 # ============================================================================
 # Stop Execution API
 # ============================================================================
