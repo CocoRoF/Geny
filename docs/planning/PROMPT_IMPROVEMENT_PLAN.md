@@ -505,7 +505,7 @@ Phase 4: 일반 정리
 |------|-----------|
 | `backend/service/prompt/sections.py` | `geny_platform()`, `capabilities()`, `identity()` 수정, 미사용 섹션 주석 |
 | `backend/service/prompt/sections.py` (build_agent_prompt) | capabilities 호출 제거/수정, 주석 업데이트 |
-| `backend/service/langgraph/agent_session_manager.py` | Sub-Worker→VTuber 세션 연동 추가 |
+| `backend/service/executor/agent_session_manager.py` | Sub-Worker→VTuber 세션 연동 추가 |
 | `backend/prompts/vtuber.md` | 전면 재작성 |
 | `backend/prompts/templates/vtuber-default.md` | 중복 제거, 페르소나만 유지 |
 | `backend/prompts/templates/vtuber-cheerful.md` | 중복 제거, 페르소나만 유지 |

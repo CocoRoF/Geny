@@ -32,7 +32,7 @@ _WRITE_RE = re.compile(r"\._system_prompt\s*=\s*")
 
 _ALLOWED_WRITES = {
     # AgentSession.__init__: immutable initial seed.
-    ("backend/service/langgraph/agent_session.py", "self._system_prompt = system_prompt"),
+    ("backend/service/executor/agent_session.py", "self._system_prompt = system_prompt"),
 }
 
 
@@ -67,6 +67,6 @@ def test_allowlisted_init_assignment_still_present() -> None:
     """Sanity check — the one permitted assignment must still exist in
     ``AgentSession.__init__``. If it moves or is renamed, the allowlist
     above needs to be updated."""
-    target = _BACKEND / "service" / "langgraph" / "agent_session.py"
+    target = _BACKEND / "service" / "executor" / "agent_session.py"
     text = target.read_text(encoding="utf-8")
     assert "self._system_prompt = system_prompt" in text

@@ -8,7 +8,7 @@ Key components:
 
 Usage::
 
-    from service.langgraph import AgentSession
+    from service.executor import AgentSession
 
     agent = await AgentSession.create(
         working_dir="/path/to/project",
@@ -17,8 +17,8 @@ Usage::
     result = await agent.invoke("Hello")
 """
 
-from service.langgraph.agent_session import AgentSession
-from service.langgraph.agent_session_manager import (
+from service.executor.agent_session import AgentSession
+from service.executor.agent_session_manager import (
     AgentSessionManager,
     get_agent_session_manager,
     reset_agent_session_manager,

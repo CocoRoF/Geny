@@ -107,7 +107,7 @@ backend/prompts/
 | `service/prompt/builder.py` | `PromptBuilder` 엔진 + `PromptSection` / `PromptMode` |
 | `service/prompt/template_loader.py` | `prompts/{role}.md` 파일 로딩 |
 | `service/prompt/context_loader.py` | bootstrap 파일 로딩 (AGENTS.md, CLAUDE.md 등) |
-| `service/langgraph/agent_session_manager.py` | 프롬프트 빌드 오케스트레이션 + 세션 링킹 |
+| `service/executor/agent_session_manager.py` | 프롬프트 빌드 오케스트레이션 + 세션 링킹 |
 | `controller/vtuber_controller.py` | Live2D 모델용 캐릭터 프롬프트 주입 |
 
 ---

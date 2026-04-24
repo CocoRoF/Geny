@@ -4,7 +4,7 @@ Bridges the gap between Geny's tool system (BaseTool with run(**kwargs))
 and geny-executor's tool system (Tool ABC with async execute(input, context)).
 
 The single public type exported is :class:`_GenyToolAdapter`, consumed
-by :class:`service.langgraph.geny_tool_provider.GenyToolProvider` —
+by :class:`service.executor.geny_tool_provider.GenyToolProvider` —
 the :class:`AdhocToolProvider` that the manifest path hands to
 ``Pipeline.from_manifest_async(adhoc_providers=[...])`` so that
 ``manifest.tools.external`` names resolve against Geny's loader.

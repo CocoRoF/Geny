@@ -453,7 +453,7 @@ KeepAlive 적용 시 `useEffect` cleanup에서 SSE 해제하지 않도록 변경
 
 #### 3-2. 백엔드 세션 생성 순서 개선
 
-**파일:** `backend/service/langgraph/agent_session_manager.py`
+**파일:** `backend/service/executor/agent_session_manager.py`
 
 `_store.register()` 호출 전에 `session_type`, `linked_session_id` 설정.
 이를 통해 레이스 컨디션 제거.
@@ -470,7 +470,7 @@ KeepAlive 적용 시 `useEffect` cleanup에서 SSE 해제하지 않도록 변경
 | `frontend/src/components/TabContent.tsx` | VTuber 탭 KeepAlive 적용 | 2 |
 | `frontend/src/components/tabs/VTuberTab.tsx` | SSE cleanup 조건 변경 | 2 |
 | `frontend/src/components/Sidebar.tsx` | 방어적 Sub-Worker 필터링 | 3 |
-| `backend/service/langgraph/agent_session_manager.py` | register 전 type 설정 | 3 |
+| `backend/service/executor/agent_session_manager.py` | register 전 type 설정 | 3 |
 
 ---
 

@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from service.chat.conversation_store import get_chat_store
-from service.langgraph import get_agent_session_manager
+from service.executor import get_agent_session_manager
 from service.utils.text_sanitizer import sanitize_for_display
 from service.execution.agent_executor import (
     execute_command,
@@ -38,7 +38,7 @@ logger = getLogger(__name__)
 
 # Absolute path of the on-disk upload root that backs ``/static/uploads/...``
 # URLs emitted by ``controller/upload_controller``. Kept here (not in
-# ``service/langgraph``) because the URL↔path mapping is intrinsically a
+# ``service/executor``) because the URL↔path mapping is intrinsically a
 # chat-layer concern: it converts the *web* URL the frontend sees into a
 # local-filesystem reference the executor pipeline can read. Everything
 # downstream of this boundary (``geny-executor`` s01 normalizer) handles

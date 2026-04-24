@@ -26,7 +26,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from service.claude_manager.models import SessionRole
-from service.langgraph.agent_session import AgentSession
+from service.executor.agent_session import AgentSession
 
 
 # ─────────────────────────────────────────────────────────────────

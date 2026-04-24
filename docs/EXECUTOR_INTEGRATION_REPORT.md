@@ -218,7 +218,7 @@ async def execute(self, input: Dict[str, Any], context: Any = None) -> Any:
 | 항목 | 라인 | 상태 |
 |------|------|------|
 | `from langgraph.graph.state import CompiledStateGraph` | L49 | **Dead import** |
-| `from service.langgraph.claude_cli_model import ClaudeCLIChatModel` | L60 | **Dead import** |
+| `from service.executor.claude_cli_model import ClaudeCLIChatModel` | L60 | **Dead import** |
 | `self._model: Optional[ClaudeCLIChatModel] = None` | L157 | **Dead 필드** |
 | `self._graph: Optional[CompiledStateGraph] = None` | L158 | **Dead 필드** |
 | `from_process()` classmethod | L275-290 | **Dead 메서드** |
@@ -245,8 +245,8 @@ async def execute(self, input: Dict[str, Any], context: Any = None) -> Any:
 | `service/claude_manager/process_manager.py` | **Dead** — ClaudeProcess |
 | `service/claude_manager/cli_discovery.py` | **Dead** — CLI 경로 탐색 |
 | `service/claude_manager/stream_parser.py` | **Dead** — CLI 출력 파싱 |
-| `service/langgraph/claude_cli_model.py` | **Dead** — CLI 래퍼 |
-| `service/langgraph/autonomous_graph.py` | **Dead** — 하드코딩 그래프 |
+| `service/executor/claude_cli_model.py` | **Dead** — CLI 래퍼 |
+| `service/executor/autonomous_graph.py` | **Dead** — 하드코딩 그래프 |
 | `tools/_proxy_mcp_server.py` | **Dead** — CLI MCP 프록시 |
 | `tools/_mcp_server.py` | **Dead** — CLI MCP 서버 |
 | `controller/internal_tool_controller.py` | **Dead** — 프록시 도구 실행 |

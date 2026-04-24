@@ -26,7 +26,7 @@ Public API
 
 Usage::
 
-    from service.langgraph.session_freshness import SessionFreshness, FreshnessConfig
+    from service.executor.session_freshness import SessionFreshness, FreshnessConfig
 
     freshness = SessionFreshness(config=FreshnessConfig())
     result = freshness.evaluate(

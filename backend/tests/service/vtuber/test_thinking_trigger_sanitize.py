@@ -56,7 +56,7 @@ def world(monkeypatch):
     agent = _FakeAgent()
     store = _FakeChatStore()
     monkeypatch.setattr(
-        "service.langgraph.get_agent_session_manager",
+        "service.executor.get_agent_session_manager",
         lambda: _FakeAgentManager(agent),
         raising=False,
     )

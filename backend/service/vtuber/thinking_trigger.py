@@ -818,7 +818,7 @@ class ThinkingTriggerService:
             if not cleaned:
                 return
 
-            from service.langgraph import get_agent_session_manager
+            from service.executor import get_agent_session_manager
             agent = get_agent_session_manager().get_agent(session_id)
             if not agent:
                 logger.warning("[ThinkingTrigger] No agent found for %s, skipping chat save", session_id)
@@ -882,7 +882,7 @@ class ThinkingTriggerService:
         # 1. Sub-Worker working — highest priority
         linked_id = None
         try:
-            from service.langgraph import get_agent_session_manager
+            from service.executor import get_agent_session_manager
             agent = get_agent_session_manager().get_agent(session_id)
             if agent:
                 linked_id = getattr(agent, 'linked_session_id', None)

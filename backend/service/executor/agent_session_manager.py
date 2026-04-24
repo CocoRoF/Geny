@@ -8,7 +8,7 @@ Retains all functionality of the existing SessionManager while
 adding methods dedicated to AgentSession management.
 
 Usage example:
-    from service.langgraph import get_agent_session_manager
+    from service.executor import get_agent_session_manager
 
     manager = get_agent_session_manager()
 
@@ -45,7 +45,7 @@ from service.claude_manager.models import (
 )
 
 from service.logging.session_logger import get_session_logger, remove_session_logger
-from service.langgraph.agent_session import AgentSession
+from service.executor.agent_session import AgentSession
 from service.prompt.sections import build_agent_prompt
 from service.prompt.context_loader import ContextLoader
 from service.prompt.builder import PromptMode
@@ -54,7 +54,7 @@ from service.claude_manager.session_store import get_session_store
 
 from pathlib import Path as _Path
 
-from service.langgraph.agent_session import (
+from service.executor.agent_session import (
     _ADAPTIVE_PROMPT,
     _DEFAULT_VTUBER_PROMPT,
     _DEFAULT_WORKER_PROMPT,
@@ -616,7 +616,7 @@ class AgentSessionManager(SessionManager):
             raise ValueError("ANTHROPIC_API_KEY is required for manifest-backed sessions")
         adhoc_providers: list = []
         if self._tool_loader is not None:
-            from service.langgraph.geny_tool_provider import GenyToolProvider
+            from service.executor.geny_tool_provider import GenyToolProvider
 
             adhoc_providers.append(GenyToolProvider(self._tool_loader))
         prebuilt_pipeline = await self._environment_service.instantiate_pipeline(

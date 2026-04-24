@@ -31,7 +31,7 @@ logger = getLogger(__name__)
 
 def _get_agent_manager():
     """Lazy import to avoid circular imports at module load time."""
-    from service.langgraph import get_agent_session_manager
+    from service.executor import get_agent_session_manager
     return get_agent_session_manager()
 
 

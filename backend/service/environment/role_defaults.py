@@ -7,7 +7,7 @@ session creation uses to decide which env to load — an explicit
 ``request.env_id`` always wins over the role default.
 
 This module stays deliberately tiny. It is imported by
-:class:`~service.langgraph.agent_session_manager.AgentSessionManager`
+:class:`~service.executor.agent_session_manager.AgentSessionManager`
 at session creation time, and is also exported for use by the env_id
 validation layer in the REST controllers.
 """

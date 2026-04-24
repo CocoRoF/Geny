@@ -15,7 +15,7 @@ string that the LLM uses to compose the narrated response.
 Registration flows through ``tools/built_in/game_tools.py`` which
 re-exports the four ``TOOLS = [...]`` instances for
 :class:`~service.tool_loader.ToolLoader`, which in turn feeds
-:class:`~service.langgraph.geny_tool_provider.GenyToolProvider` on
+:class:`~service.executor.geny_tool_provider.GenyToolProvider` on
 every pipeline build.
 """
 

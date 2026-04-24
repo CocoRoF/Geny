@@ -1,4 +1,4 @@
-"""Unit tests for :func:`service.langgraph.default_manifest.build_default_manifest`.
+"""Unit tests for :func:`service.executor.default_manifest.build_default_manifest`.
 
 Regression protection for PR #1 of the 20260420_4 cycle
 (`fix/manifest-tool-stages`). If a future change drops stages
@@ -20,7 +20,7 @@ def _known_preset_ids():
 
 @pytest.mark.parametrize("preset", _known_preset_ids())
 def test_manifest_declares_tool_stage(preset: str) -> None:
-    from service.langgraph.default_manifest import build_default_manifest
+    from service.executor.default_manifest import build_default_manifest
 
     manifest = build_default_manifest(preset)
     orders = {entry["order"] for entry in manifest.stages}
@@ -32,7 +32,7 @@ def test_manifest_declares_tool_stage(preset: str) -> None:
 
 @pytest.mark.parametrize("preset", _known_preset_ids())
 def test_tool_stage_has_default_strategies(preset: str) -> None:
-    from service.langgraph.default_manifest import build_default_manifest
+    from service.executor.default_manifest import build_default_manifest
 
     manifest = build_default_manifest(preset)
     entry = next(e for e in manifest.stages if e["order"] == 10)
@@ -43,7 +43,7 @@ def test_tool_stage_has_default_strategies(preset: str) -> None:
 
 @pytest.mark.parametrize("preset", _known_preset_ids())
 def test_agent_stage_has_single_agent_orchestrator(preset: str) -> None:
-    from service.langgraph.default_manifest import build_default_manifest
+    from service.executor.default_manifest import build_default_manifest
 
     manifest = build_default_manifest(preset)
     entry = next(e for e in manifest.stages if e["order"] == 11)
@@ -55,7 +55,7 @@ def test_agent_stage_has_single_agent_orchestrator(preset: str) -> None:
 
 @pytest.mark.parametrize("preset", _known_preset_ids())
 def test_emit_stage_uses_empty_chain(preset: str) -> None:
-    from service.langgraph.default_manifest import build_default_manifest
+    from service.executor.default_manifest import build_default_manifest
 
     manifest = build_default_manifest(preset)
     entry = next(e for e in manifest.stages if e["order"] == 14)
@@ -68,7 +68,7 @@ def test_vtuber_manifest_omits_think_stage() -> None:
     """Negative control: Stage 8 (think) is intentionally dropped on
     VTuber. Guards against a future 'add every stage' regression that
     would re-introduce the think stage on VTuber."""
-    from service.langgraph.default_manifest import build_default_manifest
+    from service.executor.default_manifest import build_default_manifest
 
     orders = {e["order"] for e in build_default_manifest("vtuber").stages}
     assert 8 not in orders, "VTuber should not declare Stage 8 (think)"
@@ -83,7 +83,7 @@ def test_manifest_built_in_is_empty(preset: str) -> None:
     against re-introducing a hardcoded builtin list (e.g. the old
     ``["Read", "Write", "Edit", ...]`` that pointed at names no
     provider supplied)."""
-    from service.langgraph.default_manifest import build_default_manifest
+    from service.executor.default_manifest import build_default_manifest
 
     manifest = build_default_manifest(preset)
     assert list(manifest.tools.built_in) == [], (
@@ -98,7 +98,7 @@ def test_manifest_external_is_caller_supplied(preset: str) -> None:
     """Everything the caller passes as ``external_tool_names`` lands
     verbatim in ``manifest.tools.external`` — this is the single
     registration path the executor honours."""
-    from service.langgraph.default_manifest import build_default_manifest
+    from service.executor.default_manifest import build_default_manifest
 
     names = ["send_direct_message_external", "memory_read", "web_search"]
     manifest = build_default_manifest(preset, external_tool_names=names)
@@ -113,7 +113,7 @@ def test_pipeline_from_manifest_registers_tool_stages(preset: str) -> None:
     pair no longer resolves through ``create_stage``."""
     from geny_executor.core.pipeline import Pipeline
 
-    from service.langgraph.default_manifest import build_default_manifest
+    from service.executor.default_manifest import build_default_manifest
 
     manifest = build_default_manifest(preset, model="claude-haiku-4-5-20251001")
     pipeline = Pipeline.from_manifest(manifest, api_key="sk-test", strict=False)

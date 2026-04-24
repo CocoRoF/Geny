@@ -513,8 +513,8 @@ def build_session_mcp_config(
 | `backend/service/tool_preset/store.py` | 프리셋 JSON CRUD |
 | `backend/service/tool_preset/models.py` | ToolPresetDefinition 모델 |
 | `backend/service/mcp_loader.py` | MCP 설정 빌드 (`build_session_mcp_config`) |
-| `backend/service/langgraph/agent_session_manager.py` | 세션 생성 + Tool/Preset 연결 |
-| `backend/service/langgraph/claude_cli_model.py` | Claude CLI 모델 (MCP config 전달) |
+| `backend/service/executor/agent_session_manager.py` | 세션 생성 + Tool/Preset 연결 |
+| `backend/service/executor/claude_cli_model.py` | Claude CLI 모델 (MCP config 전달) |
 | `backend/tools/_proxy_mcp_server.py` | Proxy MCP Server (subprocess) |
 | `backend/controller/internal_tool_controller.py` | Tool 실행 엔드포인트 |
 | `backend/controller/tool_controller.py` | Tool 카탈로그 API |
