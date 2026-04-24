@@ -76,7 +76,6 @@ class _FakeAgent:
 class _FakeAgentManager:
     def __init__(self, agents: Dict[str, _FakeAgent]) -> None:
         self._agents = agents
-        self._local_processes: Dict[str, Any] = {}
 
     def get_agent(self, session_id: str) -> Optional[_FakeAgent]:
         return self._agents.get(session_id)

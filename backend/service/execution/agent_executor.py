@@ -540,8 +540,6 @@ async def _resolve_agent(session_id: str):
             revived = await agent.revive()
             if revived:
                 logger.info("[%s] ✅ Auto-revival successful", session_id)
-                if agent.process:
-                    agent_manager._local_processes[session_id] = agent.process
                 sl = _get_session_logger(session_id, create_if_missing=False)
                 if sl is not None:
                     sl.log(

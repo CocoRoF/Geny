@@ -242,13 +242,6 @@ async def get_agent_session(
     """
     agent = agent_manager.get_agent(session_id)
     if not agent:
-        # Attempt lookup from existing sessions
-        session_info = agent_manager.get_session_info(session_id)
-        if session_info:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Session {session_id} is not an AgentSession. Use /api/agents/{session_id}/upgrade to convert it."
-            )
         raise HTTPException(status_code=404, detail=f"AgentSession not found: {session_id}")
 
     info = agent.get_session_info()

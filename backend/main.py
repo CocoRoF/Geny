@@ -500,22 +500,13 @@ async def lifespan(app: FastAPI):
         from service.sessions.store import get_session_store
         store = get_session_store()
 
-        sessions = agent_manager.list_sessions()
+        agents = agent_manager.list_agents()
         stop_tasks = []
-        for session in sessions:
-            sid = session.session_id
-            agent = agent_manager.get_agent(sid)
-            if agent:
-                stop_tasks.append(agent.cleanup())
-                # Mark as soft-deleted so the session shows up in "deleted sessions"
-                store.soft_delete(sid)
-            else:
-                # Legacy process — just stop, don't delete storage
-                process = agent_manager._local_processes.get(sid)
-                if process:
-                    stop_tasks.append(process.stop())
-                # Also soft-delete legacy sessions
-                store.soft_delete(sid)
+        for agent in agents:
+            sid = agent.session_id
+            stop_tasks.append(agent.cleanup())
+            # Mark as soft-deleted so the session shows up in "deleted sessions"
+            store.soft_delete(sid)
         if stop_tasks:
             await asyncio.gather(*stop_tasks, return_exceptions=True)
 
@@ -560,7 +551,7 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Detailed health check including database status"""
-    sessions = agent_manager.list_sessions()
+    agents = agent_manager.list_agents()
 
     # Database health check
     db_status = "not_configured"
@@ -573,9 +564,9 @@ async def health_check():
 
     return {
         "status": "healthy",
-        "total_sessions": len(sessions),
-        "running_sessions": sum(1 for s in sessions if s.status == "running"),
-        "error_sessions": sum(1 for s in sessions if s.status == "error"),
+        "total_sessions": len(agents),
+        "running_sessions": sum(1 for a in agents if a.status == "running"),
+        "error_sessions": sum(1 for a in agents if a.status == "error"),
         "database": db_status
     }
 
@@ -622,8 +613,8 @@ if templates_dir.exists():
 async def dashboard(request: Request):
     """Serve the Web UI Dashboard with server-side rendered initial data"""
     # Get initial data for SSR
-    sessions = agent_manager.list_sessions()
-    sessions_data = [s.model_dump(mode="json") for s in sessions]
+    agents = agent_manager.list_agents()
+    sessions_data = [a.get_session_info().model_dump(mode="json") for a in agents]
 
     # Get prompts list
     prompts_data = get_prompts_list()
@@ -635,9 +626,9 @@ async def dashboard(request: Request):
 
     # Calculate stats
     stats_data = {
-        "total": len(sessions),
-        "running": sum(1 for s in sessions if s.status == "running"),
-        "error": sum(1 for s in sessions if s.status == "error")
+        "total": len(agents),
+        "running": sum(1 for a in agents if a.status == "running"),
+        "error": sum(1 for a in agents if a.status == "error")
     }
 
     return templates.TemplateResponse(
