@@ -36,7 +36,10 @@ dependencies = [
     # (plugs into Pipeline.from_manifest_async via the ToolProvider Protocol
     # shipped in 0.35.0). pyyaml>=6.0 becomes a core dep. All additive;
     # existing AgentSession usage unaffected.
-    "geny-executor[web]>=0.36.0,<0.37.0",
+    # Hotfix floor — 0.36.1 makes the Stage 10 lifecycle dispatcher
+    # tolerate duck-typed tool adapters (``_GenyToolAdapter``). 0.36.0
+    # crashed on ``tool.on_enter`` lookup.
+    "geny-executor[web]>=0.36.1,<0.37.0",
     # MCP (Model Context Protocol)
     "mcp>=1.0.0",
     # Auth
