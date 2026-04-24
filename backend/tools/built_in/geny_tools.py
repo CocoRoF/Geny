@@ -387,7 +387,7 @@ class SessionCreateTool(BaseTool):
         resolved_model = model if model else _get_config_model()
 
         try:
-            from service.claude_manager.models import CreateSessionRequest, SessionRole
+            from service.sessions.models import CreateSessionRequest, SessionRole
 
             request = CreateSessionRequest(
                 session_name=session_name,
@@ -439,7 +439,7 @@ class SessionCreateTool(BaseTool):
         resolved_model = model if model else _get_config_model()
 
         try:
-            from service.claude_manager.models import CreateSessionRequest, SessionRole
+            from service.sessions.models import CreateSessionRequest, SessionRole
 
             request = CreateSessionRequest(
                 session_name=session_name,

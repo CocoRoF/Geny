@@ -107,7 +107,7 @@ backend/
 │   └── tool_controller.py
 │
 ├── service/                   # Business logic
-│   ├── claude_manager/        #   Claude CLI process management
+│   ├── sessions/              #   Session models + Postgres/JSON store
 │   ├── executor/              #   geny-executor agent sessions
 │   ├── workflow/              #   Workflow definition, execution, compiler
 │   │   ├── nodes/             #     20 workflow node types

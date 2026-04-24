@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Optional, Union
 
-from service.claude_manager.models import SessionRole
+from service.sessions.models import SessionRole
 from service.environment.templates import VTUBER_ENV_ID, WORKER_ENV_ID
 
 __all__ = [

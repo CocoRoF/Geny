@@ -44,10 +44,10 @@
 
 **핵심 파일 위치**:
 - 세션 생성: `backend/service/executor/agent_session_manager.py` → `create_agent_session()` (L270+)
-- 세션 모델: `backend/service/claude_manager/models.py` → `CreateSessionRequest` (L185+)
+- 세션 모델: `backend/service/sessions/models.py` → `CreateSessionRequest` (L185+)
 - 세션 실행: `backend/service/execution/agent_executor.py` → `execute_command()` (L317-371)
 - 그래프 실행: `backend/service/executor/agent_session.py` → `invoke()` / `astream()`
-- 세션 저장소: `backend/service/claude_manager/session_store.py` → PostgreSQL `sessions` 테이블
+- 세션 저장소: `backend/service/sessions/store.py` → PostgreSQL `sessions` 테이블
 
 ### 1.2 실행 흐름 (현재)
 
@@ -335,7 +335,7 @@ VTuber가 memory_read("task_result")
 
 #### 1-1. SessionRole에 VTUBER 추가
 
-**파일**: `backend/service/claude_manager/models.py` L21-26
+**파일**: `backend/service/sessions/models.py` L21-26
 
 ```python
 # 현재
@@ -356,7 +356,7 @@ class SessionRole(str, Enum):
 
 #### 1-2. CreateSessionRequest에 linked_session_id 추가
 
-**파일**: `backend/service/claude_manager/models.py` L185+
+**파일**: `backend/service/sessions/models.py` L185+
 
 ```python
 class CreateSessionRequest(BaseModel):
@@ -367,7 +367,7 @@ class CreateSessionRequest(BaseModel):
 
 #### 1-3. SessionStore 스키마 확장
 
-**파일**: `backend/service/claude_manager/session_store.py`
+**파일**: `backend/service/sessions/store.py`
 
 세션 레코드에 `linked_session_id` 및 `session_type` 컬럼 추가.
 PostgreSQL 마이그레이션 + JSON 폴백 모두 대응.
@@ -819,8 +819,8 @@ Phase 1 (기반) ──────► Phase 2 (워크플로우) ─────
 
 | 파일 | 변경 내용 |
 |------|----------|
-| `backend/service/claude_manager/models.py` | SessionRole.VTUBER 추가, CreateSessionRequest 확장 |
-| `backend/service/claude_manager/session_store.py` | linked_session_id, session_type 스키마 추가 |
+| `backend/service/sessions/models.py` | SessionRole.VTUBER 추가, CreateSessionRequest 확장 |
+| `backend/service/sessions/store.py` | linked_session_id, session_type 스키마 추가 |
 | `backend/service/executor/agent_session_manager.py` | VTuber 쌍 세션 생성, 프롬프트 빌더 확장 |
 | `backend/service/prompt/builder.py` | VTuber 전용 프롬프트 섹션 |
 | `backend/service/execution/agent_executor.py` | Sub-Worker 완료 → VTuber 자동 보고 연결 |

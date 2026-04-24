@@ -119,7 +119,7 @@ async def list_environment_session_counts(
     RTT per card. Soft-deleted rows are always included in the
     ``deleted_count`` bucket.
     """
-    from service.claude_manager.session_store import get_session_store
+    from service.sessions.store import get_session_store
 
     store = get_session_store()
     records = store.list_all()
@@ -549,7 +549,7 @@ async def list_environment_sessions(
     if _env_svc(request).load(env_id) is None:
         raise HTTPException(404, "Environment not found")
 
-    from service.claude_manager.session_store import get_session_store
+    from service.sessions.store import get_session_store
 
     store = get_session_store()
     records = store.list_all() if include_deleted else store.list_active()

@@ -107,7 +107,7 @@ backend/
 │   └── tool_controller.py
 │
 ├── service/                   # 비즈니스 로직
-│   ├── claude_manager/        #   Claude CLI 프로세스 관리
+│   ├── sessions/              #   세션 모델 + Postgres/JSON 저장소
 │   ├── executor/              #   geny-executor 에이전트 세션
 │   ├── workflow/              #   워크플로우 정의·실행·컴파일러
 │   │   ├── nodes/             #     20종 워크플로우 노드

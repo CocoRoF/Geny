@@ -212,7 +212,7 @@ plan/02 아래에서 env가 stage 레이아웃을 소유하고, `manifest.tools.
 
 | 파일 | 바인딩에서의 역할 |
 |------|-------------------|
-| `service/claude_manager/models.py` | `CreateSessionRequest.sub_worker_model` / `_system_prompt` / `_env_id`; `session_type` 정식 값은 `"sub"` (레거시 `"bound"` / `"cli"`는 로드 시 정규화됨) |
+| `service/sessions/models.py` | `CreateSessionRequest.sub_worker_model` / `_system_prompt` / `_env_id`; `session_type` 정식 값은 `"sub"` (레거시 `"bound"` / `"cli"`는 로드 시 정규화됨) |
 | `service/executor/agent_session_manager.py` | `create_session`의 auto-pair 블록; 재귀 가드; 생성과 복원 시점의 프롬프트 주입 |
 | `service/executor/agent_session.py` | `_session_type` 필드와 `_is_always_on` 정책 (`"sub"` → 페어 VTuber와 마찬가지로 always-on) |
 | `service/execution/agent_executor.py` | Worker 작업 완료 시 VTuber에게 `[SUB_WORKER_RESULT]` 태그 답변 전송 |

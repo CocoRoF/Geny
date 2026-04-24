@@ -420,4 +420,4 @@ DB 스키마:
 | `controller/chat_controller.py` | 채팅방 CRUD + 브로드캐스트 + 방 SSE |
 | `service/chat/conversation_store.py` | 메시지 저장 (PostgreSQL + JSON) |
 | `service/logging/session_logger.py` | 세션 로그 기록 + 인메모리 캐시 |
-| `service/claude_manager/session_store.py` | 세션 메타데이터 + 비용 저장 |
+| `service/sessions/store.py` | 세션 메타데이터 + 비용 저장 |

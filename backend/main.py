@@ -178,7 +178,7 @@ async def lifespan(app: FastAPI):
 
     # ── Step 3: Connect SessionStore & ChatStore to DB ─────────────────
     print_step_banner("SESSIONS", "SESSION STORE", "Connecting session stores to database...")
-    from service.claude_manager.session_store import get_session_store
+    from service.sessions.store import get_session_store
     from service.chat.conversation_store import get_chat_store
 
     session_store = get_session_store()
@@ -497,7 +497,7 @@ async def lifespan(app: FastAPI):
     # Stop all active sessions (processes only — storage preserved)
     # Soft-delete all active sessions so they appear in "deleted sessions" on restart
     async def stop_all_sessions():
-        from service.claude_manager.session_store import get_session_store
+        from service.sessions.store import get_session_store
         store = get_session_store()
 
         sessions = agent_manager.list_sessions()

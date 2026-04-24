@@ -37,7 +37,7 @@ class GlobalMemoryManager:
 
     @staticmethod
     def _default_path() -> str:
-        from service.claude_manager.platform_utils import DEFAULT_STORAGE_ROOT
+        from service.utils.platform import DEFAULT_STORAGE_ROOT
         return DEFAULT_STORAGE_ROOT
 
     def _initialize(self):

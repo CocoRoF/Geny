@@ -420,4 +420,4 @@ Key design decisions:
 | `controller/chat_controller.py` | Chat room CRUD + broadcast + room SSE |
 | `service/chat/conversation_store.py` | Message persistence (PostgreSQL + JSON) |
 | `service/logging/session_logger.py` | Session log recording + in-memory cache |
-| `service/claude_manager/session_store.py` | Session metadata + cost persistence |
+| `service/sessions/store.py` | Session metadata + cost persistence |

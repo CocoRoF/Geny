@@ -279,7 +279,7 @@ async def download_shared_folder():
     # Build ZIP in memory
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        from service.claude_manager.storage_utils import (
+        from service.utils.file_storage import (
             DEFAULT_IGNORE_PATTERNS,
             load_gitignore_patterns,
             should_ignore_path,

@@ -33,7 +33,7 @@ from logging import getLogger
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
-from service.claude_manager.models import (
+from service.sessions.models import (
     MCPConfig,
     MCPServerStdio,
     MCPServerHTTP,

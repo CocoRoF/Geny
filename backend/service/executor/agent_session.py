@@ -41,7 +41,7 @@ from typing import (
     Optional,
 )
 
-from service.claude_manager.models import (
+from service.sessions.models import (
     MCPConfig,
     SessionInfo,
     SessionRole,
@@ -441,7 +441,7 @@ class AgentSession:
         )
 
         # Set storage path
-        from service.claude_manager.platform_utils import DEFAULT_STORAGE_ROOT
+        from service.utils.platform import DEFAULT_STORAGE_ROOT
         from pathlib import Path
         storage = str(Path(DEFAULT_STORAGE_ROOT) / agent._session_id)
         Path(storage).mkdir(parents=True, exist_ok=True)
@@ -2160,7 +2160,7 @@ class AgentSession:
         # Read persisted total_cost from session store
         _total_cost = 0.0
         try:
-            from service.claude_manager.session_store import get_session_store
+            from service.sessions.store import get_session_store
             store_data = get_session_store().get(self._session_id)
             if store_data:
                 _total_cost = store_data.get("total_cost", 0.0) or 0.0

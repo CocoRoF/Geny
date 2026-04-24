@@ -110,8 +110,8 @@ agent_executor.py: execute_command()
 | `service/executor/agent_session_manager.py` | VTuber 세션 + 서브 워커 세션 자동 생성, 프롬프트 구성 | 핵심 |
 | `service/executor/agent_session.py` | `_linked_session_id`, `_session_type` 속성 | 핵심 |
 | `service/execution/agent_executor.py` | `_notify_linked_vtuber()`, thinking trigger 기록 | 핵심 |
-| `service/claude_manager/models.py` | `SessionRole.VTUBER`, 링크 필드 | 핵심 |
-| `service/claude_manager/session_store.py` | Cascade soft-delete, 링크 필드 영속화 | 핵심 |
+| `service/sessions/models.py` | `SessionRole.VTUBER`, 링크 필드 | 핵심 |
+| `service/sessions/store.py` | Cascade soft-delete, 링크 필드 영속화 | 핵심 |
 | **Controller** | | |
 | `controller/vtuber_controller.py` | REST API + SSE 엔드포인트 | ~200 |
 | **Frontend** | | |

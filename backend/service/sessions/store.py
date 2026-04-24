@@ -12,7 +12,7 @@ Each entry stores the full CreateSessionRequest parameters plus lifecycle
 metadata (created_at, deleted_at, status, last_output, etc.).
 
 Usage:
-    from service.claude_manager.session_store import get_session_store
+    from service.sessions.store import get_session_store
 
     store = get_session_store()
 

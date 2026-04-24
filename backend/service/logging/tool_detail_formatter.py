@@ -1,8 +1,9 @@
 """Single-source formatter for tool-invocation summaries.
 
-Both :mod:`service.logging.session_logger` and
-:mod:`service.claude_manager.process_manager` historically carried a
-near-identical ``_format_tool_detail`` method, each with its own
+Both :mod:`service.logging.session_logger` and the legacy
+``service.claude_manager.process_manager`` (removed in cycle
+20260424_2 PR-4) historically carried a near-identical
+``_format_tool_detail`` method, each with its own
 ``except Exception: return "(parse error)"`` swallower. Phase D of the
 20260420_2 cycle (see ``dev_docs/20260420_2/plan/04_observability_and_error_surface.md``
 §B) collapses them onto this module and removes the swallower.

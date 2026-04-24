@@ -21,7 +21,7 @@ import asyncio
 import os
 import uuid
 
-from service.claude_manager.models import (
+from service.sessions.models import (
     CreateSessionRequest,
     MCPConfig,
     SessionInfo,
@@ -35,7 +35,7 @@ from service.prompt.sections import build_agent_prompt
 from service.prompt.context_loader import ContextLoader
 from service.prompt.builder import PromptMode
 
-from service.claude_manager.session_store import get_session_store
+from service.sessions.store import get_session_store
 
 from pathlib import Path as _Path
 

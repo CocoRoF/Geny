@@ -87,7 +87,7 @@ async def speak(session_id: str, body: SpeakRequest):
     # Look up per-session voice profile
     session_voice_profile = None
     try:
-        from service.claude_manager.session_store import get_session_store
+        from service.sessions.store import get_session_store
         session = get_session_store().get(session_id)
         if session:
             session_voice_profile = session.get("tts_voice_profile")
@@ -207,7 +207,7 @@ async def speak_stream(session_id: str, body: SpeakRequest):
     # Per-session voice profile lookup (same as /speak).
     session_voice_profile = None
     try:
-        from service.claude_manager.session_store import get_session_store
+        from service.sessions.store import get_session_store
         session = get_session_store().get(session_id)
         if session:
             session_voice_profile = session.get("tts_voice_profile")
@@ -427,7 +427,7 @@ async def speak_chunks(session_id: str, body: SpeakChunksRequest):
 
     session_voice_profile = None
     try:
-        from service.claude_manager.session_store import get_session_store
+        from service.sessions.store import get_session_store
         session = get_session_store().get(session_id)
         if session:
             session_voice_profile = session.get("tts_voice_profile")
@@ -635,7 +635,7 @@ async def speak_chunks(session_id: str, body: SpeakChunksRequest):
 
     session_voice_profile = None
     try:
-        from service.claude_manager.session_store import get_session_store
+        from service.sessions.store import get_session_store
         session = get_session_store().get(session_id)
         if session:
             session_voice_profile = session.get("tts_voice_profile")
@@ -773,7 +773,7 @@ class AssignProfileRequest(BaseModel):
 @router.get("/agents/{session_id}/profile")
 async def get_session_profile(session_id: str):
     """Get the voice profile assigned to a session."""
-    from service.claude_manager.session_store import get_session_store
+    from service.sessions.store import get_session_store
 
     session = get_session_store().get(session_id)
     if not session:
@@ -791,7 +791,7 @@ async def assign_session_profile(session_id: str, body: AssignProfileRequest, au
 
     Stores the profile name in the session's extra_data JSON blob.
     """
-    from service.claude_manager.session_store import get_session_store
+    from service.sessions.store import get_session_store
 
     store = get_session_store()
     session = store.get(session_id)
@@ -811,7 +811,7 @@ async def assign_session_profile(session_id: str, body: AssignProfileRequest, au
 
 @router.delete("/agents/{session_id}/profile")
 async def unassign_session_profile(session_id: str, auth: dict = Depends(require_auth)):
-    from service.claude_manager.session_store import get_session_store
+    from service.sessions.store import get_session_store
 
     store = get_session_store()
     session = store.get(session_id)

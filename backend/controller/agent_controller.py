@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from service.auth.auth_middleware import require_auth
 
-from service.claude_manager.models import (
+from service.sessions.models import (
     CreateSessionRequest,
     SessionInfo,
     SessionRole,
@@ -32,7 +32,7 @@ from service.executor import (
 )
 from service.lifecycle import LifecycleEvent
 from service.logging.session_logger import get_session_logger
-from service.claude_manager.session_store import get_session_store
+from service.sessions.store import get_session_store
 from service.execution.agent_executor import (
     execute_command,
     start_command_background,
@@ -882,7 +882,7 @@ async def list_storage_files(
     """
     List session storage files.
     """
-    from service.claude_manager import storage_utils
+    from service.utils import file_storage as storage_utils
 
     agent = agent_manager.get_agent(session_id)
     if not agent:
@@ -913,7 +913,7 @@ async def read_storage_file(
     """
     Read storage file content.
     """
-    from service.claude_manager import storage_utils
+    from service.utils import file_storage as storage_utils
 
     agent = agent_manager.get_agent(session_id)
     if not agent:

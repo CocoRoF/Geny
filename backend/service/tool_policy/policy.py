@@ -273,7 +273,7 @@ class ToolPolicyEngine:
             return mcp_config
 
         # Lazy import to avoid circular dependency
-        from service.claude_manager.models import MCPConfig
+        from service.sessions.models import MCPConfig
 
         servers = getattr(mcp_config, "servers", {})
         filtered: Dict[str, object] = {}

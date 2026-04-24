@@ -66,7 +66,7 @@ Each `.json` file defines one MCP server. The filename (without extension) becom
 ### Config Models (Python)
 
 ```python
-# service/claude_manager/models.py
+# service/sessions/models.py
 MCPServerStdio(command, args, env)
 MCPServerHTTP(url, headers)
 MCPServerSSE(url, headers)

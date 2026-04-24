@@ -514,7 +514,7 @@ def _get_session_logger(session_id: str, *, create_if_missing: bool = True):
 
 
 def _get_session_store():
-    from service.claude_manager.session_store import get_session_store
+    from service.sessions.store import get_session_store
     return get_session_store()
 
 

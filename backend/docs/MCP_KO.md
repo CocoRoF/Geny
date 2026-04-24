@@ -66,7 +66,7 @@ mcp/
 ### 설정 모델 (Python)
 
 ```python
-# service/claude_manager/models.py
+# service/sessions/models.py
 MCPServerStdio(command, args, env)
 MCPServerHTTP(url, headers)
 MCPServerSSE(url, headers)

@@ -212,7 +212,7 @@ Not supported. When a VTuber terminates, its Sub-Worker becomes an orphan Worker
 
 | File | Role in the binding |
 |------|---------------------|
-| `service/claude_manager/models.py` | `CreateSessionRequest.sub_worker_model` / `_system_prompt` / `_env_id`; `session_type` canonical values include `"sub"` (with legacy `"bound"` / `"cli"` normalized on read) |
+| `service/sessions/models.py` | `CreateSessionRequest.sub_worker_model` / `_system_prompt` / `_env_id`; `session_type` canonical values include `"sub"` (with legacy `"bound"` / `"cli"` normalized on read) |
 | `service/executor/agent_session_manager.py` | Auto-pair block in `create_session`; recursion guard; prompt injection at creation and restoration |
 | `service/executor/agent_session.py` | `_session_type` field and `_is_always_on` policy (`"sub"` → always on, like its paired VTuber) |
 | `service/execution/agent_executor.py` | Emits `[SUB_WORKER_RESULT]`-tagged replies from Worker → VTuber on task completion |
