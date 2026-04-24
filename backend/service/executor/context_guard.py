@@ -8,7 +8,7 @@ Core design:
 - Token count estimation (character/word-based heuristic without exact tokenization)
 - Two-level warning based on Warn / Block thresholds
 - Suggests or automatically applies compaction strategy when threshold is reached
-- Integrable with LangGraph state
+- Integrable with `geny-executor` PipelineState
 
 Usage:
     guard = ContextWindowGuard(

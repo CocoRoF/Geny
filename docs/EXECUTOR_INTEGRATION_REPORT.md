@@ -2,6 +2,13 @@
 
 > Date: 2026-04-14
 > Status: Phase 1 Migration Complete, Phase 2 최적화 필요
+>
+> **2026-04-24 Update:** 이 리포트 작성 이후 LangGraph-era 잔재 정리 (Cycle `20260424_1`) 완료. 구체적으로:
+> - `backend/service/langgraph/` → `backend/service/executor/` 폴더 리네임 (PR #260)
+> - `autonomous_graph.py.bak` 삭제 (PR #258)
+> - `MCPToolsServer` + `langchain-{anthropic,core}` 의존성 제거 (PR #259)
+> - 하위 본문에서 언급되는 `WorkflowExecutor`, "LangGraph CompiledStateGraph" 등 엔티티는 **현재 존재하지 않는다.** 본문은 2026-04-14 시점 스냅샷으로 보존.
+> - 전체 아키텍처 최신 상태는 [`CURRENT_STATE_REPORT.md`](CURRENT_STATE_REPORT.md) + 실제 코드 (`backend/service/executor/`, `backend/service/execution/agent_executor.py`) 참조.
 
 ---
 

@@ -14,9 +14,9 @@ Backend 는 [`geny-executor`](https://github.com/CocoRoF/geny-executor) Pipeline
 | EN | KO | 내용 |
 |---|---|---|
 | [`EXECUTION.md`](EXECUTION.md) | [`EXECUTION_KO.md`](EXECUTION_KO.md) | Pipeline 실행, `execute_command()`, 세션 invoke |
-| [`SESSIONS.md`](SESSIONS.md) | [`SESSIONS_KO.md`](SESSIONS_KO.md) | AgentSession 생명주기 |
-| [`WORKFLOW.md`](WORKFLOW.md) | [`WORKFLOW_KO.md`](WORKFLOW_KO.md) | 브로드캐스트·트리거·리포트 흐름 |
 | [`CHAT.md`](CHAT.md) | [`CHAT_KO.md`](CHAT_KO.md) | Chat room · messenger · broadcast |
+
+> AgentSession 생명주기와 브로드캐스트·트리거 흐름은 코드 (`service/executor/agent_session.py`, `service/execution/agent_executor.py`) 가 Source of Truth 이다. 이전의 `SESSIONS.md` / `WORKFLOW.md` 는 LangGraph StateGraph 기반으로 작성되어 현재 구조와 불일치하므로 [`_archive/langgraph-era/`](_archive/langgraph-era/) 로 이동 완료 (2026-04-24).
 
 ### 데이터 & 상태
 | EN | KO | 내용 |
@@ -42,4 +42,4 @@ Backend 는 [`geny-executor`](https://github.com/CocoRoF/geny-executor) Pipeline
 
 ## `_archive/langgraph-era/`
 
-2025~2026-03 LangGraph StateGraph 기반 시기 문서 (13 쌍 = 26 파일). 현재 아키텍처와 불일치하므로 참고 시 주의. 세부 목차는 [`_archive/README.md`](_archive/README.md).
+2025~2026-03 LangGraph StateGraph 기반 시기 문서 (15 쌍 = 30 파일, 2026-04-24 에 `SESSIONS`, `WORKFLOW` 추가 이동). 현재 아키텍처와 불일치하므로 참고 시 주의. 세부 목차는 [`_archive/README.md`](_archive/README.md).

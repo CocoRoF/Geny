@@ -26,7 +26,7 @@ SessionLogger (세션별 인스턴스)
 | `ERROR` | `ERROR` | 에러 |
 | `COMMAND` | `COMMAND` | 사용자가 Claude에 보낸 프롬프트 |
 | `RESPONSE` | `RESPONSE` | Claude의 응답 (성공/실패) |
-| `GRAPH` | `GRAPH` | LangGraph 상태 전환 및 노드 실행 |
+| `GRAPH` | `GRAPH` | `geny-executor` Stage 전환 (legacy `Graph` 키는 DB row 호환성 위해 유지) |
 | `TOOL` | `TOOL_USE` | 도구 호출 이벤트 |
 | `TOOL_RES` | `TOOL_RESULT` | 도구 실행 결과 |
 | `STREAM` | `STREAM_EVENT` | Claude CLI stream-json 이벤트 |
@@ -112,7 +112,7 @@ logger = SessionLogger(
 
 레벨: **TOOL_RESULT** — 도구 결과. 파일 도구는 5000자, 기타 500자 미리보기.
 
-### LangGraph 이벤트 로깅
+### Pipeline 이벤트 로깅
 
 모든 레벨: **GRAPH**. UUID 이벤트 ID 생성(8자).
 

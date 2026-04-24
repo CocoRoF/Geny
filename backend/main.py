@@ -585,7 +585,7 @@ async def health_check():
 app.include_router(auth_router)  # Auth (must be first — no auth guard on itself)
 app.include_router(claude_router)
 app.include_router(command_router)
-app.include_router(agent_router)  # LangGraph agent sessions
+app.include_router(agent_router)  # geny-executor agent sessions
 app.include_router(config_router)  # Configuration management
 app.include_router(shared_folder_router)  # Shared folder
 app.include_router(chat_router)  # Chat broadcast

@@ -161,7 +161,7 @@ class EmotionExtractor:
         """
         Map an agent execution state to an emotion name.
 
-        Agent states from Geny's LangGraph:
+        Agent execution states exposed by geny-executor:
         - thinking / planning → neutral
         - executing / tool_calling → surprise (actively working)
         - success / completed → joy

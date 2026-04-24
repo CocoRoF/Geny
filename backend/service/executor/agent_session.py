@@ -287,7 +287,7 @@ class AgentSession:
             mcp_config: MCP server configuration.
             max_iterations: Max graph iterations.
             role: Session role.
-            enable_checkpointing: Enable LangGraph MemorySaver checkpointing.
+            enable_checkpointing: Enable Pipeline-state checkpointing (legacy flag, currently a no-op for the geny-executor path).
             workflow_id: Preset identifier (e.g. template-vtuber, template-optimized-autonomous).
             graph_name: Human-readable graph/workflow name.
             persona_provider: ``PersonaProvider`` resolved per turn by
@@ -422,7 +422,7 @@ class AgentSession:
             system_prompt: System prompt override.
             mcp_config: MCP configuration.
             role: Session role.
-            enable_checkpointing: Enable LangGraph checkpointing.
+            enable_checkpointing: Enable Pipeline-state checkpointing (legacy flag).
             **kwargs: Additional settings forwarded to __init__.
 
         Returns:

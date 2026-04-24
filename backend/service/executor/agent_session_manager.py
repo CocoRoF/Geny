@@ -102,7 +102,7 @@ class AgentSessionManager(SessionManager):
     - _local_agents: AgentSession store (local)
 
     All sessions use geny-executor Pipeline mode.
-    Legacy ClaudeProcess/LangGraph paths have been removed.
+    Legacy ClaudeProcess / StateGraph paths have been removed (pre-2026-04).
     """
 
     def __init__(self):
@@ -346,8 +346,9 @@ class AgentSessionManager(SessionManager):
         """Build the system prompt using the modular prompt builder.
 
         Design: The system prompt tells the agent WHO it is and WHAT to do.
-        HOW to use tools and HOW to loop is handled by Claude CLI and LangGraph.
-        Tool schemas are provided to Claude CLI via MCP — not repeated in prompts.
+        HOW to use tools and HOW to loop is handled by the Claude API (via
+        geny-executor's APIStage) and the Pipeline itself. Tool schemas are
+        provided to the model via MCP / function-calling — not repeated in prompts.
 
         Args:
             request: Session creation request.

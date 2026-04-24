@@ -19,6 +19,7 @@ Geny backend 가 LangGraph StateGraph 기반이었던 시기 (2025~2026-03) 의 
 
 - `SESSION_CLI_LIFECYCLE_REPORT.md` — Claude CLI 기반 세션 생명주기 분석
 - `OPTIMIZED_GRAPH_ENHANCEMENT_PLAN.md` — LangGraph 그래프 최적화 계획
+- `optimizing_model.md` — `ClaudeCLIChatModel` + `AgentSession._build_graph()` 시절 모델 최적화 노트 (2026-04-24 이동, 언급된 클래스들이 현재 모두 존재하지 않음)
 
 ## `executor-migration-v1/`
 

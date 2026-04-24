@@ -47,7 +47,7 @@ System prompt length directly reduces available conversation context.
 | Tool schemas & descriptions | MCP protocol | ~~capabilities section~~ |
 | Safety guidelines | Claude CLI built-in | ~~safety section~~ |
 | Tool usage patterns | Claude CLI built-in | ~~tool_style section~~ |
-| Execution loops & retry | LangGraph | ~~execution_protocol~~ |
+| Execution loops & retry | `geny-executor` Pipeline | ~~execution_protocol~~ |
 | Context window management | Claude CLI built-in | ~~context_efficiency section~~ |
 
 ---
@@ -219,5 +219,5 @@ These are retained for potential future use (e.g., stricter project-specific pol
 
 - **Be concise** — every token in the system prompt reduces the context window for actual work
 - **Don't repeat Claude CLI's defaults** — no tool usage guides, no safety rules
-- **Don't repeat LangGraph's job** — no execution loop instructions (except self-manager)
+- **Don't repeat the executor's job** — no execution-loop instructions (the `geny-executor` Pipeline owns looping/retries; exception: self-manager role)
 - **Focus on behavior** — what makes this role different from default Claude?

@@ -33,15 +33,15 @@ User (CEO)                    Frontend               Backend (chat_controller)  
     │                            │                           │     )                         │
     │                            │                           │                              │
     │                            │                           │     ┌─ agent.invoke() ────────┤
-    │                            │                           │     │  LangGraph 워크플로우    │
-    │                            │                           │     │  ├ memory_inject         │
-    │                            │                           │     │  ├ relevance_gate ★      │
-    │                            │                           │     │  ├ adaptive_classify      │
-    │                            │                           │     │  ├ guard_direct           │
-    │                            │                           │     │  ├ direct_answer (LLM)    │
-    │                            │                           │     │  └ post_model             │
+    │                            │                           │     │  geny-executor Pipeline │
+    │                            │                           │     │  ├ InputStage            │
+    │                            │                           │     │  ├ MemoryStage           │
+    │                            │                           │     │  ├ PromptStage           │
+    │                            │                           │     │  ├ APIStage (Claude)     │
+    │                            │                           │     │  ├ ParseStage            │
+    │                            │                           │     │  └ YieldStage            │
     │                            │                           │     │                          │
-    │                            │                           │     │  Claude CLI가 도구 호출:  │
+    │                            │                           │     │  Claude 가 도구 호출:     │
     │                            │                           │     │  ├ geny_session_list  ★★  │
     │                            │                           │     │  ├ geny_room_list     ★★  │
     │                            │                           │     │  └ geny_send_room_message │
