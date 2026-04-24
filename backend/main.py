@@ -26,7 +26,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
-from controller.claude_controller import router as claude_router
 from controller.command_controller import router as command_router, get_prompts_list
 from controller.agent_controller import router as agent_router, agent_manager
 from controller.config_controller import router as config_router
@@ -583,7 +582,6 @@ async def health_check():
 
 # Register routers
 app.include_router(auth_router)  # Auth (must be first — no auth guard on itself)
-app.include_router(claude_router)
 app.include_router(command_router)
 app.include_router(agent_router)  # geny-executor agent sessions
 app.include_router(config_router)  # Configuration management

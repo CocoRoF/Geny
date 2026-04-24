@@ -3,8 +3,7 @@ Agent Session Controller
 
 REST API endpoints for AgentSession (geny-executor Pipeline) management.
 
-AgentSession API:   /api/agents (primary)
-Legacy Session API: /api/sessions (deprecated, backward compatibility)
+AgentSession API: /api/agents
 """
 import asyncio
 import json
