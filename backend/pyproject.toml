@@ -30,10 +30,10 @@ dependencies = [
     # WebSocket protocol
     "websockets>=13.0",
     # geny-executor: Pipeline-based execution engine
-    # 0.29.0 bundles cycle 20260421_4 (PR-1..PR-5): PipelineState.shared,
-    # Stage.resolve_model_config, llm_client package, APIStage routing
-    # through state.llm_client, and s02/s15 native model-override paths.
-    "geny-executor>=0.31.2,<0.32.0",
+    # 0.32.x (executor uplift Phase 1): Tool ABC metadata + Permission
+    # matrix + Hook event taxonomy + Stage 10 PartitionExecutor.
+    # All additive; existing AgentSession usage unaffected.
+    "geny-executor>=0.32.3,<0.33.0",
     # MCP (Model Context Protocol)
     "mcp>=1.0.0",
     # Auth

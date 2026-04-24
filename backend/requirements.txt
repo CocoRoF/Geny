@@ -19,7 +19,10 @@ ddgs==9.11.4
 # Web fetch & browser automation
 playwright>=1.49.0
 # geny-executor: Pipeline-based execution engine
-geny-executor>=0.31.2,<0.32.0
+# 0.32.x (executor uplift Phase 1): Tool ABC metadata + Permission
+# matrix + Hook event taxonomy + Stage 10 PartitionExecutor. All
+# additive; existing AgentSession usage unaffected.
+geny-executor>=0.32.3,<0.33.0
 # MCP (Model Context Protocol)
 mcp>=1.0.0
 # TTS (Text-to-Speech)
