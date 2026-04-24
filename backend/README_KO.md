@@ -25,7 +25,7 @@ Geny Agent는 [`geny-executor`](https://github.com/CocoRoF/geny-executor) Pipeli
 │                                                         │
 │  10 Routers ─────────────────────────────────────────── │
 │  ├── /api/agent/*          세션·에이전트 CRUD + 실행    │
-│  ├── /api/sessions/*       레거시 세션 관리             │
+│  ├── /api/sessions/{id}/memory   메모리 읽기·쓰기       │
 │  ├── /api/commands/*       로그 조회 + 모니터           │
 │  ├── /api/config/*         설정 CRUD + 내보내기/가져오기│
 │  ├── /api/workflows/*      워크플로우 편집기            │
@@ -94,9 +94,9 @@ backend/
 ├── requirements.txt           # Python 의존성
 ├── Dockerfile                 # 컨테이너 이미지
 │
-├── controller/                # API 라우터 (10개)
+├── controller/                # API 라우터
 │   ├── agent_controller.py    #   /api/agent/*
-│   ├── claude_controller.py   #   /api/sessions/* (레거시)
+│   ├── session_memory_controller.py  #   /api/sessions/{id}/memory
 │   ├── command_controller.py  #   /api/commands/*
 │   ├── config_controller.py   #   /api/config/*
 │   ├── workflow_controller.py #   /api/workflows/*
@@ -225,7 +225,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 | 접두사 | 컨트롤러 | 주요 기능 |
 |--------|----------|-----------|
 | `/api/agent` | agent_controller | 에이전트 세션 CRUD, 메시지 전송, SSE 스트리밍 |
-| `/api/sessions` | claude_controller | 레거시 세션 관리 |
+| `/api/sessions/{id}/memory` | session_memory_controller | 세션별 메모리 읽기·쓰기 |
 | `/api/commands` | command_controller | 로그 조회, 모니터링, 프롬프트 목록 |
 | `/api/config` | config_controller | 설정 CRUD, 내보내기/가져오기, 재로드 |
 | `/api/workflows` | workflow_controller | 워크플로우 CRUD, 노드 카탈로그 |

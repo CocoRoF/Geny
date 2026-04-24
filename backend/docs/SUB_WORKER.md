@@ -67,10 +67,10 @@ The `session_type != "sub"` clause is the load-bearing check. `not linked_sessio
 ### Creation sequence
 
 ```
-Client POST /api/sessions
+Client POST /api/agents
     │
     ▼
-AgentSessionManager.create_session(role=VTUBER, sub_worker_env_id=...)
+AgentSessionManager.create_agent_session(role=VTUBER, sub_worker_env_id=...)
     │
     ├─ resolve_env_id(VTUBER, request.env_id)         → env_id: "template-vtuber-env"
     ├─ build manifest from env_id

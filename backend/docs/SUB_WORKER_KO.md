@@ -67,10 +67,10 @@ if (
 ### 생성 시퀀스
 
 ```
-Client POST /api/sessions
+Client POST /api/agents
     │
     ▼
-AgentSessionManager.create_session(role=VTUBER, sub_worker_env_id=...)
+AgentSessionManager.create_agent_session(role=VTUBER, sub_worker_env_id=...)
     │
     ├─ resolve_env_id(VTUBER, request.env_id)         → env_id: "template-vtuber-env"
     ├─ env_id로부터 manifest 빌드

@@ -25,7 +25,7 @@ Geny Agent is a FastAPI backend that manages **multi-agent sessions** on top of 
 │                                                         │
 │  10 Routers ─────────────────────────────────────────── │
 │  ├── /api/agent/*          Session/agent CRUD + execution│
-│  ├── /api/sessions/*       Legacy session management    │
+│  ├── /api/sessions/{id}/memory   Memory read/write      │
 │  ├── /api/commands/*       Log query + monitor          │
 │  ├── /api/config/*         Config CRUD + export/import  │
 │  ├── /api/workflows/*      Workflow editor              │
@@ -94,9 +94,9 @@ backend/
 ├── requirements.txt           # Python dependencies
 ├── Dockerfile                 # Container image
 │
-├── controller/                # API routers (10)
+├── controller/                # API routers
 │   ├── agent_controller.py    #   /api/agent/*
-│   ├── claude_controller.py   #   /api/sessions/* (legacy)
+│   ├── session_memory_controller.py  #   /api/sessions/{id}/memory
 │   ├── command_controller.py  #   /api/commands/*
 │   ├── config_controller.py   #   /api/config/*
 │   ├── workflow_controller.py #   /api/workflows/*
