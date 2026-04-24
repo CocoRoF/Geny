@@ -47,7 +47,7 @@ from service.claude_manager.models import (
     SessionRole,
     SessionStatus,
 )
-from service.langgraph.session_freshness import SessionFreshness, FreshnessStatus
+from service.executor.session_freshness import SessionFreshness, FreshnessStatus
 from service.logging.session_logger import get_session_logger, SessionLogger, LogLevel, STAGE_ORDER
 
 logger = getLogger(__name__)

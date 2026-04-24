@@ -107,7 +107,7 @@ backend/prompts/
 | `service/prompt/builder.py` | `PromptBuilder` engine + `PromptSection` / `PromptMode` |
 | `service/prompt/template_loader.py` | Loads `prompts/{role}.md` files |
 | `service/prompt/context_loader.py` | Loads bootstrap files (AGENTS.md, CLAUDE.md, etc.) |
-| `service/langgraph/agent_session_manager.py` | Orchestrates prompt building + session linking |
+| `service/executor/agent_session_manager.py` | Orchestrates prompt building + session linking |
 | `controller/vtuber_controller.py` | Character prompt injection for Live2D models |
 
 ---

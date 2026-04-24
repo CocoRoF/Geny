@@ -108,7 +108,7 @@ backend/
 │
 ├── service/                   # Business logic
 │   ├── claude_manager/        #   Claude CLI process management
-│   ├── langgraph/             #   LangGraph agent sessions
+│   ├── executor/              #   geny-executor agent sessions
 │   ├── workflow/              #   Workflow definition, execution, compiler
 │   │   ├── nodes/             #     20 workflow node types
 │   │   └── compiler/          #     Workflow test compiler

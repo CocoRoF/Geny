@@ -31,7 +31,7 @@ def _inject_character_prompt(session_id: str, model_name: str) -> None:
     ``DynamicPersonaSystemBuilder``.
     """
     try:
-        from service.langgraph import get_agent_session_manager
+        from service.executor import get_agent_session_manager
         manager = get_agent_session_manager()
         agent = manager.get_agent(session_id)
         if not agent or getattr(agent, '_session_type', None) != 'vtuber':

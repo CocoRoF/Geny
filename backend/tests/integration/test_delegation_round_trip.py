@@ -77,7 +77,7 @@ async def test_tool_stage_executes_pending_calls_for_worker_manifest() -> None:
     from geny_executor.core.pipeline import Pipeline
     from geny_executor.core.state import PipelineState
 
-    from service.langgraph.default_manifest import build_default_manifest
+    from service.executor.default_manifest import build_default_manifest
 
     manifest = build_default_manifest(
         "worker_adaptive", model="claude-haiku-4-5-20251001"
@@ -118,7 +118,7 @@ async def test_tool_stage_bypasses_when_no_pending_calls() -> None:
     from geny_executor.core.pipeline import Pipeline
     from geny_executor.core.state import PipelineState
 
-    from service.langgraph.default_manifest import build_default_manifest
+    from service.executor.default_manifest import build_default_manifest
 
     pipeline = Pipeline.from_manifest(
         build_default_manifest("worker_adaptive", model="claude-haiku-4-5-20251001"),

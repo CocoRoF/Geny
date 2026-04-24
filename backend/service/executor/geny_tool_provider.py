@@ -20,7 +20,7 @@ post-construction memory_manager / callback attach helper).
 
 Usage::
 
-    from service.langgraph.geny_tool_provider import GenyToolProvider
+    from service.executor.geny_tool_provider import GenyToolProvider
     provider = GenyToolProvider(tool_loader)
     pipeline = await Pipeline.from_manifest_async(
         manifest, api_key=api_key, adhoc_providers=[provider],
@@ -89,7 +89,7 @@ class GenyToolProvider:
         if base is None:
             return None
 
-        from service.langgraph.tool_bridge import _GenyToolAdapter
+        from service.executor.tool_bridge import _GenyToolAdapter
 
         adapter = _GenyToolAdapter(base)
         self._cache[name] = adapter

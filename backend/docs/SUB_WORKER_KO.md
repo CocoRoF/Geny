@@ -213,8 +213,8 @@ plan/02 아래에서 env가 stage 레이아웃을 소유하고, `manifest.tools.
 | 파일 | 바인딩에서의 역할 |
 |------|-------------------|
 | `service/claude_manager/models.py` | `CreateSessionRequest.sub_worker_model` / `_system_prompt` / `_env_id`; `session_type` 정식 값은 `"sub"` (레거시 `"bound"` / `"cli"`는 로드 시 정규화됨) |
-| `service/langgraph/agent_session_manager.py` | `create_session`의 auto-pair 블록; 재귀 가드; 생성과 복원 시점의 프롬프트 주입 |
-| `service/langgraph/agent_session.py` | `_session_type` 필드와 `_is_always_on` 정책 (`"sub"` → 페어 VTuber와 마찬가지로 always-on) |
+| `service/executor/agent_session_manager.py` | `create_session`의 auto-pair 블록; 재귀 가드; 생성과 복원 시점의 프롬프트 주입 |
+| `service/executor/agent_session.py` | `_session_type` 필드와 `_is_always_on` 정책 (`"sub"` → 페어 VTuber와 마찬가지로 always-on) |
 | `service/execution/agent_executor.py` | Worker 작업 완료 시 VTuber에게 `[SUB_WORKER_RESULT]` 태그 답변 전송 |
 | `service/vtuber/delegation.py` | VTuber 에이전트 루프에서 소비되는 `DelegationTag.SUB_WORKER_RESULT` / `ACTIVITY_TRIGGER` 리터럴 (레거시 `[CLI_RESULT]`도 읽기 시 허용) |
 | `service/vtuber/thinking_trigger.py` | VTuber가 서브 워커에게 위임할 `[ACTIVITY_TRIGGER]` 프롬프트 생성 |

@@ -43,10 +43,10 @@
 ```
 
 **핵심 파일 위치**:
-- 세션 생성: `backend/service/langgraph/agent_session_manager.py` → `create_agent_session()` (L270+)
+- 세션 생성: `backend/service/executor/agent_session_manager.py` → `create_agent_session()` (L270+)
 - 세션 모델: `backend/service/claude_manager/models.py` → `CreateSessionRequest` (L185+)
 - 세션 실행: `backend/service/execution/agent_executor.py` → `execute_command()` (L317-371)
-- 그래프 실행: `backend/service/langgraph/agent_session.py` → `invoke()` / `astream()`
+- 그래프 실행: `backend/service/executor/agent_session.py` → `invoke()` / `astream()`
 - 세션 저장소: `backend/service/claude_manager/session_store.py` → PostgreSQL `sessions` 테이블
 
 ### 1.2 실행 흐름 (현재)
@@ -86,7 +86,7 @@
 
 **근거 파일**:
 - `execute_command()`: `backend/service/execution/agent_executor.py` L317-371
-- 자율 그래프: `backend/service/langgraph/autonomous_graph.py` (30개 노드, 5개 라우터)
+- 자율 그래프: `backend/service/executor/autonomous_graph.py` (30개 노드, 5개 라우터)
 - 워크플로우 실행기: `backend/service/workflow/workflow_executor.py`
 - 아바타 상태 전송: `backend/service/execution/agent_executor.py` L97-122
 
@@ -374,7 +374,7 @@ PostgreSQL 마이그레이션 + JSON 폴백 모두 대응.
 
 #### 1-4. AgentSessionManager: VTuber 쌍 세션 자동 생성 로직
 
-**파일**: `backend/service/langgraph/agent_session_manager.py` L270+
+**파일**: `backend/service/executor/agent_session_manager.py` L270+
 
 ```python
 async def create_agent_session(self, request: CreateSessionRequest):
@@ -406,7 +406,7 @@ VTuber 에이전트의 인격(Persona) 정의:
 - 진행상황 보고 수신 시 사용자에게 자연스럽게 전달하는 방법
 - 생각하기(Thinking) 행동 패턴
 
-**프롬프트 빌더 수정 위치**: `backend/service/langgraph/agent_session_manager.py` L196-261
+**프롬프트 빌더 수정 위치**: `backend/service/executor/agent_session_manager.py` L196-261
 ```python
 # _build_system_prompt() 내부
 if request.role == SessionRole.VTUBER:
@@ -821,7 +821,7 @@ Phase 1 (기반) ──────► Phase 2 (워크플로우) ─────
 |------|----------|
 | `backend/service/claude_manager/models.py` | SessionRole.VTUBER 추가, CreateSessionRequest 확장 |
 | `backend/service/claude_manager/session_store.py` | linked_session_id, session_type 스키마 추가 |
-| `backend/service/langgraph/agent_session_manager.py` | VTuber 쌍 세션 생성, 프롬프트 빌더 확장 |
+| `backend/service/executor/agent_session_manager.py` | VTuber 쌍 세션 생성, 프롬프트 빌더 확장 |
 | `backend/service/prompt/builder.py` | VTuber 전용 프롬프트 섹션 |
 | `backend/service/execution/agent_executor.py` | Sub-Worker 완료 → VTuber 자동 보고 연결 |
 | `backend/service/memory/manager.py` | 소스 태그 (vtuber/sub) 추가 |

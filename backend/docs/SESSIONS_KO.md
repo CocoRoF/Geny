@@ -420,7 +420,7 @@ service/claude_manager/
 ├── storage_utils.py         # 저장소 파일 유틸리티
 └── constants.py             # 상수 정의
 
-service/langgraph/
+service/executor/
 ├── agent_session.py          # AgentSession (LangGraph 기반 세션)
 ├── agent_session_manager.py  # AgentSessionManager (통합 관리)
 ├── claude_cli_model.py       # ClaudeCLIChatModel (LangChain 래퍼)

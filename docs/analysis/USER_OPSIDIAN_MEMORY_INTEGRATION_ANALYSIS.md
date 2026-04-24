@@ -1097,7 +1097,7 @@ class ExecutionContext:
     user_opsidian_manager: Any = None       # ★ 추가
     owner_username: Optional[str] = None    # ★ 추가
 
-# service/langgraph/agent_session.py
+# service/executor/agent_session.py
 class AgentSession:
     def __init__(
         self,
@@ -1194,14 +1194,14 @@ class AgentSession:
 | 2 | `service/memory/curation_engine.py` | **신규** | 5-Stage 큐레이션 엔진 (Triage, LLM Analysis, Transform, Enrich, Store) |
 | 3 | `tools/built_in/knowledge_tools.py` | **신규** | knowledge_search/read/list + user_doc_browse |
 | 4 | `controller/curated_knowledge_controller.py` | **신규** | `/api/knowledge/*` REST API |
-| 5 | `service/langgraph/agent_session.py` | **수정** | `owner_username` 파라미터 + property |
+| 5 | `service/executor/agent_session.py` | **수정** | `owner_username` 파라미터 + property |
 | 6 | `service/workflow/nodes/base.py` | **수정** | ExecutionContext +3 필드 |
 | 7 | `service/workflow/nodes/memory/memory_inject_node.py` | **수정** | 6-7단계 curated 검색 |
 | 8 | `service/workflow/nodes/memory/memory_reflect_node.py` | **수정** | curated promote |
 | 9 | `service/config/sub_config/general/ltm_config.py` | **수정** | curated_* 설정 |
 | 10 | `controller/agent_controller.py` | **수정** | username 전달 |
 | 11 | `controller/user_opsidian_controller.py` | **수정** | 자동 큐레이션 훅 |
-| 12 | `service/langgraph/state.py` | **수정** | MemoryRef.source에 curated_knowledge 타입 |
+| 12 | `service/executor/state.py` | **수정** | MemoryRef.source에 curated_knowledge 타입 |
 | 13 | `service/memory/user_opsidian.py` | **수정** | 인덱스 전용 경량 조회 |
 | 14 | `service/memory/__init__.py` | **수정** | CuratedKnowledgeManager export |
 | 15 | `main.py` | **수정** | curated_knowledge_router 등록 |

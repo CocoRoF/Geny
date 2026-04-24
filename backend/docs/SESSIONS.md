@@ -420,7 +420,7 @@ service/claude_manager/
 ├── storage_utils.py         # Storage file utilities
 └── constants.py             # Constants
 
-service/langgraph/
+service/executor/
 ├── agent_session.py          # AgentSession (LangGraph-based session)
 ├── agent_session_manager.py  # AgentSessionManager (unified management)
 ├── claude_cli_model.py       # ClaudeCLIChatModel (LangChain wrapper)

@@ -19,7 +19,7 @@ from service.lifecycle import (
     LifecyclePayload,
     SessionLifecycleBus,
 )
-from service.langgraph.agent_session_manager import AgentSessionManager
+from service.executor.agent_session_manager import AgentSessionManager
 from service.tick import TickEngine
 
 
@@ -86,7 +86,7 @@ class _FakeStatus:
 
     def __eq__(self, other: object) -> bool:
         # Tests only compare `agent.status == SessionStatus.RUNNING`.
-        from service.langgraph.agent_session_manager import (
+        from service.executor.agent_session_manager import (
             SessionStatus,
         )
         return isinstance(other, SessionStatus) and bool(self._running) == (

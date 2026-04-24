@@ -21,7 +21,7 @@ from typing import Any, Dict, Optional
 
 import pytest
 
-from service.langgraph.tool_bridge import _GenyToolAdapter
+from service.executor.tool_bridge import _GenyToolAdapter
 from tools.built_in import geny_tools
 
 

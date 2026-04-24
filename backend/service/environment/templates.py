@@ -20,7 +20,7 @@ The seeds are **materialized on disk** at app boot via
   users see in the UI*, not invisible defaults.
 
 The manifests themselves come from
-:func:`service.langgraph.default_manifest.build_default_manifest` — the
+:func:`service.executor.default_manifest.build_default_manifest` — the
 same factory the session path uses. So "what the seed looks like" and
 "what an ephemeral session looks like" never diverge.
 """
@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, List, Optional
 from geny_executor import EnvironmentManifest
 
 from service.environment.service import EnvironmentService
-from service.langgraph.default_manifest import build_default_manifest
+from service.executor.default_manifest import build_default_manifest
 
 if TYPE_CHECKING:
     from service.tool_loader import ToolLoader

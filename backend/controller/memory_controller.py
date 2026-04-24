@@ -23,7 +23,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request
 
 from pydantic import BaseModel, Field
 
-from service.langgraph import get_agent_session_manager
+from service.executor import get_agent_session_manager
 from service.memory_provider.config import is_api_provider_enabled
 
 logger = getLogger(__name__)

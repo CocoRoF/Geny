@@ -151,7 +151,7 @@ response, fallback = await context.resilient_invoke(messages, "vtuber_think")
 | `service/workflow/nodes/vtuber/vtuber_think_node.py` | 내부 독백 생성 | **1회** |
 | `service/workflow/nodes/memory/memory_reflect_node.py` | 인사이트 추출 | **0~1회** (output 유무) |
 | `service/execution/agent_executor.py` | `record_activity()` 호출 | 없음 |
-| `service/langgraph/agent_session_manager.py` | VTuber 생성 시 자동 등록 | 없음 |
+| `service/executor/agent_session_manager.py` | VTuber 생성 시 자동 등록 | 없음 |
 | `main.py` | 서비스 시작/종료 | 없음 |
 | `service/workflow/templates.py` | VTuber 워크플로우 그래프 정의 | 없음 |
 

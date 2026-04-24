@@ -11,7 +11,7 @@ the pipeline writes to.
 
 from __future__ import annotations
 
-from service.langgraph.agent_session import (
+from service.executor.agent_session import (
     _LONELINESS_AFFECTION_LOSS,
     _LONELINESS_FAMILIARITY_LOSS,
     _USER_MSG_FAMILIARITY_GAIN,

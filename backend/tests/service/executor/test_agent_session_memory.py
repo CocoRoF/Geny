@@ -24,7 +24,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from service.langgraph.agent_session import (
+from service.executor.agent_session import (
     AgentSession,
     _classify_input_role,
 )

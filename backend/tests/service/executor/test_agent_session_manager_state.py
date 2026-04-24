@@ -12,7 +12,7 @@ here we only exercise:
 
 from __future__ import annotations
 
-from service.langgraph.agent_session_manager import AgentSessionManager
+from service.executor.agent_session_manager import AgentSessionManager
 from service.state import InMemoryCreatureStateProvider
 
 

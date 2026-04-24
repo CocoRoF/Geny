@@ -21,7 +21,7 @@ from typing import Any, Dict, List
 
 import pytest
 
-from service.langgraph.agent_session import AgentSession
+from service.executor.agent_session import AgentSession
 from service.state import (
     CREATURE_STATE_KEY,
     MUTATION_BUFFER_KEY,

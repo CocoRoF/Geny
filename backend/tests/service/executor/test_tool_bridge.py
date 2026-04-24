@@ -30,7 +30,7 @@ from typing import Any, Dict
 
 import pytest
 
-from service.langgraph.tool_bridge import _GenyToolAdapter
+from service.executor.tool_bridge import _GenyToolAdapter
 from tools.base import BaseTool, tool as tool_decorator
 
 
@@ -137,7 +137,7 @@ def test_probe_unreadable_signature_returns_false(monkeypatch) -> None:
     """C-implemented / uninspectable callables must probe False — the
     adapter must never crash on construction, and omitting the
     injection is the safe default."""
-    from service.langgraph import tool_bridge as tb
+    from service.executor import tool_bridge as tb
 
     def _always_raise(fn):
         raise ValueError("simulated uninspectable callable")

@@ -51,7 +51,7 @@ async def test_manager_lifecycle_bus_is_wired() -> None:
     minimal subclass that skips ``__init__`` and only sets the bus —
     this mirrors the property access path exactly.
     """
-    from service.langgraph.agent_session_manager import (
+    from service.executor.agent_session_manager import (
         AgentSessionManager,
     )
 
@@ -77,8 +77,8 @@ async def test_manager_lifecycle_bus_is_wired() -> None:
 @pytest.mark.asyncio
 async def test_agent_session_emit_revived_fires_with_bus() -> None:
     """``AgentSession._emit_revived`` pushes SESSION_REVIVED through the bus."""
-    from service.langgraph.agent_session import AgentSession
-    from service.langgraph.session_freshness import SessionFreshness
+    from service.executor.agent_session import AgentSession
+    from service.executor.session_freshness import SessionFreshness
 
     bus = SessionLifecycleBus()
     events, handler = _make_recorder()
@@ -104,8 +104,8 @@ async def test_agent_session_emit_revived_fires_with_bus() -> None:
 @pytest.mark.asyncio
 async def test_agent_session_emit_revived_without_bus_is_noop() -> None:
     """No bus attached → helper short-circuits silently."""
-    from service.langgraph.agent_session import AgentSession
-    from service.langgraph.session_freshness import SessionFreshness
+    from service.executor.agent_session import AgentSession
+    from service.executor.session_freshness import SessionFreshness
 
     agent = object.__new__(AgentSession)
     agent._session_id = "sid-no-bus"
@@ -118,8 +118,8 @@ async def test_agent_session_emit_revived_without_bus_is_noop() -> None:
 @pytest.mark.asyncio
 async def test_schedule_revived_emit_runs_in_background() -> None:
     """The sync variant schedules a task that fires on the next loop tick."""
-    from service.langgraph.agent_session import AgentSession
-    from service.langgraph.session_freshness import SessionFreshness
+    from service.executor.agent_session import AgentSession
+    from service.executor.session_freshness import SessionFreshness
 
     bus = SessionLifecycleBus()
     events, handler = _make_recorder()
@@ -142,8 +142,8 @@ async def test_schedule_revived_emit_runs_in_background() -> None:
 
 def test_schedule_revived_emit_outside_loop_is_noop() -> None:
     """Called with no running loop → skipped silently."""
-    from service.langgraph.agent_session import AgentSession
-    from service.langgraph.session_freshness import SessionFreshness
+    from service.executor.agent_session import AgentSession
+    from service.executor.session_freshness import SessionFreshness
 
     bus = SessionLifecycleBus()
     agent = object.__new__(AgentSession)

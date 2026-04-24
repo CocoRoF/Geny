@@ -107,8 +107,8 @@ agent_executor.py: execute_command()
 | `service/workflow/nodes/vtuber/vtuber_delegate_node.py` | 서브 워커에 작업 위임 + DM 전송 | ~200 |
 | `service/workflow/nodes/vtuber/vtuber_think_node.py` | 내부 사고/서브 워커 결과 요약 | ~120 |
 | **Session Management** | | |
-| `service/langgraph/agent_session_manager.py` | VTuber 세션 + 서브 워커 세션 자동 생성, 프롬프트 구성 | 핵심 |
-| `service/langgraph/agent_session.py` | `_linked_session_id`, `_session_type` 속성 | 핵심 |
+| `service/executor/agent_session_manager.py` | VTuber 세션 + 서브 워커 세션 자동 생성, 프롬프트 구성 | 핵심 |
+| `service/executor/agent_session.py` | `_linked_session_id`, `_session_type` 속성 | 핵심 |
 | `service/execution/agent_executor.py` | `_notify_linked_vtuber()`, thinking trigger 기록 | 핵심 |
 | `service/claude_manager/models.py` | `SessionRole.VTUBER`, 링크 필드 | 핵심 |
 | `service/claude_manager/session_store.py` | Cascade soft-delete, 링크 필드 영속화 | 핵심 |

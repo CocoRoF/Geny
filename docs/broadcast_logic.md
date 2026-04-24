@@ -265,8 +265,8 @@ Your session ID: `{session_id}`
 |------|------|------|
 | `controller/chat_controller.py` | broadcast 핸들러 | `execute_command`에 context 미전달, output 이중 저장 |
 | `service/execution/agent_executor.py` | 명령 실행기 | `is_chat_message` 파라미터 미지원 |
-| `service/langgraph/agent_session.py` | 에이전트 세션 | `invoke()`에 `is_chat_message` 전달 누락 |
-| `service/langgraph/state.py` | 상태 정의 | `is_chat_message` 필드 존재하나 사용 안됨 |
+| `service/executor/agent_session.py` | 에이전트 세션 | `invoke()`에 `is_chat_message` 전달 누락 |
+| `service/executor/state.py` | 상태 정의 | `is_chat_message` 필드 존재하나 사용 안됨 |
 | `service/workflow/nodes/logic/relevance_gate_node.py` | 관련성 필터 | `is_chat_message=False`로 인해 비활성화 |
 | `service/prompt/sections.py` | 시스템 프롬프트 | broadcast 시 도구 사용 지침 없음 |
 | `tools/built_in/geny_tools.py` | 플랫폼 도구 | broadcast 중 도구 호출 방지 메커니즘 없음 |

@@ -53,7 +53,7 @@ AgentSession.initialize()
 | `ExecutionContext` | `workflow/nodes/base.py` | 모든 노드에 전달되는 실행 컨텍스트 (모델 포함) |
 | `ClaudeCLIChatModel` | `langgraph/claude_cli_model.py` | Claude CLI 서브프로세스 래퍼 (LangChain BaseChatModel) |
 | `WorkflowExecutor` | `workflow/workflow_executor.py` | 그래프 빌드 시 모든 노드에 동일 context 주입 |
-| `AgentSession._build_graph()` | `langgraph/agent_session.py` | ExecutionContext 생성, 그래프 컴파일 |
+| `AgentSession._build_graph()` | `executor/agent_session.py` | ExecutionContext 생성, 그래프 컴파일 |
 | `APIConfig` | `config/sub_config/general/api_config.py` | 모델명, API 키 등 전역 설정 |
 
 ### 2.3 모델 생성 방식
@@ -248,7 +248,7 @@ aux_model = ChatAnthropic(
 ```
 변경 파일:
   backend/service/workflow/nodes/base.py          — ExecutionContext에 auxiliary_model 추가
-  backend/service/langgraph/agent_session.py      — _build_graph()에서 auxiliary 모델 생성
+  backend/service/executor/agent_session.py      — _build_graph()에서 auxiliary 모델 생성
   backend/service/config/sub_config/general/api_config.py  — auxiliary_model 설정 추가
 
 노드별 수정 (선택적):
@@ -467,7 +467,7 @@ def _build_graph(self):
 | 파일 | 변경 | LOC |
 |------|------|-----|
 | `workflow/nodes/base.py` | `auxiliary_model` 필드 + `auxiliary_invoke` 2개 메서드 | ~60 |
-| `langgraph/agent_session.py` | `_build_graph()`에 `ChatAnthropic` 생성 | ~20 |
+| `executor/agent_session.py` | `_build_graph()`에 `ChatAnthropic` 생성 | ~20 |
 | `config/sub_config/general/api_config.py` | `auxiliary_model` 설정 필드 | ~15 |
 | `workflow/nodes/memory/memory_inject_node.py` | gate 호출 교체 | ~3 |
 | `workflow/nodes/vtuber/vtuber_classify_node.py` | 분류 호출 교체 | ~3 |

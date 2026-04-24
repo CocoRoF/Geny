@@ -188,7 +188,7 @@ async def _notify_linked_vtuber(session_id: str, result: 'ExecutionResult') -> N
     Best-effort: never raises.
     """
     try:
-        from service.langgraph import get_agent_session_manager
+        from service.executor import get_agent_session_manager
 
         manager = get_agent_session_manager()
         agent = manager.get_agent(session_id)
@@ -354,7 +354,7 @@ async def _notify_vtuber_sub_worker_progress(session_id: str, status: str) -> No
         if not hasattr(_app_state, 'avatar_state_manager') or not hasattr(_app_state, 'live2d_model_manager'):
             return
 
-        from service.langgraph import get_agent_session_manager
+        from service.executor import get_agent_session_manager
         manager = get_agent_session_manager()
         agent = manager.get_agent(session_id)
         if not agent:
@@ -504,7 +504,7 @@ async def stop_execution(session_id: str) -> bool:
 # ============================================================================
 
 def _get_agent_manager():
-    from service.langgraph import get_agent_session_manager
+    from service.executor import get_agent_session_manager
     return get_agent_session_manager()
 
 

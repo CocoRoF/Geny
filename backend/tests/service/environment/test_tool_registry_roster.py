@@ -59,7 +59,7 @@ class _StubTool(Tool):
 class _FakeProvider:
     """Adapts a flat name list as the AdhocToolProvider Protocol.
 
-    Mirrors ``service.langgraph.geny_tool_provider.GenyToolProvider``
+    Mirrors ``service.executor.geny_tool_provider.GenyToolProvider``
     shape without dragging in ToolLoader / tool_bridge — tests build
     a provider from a literal list and never touch the filesystem.
     """

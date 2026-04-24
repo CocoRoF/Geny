@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Tuple
 
 import pytest
 
-from service.langgraph.agent_session import AgentSession
+from service.executor.agent_session import AgentSession
 from service.logging.session_logger import LogLevel, SessionLogger
 
 

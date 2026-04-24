@@ -108,7 +108,7 @@ backend/
 │
 ├── service/                   # 비즈니스 로직
 │   ├── claude_manager/        #   Claude CLI 프로세스 관리
-│   ├── langgraph/             #   LangGraph 에이전트 세션
+│   ├── executor/              #   geny-executor 에이전트 세션
 │   ├── workflow/              #   워크플로우 정의·실행·컴파일러
 │   │   ├── nodes/             #     20종 워크플로우 노드
 │   │   └── compiler/          #     워크플로우 테스트 컴파일러
