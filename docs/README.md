@@ -41,7 +41,6 @@ docs/
 | [`Thinking_trigger.md`](Thinking_trigger.md) | Thinking trigger 개념 |
 | [`broadcast_logic.md`](broadcast_logic.md) | 브로드캐스트 실행 흐름 |
 | [`source_live2d_model.md`](source_live2d_model.md) | Live2D 모델 소싱 |
-| [`optimizing_model.md`](optimizing_model.md) | 모델 최적화 노트 |
 
 ### `planning/` — 진행 중 / 대기 중 계획
 

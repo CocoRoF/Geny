@@ -1,15 +1,15 @@
 # Geny Agent — Backend
 
-> Multi-session agent management system based on Claude CLI
+> Multi-session agent management system on top of `geny-executor`
 
 ## Project Overview
 
-Geny Agent is a FastAPI backend that wraps Claude CLI to manage **multi-agent sessions**. It supports LangGraph-based autonomous execution workflows, MCP tool integration, vector memory, and real-time chat.
+Geny Agent is a FastAPI backend that manages **multi-agent sessions** on top of the [`geny-executor`](https://github.com/CocoRoF/geny-executor) Pipeline engine. It supports broadcast / direct-message chat between sessions, MCP tool integration, vector memory, and real-time streaming over SSE/WebSocket.
 
 ### Key Features
 
-- **Multi-Session** — Run and manage independent Claude CLI processes in parallel
-- **Autonomous Workflows** — LangGraph StateGraph automates difficulty-based branching, review, and TODO decomposition
+- **Multi-Session** — Run and manage independent agent sessions in parallel, each wrapping a `geny-executor` Pipeline
+- **Pipeline Execution** — Stage-based execution via `geny-executor` (input → tool dispatch → API → parse → yield)
 - **MCP Proxy** — Unifies external MCP servers + built-in Python tools into a single interface
 - **Vector Memory** — FAISS + Embedding API for semantic search over long-term memory
 - **Real-time Chat** — Inter-session broadcast, DM, and SSE streaming
@@ -39,9 +39,9 @@ Geny Agent is a FastAPI backend that wraps Claude CLI to manage **multi-agent se
 │                     Service Layer                        │
 │                                                         │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │ AgentSession  │  │  Workflow    │  │   Memory     │  │
-│  │ Manager       │  │  Executor   │  │   Manager    │  │
-│  │ (LangGraph)   │  │  (Compiler) │  │ (LTM+STM+V) │  │
+│  │ AgentSession  │  │   Chat /     │  │   Memory     │  │
+│  │ Manager       │  │  Broadcast   │  │   Manager    │  │
+│  │(geny-executor)│  │  Router      │  │ (LTM+STM+V) │  │
 │  └──────┬───────┘  └──────┬──────┘  └──────────────┘  │
 │         │                  │                            │
 │  ┌──────┴───────┐  ┌──────┴──────┐  ┌──────────────┐  │

@@ -706,8 +706,8 @@ def build_agent_prompt(
         3. Shared folder — auto-appended when enabled.
 
     Design philosophy:
-    - Claude CLI receives full tool schemas via MCP — no tool listing needed.
-    - LangGraph graph controls execution loop, retry, and completion.
+    - Claude API receives full tool schemas via MCP — no tool listing needed.
+    - `geny-executor` Pipeline controls execution loop, retry, and completion.
     - The system prompt only needs: Identity + Role Behavior + Context.
 
     Sections NOT included (handled by infrastructure):

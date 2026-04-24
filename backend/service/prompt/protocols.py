@@ -2,9 +2,9 @@
 Execution / Completion / Error Recovery Protocols (opt-in sections)
 
 NOTE: The sections in this module are NOT included in the default prompt build.
-- The LangGraph graph controls the execution loop, retries, and completion detection.
-- The Claude CLI provides default safety guidelines and error handling.
-- All sessions already have autonomous execution capability via the autonomous graph.
+- The `geny-executor` Pipeline controls the execution loop, retries, and completion detection.
+- The Claude API (via geny-executor's APIStage) provides default safety guidelines.
+- All sessions already have autonomous execution capability via the Pipeline's stages.
 
 Use these only when you want to manually add them to a PromptBuilder:
     builder.add_section(ExecutionProtocol.autonomous_execution())

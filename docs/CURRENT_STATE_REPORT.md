@@ -3,6 +3,15 @@
 > Date: 2026-04-14
 > 대상: geny-executor 통합 후 전체 실행 로직
 > 방향: vtuber(간소화) + default(geny-executor 전체) 두 가지만 사용
+>
+> **2026-04-24 Update — Cycle `20260424_1` LangGraph cleanup 완료:**
+> - `backend/service/langgraph/` → `backend/service/executor/` 리네임 완료 (PR #260)
+> - `autonomous_graph.py.bak` (985 LOC) + `mcp_tools_server.py` (381 LOC) 삭제 (PR #258, #259)
+> - `langchain-anthropic` + `langchain-core` 의존성 제거
+> - LangGraph-era 문서 30+ 개 `backend/docs/_archive/langgraph-era/` 로 이동
+> - 세 채널 (Command / VTuber / Messenger) 모두 동일한 `execute_command()` → `Pipeline.run()` 경로로 통일됨을 audit 재확인
+>
+> 세부 audit 과 PR 기록: [`dev_docs/20260424_1/`](../dev_docs/20260424_1/)
 
 ---
 

@@ -1,9 +1,7 @@
 """
 Agent Session Controller
 
-REST API endpoints for AgentSession (LangGraph + Claude CLI) management.
-
-Manages sessions based on AgentSession(CompiledStateGraph).
+REST API endpoints for AgentSession (geny-executor Pipeline) management.
 
 AgentSession API:   /api/agents (primary)
 Legacy Session API: /api/sessions (deprecated, backward compatibility)
@@ -91,7 +89,7 @@ class AgentInvokeRequest(BaseModel):
     """
     Request to invoke an AgentSession.
 
-    Executes based on LangGraph state.
+    Executes the session's `geny-executor` Pipeline.
     """
     input_text: str = Field(
         ...,
@@ -150,8 +148,8 @@ async def create_agent_session(request: CreateAgentRequest, auth: dict = Depends
     """
     Create a new AgentSession.
 
-    AgentSession operates based on a CompiledStateGraph and
-    provides LangGraph's state management capabilities.
+    AgentSession wraps a `geny-executor` Pipeline and manages its
+    lifecycle (tool attach, memory integration, idle monitoring).
     """
     try:
         owner_username = auth.get("sub", "anonymous")
@@ -574,9 +572,8 @@ async def invoke_agent(
     auth: dict = Depends(require_auth),
 ):
     """
-    Invoke AgentSession with LangGraph state execution.
+    Invoke AgentSession — runs the session's `geny-executor` Pipeline.
 
-    Performs state-based graph execution.
     If checkpointing is enabled, state is restored/saved using thread_id.
     """
     agent = agent_manager.get_agent(session_id)
@@ -600,7 +597,7 @@ async def invoke_agent(
                 max_turns=request.max_iterations,
             )
 
-        # Execute the LangGraph graph
+        # Run the session's Pipeline
         result = await agent.invoke(
             input_text=request.input_text,
             thread_id=request.thread_id,

@@ -26,7 +26,7 @@ All log entries are simultaneously recorded in all three locations. DB writes ar
 | `ERROR` | `ERROR` | Errors |
 | `COMMAND` | `COMMAND` | User prompt sent to Claude |
 | `RESPONSE` | `RESPONSE` | Claude's response (success/failure) |
-| `GRAPH` | `GRAPH` | LangGraph state transitions and node execution |
+| `GRAPH` | `GRAPH` | `geny-executor` Stage transitions (legacy `Graph` key preserved for DB row compatibility) |
 | `TOOL` | `TOOL_USE` | Tool call events |
 | `TOOL_RES` | `TOOL_RESULT` | Tool execution results |
 | `STREAM` | `STREAM_EVENT` | Claude CLI stream-json events |
@@ -112,7 +112,7 @@ Level: **TOOL_USE** — Tool call. Auto-performs structured extraction (see belo
 
 Level: **TOOL_RESULT** — Tool result. File tools get 5000-char preview, others 500-char.
 
-### LangGraph Event Logging
+### Pipeline Event Logging
 
 All levels: **GRAPH**. UUID event IDs generated (8 chars).
 
