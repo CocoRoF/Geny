@@ -30,10 +30,12 @@ dependencies = [
     # WebSocket protocol
     "websockets>=13.0",
     # geny-executor: Pipeline-based execution engine
-    # 0.32.x (executor uplift Phase 1): Tool ABC metadata + Permission
-    # matrix + Hook event taxonomy + Stage 10 PartitionExecutor.
-    # All additive; existing AgentSession usage unaffected.
-    "geny-executor>=0.32.3,<0.33.0",
+    # 0.33.x (executor uplift Phase 2): StreamingToolExecutor, large-
+    # result persistence to {storage_path}/tool-results/, tool lifecycle
+    # hooks fired around every RegistryRouter dispatch, and a stage-
+    # level max_concurrency ConfigSchema knob. All additive; existing
+    # AgentSession usage unaffected.
+    "geny-executor>=0.33.0,<0.34.0",
     # MCP (Model Context Protocol)
     "mcp>=1.0.0",
     # Auth
