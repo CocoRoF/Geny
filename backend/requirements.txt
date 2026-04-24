@@ -19,14 +19,13 @@ ddgs==9.11.4
 # Web fetch & browser automation
 playwright>=1.49.0
 # geny-executor: Pipeline-based execution engine
-# 0.35.x (executor uplift Phase 3 closer): adds ToolProvider Protocol
-# + BuiltInToolProvider + Pipeline.from_manifest_async(tool_providers=
-# ...). Complements the existing AdhocToolProvider: ToolProvider is a
-# self-contained bundle with its own startup / shutdown lifecycle, so
-# hosts bundle their own tools (eventually GenyPlatformToolProvider)
-# without enumerating tool names in the manifest. All surfaces are
-# additive; existing AgentSession usage unaffected.
-geny-executor[web]>=0.35.0,<0.36.0
+# 0.36.x (executor uplift Phase 4 Weeks 7-8): Skills system lands in
+# inline-execution form. Adds geny_executor.skills subpackage — SKILL
+# .md frontmatter parser, loader, registry, SkillTool + SkillToolProvider
+# (plugs into Pipeline.from_manifest_async via the ToolProvider Protocol
+# shipped in 0.35.0). pyyaml>=6.0 becomes a core dep. All additive;
+# existing AgentSession usage unaffected.
+geny-executor[web]>=0.36.0,<0.37.0
 # MCP (Model Context Protocol)
 mcp>=1.0.0
 # TTS (Text-to-Speech)
