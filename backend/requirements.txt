@@ -25,15 +25,19 @@ playwright>=1.49.0
 # (plugs into Pipeline.from_manifest_async via the ToolProvider Protocol
 # shipped in 0.35.0). pyyaml>=6.0 becomes a core dep. All additive;
 # existing AgentSession usage unaffected.
-# 0.39.x (executor uplift Phase 7 Sprint S7.4): the Phase 1
-# PermissionRule matrix finally fires inside Stage 10's dispatcher.
-# Pipeline.attach_runtime(permission_rules=[...], permission_mode=
-# "default"|"plan"|"auto"|"bypass") binds the matrix; DENY rules
-# short-circuit before subprocess hooks fire so we never burn a
-# subprocess on a call we already know is blocked. ASK is treated
-# as a safe DENY until the Phase 9 HITL stage lands. Without rules
-# attached, dispatch is byte-identical to 0.38.x.
-geny-executor[web]>=0.39.0,<0.40.0
+# 0.40.x (executor uplift Phase 7 sprint batch S7.1 + S7.2 + S7.3):
+# - DynamicPersonaPromptBuilder + PersonaProvider Protocol promoted
+#   into the executor (Geny's service.persona.* can migrate to a
+#   thin re-export later).
+# - MCPResourceRetriever — Stage 2 can pull MCP resources as memory
+#   chunks, complementing tool consumption.
+# - StructuredOutputParser schema contract — three named outcomes
+#   (clean / parse-failed / schema-mismatched) on
+#   ParsedResponse.structured_output_error.
+# All surfaces are independently opt-in; without consuming any of
+# them, dispatch + prompt assembly + parsing all behave identically
+# to 0.39.x.
+geny-executor[web]>=0.40.0,<0.41.0
 # MCP (Model Context Protocol)
 mcp>=1.0.0
 # TTS (Text-to-Speech)
