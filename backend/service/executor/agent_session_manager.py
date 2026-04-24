@@ -1,32 +1,18 @@
 """
-AgentSessionManager - AgentSession Manager
-
-Extends the existing SessionManager to manage sessions based on
-AgentSession (CompiledStateGraph).
-
-Retains all functionality of the existing SessionManager while
-adding methods dedicated to AgentSession management.
+AgentSessionManager — manages AgentSession (geny-executor Pipeline) instances.
 
 Usage example:
     from service.executor import get_agent_session_manager
 
     manager = get_agent_session_manager()
 
-    # Create an AgentSession
     agent = await manager.create_agent_session(CreateSessionRequest(
         working_dir="/path/to/project",
         model="claude-sonnet-4-20250514",
     ))
 
-    # Retrieve an AgentSession
     agent = manager.get_agent(session_id)
-
-    # Execute
     result = await agent.invoke("Hello")
-
-    # Legacy SessionManager compatibility
-    process = manager.get_process(session_id)  # Returns ClaudeProcess
-    sessions = manager.list_sessions()  # Returns list of SessionInfo
 """
 
 from logging import getLogger
@@ -35,7 +21,6 @@ import asyncio
 import os
 import uuid
 
-from service.claude_manager.session_manager import SessionManager, merge_mcp_configs
 from service.claude_manager.models import (
     CreateSessionRequest,
     MCPConfig,
@@ -91,22 +76,20 @@ _VTUBER_SUB_WORKER_NOTICE = (
 )
 
 
-class AgentSessionManager(SessionManager):
+class AgentSessionManager:
     """
-    AgentSession manager.
-
-    Inherits from SessionManager to retain all existing functionality while
-    adding session management capabilities based on AgentSession (CompiledStateGraph).
+    AgentSession manager — geny-executor Pipeline sessions.
 
     Core structure:
     - _local_agents: AgentSession store (local)
-
-    All sessions use geny-executor Pipeline mode.
-    Legacy ClaudeProcess / StateGraph paths have been removed (pre-2026-04).
+    - _global_mcp_config: cluster-wide MCP defaults, injected from main.py
     """
 
     def __init__(self):
-        super().__init__()
+        # Global MCP configuration (applied to every session unless overridden
+        # by the per-request mcp_config). Set from main.py via
+        # ``set_global_mcp_config`` after MCPLoader.load_all().
+        self._global_mcp_config: Optional[MCPConfig] = None
 
         # AgentSession store (local)
         self._local_agents: Dict[str, AgentSession] = {}
@@ -180,6 +163,28 @@ class AgentSessionManager(SessionManager):
         self._state_provider_vtuber_only: bool = True
 
         logger.info("✅ AgentSessionManager initialized")
+
+    # ========================================================================
+    # Global MCP configuration
+    # ========================================================================
+
+    def set_global_mcp_config(self, config: MCPConfig) -> None:
+        """Set cluster-wide MCP defaults (applied to every new session).
+
+        Called from main.py after MCPLoader.load_all(). The per-request
+        ``request.mcp_config`` still overrides these globals at session
+        creation via ``build_session_mcp_config``.
+        """
+        self._global_mcp_config = config
+        if config and config.servers:
+            logger.info(
+                f"✅ Global MCP config registered: {list(config.servers.keys())}"
+            )
+
+    @property
+    def global_mcp_config(self) -> Optional[MCPConfig]:
+        """Currently registered global MCP configuration (or None)."""
+        return self._global_mcp_config
 
     @property
     def persona_provider(self) -> CharacterPersonaProvider:
@@ -1061,10 +1066,6 @@ class AgentSessionManager(SessionManager):
             # Remove from local store
             del self._local_agents[session_id]
 
-            # Also remove from _local_processes (for compatibility)
-            if session_id in self._local_processes:
-                del self._local_processes[session_id]
-
             # Clear persona provider's in-memory state for this session.
             # Restore re-stages static_override/character from sessions.json.
             try:
@@ -1089,17 +1090,12 @@ class AgentSessionManager(SessionManager):
             logger.info(f"[{session_id}] ✅ AgentSession deleted (soft)")
             return True
 
-        # Legacy approach (direct ClaudeProcess)
-        return await super().delete_session(session_id, cleanup_storage)
+        # Not in the local AgentSession store — nothing to delete. No
+        # legacy ClaudeProcess fallback since cycle 20260424_2 PR-2.
+        return False
 
     async def cleanup_dead_sessions(self):
-        """
-        Clean up dead sessions (both AgentSession and legacy approach).
-
-        Philosophy: Try to REVIVE idle/dead agent sessions before deleting
-        them.  Only sessions that fail revival are removed.
-        """
-        # Clean up AgentSessions — try revival first
+        """Revive idle AgentSessions; delete the ones that cannot be revived."""
         dead_agents = [
             session_id
             for session_id, agent in self._local_agents.items()
@@ -1118,20 +1114,8 @@ class AgentSessionManager(SessionManager):
             except Exception as e:
                 logger.warning(f"[{session_id}] Revival failed: {e}")
 
-            # Revival failed — clean up
             logger.info(f"[{session_id}] Cleaning up unrevivable AgentSession")
             await self.delete_session(session_id)
-
-        # Clean up legacy processes (only those that are not AgentSessions)
-        dead_processes = [
-            session_id
-            for session_id, process in self._local_processes.items()
-            if session_id not in self._local_agents and not process.is_alive()
-        ]
-
-        for session_id in dead_processes:
-            logger.info(f"[{session_id}] Cleaning up dead session")
-            await super().delete_session(session_id)
 
     # ========================================================================
     # Background Idle Monitor
