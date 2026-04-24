@@ -36,10 +36,13 @@ dependencies = [
     # (plugs into Pipeline.from_manifest_async via the ToolProvider Protocol
     # shipped in 0.35.0). pyyaml>=6.0 becomes a core dep. All additive;
     # existing AgentSession usage unaffected.
-    # Hotfix floor — 0.36.1 makes the Stage 10 lifecycle dispatcher
-    # tolerate duck-typed tool adapters (``_GenyToolAdapter``). 0.36.0
-    # crashed on ``tool.on_enter`` lookup.
-    "geny-executor[web]>=0.36.1,<0.37.0",
+    # 0.37.x (executor uplift Phase 5): subprocess hooks land. Stage 10
+    # router fires PRE_TOOL_USE / POST_TOOL_USE / POST_TOOL_FAILURE
+    # around every dispatch, honouring the returned HookOutcome (block
+    # / modify_input). Two-switch opt-in (HookConfig.enabled +
+    # GENY_ALLOW_HOOKS=1) plus fail-open semantics — without a runner
+    # attached, dispatch is byte-identical to 0.36.x.
+    "geny-executor[web]>=0.37.0,<0.38.0",
     # MCP (Model Context Protocol)
     "mcp>=1.0.0",
     # Auth
