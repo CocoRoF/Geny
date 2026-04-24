@@ -19,13 +19,14 @@ ddgs==9.11.4
 # Web fetch & browser automation
 playwright>=1.49.0
 # geny-executor: Pipeline-based execution engine
-# 0.34.x (executor uplift Phase 3): built-in tool catalog grows 6 → 13
-# — adds WebFetch, WebSearch, TodoWrite, NotebookEdit, ToolSearch,
-# EnterPlanMode, ExitPlanMode. ToolResult.state_mutations now lands in
-# state.shared through all four Stage 10 executors. New [web] optional
-# extra pulls ddgs for WebSearch. All additive; existing AgentSession
-# usage unaffected.
-geny-executor[web]>=0.34.0,<0.35.0
+# 0.35.x (executor uplift Phase 3 closer): adds ToolProvider Protocol
+# + BuiltInToolProvider + Pipeline.from_manifest_async(tool_providers=
+# ...). Complements the existing AdhocToolProvider: ToolProvider is a
+# self-contained bundle with its own startup / shutdown lifecycle, so
+# hosts bundle their own tools (eventually GenyPlatformToolProvider)
+# without enumerating tool names in the manifest. All surfaces are
+# additive; existing AgentSession usage unaffected.
+geny-executor[web]>=0.35.0,<0.36.0
 # MCP (Model Context Protocol)
 mcp>=1.0.0
 # TTS (Text-to-Speech)
