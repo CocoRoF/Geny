@@ -417,7 +417,6 @@ service/claude_manager/
 ├── stream_parser.py         # StreamParser (stream-json 파싱)
 ├── cli_discovery.py         # Claude CLI 자동 발견 (node.exe + cli.js)
 ├── platform_utils.py        # 크로스 플랫폼 유틸리티
-├── mcp_tools_server.py      # MCP 도구 서버 래퍼
 ├── storage_utils.py         # 저장소 파일 유틸리티
 └── constants.py             # 상수 정의
 

@@ -417,7 +417,6 @@ service/claude_manager/
 ├── stream_parser.py         # StreamParser (stream-json parsing)
 ├── cli_discovery.py         # Claude CLI auto-discovery (node.exe + cli.js)
 ├── platform_utils.py        # Cross-platform utilities
-├── mcp_tools_server.py      # MCP tools server wrapper
 ├── storage_utils.py         # Storage file utilities
 └── constants.py             # Constants
 
