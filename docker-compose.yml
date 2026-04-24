@@ -99,6 +99,10 @@ services:
     volumes:
       - geny-tts-cache:/app/cache/tts
       - geny-voices:/app/static/voices
+      # Chat attachment uploads (content-addressable: /app/static/uploads/{shard}/{sha256}.{ext}).
+      # Cycle 20260424_3 PR-1: without this volume the folder was ephemeral —
+      # every container restart wiped user-uploaded images.
+      - geny-uploads:/app/static/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -233,6 +237,8 @@ volumes:
   geny-tts-cache:
     driver: local
   geny-voices:
+    driver: local
+  geny-uploads:
     driver: local
   geny-omnivoice-models:
     driver: local

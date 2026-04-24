@@ -100,6 +100,9 @@ services:
     volumes:
       - geny-tts-cache-prod:/app/cache/tts
       - geny-voices-prod:/app/static/voices
+      # Chat attachment uploads (cycle 20260424_3 PR-1) — without a named
+      # volume here every container restart wiped user-uploaded images.
+      - geny-uploads-prod:/app/static/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -269,6 +272,8 @@ volumes:
   geny-tts-cache-prod:
     driver: local
   geny-voices-prod:
+    driver: local
+  geny-uploads-prod:
     driver: local
   geny-omnivoice-models-prod:
     driver: local
