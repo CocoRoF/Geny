@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { chatApi } from '@/lib/api';
 import { getChatWSManager } from '@/lib/chatWsManager';
 import { useCreatureStateStore } from './useCreatureStateStore';
-import type { ChatRoom, ChatRoomMessage, BroadcastStatus, AgentProgressState, FileChanges } from '@/types';
+import type { ChatRoom, ChatRoomMessage, ChatAttachment, BroadcastStatus, AgentProgressState, FileChanges } from '@/types';
 
 interface MessengerState {
   // Rooms
@@ -46,7 +46,7 @@ interface MessengerState {
   setSearchQuery: (q: string) => void;
 
   // Actions - Messages
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, attachments?: ChatAttachment[]) => Promise<void>;
   loadOlderMessages: () => Promise<void>;
   cancelBroadcast: () => Promise<void>;
 
@@ -161,14 +161,19 @@ export const useMessengerStore = create<MessengerState>((set, get) => ({
     }
   },
 
-  sendMessage: async (content) => {
+  sendMessage: async (content, attachments) => {
     const { activeRoomId } = get();
-    if (!activeRoomId || !content.trim()) return;
+    const trimmed = content.trim();
+    const hasAttachments = !!attachments && attachments.length > 0;
+    if (!activeRoomId || (!trimmed && !hasAttachments)) return;
 
     set({ isSending: true });
 
     try {
-      const res = await chatApi.broadcastToRoom(activeRoomId, { message: content.trim() });
+      const res = await chatApi.broadcastToRoom(activeRoomId, {
+        message: trimmed,
+        attachments: hasAttachments ? attachments : undefined,
+      });
       // Add user message immediately (optimistic)
       set(s => {
         const alreadyExists = s.messages.some(m => m.id === res.user_message.id);
