@@ -205,3 +205,100 @@ async def test_astream_path_also_translates_bypass(tmp_path) -> None:
     assert len(bypass) == 1
     assert bypass[0].metadata["stage_name"] == "think"
     assert bypass[0].metadata["stage_order"] == 8
+
+
+# ─────────────────────────────────────────────────────────────────
+# G2.4: tool_review.flag / .reviewer_error / .completed broadcast
+# ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_tool_review_flag_event_logged_with_severity(tmp_path) -> None:
+    session, sl = _make_session(
+        [
+            _FakeEvent(
+                "tool_review.flag",
+                {
+                    "tool_call_id": "t1",
+                    "reviewer": "sensitive",
+                    "severity": "warn",
+                    "reason": "sensitive pattern matched: api_key_assignment",
+                    "details": {"tool": "Bash", "pattern": "api_key_assignment"},
+                },
+                iteration=2,
+            ),
+            *_success_tail(),
+        ],
+        tmp_path,
+    )
+    await session._invoke_pipeline("hi", start_time=0.0, session_logger=sl)
+
+    entries, _ = sl.get_cache_entries_since(0)
+    flags = [e for e in entries if e.metadata.get("event_type") == "tool_review_flag"]
+    assert len(flags) == 1
+    meta = flags[0].metadata
+    assert flags[0].level == LogLevel.STAGE
+    assert meta["stage_name"] == "tool_review"
+    assert meta["stage_order"] == 11
+    assert meta["iteration"] == 2
+    # Message carries severity + reviewer for a quick read in the UI.
+    assert "warn" in flags[0].message
+    assert "sensitive" in flags[0].message
+    # Full event data preserved for the UI to render details.
+    assert meta["data"]["reviewer"] == "sensitive"
+    assert meta["data"]["details"]["pattern"] == "api_key_assignment"
+
+
+@pytest.mark.asyncio
+async def test_tool_review_reviewer_error_logged(tmp_path) -> None:
+    session, sl = _make_session(
+        [
+            _FakeEvent(
+                "tool_review.reviewer_error",
+                {"reviewer": "schema", "error": "boom"},
+                iteration=1,
+            ),
+            *_success_tail(),
+        ],
+        tmp_path,
+    )
+    await session._invoke_pipeline("hi", start_time=0.0, session_logger=sl)
+
+    entries, _ = sl.get_cache_entries_since(0)
+    errs = [e for e in entries if e.metadata.get("event_type") == "tool_review_error"]
+    assert len(errs) == 1
+    assert errs[0].metadata["stage_name"] == "tool_review"
+    assert "boom" in errs[0].message
+
+
+@pytest.mark.asyncio
+async def test_tool_review_completed_summary_only_when_flags_present(
+    tmp_path,
+) -> None:
+    """The summary log is gated on ``flags > 0`` so a clean turn
+    doesn't spam the log panel with a "0 flags" entry."""
+    session, sl = _make_session(
+        [
+            _FakeEvent(
+                "tool_review.completed",
+                {"reviewers": ["schema"], "flags": 0, "tool_calls": 1, "tool_results": 1},
+                iteration=1,
+            ),
+            _FakeEvent(
+                "tool_review.completed",
+                {"reviewers": ["schema"], "flags": 2, "tool_calls": 1, "tool_results": 1},
+                iteration=2,
+            ),
+            *_success_tail(),
+        ],
+        tmp_path,
+    )
+    await session._invoke_pipeline("hi", start_time=0.0, session_logger=sl)
+
+    entries, _ = sl.get_cache_entries_since(0)
+    summaries = [
+        e for e in entries if e.metadata.get("event_type") == "tool_review_summary"
+    ]
+    assert len(summaries) == 1
+    # The one we kept has flags=2.
+    assert summaries[0].metadata["data"]["flags"] == 2

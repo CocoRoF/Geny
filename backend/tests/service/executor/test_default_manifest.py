@@ -37,10 +37,11 @@ def test_manifest_declares_tool_stage(preset: str) -> None:
 
 # Per-preset opt-in for the 5 scaffold stages. Updated as each
 # G2.x sprint promotes a scaffold from "advisory" to "wired".
-#   G2.2 — summarize (19) on worker_adaptive
-#   G2.3 — persist   (20) on worker_adaptive (FilePersister swapped at runtime)
+#   G2.2 — summarize   (19) on worker_adaptive
+#   G2.3 — persist     (20) on worker_adaptive (FilePersister swapped at runtime)
+#   G2.4 — tool_review (11) on worker_adaptive
 _ACTIVE_SCAFFOLDS_BY_PRESET: dict[str, set[int]] = {
-    "worker_adaptive": {19, 20},
+    "worker_adaptive": {11, 19, 20},
     "worker_easy": set(),
     "vtuber": set(),
 }
@@ -95,6 +96,33 @@ def test_worker_adaptive_activates_summarize_with_real_strategies() -> None:
         s = next(e for e in build_default_manifest(preset).stages if e["order"] == 19)
         assert s["active"] is False
         assert s["strategies"]["summarizer"] == "no_summary"
+
+
+def test_worker_adaptive_activates_tool_review_chain() -> None:
+    """G2.4: worker_adaptive opts the Stage 11 Tool Review scaffold
+    in. The chain default (schema → sensitive → destructive →
+    network → size) carries through; flag events are forwarded
+    to the session_logger by the agent_session event loop.
+    Other presets keep tool_review off."""
+    from service.executor.default_manifest import build_default_manifest
+
+    m = build_default_manifest("worker_adaptive")
+    review = next(e for e in m.stages if e["order"] == 11)
+    assert review["active"] is True
+    assert review["chain_order"]["reviewers"] == [
+        "schema",
+        "sensitive",
+        "destructive",
+        "network",
+        "size",
+    ]
+
+    # vtuber + worker_easy keep tool_review off — VTuber sessions
+    # don't run general-purpose tools and worker_easy is a single-
+    # turn Q&A path.
+    for preset in ("vtuber", "worker_easy"):
+        s = next(e for e in build_default_manifest(preset).stages if e["order"] == 11)
+        assert s["active"] is False
 
 
 def test_worker_adaptive_activates_persist_with_on_significant_frequency() -> None:

@@ -1614,6 +1614,50 @@ class AgentSession:
                         data={"signal": signal},
                     )
 
+                # ── G2.4: Tool Review (Stage 11) flag broadcast ──
+                # Each reviewer-emitted flag gets its own log entry so
+                # WebSocket / SSE consumers can render them inline
+                # against the offending tool call. The summary
+                # ``tool_review.completed`` lands once per turn for
+                # dashboard counts (only when at least one flag fired).
+                elif event_type == "tool_review.flag":
+                    iteration = event.iteration if hasattr(event, "iteration") else event_data.get("iteration", 0)
+                    severity = event_data.get("severity", "info")
+                    reviewer = event_data.get("reviewer", "unknown")
+                    reason = event_data.get("reason", "")
+                    session_logger.log_stage_event(
+                        event_type="tool_review_flag",
+                        message=f"[{severity}] {reviewer}: {reason}",
+                        stage_name="tool_review",
+                        stage_order=STAGE_ORDER.get("tool_review"),
+                        iteration=iteration or 0,
+                        data=dict(event_data),
+                    )
+                elif event_type == "tool_review.reviewer_error":
+                    iteration = event.iteration if hasattr(event, "iteration") else event_data.get("iteration", 0)
+                    reviewer = event_data.get("reviewer", "unknown")
+                    err = event_data.get("error", "unknown error")
+                    session_logger.log_stage_event(
+                        event_type="tool_review_error",
+                        message=f"reviewer {reviewer} raised: {err}",
+                        stage_name="tool_review",
+                        stage_order=STAGE_ORDER.get("tool_review"),
+                        iteration=iteration or 0,
+                        data=dict(event_data),
+                    )
+                elif event_type == "tool_review.completed":
+                    iteration = event.iteration if hasattr(event, "iteration") else event_data.get("iteration", 0)
+                    flags = event_data.get("flags", 0)
+                    if flags > 0:
+                        session_logger.log_stage_event(
+                            event_type="tool_review_summary",
+                            message=f"tool_review: {flags} flag(s) raised this turn",
+                            stage_name="tool_review",
+                            stage_order=STAGE_ORDER.get("tool_review"),
+                            iteration=iteration or 0,
+                            data=dict(event_data),
+                        )
+
             # Accumulate output + log to session_logger for streaming
             if event_type == "text.delta":
                 text = event_data.get("text", "")

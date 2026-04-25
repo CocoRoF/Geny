@@ -130,6 +130,15 @@ _SCAFFOLD_ENTRIES_SPEC: List[Dict[str, Any]] = [
 # sprints (G2.x) extend these tables as each stage matures.
 _PRESET_SCAFFOLD_OVERRIDES: Dict[str, Dict[str, Dict[str, Any]]] = {
     _WORKER_ADAPTIVE: {
+        # G2.4: Tool Review chain on. Default reviewer order
+        # (schema → sensitive → destructive → network → size)
+        # comes from the scaffold spec; flags land at
+        # state.shared['tool_review_flags'] and the agent_session
+        # event loop forwards them to the session_logger so the
+        # WebSocket / SSE consumers see them inline.
+        "tool_review": {
+            "active": True,
+        },
         # G2.2: turn-summary writer + heuristic importance grader.
         # Forwards to ``state.session_runtime.memory_provider.record_summary``
         # when the registry has provisioned one (G3.1).
