@@ -26,9 +26,24 @@ interface StageRow {
   strategy_chains: Record<string, { items: string[]; registered: string[] }>;
 }
 
+// Default impl names per stage slot — derived from the executor's
+// stage __init__ defaults. Adding a strategy as the slot's `strategy=`
+// constructor default → add it here too. R9 (audit 20260425_3 §2.3)
+// flagged this as a single-source-of-truth gap; the future fix is to
+// have the introspect endpoint mark each impl with an `is_default`
+// flag and let the heatmap consume that. Until then, keep this list
+// in sync with executor stage default constructors.
 const DEFAULT_IMPL_NAMES = new Set([
-  'default', 'null', 'no_persist', 'no_summary', 'no_scorer', 'standard',
-  'passthrough', 'append_only', 'static', 'sequential',
+  // Universal
+  'default', 'null', 'static', 'sequential',
+  // Memory / persist
+  'append_only', 'no_persist', 'no_summary', 'no_memory', 'in_memory', 'file',
+  // Evaluation / loop
+  'no_scorer', 'standard', 'signal_based', 'binary_classify', 'single_turn',
+  // Routing / cache / API
+  'passthrough', 'no_cache', 'no_retry', 'anthropic',
+  // Misc
+  'registry',
 ]);
 
 function isOverridden(row: StageRow): boolean {

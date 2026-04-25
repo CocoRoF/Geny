@@ -501,8 +501,13 @@ export default function CommandTab() {
   // ── Restore-from-checkpoint modal (G7.2) — operator-triggered.
   // Visible button appears whenever the session has reached an
   // error / connection-lost state where a rewind is the natural recovery.
+  // R5 (audit 20260425_3 §1.4): expand from `error` only to every
+  // non-running, non-success terminal state — backend can emit
+  // `crashed` / `disconnected` / `failed` etc. and operators
+  // should see the recovery affordance there too.
   const [showRestore, setShowRestore] = useState(false);
-  const restoreEligible = sessionData?.status === 'error';
+  const status = sessionData?.status ?? '';
+  const restoreEligible = status !== '' && status !== 'running' && status !== 'success';
 
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)] relative">
