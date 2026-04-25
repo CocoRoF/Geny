@@ -140,6 +140,21 @@ _PRESET_SCAFFOLD_OVERRIDES: Dict[str, Dict[str, Dict[str, Any]]] = {
                 "importance": "heuristic",
             },
         },
+        # G2.3: declarative persist on. The persister slot stays at
+        # ``no_persist`` in the manifest; the real FilePersister is
+        # wired at runtime by ``service.persist.install_file_persister``
+        # because it needs the per-session storage path which is
+        # session-scoped, not manifest-scoped. ``on_significant``
+        # frequency keeps IO bounded — checkpoints land only on
+        # noteworthy events (HITL decisions, tool review errors,
+        # high-importance summaries, terminal turns).
+        "persist": {
+            "active": True,
+            "strategies": {
+                "persister": "no_persist",  # swapped at runtime
+                "frequency": "on_significant",
+            },
+        },
     },
     _WORKER_EASY: {
         # worker_easy is single-turn — summarising a single answer adds

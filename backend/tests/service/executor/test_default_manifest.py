@@ -37,9 +37,10 @@ def test_manifest_declares_tool_stage(preset: str) -> None:
 
 # Per-preset opt-in for the 5 scaffold stages. Updated as each
 # G2.x sprint promotes a scaffold from "advisory" to "wired".
-# G2.2 turned on summarize for worker_adaptive only.
+#   G2.2 — summarize (19) on worker_adaptive
+#   G2.3 — persist   (20) on worker_adaptive (FilePersister swapped at runtime)
 _ACTIVE_SCAFFOLDS_BY_PRESET: dict[str, set[int]] = {
-    "worker_adaptive": {19},  # summarize active (G2.2)
+    "worker_adaptive": {19, 20},
     "worker_easy": set(),
     "vtuber": set(),
 }
@@ -94,6 +95,27 @@ def test_worker_adaptive_activates_summarize_with_real_strategies() -> None:
         s = next(e for e in build_default_manifest(preset).stages if e["order"] == 19)
         assert s["active"] is False
         assert s["strategies"]["summarizer"] == "no_summary"
+
+
+def test_worker_adaptive_activates_persist_with_on_significant_frequency() -> None:
+    """G2.3: worker_adaptive opts Stage 20 Persist in with the
+    on_significant frequency. The persister slot stays at
+    no_persist in the manifest — the real FilePersister is wired
+    by ``service.persist.install_file_persister`` at session-build
+    time once the storage_path is known."""
+    from service.executor.default_manifest import build_default_manifest
+
+    m = build_default_manifest("worker_adaptive")
+    persist = next(e for e in m.stages if e["order"] == 20)
+    assert persist["active"] is True
+    # Real persister is runtime-wired; manifest carries the placeholder.
+    assert persist["strategies"]["persister"] == "no_persist"
+    assert persist["strategies"]["frequency"] == "on_significant"
+
+    # vtuber + worker_easy keep the scaffold default (off).
+    for preset in ("vtuber", "worker_easy"):
+        s = next(e for e in build_default_manifest(preset).stages if e["order"] == 20)
+        assert s["active"] is False
 
 
 @pytest.mark.parametrize("preset", _known_preset_ids())

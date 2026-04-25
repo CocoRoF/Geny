@@ -1173,6 +1173,19 @@ class AgentSession:
         self._pipeline.attach_runtime(**attach_kwargs)
         self._preset_name = f"env:{self._env_id}" if self._env_id else "env"
 
+        # G2.3: install a session-scoped FilePersister into Stage 20.
+        # Manifest declares the slot active with a no_persist placeholder;
+        # this swaps in the real persister rooted at storage_path. No-op
+        # when storage_path is empty or Stage 20 isn't registered.
+        try:
+            from service.persist import install_file_persister
+
+            install_file_persister(self._pipeline, self.storage_path)
+        except Exception as exc:  # noqa: BLE001 — never block run on persist wiring
+            logger.warning(
+                f"[{self._session_id}] FilePersister install failed: {exc}"
+            )
+
         logger.info(
             f"[{self._session_id}] Pipeline adopted + runtime attached: "
             f"preset={self._preset_name}, role={self._role.value}, "
