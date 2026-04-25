@@ -384,26 +384,59 @@ tests/
 
 `build_default_manifest(preset)` 의 `_PRESET_SCAFFOLD_OVERRIDES` 표 (`Geny/backend/service/executor/default_manifest.py`) 가 각 preset 별로 어떤 scaffold 를 manifest 에서 `active=True` 로 켜는지 결정. 현재 상태:
 
+#### A.3.1 Sub-phase 9a 신규 scaffold (5종)
+
 | Preset | `tool_review` (11) | `task_registry` (13) | `hitl` (15) | `summarize` (19) | `persist` (20) |
 |---|---|---|---|---|---|
 | `worker_adaptive` | ✅ G2.4 | ⏸ scaffold-off | ✅ G2.5 (null requester → install_pipeline_resume_requester) | ✅ G2.2 (rule_based + heuristic) | ✅ G2.3 (no_persist → install_file_persister) |
 | `worker_easy` | ⏸ off (single-turn Q&A) | ⏸ off | ⏸ off | ⏸ off | ⏸ off |
 | `vtuber` | ⏸ off (no general tools) | ⏸ off | ⏸ off (no approval surface) | ⏸ off | ⏸ off |
 
-`runtime-only` swap 패턴: `summarize` 와 `persist` 와 `hitl` 은 manifest 에 placeholder 를 두고 (`no_persist`, `null` requester), session-build time 에 `service.persist.install_file_persister` / `service.hitl.install_pipeline_resume_requester` 가 실제 객체로 교체. Pipeline 참조가 필요하거나 storage path 가 runtime 결정이라서 manifest-serialisable 하지 않은 의존성을 다루는 표준 방식.
+`runtime-only` swap 패턴: `summarize` / `persist` / `hitl` 은 manifest 에 placeholder (`no_persist`, `null` requester) 만 두고, session-build time 에 `service.persist.install_file_persister` / `service.hitl.install_pipeline_resume_requester` 가 실제 객체로 교체. Pipeline 참조가 필요하거나 storage path 가 runtime 결정이라서 manifest-serialisable 하지 않은 의존성을 다루는 표준 방식.
+
+#### A.3.2 Phase 7 strategy 활성화 (G9.9 + G12)
+
+기존 stage 들의 slot strategy 를 default 에서 Phase 7 신규 구현체로 flip. 모두 strict-superset default 로 동작 — 추가 config 없으면 종전 동작과 동일, `strategy_configs` 로 튜닝 가능:
+
+| Preset | s06 router | s08 budget_planner | s14 strategy | s16 controller | s18 strategy |
+|---|---|---|---|---|---|
+| `worker_adaptive` | `adaptive` (G12) | `adaptive` (G9.9) | `evaluation_chain` (G12) | `multi_dim_budget` (G12) | `structured_reflective` (G12) |
+| `worker_easy` | `adaptive` (G12) | `adaptive` (G9.9) | `evaluation_chain` (G12) | `multi_dim_budget` (G12) | `structured_reflective` (G12) |
+| `vtuber` | `passthrough` (legacy) | (no s08 — think omitted) | `signal_based` (legacy) | `standard` (legacy) | `append_only` (legacy) |
+
+Strict-superset 의미:
+- `multi_dim_budget` 의 default 는 `dimensions=["iterations"]` → `standard` 와 동일 동작
+- `evaluation_chain` 의 default 는 `["binary_classify", "signal_based"]` first-non-null → 사실상 `binary_classify` 단일
+- `structured_reflective` 의 default schema 는 `append_only` 의 데이터 모양과 동일
+- `adaptive` router 의 default 는 bound model 만 사용 → `passthrough` 와 동일
+
+**vtuber 는 conservative default 유지** (단일 turn + tool 없는 affect_tag 전용 → chain 류 wrapper 가 latency 만 추가).
+
+#### A.3.3 Slot registry 확장 + 추가 wired strategies
+
+- s02 retriever: `mcp_resource` 옵션을 Stage 2 slot 에 register (G9.1 / `service/strategies/__init__.py:register_mcp_resource_retriever`). 활성 retriever 는 여전히 attach_runtime 의 `GenyMemoryRetriever` — preset 이 명시 선택 시 swap.
+- s17 emit chain: `OrderedEmitterChain` 으로 install (G2.1 / `service/emit/chain_install.py`).
+- s03 system: `DynamicPersonaPromptBuilder` (S7.1, `service/persona/dynamic_builder.py`).
 
 ### A.4 새 이벤트 채널
 
-| Stage | 이벤트 | 용도 |
-|---|---|---|
-| 11 (tool_review) | `tool_review.flag` | reviewer 1건 마다 — severity / reviewer / reason 동봉 |
-| 11 (tool_review) | `tool_review.reviewer_error` | reviewer 가 raise 한 경우 |
-| 11 (tool_review) | `tool_review.completed` | turn 단위 요약 (flags 개수) |
-| 15 (hitl) | `hitl.request` | 모달이 listen — token / severity / reason / data |
-| 15 (hitl) | `hitl.decision` | resume 결과 echo (모달 닫힘 신호) |
-| 15 (hitl) | `hitl.timeout` | timeout policy fire |
+| Stage | 이벤트 (executor) | event_type (Geny session_logger) | 용도 / consumer |
+|---|---|---|---|
+| 11 (tool_review) | `tool_review.flag` | `tool_review_flag` | reviewer 1건 마다 — severity / reviewer / reason; ExecutionTimeline 의 `getToolReviewVisual` 분기 |
+| 11 (tool_review) | `tool_review.reviewer_error` | `tool_review_error` | reviewer 가 raise — 동일 |
+| 11 (tool_review) | `tool_review.completed` | `tool_review_summary` | turn 단위 요약 (flags 개수) — 동일 |
+| 15 (hitl) | `hitl.request` | `hitl_request` | HITLApprovalModal 의 `deriveHitlFromLogEvent` listen |
+| 15 (hitl) | `hitl.decision` | `hitl_decision` | 모달 닫힘 신호 — 동일 |
+| 15 (hitl) | `hitl.timeout` | `hitl_timeout` | timeout policy fire — 동일 |
+| 16 (loop) | `loop.escalate` / `loop.error` | `loop_signal` | 권한 거부 / 예산 초과 / hook 차단; ExecutionTimeline 의 `loop_signal` 분기 (Lock / ShieldOff icon, G6.6) |
+| 시스템 | `mcp.server.state` | `mcp_server_state` | MCPManager FSM 전이 (PENDING/CONNECTED/FAILED/NEEDS_AUTH/DISABLED); MCPAdminPanel + Dashboard 가 listen (G8.2) |
+| 시스템 | `mutation.applied` | `mutation_applied` | PipelineMutator 변경; Dashboard MutationLog → MutationDiffViewer (G15) |
 
-이벤트는 모두 `session_logger.log_stage_event` 를 거쳐 `LogLevel.STAGE` 행으로 직렬화 → WS `log` 이벤트로 frontend 로 흐름. Geny `CommandTab` 의 `deriveHitlFromLogEvent` 헬퍼와 `ExecutionTimeline` 의 `getToolReviewVisual` 헬퍼가 metadata.event_type 을 보고 분기.
+이벤트는 모두 `session_logger.log_stage_event` 를 거쳐 `LogLevel.STAGE` 행으로 직렬화 → WS `log` 이벤트로 frontend 로 흐름. Geny side 의 분기 helper:
+- `frontend/src/components/tabs/CommandTab.tsx` — `deriveHitlFromLogEvent`
+- `frontend/src/components/execution/ExecutionTimeline.tsx` — `getToolReviewVisual` (tool_review 3종 + loop_signal 4 분기)
+- `frontend/src/components/dashboard/MutationLog.tsx` — `extractMutations` → `MutationDiffViewer`
+- `frontend/src/components/mcp/MCPAdminPanel.tsx` — 직접 polling (이벤트 구독은 추후 cycle)
 
 ### A.5 관련 문서
 
