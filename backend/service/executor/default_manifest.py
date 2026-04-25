@@ -344,7 +344,14 @@ def _worker_adaptive_stage_entries(StageManifestEntry) -> List["object"]:
         StageManifestEntry(
             order=10,
             name="tool",
-            strategies={"executor": "sequential", "router": "registry"},
+            # G6.2: capability-aware partition. The executor groups
+            # `concurrency_safe=True` tool calls into a parallel batch
+            # (capped at max_concurrency=8 to avoid overwhelming MCP
+            # servers / external APIs) and serializes the rest. Worker
+            # turns that fan out reads (memory_search + web_fetch +
+            # knowledge_list) finish in one round-trip instead of N.
+            strategies={"executor": "partition", "router": "registry"},
+            config={"max_concurrency": 8},
         ),
         StageManifestEntry(
             order=12,

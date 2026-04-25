@@ -172,13 +172,20 @@ def test_worker_adaptive_activates_persist_with_on_significant_frequency() -> No
 
 @pytest.mark.parametrize("preset", _known_preset_ids())
 def test_tool_stage_has_default_strategies(preset: str) -> None:
+    """G6.2: worker presets (worker_adaptive + worker_easy) flip to
+    capability-aware ``partition`` execution; vtuber stays sequential
+    because it doesn't run general-purpose tools."""
     from service.executor.default_manifest import build_default_manifest
 
     manifest = build_default_manifest(preset)
     entry = next(e for e in manifest.stages if e["order"] == 10)
 
     assert entry["name"] == "tool"
-    assert entry["strategies"] == {"executor": "sequential", "router": "registry"}
+    if preset == "vtuber":
+        assert entry["strategies"] == {"executor": "sequential", "router": "registry"}
+    else:
+        assert entry["strategies"] == {"executor": "partition", "router": "registry"}
+        assert entry["config"] == {"max_concurrency": 8}
 
 
 @pytest.mark.parametrize("preset", _known_preset_ids())
