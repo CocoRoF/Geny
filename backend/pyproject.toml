@@ -85,9 +85,20 @@ dependencies = [
     #   get_mcp_prompt + mcp_prompts_to_skills(manager) advisory
     #   bridge producing Skill records with prompt metadata in
     #   extras.
+    # 0.45.x (executor uplift Phase 9 Sub-phase 9a close —
+    # S9a.1 + S9a.2 + S9a.3 + S9a.4 + S9a.5): the canonical
+    # pipeline grew 16 → 21 slots. Sub-phase 9a is no-op
+    # behaviour-wise — the five new slots (s11_tool_review /
+    # s13_task_registry / s15_hitl / s19_summarize / s20_persist)
+    # are pass-through / bypass scaffolds. Existing pipelines run
+    # identically; v1/v2 manifests auto-pad to v3 on load.
+    # PipelineBuilder gains 5 new opt-in `with_*` methods so hosts
+    # can register the scaffolds; full-stack presets (agent /
+    # geny_vtuber / worker_*) opt them in by default. Real
+    # behaviour for each new slot lands in Sub-phase 9b.
     # All surfaces independently opt-in; without consuming them
-    # behaviour is identical to 0.43.x.
-    "geny-executor[web]>=0.44.0,<0.45.0",
+    # behaviour is identical to 0.44.x.
+    "geny-executor[web]>=0.45.0,<0.46.0",
     # MCP (Model Context Protocol)
     "mcp>=1.0.0",
     # Auth
