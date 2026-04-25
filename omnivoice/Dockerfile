@@ -1,15 +1,15 @@
 # ── geny-omnivoice Dockerfile ─────────────────────────────────────────
-# CUDA 12.6 + PyTorch 2.6 + vendored OmniVoice (omnivoice_core/) +
+# CUDA 12.8 + PyTorch 2.8 + vendored OmniVoice (omnivoice_core/) +
 # Geny FastAPI wrapper (server/).
 #
-# Note: We deliberately stay on CUDA 12.6 / torch 2.6 rather than the
-# newer cu128 / torch 2.8 wheels because the latter dropped Pascal
-# (sm_60/61) support — Geny's reference dev box ships a GTX 1070
-# (sm_61) and would otherwise crash at first kernel launch with
-# ``CUDA error: no kernel image is available for execution on the
-# device``. cu126 wheels still bundle sm_60/61/70/75/80/86/90 kernels.
+# Hardware target (2026-04-25): RTX 5070 (Blackwell, sm_120) on host
+# driver 580. cu128 wheels are required — the previous cu126 baseline
+# had no sm_100/sm_120 SASS or PTX, so first ``mem_get_info`` aborted
+# with ``CUDA unknown error ... Setting available devices to be zero``
+# during ``_lazy_init``. The legacy GTX 1070 (sm_61) dev box has been
+# retired; if it ever comes back, run an older tag pinned to cu126.
 # ──────────────────────────────────────────────────────────────────────
-FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04 AS base
+FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -32,10 +32,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # ── PyTorch first (heavy layer, cached separately) ────────────────────
-# torch 2.6.0 + cu126 still ships Pascal (sm_60/61) kernels.
+# torch 2.8.0 + cu128 ships Blackwell kernels (sm_100/sm_120). Drops
+# Pascal (sm_60/61) support — see header note for why that's intentional.
 RUN pip install --no-cache-dir \
-        torch==2.6.0 torchaudio==2.6.0 \
-        --extra-index-url https://download.pytorch.org/whl/cu126
+        torch==2.8.0 torchaudio==2.8.0 \
+        --extra-index-url https://download.pytorch.org/whl/cu128
 
 # ── Project install ──────────────────────────────────────────────────
 COPY pyproject.toml README.md ./
@@ -52,9 +53,9 @@ RUN pip install --no-cache-dir . \
 # Note: ``expandable_segments:True`` is mutually exclusive with
 # ``max_split_size_mb`` — combining them raises
 # ``RuntimeError: Unrecognized CachingAllocator option`` at first CUDA init.
-# OMNIVOICE_GPU_MEM_FRACTION: cap this process at 70% of total VRAM by
-# default (~5.5 GB on a GTX 1070 8 GB). Operators on dedicated hosts
-# can raise to 0.9 via the compose file.
+# OMNIVOICE_GPU_MEM_FRACTION: cap this process at 85% of total VRAM by
+# default (~10.2 GB on an RTX 5070 12 GB dedicated host). Operators on
+# shared GPUs can lower via the compose file.
 ENV OMNIVOICE_HOST=0.0.0.0 \
     OMNIVOICE_PORT=9881 \
     OMNIVOICE_VOICES_DIR=/voices \
@@ -62,7 +63,7 @@ ENV OMNIVOICE_HOST=0.0.0.0 \
     HF_HOME=/models/hf-cache \
     TRANSFORMERS_CACHE=/models/hf-cache \
     PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-    OMNIVOICE_GPU_MEMORY_FRACTION=0.7
+    OMNIVOICE_GPU_MEMORY_FRACTION=0.85
 
 RUN mkdir -p /voices /models/hf-cache
 
