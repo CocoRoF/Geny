@@ -35,13 +35,23 @@ def test_manifest_declares_tool_stage(preset: str) -> None:
     assert 17 in orders, f"{preset} manifest missing Stage 17 (emit)"
 
 
+# Per-preset opt-in for the 5 scaffold stages. Updated as each
+# G2.x sprint promotes a scaffold from "advisory" to "wired".
+# G2.2 turned on summarize for worker_adaptive only.
+_ACTIVE_SCAFFOLDS_BY_PRESET: dict[str, set[int]] = {
+    "worker_adaptive": {19},  # summarize active (G2.2)
+    "worker_easy": set(),
+    "vtuber": set(),
+}
+
+
 @pytest.mark.parametrize("preset", _known_preset_ids())
 def test_manifest_declares_21_stage_layout(preset: str) -> None:
     """Sub-phase 9a (executor 1.0+) widened the layout to 21 slots.
 
-    Every preset emits all 21 entries — the five new ones
-    (11/13/15/19/20) ship with ``active=False`` and are promoted
-    by per-stage Geny integration sprints.
+    Every preset emits all 21 entries. Scaffold opt-in tracked in
+    :data:`_ACTIVE_SCAFFOLDS_BY_PRESET` — each G2.x sprint flips
+    one or more scaffold stages from default inactive to active.
     """
     from service.executor.default_manifest import build_default_manifest
 
@@ -57,13 +67,33 @@ def test_manifest_declares_21_stage_layout(preset: str) -> None:
         f"{preset}: orders={sorted(orders)} expected={sorted(expected)}"
     )
 
-    # Scaffold orders default to active=False so existing pipelines
-    # see no behaviour change.
     by_order = {e["order"]: e for e in manifest.stages}
+    expected_active = _ACTIVE_SCAFFOLDS_BY_PRESET.get(preset, set())
     for scaffold_order in (11, 13, 15, 19, 20):
-        assert by_order[scaffold_order]["active"] is False, (
-            f"{preset}: scaffold order {scaffold_order} should default inactive"
+        expected_state = scaffold_order in expected_active
+        assert by_order[scaffold_order]["active"] is expected_state, (
+            f"{preset}: scaffold order {scaffold_order} active state mismatch "
+            f"(expected={expected_state}, got={by_order[scaffold_order]['active']})"
         )
+
+
+def test_worker_adaptive_activates_summarize_with_real_strategies() -> None:
+    """G2.2: worker_adaptive opts the Stage 19 Summarize scaffold in
+    with the real RuleBasedSummarizer + HeuristicImportance picks.
+    Other presets keep summarize off."""
+    from service.executor.default_manifest import build_default_manifest
+
+    m = build_default_manifest("worker_adaptive")
+    summarize = next(e for e in m.stages if e["order"] == 19)
+    assert summarize["active"] is True
+    assert summarize["strategies"]["summarizer"] == "rule_based"
+    assert summarize["strategies"]["importance"] == "heuristic"
+
+    # vtuber + worker_easy keep the no-op default.
+    for preset in ("vtuber", "worker_easy"):
+        s = next(e for e in build_default_manifest(preset).stages if e["order"] == 19)
+        assert s["active"] is False
+        assert s["strategies"]["summarizer"] == "no_summary"
 
 
 @pytest.mark.parametrize("preset", _known_preset_ids())

@@ -119,17 +119,72 @@ _SCAFFOLD_ENTRIES_SPEC: List[Dict[str, Any]] = [
 ]
 
 
-def _make_scaffold_entries(StageManifestEntry) -> List["object"]:
-    """Build the 5 scaffold entries (active=False by default)."""
+# Per-preset opt-in for scaffold stages. Each value is a partial
+# override for the matching :data:`_SCAFFOLD_ENTRIES_SPEC` entry.
+# Setting ``"active": True`` turns the scaffold on; merging
+# ``"strategies": {...}`` swaps the slot picks.
+#
+# Defaults below pick the *real* implementation strategies that ship
+# with geny-executor 1.0+ so opting a stage in is one flag flip
+# rather than a full strategy rewrite. New per-stage Geny integration
+# sprints (G2.x) extend these tables as each stage matures.
+_PRESET_SCAFFOLD_OVERRIDES: Dict[str, Dict[str, Dict[str, Any]]] = {
+    _WORKER_ADAPTIVE: {
+        # G2.2: turn-summary writer + heuristic importance grader.
+        # Forwards to ``state.session_runtime.memory_provider.record_summary``
+        # when the registry has provisioned one (G3.1).
+        "summarize": {
+            "active": True,
+            "strategies": {
+                "summarizer": "rule_based",
+                "importance": "heuristic",
+            },
+        },
+    },
+    _WORKER_EASY: {
+        # worker_easy is single-turn — summarising a single answer adds
+        # little value, so leave it off. Future task: a one-shot
+        # summarizer mode that emits only on terminal turns.
+    },
+    _VTUBER: {
+        # VTuber turns are conversational — summary defers to host-side
+        # mood/bond accumulation rather than a structured turn record.
+    },
+}
+
+
+def _make_scaffold_entries(
+    StageManifestEntry,
+    overrides: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> List["object"]:
+    """Build the 5 scaffold entries with optional per-name overrides.
+
+    ``overrides`` maps a scaffold name to a dict carrying any of:
+    ``active`` (bool), ``strategies`` (dict — merged onto the spec
+    defaults), ``strategy_configs`` (dict), ``chain_order`` (dict —
+    replaces the spec default). Names not present in *overrides*
+    keep the canonical scaffold defaults (active=False, no-op
+    strategies).
+    """
+    overrides = overrides or {}
     out = []
     for spec in _SCAFFOLD_ENTRIES_SPEC:
+        name = spec["name"]
+        ov = overrides.get(name) or {}
+        strategies = dict(spec.get("strategies") or {})
+        strategies.update(ov.get("strategies") or {})
         out.append(
             StageManifestEntry(
                 order=spec["order"],
-                name=spec["name"],
-                active=False,
-                strategies=dict(spec.get("strategies") or {}),
-                chain_order=dict(spec.get("chain_order") or {}),
+                name=name,
+                active=bool(ov.get("active", False)),
+                strategies=strategies,
+                strategy_configs=dict(ov.get("strategy_configs") or {}),
+                chain_order=dict(
+                    ov.get("chain_order")
+                    if "chain_order" in ov
+                    else spec.get("chain_order") or {}
+                ),
             )
         )
     return out
@@ -181,7 +236,10 @@ def _build_stage_entries(preset: str) -> List["object"]:
         # attach time, not by a separate manifest variant.
         base = _worker_adaptive_stage_entries(StageManifestEntry)
 
-    return _merge_sorted(base, _make_scaffold_entries(StageManifestEntry))
+    overrides = _PRESET_SCAFFOLD_OVERRIDES.get(preset, {})
+    return _merge_sorted(
+        base, _make_scaffold_entries(StageManifestEntry, overrides=overrides)
+    )
 
 
 def _worker_adaptive_stage_entries(StageManifestEntry) -> List["object"]:
