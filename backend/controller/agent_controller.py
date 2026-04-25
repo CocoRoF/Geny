@@ -1057,3 +1057,138 @@ async def get_session_workflow(
         "preset": preset,
         "execution_backend": "pipeline",
     }
+
+
+# ============================================================================
+# G2.5 — HITL endpoints (Stage 15 / Pipeline.resume API)
+# ============================================================================
+#
+# An external decision channel (typically the frontend HITL modal,
+# reached over /api/agents) satisfies pending HITL requests by posting
+# the operator's decision to /api/agents/{session_id}/hitl/resume.
+# The endpoint dispatches to ``Pipeline.resume(token, decision)``,
+# which resolves the asyncio.Future the HITLStage's
+# PipelineResumeRequester is awaiting on.
+
+
+class HITLResumeRequest(BaseModel):
+    token: str = Field(..., description="HITL request token issued by the pipeline")
+    decision: str = Field(..., description="approve | reject | cancel")
+
+
+class HITLPendingItem(BaseModel):
+    token: str
+
+
+class HITLPendingResponse(BaseModel):
+    session_id: str
+    pending: List[HITLPendingItem]
+
+
+def _resolve_pipeline(session_id: str):
+    agent: Optional[AgentSession] = agent_manager.get_agent(session_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    pipeline = getattr(agent, "_pipeline", None)
+    if pipeline is None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Session {session_id} has no built pipeline yet",
+        )
+    return pipeline
+
+
+@router.get(
+    "/{session_id}/hitl/pending",
+    response_model=HITLPendingResponse,
+    summary="List pending HITL request tokens",
+)
+async def list_pending_hitl(
+    session_id: str = Path(..., description="Session ID"),
+    auth: dict = Depends(require_auth),
+):
+    """Returns the tokens of unresolved HITL requests this session is
+    awaiting. Drives the frontend HITL modal's "approval needed"
+    indicator without forcing it to subscribe to the WebSocket
+    event stream just to discover what's outstanding."""
+    pipeline = _resolve_pipeline(session_id)
+    list_pending = getattr(pipeline, "list_pending_hitl", None)
+    if not callable(list_pending):
+        # Pipelines built before geny-executor 1.0 / S9c.1 don't have
+        # the resume API. Treat as "no pending" rather than 500 so
+        # mixed-version deployments degrade gracefully.
+        return HITLPendingResponse(session_id=session_id, pending=[])
+    tokens: List[str] = list_pending() or []
+    return HITLPendingResponse(
+        session_id=session_id,
+        pending=[HITLPendingItem(token=t) for t in tokens],
+    )
+
+
+@router.post(
+    "/{session_id}/hitl/resume",
+    summary="Resolve a pending HITL request",
+)
+async def resume_hitl(
+    body: HITLResumeRequest,
+    session_id: str = Path(..., description="Session ID"),
+    auth: dict = Depends(require_auth),
+):
+    """Resolve a pending HITL request by token + decision. Calls
+    :meth:`Pipeline.resume(token, decision)` which sets the future
+    the HITL stage's :class:`PipelineResumeRequester` is awaiting on,
+    so the loop continues from where it paused.
+
+    Returns 404 when the session is unknown, 409 when the pipeline
+    has no resume API or the token is unknown / already resolved,
+    400 when the decision string is unrecognised.
+    """
+    pipeline = _resolve_pipeline(session_id)
+    resume = getattr(pipeline, "resume", None)
+    if not callable(resume):
+        raise HTTPException(
+            status_code=409,
+            detail="pipeline has no resume() — geny-executor < 1.0 in use",
+        )
+    try:
+        resume(body.token, body.decision)
+    except KeyError:
+        raise HTTPException(status_code=409, detail=f"unknown HITL token: {body.token}")
+    except RuntimeError as exc:  # already resolved
+        raise HTTPException(status_code=409, detail=str(exc))
+    except ValueError as exc:  # unknown decision
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {
+        "session_id": session_id,
+        "token": body.token,
+        "decision": body.decision,
+        "resumed": True,
+    }
+
+
+@router.delete(
+    "/{session_id}/hitl/{token}",
+    summary="Cancel a pending HITL request",
+)
+async def cancel_hitl(
+    session_id: str = Path(..., description="Session ID"),
+    token: str = Path(..., description="HITL request token"),
+    auth: dict = Depends(require_auth),
+):
+    """Cancel a pending HITL request. Equivalent to ``resume`` with
+    decision ``cancel`` but a separate verb for "session terminated,
+    drop in-flight approvals" cleanup paths.
+
+    Returns 404 when the session is unknown, 409 when the pipeline
+    has no resume API, and ``cancelled=False`` (with 200) when the
+    token is unknown or already resolved.
+    """
+    pipeline = _resolve_pipeline(session_id)
+    cancel = getattr(pipeline, "cancel_pending_hitl", None)
+    if not callable(cancel):
+        raise HTTPException(
+            status_code=409,
+            detail="pipeline has no cancel_pending_hitl() — geny-executor < 1.0",
+        )
+    cancelled = bool(cancel(token))
+    return {"session_id": session_id, "token": token, "cancelled": cancelled}
