@@ -1150,6 +1150,22 @@ class AgentSession:
             ),
             "llm_client": llm_client,
         }
+
+        # G6.3: forward host-side permission rules + mode. Returns an
+        # empty dict when no rule files are present (every tool stays
+        # allowed) so older executor builds without the kwarg keep
+        # working. Mode defaults to "advisory" — G6.4 flips
+        # worker_adaptive to "enforce" once the timeline UI shows the
+        # permission.* events.
+        try:
+            from service.permission import install as _perm_install
+            attach_kwargs.update(_perm_install.attach_kwargs())
+        except Exception:
+            logger.debug(
+                "_build_pipeline: permission install failed; continuing without rules",
+                exc_info=True,
+            )
+
         if self._memory_manager is not None:
             attach_kwargs["memory_retriever"] = GenyMemoryRetriever(
                 self._memory_manager,
