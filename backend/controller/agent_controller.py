@@ -165,11 +165,16 @@ async def create_agent_session(request: CreateAgentRequest, auth: dict = Depends
 
 
 @router.get("", response_model=List[SessionInfo])
-async def list_agent_sessions():
+async def list_agent_sessions(auth: dict = Depends(require_auth)):
     """
     List all AgentSessions.
 
     Returns only AgentSession instances (not regular sessions).
+
+    Auth (R7 / audit 20260425_3 §1.5): the listing exposes session
+    names + roles + statuses, which is operator-relevant metadata.
+    Sibling read endpoints (``/{session_id}``, ``/{session_id}/state``,
+    etc.) all require auth; this one was an oversight.
     """
     agents = agent_manager.list_agents()
     return [agent.get_session_info() for agent in agents]
@@ -181,18 +186,22 @@ async def list_agent_sessions():
 
 
 @router.get("/store/deleted", response_model=List[dict])
-async def list_deleted_sessions():
+async def list_deleted_sessions(auth: dict = Depends(require_auth)):
     """
     List all soft-deleted sessions from the persistent store.
+
+    Auth (R7): same rationale as ``list_agent_sessions``.
     """
     store = get_session_store()
     return store.list_deleted()
 
 
 @router.get("/store/all", response_model=List[dict])
-async def list_all_stored_sessions():
+async def list_all_stored_sessions(auth: dict = Depends(require_auth)):
     """
     List ALL sessions from the persistent store (active + deleted).
+
+    Auth (R7): same rationale as ``list_agent_sessions``.
     """
     store = get_session_store()
     return store.list_all()
@@ -201,6 +210,7 @@ async def list_all_stored_sessions():
 @router.get("/store/{session_id}")
 async def get_stored_session_info(
     session_id: str = Path(..., description="Session ID"),
+    auth: dict = Depends(require_auth),
 ):
     """
     Get detailed metadata for any session (active or deleted) from the store.
@@ -235,7 +245,8 @@ async def get_stored_session_info(
 
 @router.get("/{session_id}", response_model=SessionInfo)
 async def get_agent_session(
-    session_id: str = Path(..., description="Session ID")
+    session_id: str = Path(..., description="Session ID"),
+    auth: dict = Depends(require_auth),
 ):
     """
     Get specific AgentSession information.
@@ -307,6 +318,7 @@ async def update_system_prompt(
 @router.get("/{session_id}/thinking-trigger")
 async def get_thinking_trigger(
     session_id: str = Path(..., description="Session ID"),
+    auth: dict = Depends(require_auth),
 ):
     """Get thinking trigger status for a VTuber session."""
     from service.vtuber.thinking_trigger import get_thinking_trigger_service
@@ -732,6 +744,7 @@ async def _emit_avatar_state_for_log(entry_dict: dict, session_id: str, app_stat
 @router.get("/{session_id}/execute/status")
 async def get_execution_status(
     session_id: str = Path(..., description="Session ID"),
+    auth: dict = Depends(require_auth),
 ):
     """
     Lightweight polling endpoint — check whether an execution is active.
@@ -780,7 +793,8 @@ async def get_execution_status(
 @router.get("/{session_id}/state", response_model=AgentStateResponse)
 async def get_agent_state(
     session_id: str = Path(..., description="Session ID"),
-    thread_id: Optional[str] = Query(None, description="Thread ID")
+    thread_id: Optional[str] = Query(None, description="Thread ID"),
+    auth: dict = Depends(require_auth),
 ):
     """
     Get current AgentSession state.
@@ -814,7 +828,8 @@ async def get_agent_state(
 @router.get("/{session_id}/history")
 async def get_agent_history(
     session_id: str = Path(..., description="Session ID"),
-    thread_id: Optional[str] = Query(None, description="Thread ID")
+    thread_id: Optional[str] = Query(None, description="Thread ID"),
+    auth: dict = Depends(require_auth),
 ):
     """
     Get AgentSession execution history.
@@ -870,7 +885,8 @@ async def stop_execution(
 @router.get("/{session_id}/storage")
 async def list_storage_files(
     session_id: str = Path(..., description="Session ID"),
-    path: str = Query("", description="Subdirectory path")
+    path: str = Query("", description="Subdirectory path"),
+    auth: dict = Depends(require_auth),
 ):
     """
     List session storage files.
@@ -901,7 +917,8 @@ async def list_storage_files(
 async def read_storage_file(
     session_id: str = Path(..., description="Session ID"),
     file_path: str = Path(..., description="File path"),
-    encoding: str = Query("utf-8", description="File encoding")
+    encoding: str = Query("utf-8", description="File encoding"),
+    auth: dict = Depends(require_auth),
 ):
     """
     Read storage file content.
@@ -931,6 +948,7 @@ async def read_storage_file(
 @router.get("/{session_id}/download-folder")
 async def download_storage_folder(
     session_id: str = Path(..., description="Session ID"),
+    auth: dict = Depends(require_auth),
 ):
     """
     Download the session's storage folder as a ZIP archive.
@@ -1022,6 +1040,7 @@ class GraphStructure(BaseModel):
 @router.get("/{session_id}/graph")
 async def get_session_graph(
     session_id: str = Path(..., description="Session ID"),
+    auth: dict = Depends(require_auth),
 ):
     """Get pipeline info for a session (replaces workflow graph)."""
     agent: Optional[AgentSession] = agent_manager.get_agent(session_id)
@@ -1042,6 +1061,7 @@ async def get_session_graph(
 @router.get("/{session_id}/workflow")
 async def get_session_workflow(
     session_id: str = Path(..., description="Session ID"),
+    auth: dict = Depends(require_auth),
 ):
     """Get pipeline preset info (replaces workflow definition)."""
     agent: Optional[AgentSession] = agent_manager.get_agent(session_id)
