@@ -267,6 +267,38 @@ export const agentApi = {
     };
   },
 
+  /**
+   * HITL (Human-in-the-loop) — Stage 15 approval surface (G2.5+G4.1).
+   *
+   * Backend endpoints registered by `controller.agent_controller`. The
+   * modal opens on a `hitl_request` log event and closes once the
+   * decision lands as a `hitl_decision` event on the same WS stream.
+   * `hitlPending` is a defensive fallback for cases where a request
+   * lands before the page mounts (or after a forced reload).
+   */
+  hitlPending: (id: string) =>
+    apiCall<{
+      session_id: string;
+      pending: Array<{ token: string }>;
+    }>(`/api/agents/${id}/hitl/pending`),
+
+  /** POST /api/agents/{id}/hitl/resume — resume a pending HITL token. */
+  hitlResume: (
+    id: string,
+    body: { token: string; decision: 'approve' | 'reject' | 'cancel' },
+  ) =>
+    apiCall<{ session_id: string; token: string; decision: string; resumed: boolean }>(
+      `/api/agents/${id}/hitl/resume`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+
+  /** DELETE /api/agents/{id}/hitl/{token} — cancel a pending HITL token. */
+  hitlCancel: (id: string, token: string) =>
+    apiCall<{ session_id: string; token: string; cancelled: boolean }>(
+      `/api/agents/${id}/hitl/${encodeURIComponent(token)}`,
+      { method: 'DELETE' },
+    ),
+
   /** GET /api/agents/{id}/graph — graph structure */
   getGraph: (id: string) => apiCall<GraphStructure>(`/api/agents/${id}/graph`),
 

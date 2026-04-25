@@ -233,6 +233,19 @@ const ko: Translations = {
     noActivity: '무응답',
   },
 
+  // ─── HITL 승인 모달 (Stage 15) ───
+  hitl: {
+    modalTitle: '승인 필요',
+    reasonLabel: '사유',
+    payloadLabel: '페이로드',
+    approveBtn: '승인',
+    approvingBtn: '승인 중…',
+    rejectBtn: '거부',
+    rejectingBtn: '거부 중…',
+    cancelBtn: '요청 취소',
+    cancellingBtn: '취소 중…',
+  },
+
   // ─── Settings Tab ───
   settings: {
     title: '설정',

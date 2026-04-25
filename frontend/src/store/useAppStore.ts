@@ -7,12 +7,39 @@ import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 const SESSION_TAB_IDS = new Set(['command', 'logs', 'storage', 'environment', 'graph', 'info', 'sessionTools', 'memory', 'vtuber']);
 
 // ==================== Session Data Cache ====================
+
+/**
+ * A pending HITL approval surfaced by Stage 15 (geny-executor 1.0+).
+ *
+ * Mirrors the payload the backend emits via `session_logger.log_stage_event`
+ * with `event_type='hitl_request'` (see `service/executor/agent_session.py`
+ * around line 1682). The full executor-side payload comes through under
+ * `data` so the modal can render whatever the reviewer attached
+ * (tool name, args, guard chain, …) without us having to model it
+ * field-by-field.
+ */
+export interface PendingHitlRequest {
+  token: string;
+  reason: string;
+  severity: string;
+  /** Raw event payload (tool name, args, guard chain hits, …). */
+  data: Record<string, unknown>;
+  /** Wall-clock instant when the request entered the cache. */
+  receivedAt: number;
+}
+
 export interface SessionData {
   input: string;
   output: string;
   status: string;
   statusText: string;
   logEntries?: Array<{ timestamp: string; level: string; message: string; metadata?: Record<string, unknown> }>;
+  /**
+   * Pending Stage 15 (HITL) approval, if any. Set by the WS event
+   * handler on `hitl_request`, cleared on `hitl_decision` / `hitl_timeout`
+   * for the same token, or on a successful resume from the modal.
+   */
+  pendingHitl?: PendingHitlRequest | null;
 }
 
 // ==================== App Store ====================

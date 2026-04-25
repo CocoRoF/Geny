@@ -1,13 +1,14 @@
 'use client';
 
 import { useCallback, useRef, useEffect, useState, useMemo } from 'react';
-import { useAppStore, type SessionData } from '@/store/useAppStore';
+import { useAppStore, type SessionData, type PendingHitlRequest } from '@/store/useAppStore';
 import { agentApi } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { useIsMobile } from '@/lib/useIsMobile';
 import type { LogEntry } from '@/types';
 import ExecutionTimeline from '@/components/execution/ExecutionTimeline';
 import StepDetailPanel from '@/components/execution/StepDetailPanel';
+import HITLApprovalModal from '@/components/modals/HITLApprovalModal';
 import {
   Square,
   Loader2,
@@ -22,6 +23,44 @@ import {
   ScrollText,
   FileOutput,
 } from 'lucide-react';
+
+/**
+ * Inspect a `log` WS event for HITL stage transitions and derive the
+ * next `pendingHitl` value. Returns:
+ *  - `undefined` → no change (use the previous value)
+ *  - `null`      → clear the pending request (decision/timeout landed)
+ *  - object      → set a new pending request (request just opened)
+ *
+ * The backend marshals stage events through `session_logger.log_stage_event`
+ * (`service/logging/session_logger.py:740`), so the relevant payload is at
+ * `eventData.metadata.event_type` and `.metadata.data` rather than at the
+ * top level of `eventData`.
+ */
+function deriveHitlFromLogEvent(
+  eventData: Record<string, unknown>,
+  current: PendingHitlRequest | null | undefined,
+): PendingHitlRequest | null | undefined {
+  const meta = eventData.metadata as Record<string, unknown> | undefined;
+  if (!meta) return undefined;
+  const evt = meta.event_type as string | undefined;
+  if (!evt) return undefined;
+  const data = (meta.data as Record<string, unknown> | undefined) || {};
+  const token = typeof data.token === 'string' ? data.token : '';
+
+  if (evt === 'hitl_request' && token) {
+    return {
+      token,
+      reason: typeof data.reason === 'string' ? data.reason : '',
+      severity: typeof data.severity === 'string' ? data.severity : 'warn',
+      data,
+      receivedAt: Date.now(),
+    };
+  }
+  if ((evt === 'hitl_decision' || evt === 'hitl_timeout') && current && current.token === token) {
+    return null;
+  }
+  return undefined;
+}
 
 export default function CommandTab() {
   const { selectedSessionId, sessions, getSessionData, updateSessionData } = useAppStore();
@@ -141,8 +180,13 @@ export default function CommandTab() {
                 } else if (logLevel && logLevel !== 'DEBUG' && logLevel !== 'INFO') {
                   lastToolNameRef.current = null;
                 }
+                const nextHitl = deriveHitlFromLogEvent(
+                  eventData as Record<string, unknown>,
+                  cur?.pendingHitl ?? null,
+                );
                 updateSessionData(selectedSessionId, {
                   logEntries: [...(cur?.logEntries || []), eventData as unknown as LogEntry],
+                  ...(nextHitl !== undefined ? { pendingHitl: nextHitl } : {}),
                 });
                 break;
               }
@@ -289,8 +333,13 @@ export default function CommandTab() {
               } else if (logLevel && logLevel !== 'DEBUG' && logLevel !== 'INFO') {
                 lastToolNameRef.current = null;
               }
+              const nextHitl = deriveHitlFromLogEvent(
+                eventData as Record<string, unknown>,
+                current?.pendingHitl ?? null,
+              );
               updateSessionData(selectedSessionId, {
                 logEntries: [...(current?.logEntries || []), eventData as unknown as LogEntry],
+                ...(nextHitl !== undefined ? { pendingHitl: nextHitl } : {}),
               });
               break;
             }
@@ -435,8 +484,27 @@ export default function CommandTab() {
     return `${h}h ${m % 60}m`;
   };
 
+  // ── HITL approval modal — shown whenever Stage 15 surfaces a pending
+  // request and not yet resolved by a hitl_decision / hitl_timeout
+  // event echoed back over the WS stream. The modal closes optimistically
+  // on a successful resume; the WS event landing later just clears
+  // pendingHitl again, which is a no-op.
+  const pendingHitl = sessionData?.pendingHitl ?? null;
+  const handleHitlClose = useCallback(() => {
+    if (!selectedSessionId) return;
+    updateSessionData(selectedSessionId, { pendingHitl: null });
+  }, [selectedSessionId, updateSessionData]);
+
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)] relative">
+      {/* HITL approval modal — global to the session view */}
+      {selectedSessionId && pendingHitl && (
+        <HITLApprovalModal
+          sessionId={selectedSessionId}
+          request={pendingHitl}
+          onClose={handleHitlClose}
+        />
+      )}
       {/* ── Header ── */}
       <div className="shrink-0 px-3 md:px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
         <div className="flex items-center justify-between gap-2">

@@ -233,6 +233,19 @@ const en = {
     noActivity: 'no activity',
   },
 
+  // ─── HITL approval modal (Stage 15) ───
+  hitl: {
+    modalTitle: 'Approval required',
+    reasonLabel: 'Reason',
+    payloadLabel: 'Payload',
+    approveBtn: 'Approve',
+    approvingBtn: 'Approving…',
+    rejectBtn: 'Reject',
+    rejectingBtn: 'Rejecting…',
+    cancelBtn: 'Cancel request',
+    cancellingBtn: 'Cancelling…',
+  },
+
   // ─── Settings Tab ───
   settings: {
     title: 'Settings',
