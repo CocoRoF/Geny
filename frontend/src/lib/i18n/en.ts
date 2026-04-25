@@ -79,6 +79,7 @@ const en = {
     environment: 'Environment',
     graph: 'Environment',
     sessionTools: 'Tools',
+    dashboard: 'Dashboard',
     command: 'Command',
     storage: 'Storage',
     logs: 'Logs',

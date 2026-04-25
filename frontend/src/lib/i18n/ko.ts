@@ -79,6 +79,7 @@ const ko: Translations = {
     environment: '환경',
     graph: '환경',
     sessionTools: '도구',
+    dashboard: '대시보드',
     command: '명령',
     storage: '스토리지',
     logs: '로그',

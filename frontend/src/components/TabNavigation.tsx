@@ -20,6 +20,7 @@ const SESSION_TAB_DEFS = [
   { id: 'memory' },
   { id: 'storage' },
   { id: 'sessionTools' },
+  { id: 'dashboard' },
   { id: 'logs' },
 ] as const;
 

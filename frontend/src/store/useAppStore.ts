@@ -4,7 +4,7 @@ import { agentApi, commandApi, healthApi, configApi } from '@/lib/api';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 
 // Session-scoped tab IDs (must match TabNavigation)
-const SESSION_TAB_IDS = new Set(['command', 'logs', 'storage', 'environment', 'graph', 'info', 'sessionTools', 'memory', 'vtuber']);
+const SESSION_TAB_IDS = new Set(['command', 'logs', 'storage', 'environment', 'graph', 'info', 'sessionTools', 'dashboard', 'memory', 'vtuber']);
 
 // ==================== Session Data Cache ====================
 
