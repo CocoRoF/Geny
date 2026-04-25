@@ -6,7 +6,7 @@
 **Scope:** cycle 20260425_1 + 20260425_2 의 모든 PR (#292 ~ #330), 약 24 sprint PR
 **Purpose:** plan 이 약속한 것 vs 실제 코드의 정직한 격차 보고. "trust but verify."
 
-**Status:** Audit 완료 + R1–R9 remediation 완료 (PR #332–#336, 5 PR). 모든 발견된 결함 해결.
+**Status:** Audit 완료 + R1–R9 remediation 완료 (PR #332–#336) + §3 coverage 잔여 gap 처리 (PR #338). **모든 발견된 결함 해결.** 단 1 항목 (`frontend 컴포넌트 단위 테스트`) 만 별도 인프라 cycle 로 carve-out — vitest/jest 셋업이 single-PR 범위 초과이기 때문.
 
 ---
 
@@ -24,8 +24,11 @@
 | **R8** OAuth controller endpoint tests | [#336](https://github.com/CocoRoF/Geny/pull/336) | ✅ Added | `tests/controller/test_mcp_oauth_controller.py` 10 케이스 (oauth_start 5 + resolve_mcp_uri 5). HITL test pattern 동일 (fastapi 없으면 skip; CI 에서 실행). |
 | **R9** SkillPanel race + DEFAULT_IMPL_NAMES | [#333](https://github.com/CocoRoF/Geny/pull/333) | ✅ Fixed | (1) `fetchIdRef` counter 패턴으로 stale response short-circuit + unmount cleanup. (2) DEFAULT_IMPL_NAMES 에 11개 누락된 default impl 이름 추가 (`signal_based`, `binary_classify`, `single_turn`, `in_memory`, `file`, `no_memory`, `no_cache`, `no_retry`, `anthropic`, `registry`) + 유지보수 contract 주석. |
 | **Bug 1.6** JSON 순환 참조 | [#333](https://github.com/CocoRoF/Geny/pull/333) | ✅ Fixed | `MutationDiffViewer.pretty()` 에 WeakSet replacer → `[Circular]` 출력. |
+| **§3 coverage** `service/strategies` 전용 테스트 부재 | [#338](https://github.com/CocoRoF/Geny/pull/338) | ✅ Added | `tests/service/strategies/test_register.py` 6 케이스 — None pipeline / 미연결 stage / 실 Pipeline 등록 / 멱등성 / active strategy 불변. |
+| **§3 coverage** `controller/skills_controller.py` 0 케이스 | [#338](https://github.com/CocoRoF/Geny/pull/338) | ✅ Added | `tests/controller/test_skills_controller.py` 5 케이스 (CI-only) — response_model 직렬화 / 사용자 opt-in / allowed_tools list 보장 / env 재export 즉시 반영. |
+| **§3 coverage** Frontend 컴포넌트 단위 테스트 0 | (carve-out) | ⏸ Deferred | vitest/jest 인프라 셋업 (config + fixtures + react-testing-library) 이 single-PR 범위 초과. 별도 infra cycle 필요. |
 
-**합계: 5 fix PR + 1 verification (R1) = 모든 발견된 문제 해결.** Remediation 누적 변경: ~150 LOC backend + ~100 LOC frontend + 16 신규 테스트 + 1 doc.
+**합계: 6 fix PR + 1 verification (R1) = audit 가 actionable 로 분류한 모든 결함 해결.** Remediation 누적 변경: ~150 LOC backend + ~100 LOC frontend + **27 신규 테스트** (R2: 4 + R3: 1 + R8: 10 + strategies: 6 + skills_controller: 5 + Phase 7 implicit) + 2 doc 갱신.
 
 ### Remediation 진행 중 발견된 추가 사항
 
@@ -247,10 +250,10 @@ const DEFAULT_IMPL_NAMES = new Set([
 | `service/persist/install.py` (write) | `tests/service/persist/test_install.py` | 10 | ✅ (cycle 1) |
 | `service/persist/restore.py` | `tests/service/persist/test_restore.py` | 7 + 1 skipped | ✅ |
 | `service/credentials/install.py` | `tests/service/credentials/test_install.py` | 6 | ✅ (앞선 audit 가 "0개 테스트" 라고 한 건 오보) |
-| `service/strategies/__init__.py` | (전용 없음) | 0 | ❌ — `test_phase7_strategy_availability.py` 가 등록 결과를 간접 검증 |
+| `service/strategies/__init__.py` | `tests/service/strategies/test_register.py` (PR #338) | 6 | ✅ — 직접 검증 + 멱등성 + active strategy 불변 |
 | `controller/admin_controller.py` | `tests/controller/test_admin_controller.py` | 4 | ✅ (fastapi 없으면 skip) |
-| `controller/mcp_oauth_controller.py` | (없음) | 0 | ⚠️ G10.234 PR 에서 명시적으로 "no tests" 라고 적시 |
-| `controller/skills_controller.py` | (없음) | 0 | ⚠️ 단순 read-only endpoint, 위험도 낮음 |
+| `controller/mcp_oauth_controller.py` | `tests/controller/test_mcp_oauth_controller.py` (PR #336) | 10 | ✅ (fastapi 없으면 skip; CI 에서 실행) |
+| `controller/skills_controller.py` | `tests/controller/test_skills_controller.py` (PR #338) | 5 | ✅ (fastapi 없으면 skip; CI 에서 실행) |
 | MCP admin endpoints (G8.1) | `tests/service/mcp/test_admin_endpoints.py` | 12 | ✅ |
 | HITL endpoints (G2.5 / G4.1) | `tests/service/hitl/test_endpoints.py` | 12 | ✅ |
 | Phase 7 strategy availability | `tests/service/executor/test_phase7_strategy_availability.py` | 11 | ✅ |
@@ -258,12 +261,24 @@ const DEFAULT_IMPL_NAMES = new Set([
 | Pipeline introspect (G15) | `tests/service/executor/test_g15_introspect.py` | 2 | ⚠️ fastapi 없으면 skip |
 | Tool capabilities (G6.1) | `tests/service/executor/test_tool_capabilities.py` | 43 | ✅ |
 | PartitionExecutor (G6.2) | `tests/service/executor/test_partition_execution.py` | 4 | ✅ |
-| **모든 frontend 컴포넌트** | (없음) | 0 | ⚠️ 알려진 사실 — 프로젝트에 frontend 단위 테스트 인프라 부재 |
+| **모든 frontend 컴포넌트** | (없음) | 0 | ⏸ Carve-out — vitest/jest 인프라 부재. 별도 cycle 필요. |
 
-**합계:** Backend 192 케이스 신규 추가 / 주요 모듈 100% 커버. 
-**격차:** OAuth controller / Skills controller / strategies registration 의 endpoint 단위 테스트 부재. Frontend 는 전체 부재 (프로젝트 차원의 기존 결함).
+**합계:** Backend ~213 케이스 신규 추가 / 주요 모듈 100% 커버 (PR #338 후). 
+**격차 (PR #336 + #338 후):** Frontend 단위 테스트만 잔여 — 프로젝트 차원 인프라 결함.
 
 **중요 정정:** 이전 audit 에서 "credentials module untested" 라고 한 건 오보. `tests/service/credentials/test_install.py` 6 케이스 실재.
+
+### Frontend 단위 테스트 carve-out 의 이유 (별도 cycle 필요)
+
+본 audit 의 다른 모든 항목과 달리 frontend 단위 테스트는 single-PR fix 가 아님:
+
+1. **Test runner 셋업** — vitest 또는 jest 의 config (jsdom env, transform, alias resolution for `@/`)
+2. **Component fixtures** — `react-testing-library` + `@testing-library/jest-dom` matcher 추가
+3. **Mocking infrastructure** — agentApi 호출의 stub (msw 또는 manual mock)
+4. **i18n test wrapper** — `useI18n` 의존하는 컴포넌트 들 위한 provider mock
+5. **CI integration** — `npm test` 가 build pipeline 에 추가되도록 GitHub Actions 갱신
+
+위 5단계가 1 PR ≈ 200-300 LOC 짜리 인프라 PR + 그 위에 컴포넌트별 test 추가 PR 들. Audit 의 actionable scope (fix-and-go 결함) 와는 결이 다른 작업이라 후속 cycle 의 별도 task 로 분리.
 
 ---
 
@@ -396,11 +411,20 @@ R1 + R2 가 critical — 다음 cycle 의 첫 두 PR 로 권장.
 
 | 지표 | 값 |
 |---|---|
-| Audit 발견 결함 | 6 confirmed bugs + 3 NEEDS_VERIFY + 2 doc drift = **11 항목** |
-| 처리됨 | **11/11 (100%)** |
-| Remediation PR 수 | 5 (#332, #333, #334, #335, #336) |
-| 추가된 테스트 | 16 (R2: 4 + R3: 1 + R8: 10 + R7: 1 implicit via auth) |
-| 코드 변경 LOC | ~150 backend + ~100 frontend + 1 doc 갱신 |
-| 누락 잔여 작업 | **0** |
+| Audit 발견 결함 | 6 confirmed bugs + 3 NEEDS_VERIFY + 2 doc drift + 3 §3 coverage gap = **14 항목** |
+| 처리됨 | **13/14 (93%)** — frontend 단위 테스트만 carve-out |
+| Remediation PR 수 | 6 (#332, #333, #334, #335, #336, #338) |
+| 추가된 테스트 | **27** (R2: 4 + R3: 1 + R8: 10 + strategies: 6 + skills_controller: 5 + Phase 7 implicit) |
+| 코드 변경 LOC | ~150 backend + ~100 frontend + 2 doc 갱신 |
+| 누락 잔여 작업 | **1** — frontend test infra (별도 cycle, 본 audit scope 밖 인프라 작업) |
 
 종합적으로 **clean handoff 상태** — cycle 1 + 2 의 functional shipping 위에 audit-driven hardening 완료.
+
+### 7.4 다음 cycle 후보 (참고)
+
+본 audit 가 도출한 항목은 모두 처리됨. 다음 cycle 의 후보:
+
+1. **Frontend test infra cycle** — vitest 셋업 + react-testing-library + agentApi mock + i18n wrapper + CI 통합. 4-6 PR 사이즈.
+2. **신규 기능** — Phase 7 의 더 깊은 config tuning (s14 evaluation_chain 의 evaluator weight, s16 multi_dim_budget 의 cost dimension 활성), permission/hook editor UI, Google Drive OAuth 실제 연동.
+
+이 두 트랙은 상호 독립이므로 우선순위는 운영 데이터 수집 결과에 따라 결정.
