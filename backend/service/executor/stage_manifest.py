@@ -302,21 +302,26 @@ def _build_stage_entries(stage: str) -> List["object"]:
     """Emit the stage-entry list for *stage*.
 
     Mirrors :func:`_vtuber_stage_entries` in :mod:`default_manifest`
-    (same 15-entry chain, no stage 8 think) but with three entries
+    (same chain, no stage 8 think) but with three entries
     stage-parameterised:
 
     - Stage 5 (cache): swapped based on :data:`_STAGE_CACHE`.
-    - Stage 12 (evaluate): swapped based on :data:`_STAGE_EVALUATOR`.
-    - Stage 13 (loop): ``max_turns`` from :data:`_STAGE_MAX_TURNS`.
+    - Stage 14 (evaluate): swapped based on :data:`_STAGE_EVALUATOR`.
+    - Stage 16 (loop): ``max_turns`` from :data:`_STAGE_MAX_TURNS`.
 
     Kept inline rather than importing the vtuber variant so changing
     one preset doesn't silently move the other. The duplication is
-    small (15 entries, 4 deliberate knobs) and the diff across stage
-    manifests stays legible.
+    small and the diff across stage manifests stays legible.
+
+    Layout updated for geny-executor 1.0+ — agent moved 11→12,
+    evaluate 12→14, loop 13→16, emit 14→17, memory 15→18,
+    yield 16→21. The five new scaffold stages (11/13/15/19/20)
+    are emitted with ``active=False`` for parity with
+    :func:`default_manifest._build_stage_entries`.
     """
     from geny_executor.core.environment import StageManifestEntry
 
-    return [
+    base = [
         StageManifestEntry(
             order=1,
             name="input",
@@ -351,6 +356,7 @@ def _build_stage_entries(stage: str) -> List["object"]:
             strategies={
                 "provider": "anthropic",
                 "retry": "exponential_backoff",
+                "router": "passthrough",
             },
         ),
         StageManifestEntry(
@@ -361,9 +367,7 @@ def _build_stage_entries(stage: str) -> List["object"]:
                 "calculator": "anthropic_pricing",
             },
         ),
-        # Stage 8 (think) intentionally omitted — matches vtuber. Stage
-        # manifests are VTuber-derived; infant "thinking" would be
-        # contradictory, and adult reflection is an X5+ concern.
+        # Stage 8 (think) intentionally omitted — matches vtuber.
         StageManifestEntry(
             order=9,
             name="parse",
@@ -375,13 +379,13 @@ def _build_stage_entries(stage: str) -> List["object"]:
             strategies={"executor": "sequential", "router": "registry"},
         ),
         StageManifestEntry(
-            order=11,
+            order=12,
             name="agent",
             strategies={"orchestrator": "single_agent"},
             config={"max_delegations": 4},
         ),
         StageManifestEntry(
-            order=12,
+            order=14,
             name="evaluate",
             strategies={
                 "strategy": _STAGE_EVALUATOR[stage],
@@ -389,19 +393,19 @@ def _build_stage_entries(stage: str) -> List["object"]:
             },
         ),
         StageManifestEntry(
-            order=13,
+            order=16,
             name="loop",
             strategies={"controller": "standard"},
             config={"max_turns": _STAGE_MAX_TURNS[stage]},
         ),
         StageManifestEntry(
-            order=14,
+            order=17,
             name="emit",
             strategies={},
             chain_order={"emitters": []},
         ),
         StageManifestEntry(
-            order=15,
+            order=18,
             name="memory",
             strategies={
                 "strategy": "append_only",  # swapped by attach_runtime
@@ -409,11 +413,18 @@ def _build_stage_entries(stage: str) -> List["object"]:
             },
         ),
         StageManifestEntry(
-            order=16,
+            order=21,
             name="yield",
             strategies={"formatter": "default"},
         ),
     ]
+    # Append Sub-phase 9a scaffold entries (active=False) by reusing
+    # the default_manifest helper so the two builders never drift.
+    from service.executor.default_manifest import _make_scaffold_entries
+
+    base.extend(_make_scaffold_entries(StageManifestEntry))
+    base.sort(key=lambda e: int(getattr(e, "order", 0)))
+    return base
 
 
 __all__ = [

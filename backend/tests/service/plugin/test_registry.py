@@ -20,8 +20,8 @@ import pytest
 
 from geny_executor.core.state import PipelineState
 from geny_executor.stages.s03_system.interface import PromptBlock
-from geny_executor.stages.s14_emit.interface import Emitter
-from geny_executor.stages.s14_emit.types import EmitResult
+from geny_executor.stages.s17_emit.interface import Emitter
+from geny_executor.stages.s17_emit.types import EmitResult
 
 from service.lifecycle.bus import SessionLifecycleBus
 from service.lifecycle.events import LifecycleEvent, LifecyclePayload

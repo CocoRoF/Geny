@@ -43,7 +43,7 @@ import logging
 from typing import Any, Dict, List, Mapping, Sequence
 
 from geny_executor.stages.s03_system.interface import PromptBlock
-from geny_executor.stages.s14_emit.interface import Emitter
+from geny_executor.stages.s17_emit.interface import Emitter
 
 from service.lifecycle.bus import SessionLifecycleBus
 from service.lifecycle.events import LifecycleEvent

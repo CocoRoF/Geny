@@ -2,11 +2,15 @@
 
 Regression protection for PR #1 of the 20260420_4 cycle
 (`fix/manifest-tool-stages`). If a future change drops stages
-10/11/14 from the builder — intentionally or accidentally — the
+10/12/17 from the builder — intentionally or accidentally — the
 system would silently regress to the pre-fix "tool calls never
 run" state because :meth:`Pipeline._try_run_stage` bypasses
 missing stages with only a ``stage.bypass`` event. These tests
 make that regression loud.
+
+geny-executor 1.0+ moved agent 11→12 and emit 14→17 as part of
+the 21-stage layout (Sub-phase 9a). The asserts below track
+the new orders.
 """
 
 from __future__ import annotations
@@ -25,9 +29,41 @@ def test_manifest_declares_tool_stage(preset: str) -> None:
     manifest = build_default_manifest(preset)
     orders = {entry["order"] for entry in manifest.stages}
 
+    # 21-stage layout: tool=10, agent=12 (was 11), emit=17 (was 14).
     assert 10 in orders, f"{preset} manifest missing Stage 10 (tool)"
-    assert 11 in orders, f"{preset} manifest missing Stage 11 (agent)"
-    assert 14 in orders, f"{preset} manifest missing Stage 14 (emit)"
+    assert 12 in orders, f"{preset} manifest missing Stage 12 (agent)"
+    assert 17 in orders, f"{preset} manifest missing Stage 17 (emit)"
+
+
+@pytest.mark.parametrize("preset", _known_preset_ids())
+def test_manifest_declares_21_stage_layout(preset: str) -> None:
+    """Sub-phase 9a (executor 1.0+) widened the layout to 21 slots.
+
+    Every preset emits all 21 entries — the five new ones
+    (11/13/15/19/20) ship with ``active=False`` and are promoted
+    by per-stage Geny integration sprints.
+    """
+    from service.executor.default_manifest import build_default_manifest
+
+    manifest = build_default_manifest(preset)
+    orders = {entry["order"] for entry in manifest.stages}
+
+    if preset == "vtuber":
+        # vtuber omits Stage 8 (think) — same legacy diff.
+        expected = set(range(1, 22)) - {8}
+    else:
+        expected = set(range(1, 22))
+    assert orders == expected, (
+        f"{preset}: orders={sorted(orders)} expected={sorted(expected)}"
+    )
+
+    # Scaffold orders default to active=False so existing pipelines
+    # see no behaviour change.
+    by_order = {e["order"]: e for e in manifest.stages}
+    for scaffold_order in (11, 13, 15, 19, 20):
+        assert by_order[scaffold_order]["active"] is False, (
+            f"{preset}: scaffold order {scaffold_order} should default inactive"
+        )
 
 
 @pytest.mark.parametrize("preset", _known_preset_ids())
@@ -43,10 +79,11 @@ def test_tool_stage_has_default_strategies(preset: str) -> None:
 
 @pytest.mark.parametrize("preset", _known_preset_ids())
 def test_agent_stage_has_single_agent_orchestrator(preset: str) -> None:
+    """Agent moved 11 → 12 in the 21-stage layout."""
     from service.executor.default_manifest import build_default_manifest
 
     manifest = build_default_manifest(preset)
-    entry = next(e for e in manifest.stages if e["order"] == 11)
+    entry = next(e for e in manifest.stages if e["order"] == 12)
 
     assert entry["name"] == "agent"
     assert entry["strategies"] == {"orchestrator": "single_agent"}
@@ -55,10 +92,11 @@ def test_agent_stage_has_single_agent_orchestrator(preset: str) -> None:
 
 @pytest.mark.parametrize("preset", _known_preset_ids())
 def test_emit_stage_uses_empty_chain(preset: str) -> None:
+    """Emit moved 14 → 17 in the 21-stage layout."""
     from service.executor.default_manifest import build_default_manifest
 
     manifest = build_default_manifest(preset)
-    entry = next(e for e in manifest.stages if e["order"] == 14)
+    entry = next(e for e in manifest.stages if e["order"] == 17)
 
     assert entry["name"] == "emit"
     assert entry["chain_order"] == {"emitters": []}
@@ -119,6 +157,7 @@ def test_pipeline_from_manifest_registers_tool_stages(preset: str) -> None:
     pipeline = Pipeline.from_manifest(manifest, api_key="sk-test", strict=False)
 
     registered_orders = {s.order for s in pipeline.stages}
-    assert {10, 11, 14}.issubset(registered_orders), (
+    # 21-stage layout: tool=10, agent=12, emit=17.
+    assert {10, 12, 17}.issubset(registered_orders), (
         f"{preset}: pipeline stages = {sorted(registered_orders)}"
     )

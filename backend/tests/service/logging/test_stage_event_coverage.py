@@ -135,8 +135,9 @@ async def test_stage_enter_carries_order_and_iteration(tmp_path) -> None:
     enters = [e for e in entries if e.metadata.get("event_type") == "stage_enter"]
     assert len(enters) == 1
     meta = enters[0].metadata
-    assert meta["stage_order"] == 16
-    assert meta["stage_display_name"] == "s16_yield"
+    # yield moved 16 → 21 in the geny-executor 1.0 21-stage layout.
+    assert meta["stage_order"] == 21
+    assert meta["stage_display_name"] == "s21_yield"
     assert meta["iteration"] == 4
 
 

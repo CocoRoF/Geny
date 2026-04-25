@@ -62,11 +62,17 @@ class LogLevel(str, Enum):
 # guarded by ``test_stage_order_table_matches_executor_names`` so a
 # rename upstream surfaces as a loud failing test rather than silent
 # drift. Update in lockstep when the floor version changes.
+#
+# Updated for geny-executor 1.0+ (Sub-phase 9a 21-stage layout):
+# the original 16 names + 5 new scaffold stages (tool_review,
+# task_registry, hitl, summarize, persist) fill orders 11/13/15/19/20.
 STAGE_ORDER: Dict[str, int] = {
     "input": 1, "context": 2, "system": 3, "guard": 4,
     "cache": 5, "api": 6, "token": 7, "think": 8,
-    "parse": 9, "tool": 10, "agent": 11, "evaluate": 12,
-    "loop": 13, "emit": 14, "memory": 15, "yield": 16,
+    "parse": 9, "tool": 10, "tool_review": 11, "agent": 12,
+    "task_registry": 13, "evaluate": 14, "hitl": 15, "loop": 16,
+    "emit": 17, "memory": 18, "summarize": 19, "persist": 20,
+    "yield": 21,
 }
 
 
@@ -745,7 +751,7 @@ class SessionLogger:
         """Log a geny-executor stage lifecycle event.
 
         ``stage_name`` is the canonical short name (``"yield"``,
-        ``"tool"``, …). ``stage_order`` is the 1-16 position from
+        ``"tool"``, …). ``stage_order`` is the 1-21 position from
         :data:`STAGE_ORDER`; callers pass it explicitly so a new
         unrecognised stage still logs (with ``stage_order=None``).
         ``node_name`` is mirrored into metadata for back-compat with

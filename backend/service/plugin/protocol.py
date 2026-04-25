@@ -61,7 +61,7 @@ from typing import (
 # ``isinstance`` check in downstream plugin tests can resolve the
 # annotation without jumping through hoops.
 from geny_executor.stages.s03_system.interface import PromptBlock
-from geny_executor.stages.s14_emit.interface import Emitter
+from geny_executor.stages.s17_emit.interface import Emitter
 
 from service.tick.engine import TickSpec
 

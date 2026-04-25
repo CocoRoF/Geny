@@ -37,8 +37,8 @@ import re
 from typing import Any, Final
 
 from geny_executor.core.state import PipelineState
-from geny_executor.stages.s14_emit.interface import Emitter
-from geny_executor.stages.s14_emit.types import EmitResult
+from geny_executor.stages.s17_emit.interface import Emitter
+from geny_executor.stages.s17_emit.types import EmitResult
 
 from service.affect.summary import stash_affect_summary
 from service.affect.taxonomy import RECOGNIZED_TAGS, coefficients_for

@@ -35,14 +35,21 @@ def test_loglevel_stage_and_graph_both_present() -> None:
     assert LogLevel("GRAPH") is LogLevel.GRAPH
 
 
-def test_stage_order_table_covers_16_stages_in_order() -> None:
-    assert len(STAGE_ORDER) == 16
+def test_stage_order_table_covers_21_stages_in_order() -> None:
+    """geny-executor 1.0+ Sub-phase 9a widened the layout to 21 slots."""
+    assert len(STAGE_ORDER) == 21
     assert STAGE_ORDER["input"] == 1
-    assert STAGE_ORDER["loop"] == 13
-    assert STAGE_ORDER["yield"] == 16
-    # Monotonic 1..16
+    assert STAGE_ORDER["loop"] == 16
+    assert STAGE_ORDER["yield"] == 21
+    # New scaffold orders.
+    assert STAGE_ORDER["tool_review"] == 11
+    assert STAGE_ORDER["task_registry"] == 13
+    assert STAGE_ORDER["hitl"] == 15
+    assert STAGE_ORDER["summarize"] == 19
+    assert STAGE_ORDER["persist"] == 20
+    # Monotonic 1..21
     orders = sorted(STAGE_ORDER.values())
-    assert orders == list(range(1, 17))
+    assert orders == list(range(1, 22))
 
 
 def test_stage_order_table_matches_executor_names() -> None:
@@ -61,7 +68,7 @@ def test_stage_order_table_matches_executor_names() -> None:
 
 
 def test_stage_display_name_formats_with_order_padding() -> None:
-    assert stage_display_name("yield", 16) == "s16_yield"
+    assert stage_display_name("yield", 21) == "s21_yield"
     assert stage_display_name("input", 1) == "s01_input"
     # Unknown stage falls back to raw name
     assert stage_display_name("custom", None) == "custom"
@@ -153,8 +160,9 @@ def test_legacy_log_graph_event_still_works_and_writes_stage(sl) -> None:
     # New writes route to STAGE regardless of which helper was called.
     assert entry.level == LogLevel.STAGE
     # stage_order populated from the local lookup so existing callers
-    # automatically get the metadata upgrade
-    assert entry.metadata["stage_order"] == 16
+    # automatically get the metadata upgrade. yield moved 16 → 21 in
+    # the geny-executor 1.0 21-stage layout.
+    assert entry.metadata["stage_order"] == 21
 
 
 def test_legacy_log_graph_node_enter_populates_stage_metadata(sl) -> None:

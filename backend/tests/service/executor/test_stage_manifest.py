@@ -172,7 +172,8 @@ def test_unknown_stage_raises_valueerror() -> None:
 
 
 def _loop_max_turns(manifest) -> int:
-    entry = next(s for s in manifest.stages if s["order"] == 13)
+    # Loop moved 13 → 16 in the 21-stage layout.
+    entry = next(s for s in manifest.stages if s["order"] == 16)
     return entry["config"]["max_turns"]
 
 
@@ -211,7 +212,8 @@ def test_cache_strategy_matches_stage(stage: str, expected: str) -> None:
 
 
 def _evaluator_strategy(manifest) -> str:
-    entry = next(s for s in manifest.stages if s["order"] == 12)
+    # Evaluate moved 12 → 14 in the 21-stage layout.
+    entry = next(s for s in manifest.stages if s["order"] == 14)
     return entry["strategies"]["strategy"]
 
 
@@ -292,12 +294,13 @@ def test_built_in_tools_flow_through_untouched() -> None:
 @pytest.mark.parametrize("stage", _STAGES)
 def test_mandatory_tool_agent_emit_stages_present(stage: str) -> None:
     """Same invariant as :mod:`test_default_manifest`: stages 10 (tool),
-    11 (agent), 14 (emit) are non-negotiable — dropping them silently
-    disables tool execution."""
+    12 (agent), 17 (emit) are non-negotiable — dropping them silently
+    disables tool execution. Orders updated for the geny-executor 1.0
+    21-stage layout (Sub-phase 9a renumbering)."""
     from service.executor.stage_manifest import build_stage_manifest
 
     orders = {e["order"] for e in build_stage_manifest(stage).stages}
-    assert {10, 11, 14}.issubset(orders), (
+    assert {10, 12, 17}.issubset(orders), (
         f"{stage}: missing mandatory stages; got {sorted(orders)}"
     )
 
@@ -332,10 +335,11 @@ def test_tool_stage_strategies_match_preset(stage: str) -> None:
 def test_emit_chain_starts_empty(stage: str) -> None:
     """Emitters are attached at runtime (``attach_runtime``) — the
     manifest declares an empty chain so :class:`EmitStage` bypasses
-    until the session layer fills it. Matches vtuber."""
+    until the session layer fills it. Matches vtuber. Emit moved
+    14 → 17 in the 21-stage layout."""
     from service.executor.stage_manifest import build_stage_manifest
 
-    entry = next(e for e in build_stage_manifest(stage).stages if e["order"] == 14)
+    entry = next(e for e in build_stage_manifest(stage).stages if e["order"] == 17)
     assert entry["chain_order"] == {"emitters": []}
 
 
