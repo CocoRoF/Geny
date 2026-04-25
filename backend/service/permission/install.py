@@ -138,6 +138,81 @@ def attach_kwargs() -> dict:
     return {"permission_rules": rules, "permission_mode": mode}
 
 
+# G6.4 — Stage 4 guard chain population
+# =====================================
+# The manifest's ``chain_order`` only reorders items that already exist
+# in the chain (executor's ``reorder_chain``). The default GuardStage
+# constructs an empty chain, so populating the chain has to happen
+# *after* pipeline build via ``add_to_chain``. Same pattern as
+# ``install_file_persister`` for Stage 20 — a runtime swap that
+# manifest serialization can't express.
+GUARD_STAGE_ORDER: int = 4
+
+
+def populate_guard_chain(pipeline, chain: Optional[list] = None) -> int:
+    """Add the requested guards to the pipeline's Stage 4 chain.
+
+    Returns the number of guards actually added (idempotent — guards
+    already in the chain are skipped). Returns ``0`` and logs a debug
+    message when the pipeline has no Stage 4 (custom manifest dropped
+    it) or the chain doesn't exist.
+
+    The default chain (when *chain* is None) matches the manifest
+    declaration in ``default_manifest._worker_adaptive_stage_entries``:
+    ``["token_budget", "cost_budget", "iteration", "permission"]``.
+    Hosts can pass their own list to install a different mix.
+    """
+    if chain is None:
+        chain = ["token_budget", "cost_budget", "iteration", "permission"]
+
+    if pipeline is None:
+        return 0
+
+    getter = getattr(pipeline, "get_stage", None)
+    stage = None
+    if callable(getter):
+        stage = getter(GUARD_STAGE_ORDER)
+    if stage is None:
+        stages = getattr(pipeline, "_stages", None)
+        if isinstance(stages, dict):
+            stage = stages.get(GUARD_STAGE_ORDER)
+    if stage is None:
+        logger.debug(
+            "populate_guard_chain: pipeline has no stage at order %d; skipping",
+            GUARD_STAGE_ORDER,
+        )
+        return 0
+
+    chains = stage.get_strategy_chains() if hasattr(stage, "get_strategy_chains") else None
+    if not chains or "guards" not in chains:
+        logger.debug(
+            "populate_guard_chain: stage %r has no guards chain; skipping",
+            getattr(stage, "name", type(stage).__name__),
+        )
+        return 0
+
+    existing = {getattr(g, "name", None) for g in chains["guards"].items}
+    added = 0
+    for guard_name in chain:
+        if guard_name in existing:
+            continue
+        try:
+            stage.add_to_chain("guards", guard_name)
+            added += 1
+        except Exception as exc:
+            logger.warning(
+                "populate_guard_chain: failed to add %r: %s",
+                guard_name, exc,
+            )
+    if added:
+        logger.info(
+            "populate_guard_chain: added %d guard(s) — chain now: %s",
+            added,
+            [getattr(g, "name", None) for g in chains["guards"].items],
+        )
+    return added
+
+
 __all__ = [
     "PERMISSION_MODES",
     "attach_kwargs",

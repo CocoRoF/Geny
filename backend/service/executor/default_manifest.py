@@ -305,6 +305,14 @@ def _worker_adaptive_stage_entries(StageManifestEntry) -> List["object"]:
         StageManifestEntry(
             order=4,
             name="guard",
+            # G6.4: declare the guard chain explicitly so PermissionGuard
+            # (consumes the rules wired in G6.3) joins the pre-flight
+            # check. Default order keeps the cheapest checks first —
+            # token / cost / iteration are O(1) state lookups, permission
+            # is a regex match against the rule list.
+            chain_order={
+                "guards": ["token_budget", "cost_budget", "iteration", "permission"],
+            },
         ),
         StageManifestEntry(
             order=5,

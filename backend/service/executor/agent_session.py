@@ -1189,6 +1189,22 @@ class AgentSession:
         self._pipeline.attach_runtime(**attach_kwargs)
         self._preset_name = f"env:{self._env_id}" if self._env_id else "env"
 
+        # G6.4: populate Stage 4's guard chain. The manifest declares the
+        # chain order but the executor's reorder_chain only reorders
+        # *existing* items; the default GuardStage starts with an empty
+        # chain. populate_guard_chain reads the same default order
+        # (token_budget + cost_budget + iteration + permission) and adds
+        # any missing guards via add_to_chain. Idempotent. No-op when
+        # Stage 4 isn't registered (custom manifest dropped it).
+        try:
+            from service.permission.install import populate_guard_chain
+
+            populate_guard_chain(self._pipeline)
+        except Exception as exc:  # noqa: BLE001 — guard wiring must never block run
+            logger.warning(
+                f"[{self._session_id}] Guard chain population failed: {exc}"
+            )
+
         # G2.3: install a session-scoped FilePersister into Stage 20.
         # Manifest declares the slot active with a no_persist placeholder;
         # this swaps in the real persister rooted at storage_path. No-op
