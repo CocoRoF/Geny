@@ -170,19 +170,23 @@ async def tts_stream(req: TTSStreamRequest) -> StreamingResponse:
     Concurrency model (Phase 5 — parallel submission)
     -------------------------------------------------
     All sentences are submitted as concurrent ``asyncio`` tasks up
-    front. The engine's :class:`asyncio.Semaphore` (sized by
-    ``OMNIVOICE_MAX_CONCURRENCY``) is the *single* place we gate
-    actual GPU access, so:
+    front. Two layers gate actual GPU work:
 
-    * ``max_concurrency == 1`` (default, safe for single-GPU hosts):
-      effectively identical to the old sequential loop for total wall
-      time, but sentence ``N+1`` now starts the moment sentence ``N``
-      finishes — the old path paid ~1 event-loop tick + NDJSON encode
-      + network flush between each synthesis, which adds up on long
-      replies.
-    * ``max_concurrency >= 2`` (multi-GPU or high-VRAM hosts): real
-      pipelining — sentence 1 and 2 are generated on the GPU in
-      parallel, sentence 3 starts as soon as slot frees up.
+    * ``OMNIVOICE_MAX_CONCURRENCY`` (the engine's
+      :class:`asyncio.Semaphore`) bounds how many tasks are in flight
+      — i.e. how many can sit waiting on the GPU lock. It is a
+      queue-depth knob, not a parallel-GPU knob.
+    * ``EngineState.gpu_lock`` (a ``threading.Lock``) hard-serialises
+      every model.* call. OmniVoice is not thread-safe; concurrent
+      invocation produces ``CUDA error: unspecified launch failure``
+      and corrupts the CUDA context. Sentences therefore execute on
+      the GPU strictly one-at-a-time regardless of
+      ``max_concurrency``.
+
+    The remaining win over the old sequential loop is event-loop
+    overhead: sentence ``N+1`` claims the GPU the instant ``N``
+    releases the lock, without paying one event-loop tick + NDJSON
+    encode + network flush between syntheses.
 
     Yield order is strictly ``seq=0, 1, 2, ...`` regardless of which
     task finishes first: a small pending-buffer keeps out-of-order

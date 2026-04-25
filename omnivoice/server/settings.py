@@ -67,10 +67,19 @@ class Settings(BaseSettings):
         default=4,
         ge=1,
         description=(
-            "Maximum concurrent in-flight synthesis calls. Default 4 is "
-            "calibrated for RTX 5070 (12 GB, Blackwell, fp16) under the "
-            "persistent-residency policy. Drop to 1 on shared / lower-VRAM "
-            "hosts to avoid CUDA OOM."
+            "Maximum number of in-flight synthesis requests on the event "
+            "loop. This is a *queue-depth* knob, not a parallel-GPU knob: "
+            "actual model.generate() / create_voice_clone_prompt() calls "
+            "are serialised process-wide by EngineState.gpu_lock because "
+            "OmniVoice (and its torch.compile(reduce-overhead) CUDA Graph) "
+            "is not thread-safe — concurrent invocation surfaces as "
+            "'CUDA error: unspecified launch failure' deep inside the "
+            "Qwen3 attention kernels and corrupts the CUDA context. "
+            "Values > 1 are still useful: extra requests park on the GPU "
+            "lock instead of being rejected, which lets a streaming "
+            "endpoint hand off sentence N+1 the instant N finishes "
+            "without an extra event-loop round-trip. Drop to 1 on shared "
+            "/ lower-VRAM hosts to keep peak host-side memory bounded."
         ),
     )
 

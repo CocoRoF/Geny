@@ -22,9 +22,28 @@ Design highlights
   ``float16`` on sm < 8.0. Dormant on the current prod target
   (RTX 5070, sm_120) but kept for any older dev GPU that gets
   temporarily attached.
-* **GPU serialisation.** A single ``asyncio.Semaphore`` gates all
-  in-flight syntheses to ``Settings.max_concurrency``; synthesis itself
-  runs in a worker thread so the event loop stays responsive.
+* **GPU serialisation.** Two-tier gating:
+
+  1. An ``asyncio.Semaphore`` sized by ``Settings.max_concurrency``
+     bounds the number of *in-flight* requests on the event loop —
+     i.e. how many requests may sit in the worker pool / waiting on
+     the GPU lock. This keeps queue depth (and therefore peak host
+     memory pressure) bounded.
+  2. A process-wide ``threading.Lock`` (``EngineState.gpu_lock``)
+     wraps every actual call into the OmniVoice model
+     (``generate`` / ``create_voice_clone_prompt`` / ``transcribe``).
+     The model is **not** thread-safe — it carries shared internal
+     buffers, mutates ``self.eval()`` state, and (when
+     ``torch.compile(mode="reduce-overhead")`` is on) replays a
+     CUDA Graph whose static memory regions are reused across
+     calls. Concurrent invocation manifested as
+     ``CUDA error: unspecified launch failure`` deep inside the
+     Qwen3 attention / RMSNorm kernels — recovery is impossible
+     without a full process restart, so we hard-serialise the GPU
+     instead.
+
+  Synthesis itself runs in a worker thread so the event loop stays
+  responsive while the GPU lock is held.
 """
 
 from __future__ import annotations
@@ -32,6 +51,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -82,6 +102,11 @@ class EngineState:
     streams: dict[str, Optional[Any]] = field(default_factory=dict)
     pinned_pool: Optional[PinnedPCMPool] = None
     ref_cache: Optional[RefCache] = None
+    # Process-wide GPU serialisation lock. Held around every model.*
+    # call that touches the device. See module docstring §"GPU
+    # serialisation" for why this is mandatory even when
+    # max_concurrency == 1 (defence in depth against future callers).
+    gpu_lock: threading.Lock = field(default_factory=threading.Lock)
 
     @property
     def sampling_rate(self) -> int:
@@ -440,11 +465,12 @@ def _generate_sync(
         if voice_clone_prompt is not None:
             kwargs["voice_clone_prompt"] = voice_clone_prompt
         else:
-            kwargs["voice_clone_prompt"] = state.model.create_voice_clone_prompt(
-                ref_audio=ref_audio_path,
-                ref_text=ref_text,
-                preprocess_prompt=preprocess_prompt,
-            )
+            with state.gpu_lock:
+                kwargs["voice_clone_prompt"] = state.model.create_voice_clone_prompt(
+                    ref_audio=ref_audio_path,
+                    ref_text=ref_text,
+                    preprocess_prompt=preprocess_prompt,
+                )
 
     if mode == "design":
         if not instruct:
@@ -453,7 +479,8 @@ def _generate_sync(
     elif instruct:
         kwargs["instruct"] = instruct.strip()
 
-    audios = state.model.generate(**kwargs)
+    with state.gpu_lock:
+        audios = state.model.generate(**kwargs)
     if not audios:
         raise RuntimeError("OmniVoice returned an empty audio batch.")
     return audios[0]
@@ -463,7 +490,8 @@ def _transcribe(state: EngineState, audio_path: str) -> Optional[str]:
     if not state.has_asr:
         return None
     try:
-        return state.model.transcribe(audio_path)
+        with state.gpu_lock:
+            return state.model.transcribe(audio_path)
     except Exception:  # pragma: no cover - optional path
         logger.exception("Whisper transcription failed for %s", audio_path)
         return None
@@ -497,15 +525,16 @@ async def synthesize(
     if mode == "clone" and ref_audio_path and state.ref_cache is not None:
         loop = asyncio.get_running_loop()
 
-        async def _build() -> Any:
-            return await loop.run_in_executor(
-                None,
-                lambda: state.model.create_voice_clone_prompt(
+        def _build_sync() -> Any:
+            with state.gpu_lock:
+                return state.model.create_voice_clone_prompt(
                     ref_audio=ref_audio_path,
                     ref_text=ref_text,
                     preprocess_prompt=preprocess_prompt,
-                ),
-            )
+                )
+
+        async def _build() -> Any:
+            return await loop.run_in_executor(None, _build_sync)
 
         voice_clone_prompt = await state.ref_cache.get_or_build(
             ref_audio_path=ref_audio_path,
