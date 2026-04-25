@@ -92,24 +92,40 @@ def install_skill_registry() -> Tuple[Optional[Any], List[Any]]:
         )
 
     if loaded:
+        # R3 (audit 20260425_3 §1.1): the previous bundled-vs-user
+        # breakdown used a placeholder that always returned [], so
+        # the log always read "(0 bundled, N user)" regardless of
+        # the actual mix. Use Skill.metadata.source (set by the
+        # executor's frontmatter parser) to derive the real bundled count.
+        bundled_count = sum(1 for s in loaded if _is_bundled_skill(s))
+        user_count = len(loaded) - bundled_count
         logger.info(
             "install_skill_registry: %d skill(s) registered (%d bundled, %d user)",
-            len(loaded),
-            sum(1 for _ in loaded if BUNDLED_SKILLS_DIR in _path_chain(loaded)),
-            len(loaded),
+            len(loaded), bundled_count, user_count,
         )
-        # Cleaner count: just total + breakdown without trying to
-        # introspect each skill's source path.
 
     return (registry if loaded else None), loaded
 
 
-def _path_chain(_) -> List[Path]:
-    """Placeholder kept simple — Skill objects don't expose their
-    source path uniformly across versions, so the breakdown count
-    in the log line above is approximate. Future versions can
-    enrich this if Skill.source_path becomes stable."""
-    return []
+def _is_bundled_skill(skill: Any) -> bool:
+    """Return True when the skill was loaded from BUNDLED_SKILLS_DIR.
+
+    Skill objects across executor versions store their source path
+    either at the top level (``source``) or under metadata
+    (``metadata.source``). Try both. Anything under the bundled
+    directory counts as bundled; everything else is user.
+    """
+    source = getattr(skill, "source", None)
+    if source is None:
+        meta = getattr(skill, "metadata", None)
+        if meta is not None:
+            source = getattr(meta, "source", None)
+    if source is None:
+        return False
+    try:
+        return BUNDLED_SKILLS_DIR in Path(source).parents
+    except Exception:
+        return False
 
 
 def list_skills() -> List[dict]:

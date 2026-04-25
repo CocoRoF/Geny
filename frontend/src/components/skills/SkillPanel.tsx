@@ -8,7 +8,7 @@
  * a ``/<id>`` prefix the slash-command detector recognises.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { agentApi } from '@/lib/api';
 import { Sparkles, RefreshCw } from 'lucide-react';
 
@@ -31,19 +31,38 @@ export default function SkillPanel({ onPickSkill }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const reload = () => {
+  // R9 (audit 20260425_3 §1.3): cancel in-flight reload when a new
+  // one starts (rapid clicks) or the component unmounts. Without
+  // this a slow first response could clobber a fast second one.
+  const fetchIdRef = useRef(0);
+
+  const reload = useCallback(() => {
     setLoading(true);
     setError(null);
+    const id = ++fetchIdRef.current;
     agentApi
       .skillsList()
-      .then((resp) => setSkills(resp.skills))
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
-      .finally(() => setLoading(false));
-  };
+      .then((resp) => {
+        if (id !== fetchIdRef.current) return;  // stale
+        setSkills(resp.skills);
+      })
+      .catch((err) => {
+        if (id !== fetchIdRef.current) return;
+        setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (id !== fetchIdRef.current) return;
+        setLoading(false);
+      });
+  }, []);
 
   useEffect(() => {
     reload();
-  }, []);
+    return () => {
+      // Bump the id so any in-flight callback short-circuits.
+      fetchIdRef.current += 1;
+    };
+  }, [reload]);
 
   if (loading && skills.length === 0) {
     return (
@@ -72,9 +91,9 @@ export default function SkillPanel({ onPickSkill }: Props) {
       <span className="text-[0.625rem] text-[var(--text-muted)] uppercase tracking-wider font-semibold mr-1">
         Skills
       </span>
-      {skills.map((skill) => (
+      {skills.map((skill, idx) => (
         <button
-          key={skill.id ?? Math.random()}
+          key={skill.id ?? `skill-${idx}`}
           className="inline-flex items-center gap-1 px-2 py-[2px] rounded-full bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] text-[0.6875rem] text-[var(--text-secondary)] border border-[var(--border-color)] transition-colors"
           onClick={() => onPickSkill(`/${skill.id ?? ''}`)}
           title={skill.description ?? skill.name ?? ''}

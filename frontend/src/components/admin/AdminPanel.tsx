@@ -234,9 +234,9 @@ export default function AdminPanel() {
             </div>
           ) : (
             <ul className="flex flex-col gap-1">
-              {skills.map((s) => (
+              {skills.map((s, idx) => (
                 <li
-                  key={s.id ?? Math.random()}
+                  key={s.id ?? `admin-skill-${idx}`}
                   className="px-2 py-1.5 rounded border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[0.6875rem]"
                 >
                   <div className="flex items-center gap-2">

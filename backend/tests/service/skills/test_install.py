@@ -108,6 +108,33 @@ def test_attach_provider_returns_provider_for_real_registry(
 # ── list_skills (used by the /api/skills/list endpoint in G7.4) ────
 
 
+def test_is_bundled_skill_distinguishes_sources(isolated_user_dir: Path, monkeypatch) -> None:
+    """R3 (audit 20260425_3 §1.1): the previous _path_chain helper
+    returned [] unconditionally → log always reported "0 bundled".
+    The replacement _is_bundled_skill must correctly classify a
+    skill loaded from BUNDLED_SKILLS_DIR as bundled and a skill
+    loaded from ~/.geny/skills as user."""
+    user_dir = skill_install.user_skills_dir()
+    _write_skill(user_dir, "user_only_skill")
+    monkeypatch.setenv(skill_install.SKILLS_OPT_IN_ENV, "1")
+
+    _, skills = skill_install.install_skill_registry()
+    by_id = {getattr(s, "id", None): s for s in skills}
+
+    user_skill = by_id.get("user_only_skill")
+    assert user_skill is not None
+    assert skill_install._is_bundled_skill(user_skill) is False
+
+    # The bundled directory ships with the 3 G7.5 skills; if any is
+    # present we should classify it as bundled.
+    bundled_skills = [s for s in skills if skill_install._is_bundled_skill(s)]
+    if skill_install.BUNDLED_SKILLS_DIR.exists() and any(
+        (skill_install.BUNDLED_SKILLS_DIR / d).exists()
+        for d in ("summarize_session", "search_web_and_summarize", "draft_pr")
+    ):
+        assert len(bundled_skills) >= 1
+
+
 def test_list_skills_summary_shape(isolated_user_dir: Path, monkeypatch) -> None:
     user_dir = skill_install.user_skills_dir()
     _write_skill(user_dir, "summary_skill")

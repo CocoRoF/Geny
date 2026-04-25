@@ -28,8 +28,22 @@ interface Props {
 
 function pretty(value: unknown): string {
   if (value === undefined) return '(none)';
+  // Bug 1.6 (audit 20260425_3): JSON.stringify throws on circular
+  // references. Detect cycles via a WeakSet and substitute "[Circular]"
+  // so the operator sees structure instead of "[object Object]".
+  const seen = new WeakSet<object>();
   try {
-    return JSON.stringify(value, null, 2);
+    return JSON.stringify(
+      value,
+      (_, v) => {
+        if (typeof v === 'object' && v !== null) {
+          if (seen.has(v as object)) return '[Circular]';
+          seen.add(v as object);
+        }
+        return v;
+      },
+      2,
+    );
   } catch {
     return String(value);
   }
