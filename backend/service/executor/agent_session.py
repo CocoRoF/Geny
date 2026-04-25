@@ -1245,6 +1245,19 @@ class AgentSession:
                 f"[{self._session_id}] FilePersister install failed: {exc}"
             )
 
+        # G10.1: attach a FileCredentialStore to the MCPManager so
+        # OAuth-required servers persist tokens across pipeline
+        # restarts. No-op when the pipeline has no MCPManager.
+        try:
+            from service.credentials import install_credential_store
+
+            install_credential_store(self._pipeline)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                f"[{self._session_id}] credential store install skipped: {exc}",
+                exc_info=True,
+            )
+
         # G2.5: install the PipelineResumeRequester into Stage 15.
         # Manifest declares the HITL slot active with the safe ``null``
         # requester placeholder; this swaps in the real requester
