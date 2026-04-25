@@ -351,6 +351,19 @@ export const agentApi = {
       entries: Array<{ event: string; command: string[]; timeout_ms: number | null; tool_filter: string[] }>;
     }>(`/api/hooks/list`),
 
+  /** Pipeline introspection (G15) — drives Dashboard heatmap. */
+  pipelineIntrospect: (id: string) =>
+    apiCall<{
+      session_id: string;
+      stages: Array<{
+        order: number;
+        name: string;
+        artifact: string;
+        strategy_slots: Record<string, { active: string | null; registered: string[] }>;
+        strategy_chains: Record<string, { items: string[]; registered: string[] }>;
+      }>;
+    }>(`/api/agents/${id}/pipeline/introspect`),
+
   /** Per-session MCP admin endpoints (G8.1 / G8.3). */
   mcpServersList: (id: string) =>
     apiCall<{

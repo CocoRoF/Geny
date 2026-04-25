@@ -1,20 +1,23 @@
 'use client';
 
 /**
- * Observability dashboard (G11). Composes:
+ * Observability dashboard (G11 + G15). Composes:
  * - TokenMeter (G11.2): running input / output / cache / cost
  * - StageGrid (G11.1): live 21-stage status + per-stage durations
  * - MutationLog (G11.3): scrollable PipelineMutator audit feed
+ *   (clickable rows open MutationDiffViewer modal — G15)
+ * - StageStrategyHeatmap (G15): per-stage strategy override map
  *
- * Reads the session id from the app store. All three children derive
- * from `sessionDataCache[sessionId].logEntries` so they update in
- * lockstep with the WS event stream — no extra subscriptions.
+ * TokenMeter / StageGrid / MutationLog derive from the session's
+ * logEntries (live WS stream). StageStrategyHeatmap pulls from
+ * /api/agents/{id}/pipeline/introspect on mount.
  */
 
 import { useAppStore } from '@/store/useAppStore';
 import StageGrid from '@/components/dashboard/StageGrid';
 import TokenMeter from '@/components/dashboard/TokenMeter';
 import MutationLog from '@/components/dashboard/MutationLog';
+import StageStrategyHeatmap from '@/components/dashboard/StageStrategyHeatmap';
 import { LayoutDashboard } from 'lucide-react';
 
 export default function DashboardTab() {
@@ -46,6 +49,10 @@ export default function DashboardTab() {
             Stage execution
           </h3>
           <StageGrid sessionId={selectedSessionId} />
+        </section>
+
+        <section className="border-t border-[var(--border-color)] pt-2">
+          <StageStrategyHeatmap sessionId={selectedSessionId} />
         </section>
 
         <section className="border-t border-[var(--border-color)]">

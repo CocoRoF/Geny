@@ -1547,3 +1547,89 @@ async def control_mcp_server(
         "result": str(result) if result is not None else "ok",
         "server": _serialize_server(name, manager).model_dump(),
     }
+
+
+# ============================================================================
+# G15 — Pipeline introspection (Dashboard heatmap source)
+# ============================================================================
+#
+# Wraps geny_executor.core.introspection.introspect_all so the frontend
+# Dashboard can render a per-stage strategy heatmap (green = override
+# applied, red = default, grey = no slot of that name).
+
+
+class StageIntrospectInfo(BaseModel):
+    order: int
+    name: str
+    artifact: str
+    strategy_slots: Dict[str, Any]
+    strategy_chains: Dict[str, Any]
+
+
+class PipelineIntrospectResponse(BaseModel):
+    session_id: str
+    stages: List[StageIntrospectInfo]
+
+
+@router.get(
+    "/{session_id}/pipeline/introspect",
+    response_model=PipelineIntrospectResponse,
+    summary="Snapshot of every registered stage + active strategies",
+)
+async def introspect_pipeline(
+    session_id: str = Path(...),
+    auth: dict = Depends(require_auth),
+):
+    """Returns each stage's order / name / artifact id plus the
+    currently-active strategy id per slot. Drives the Dashboard's
+    StageStrategyHeatmap (G15).
+
+    409 when the executor's introspection helper isn't importable.
+    """
+    pipeline = _resolve_pipeline(session_id)
+    try:
+        from geny_executor.core.introspection import introspect_all
+    except ImportError:
+        raise HTTPException(
+            status_code=409,
+            detail="geny_executor.core.introspection unavailable",
+        )
+
+    # introspect_all walks the global stage catalog by default; pass
+    # the pipeline-specific override map when one is available so we
+    # report the active artifact per slot.
+    artifact_overrides: Dict[str, str] = {}
+    for stage in pipeline.stages:
+        artifact_overrides[stage.name] = getattr(stage, "artifact", "default") or "default"
+
+    try:
+        rows = introspect_all(artifact_overrides=artifact_overrides)
+    except TypeError:
+        # Older signature didn't accept the kwarg.
+        rows = introspect_all()
+
+    out: List[StageIntrospectInfo] = []
+    for row in rows:
+        out.append(
+            StageIntrospectInfo(
+                order=getattr(row, "order", 0),
+                name=getattr(row, "name", ""),
+                artifact=getattr(row, "artifact", "default"),
+                strategy_slots={
+                    name: {
+                        "active": getattr(slot, "active_name", None) or getattr(slot, "active", None),
+                        "registered": list(getattr(slot, "registered_names", []) or []),
+                    }
+                    for name, slot in (getattr(row, "strategy_slots", {}) or {}).items()
+                },
+                strategy_chains={
+                    name: {
+                        "items": list(getattr(chain, "active_names", []) or []),
+                        "registered": list(getattr(chain, "registered_names", []) or []),
+                    }
+                    for name, chain in (getattr(row, "strategy_chains", {}) or {}).items()
+                },
+            )
+        )
+
+    return PipelineIntrospectResponse(session_id=session_id, stages=out)
