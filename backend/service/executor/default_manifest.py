@@ -325,7 +325,13 @@ def _worker_adaptive_stage_entries(StageManifestEntry) -> List["object"]:
             strategies={
                 "provider": "anthropic",
                 "retry": "exponential_backoff",
-                "router": "passthrough",  # S7.8: no model swap by default
+                # G12 / S7.8: capability-aware adaptive router. Default
+                # config picks Opus for the first turn (deep planning),
+                # Sonnet for follow-ups, Haiku for tool-result digest
+                # turns. Strict superset of passthrough — without
+                # strategy_configs the router falls back to the
+                # session's bound model.
+                "router": "adaptive",
             },
         ),
         StageManifestEntry(
@@ -374,9 +380,16 @@ def _worker_adaptive_stage_entries(StageManifestEntry) -> List["object"]:
         StageManifestEntry(
             order=14,
             name="evaluate",
-            strategies={"strategy": "binary_classify", "scorer": "no_scorer"},
+            # G12 / S7.6: evaluation_chain wraps the existing
+            # binary_classify + signal_based evaluators. Default
+            # behaviour is identical to running binary_classify alone
+            # (chain returns first non-null verdict); the slot now
+            # exposes the chain primitive for future evaluator
+            # composition without another manifest flip.
+            strategies={"strategy": "evaluation_chain", "scorer": "no_scorer"},
             strategy_configs={
                 "strategy": {
+                    "evaluators": ["binary_classify", "signal_based"],
                     "easy_max_turns": _WORKER_ADAPTIVE_EASY_MAX_TURNS,
                     "not_easy_max_turns": _WORKER_ADAPTIVE_NOT_EASY_MAX_TURNS,
                 },
@@ -385,8 +398,17 @@ def _worker_adaptive_stage_entries(StageManifestEntry) -> List["object"]:
         StageManifestEntry(
             order=16,
             name="loop",
-            strategies={"controller": "standard"},
+            # G12 / S7.7: multi_dim_budget controller. Defaults to a
+            # single iteration dimension (= standard). Adding
+            # cost_usd / walltime_seconds dimensions later is a
+            # strategy_configs edit — no code change.
+            strategies={"controller": "multi_dim_budget"},
             config={"max_turns": _WORKER_ADAPTIVE_MAX_TURNS},
+            strategy_configs={
+                "controller": {
+                    "dimensions": ["iterations"],
+                },
+            },
         ),
         StageManifestEntry(
             order=17,
@@ -397,8 +419,15 @@ def _worker_adaptive_stage_entries(StageManifestEntry) -> List["object"]:
         StageManifestEntry(
             order=18,
             name="memory",
+            # G12 / S7.9: structured_reflective. Default schema is
+            # the same {insights, tags, importance} shape the existing
+            # GenyMemoryStrategy produces — without strategy_configs
+            # the strategy degrades to append-only behaviour. The
+            # attach_runtime path still swaps in the real
+            # GenyMemoryStrategy so this change only affects sessions
+            # without a memory_manager (rare).
             strategies={
-                "strategy": "append_only",  # swapped by attach_runtime
+                "strategy": "structured_reflective",
                 "persistence": "null",  # swapped by attach_runtime
             },
         ),
