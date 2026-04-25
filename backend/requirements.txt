@@ -59,9 +59,21 @@ playwright>=1.49.0
 #   markdown in one pass; final_output becomes a dict keyed by
 #   format. include_thinking toggle for thinking visibility in
 #   markdown. build_structured / build_markdown helpers exposed.
+# 0.44.x (executor uplift Phase 8 close — S8.1 + S8.2 + S8.3 + S8.4):
+# - CredentialStore Protocol + Memory/File implementations
+#   (mode-0600 atomic writes). Foundation for OAuth.
+# - OAuthFlow — full OAuth 2.0 authorization-code dance (CSRF
+#   state, localhost callback HTTP server, injectable token-
+#   exchange http_post). Persists tokens under mcp:<server>.
+# - mcp:// URI scheme + MCPManager.read_mcp_resource /
+#   list_all_resources for cross-server resource references.
+# - prompts → Skills bridge: per-connection list_prompts /
+#   get_prompt + manager-level list_all_prompts / get_mcp_prompt
+#   + mcp_prompts_to_skills(manager) advisory bridge producing
+#   Skill records with prompt metadata in extras.
 # All surfaces independently opt-in; without consuming them
-# behaviour is identical to 0.42.x.
-geny-executor[web]>=0.43.0,<0.44.0
+# behaviour is identical to 0.43.x.
+geny-executor[web]>=0.44.0,<0.45.0
 # MCP (Model Context Protocol)
 mcp>=1.0.0
 # TTS (Text-to-Speech)
