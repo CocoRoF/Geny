@@ -625,6 +625,22 @@ class AgentSessionManager:
             from service.executor.geny_tool_provider import GenyToolProvider
 
             adhoc_providers.append(GenyToolProvider(self._tool_loader))
+
+        # G7.3 + G14: skill registry. Always build (bundled skills load
+        # without opt-in); only register the SkillToolProvider when at
+        # least one skill resolved. Hold the registry on the manager so
+        # G14's MCP auto-bridge can re-register prompts post-connect.
+        skill_registry = None
+        try:
+            from service.skills import attach_provider, install_skill_registry
+
+            skill_registry, _skill_list = install_skill_registry()
+            skill_provider = attach_provider(skill_registry)
+            if skill_provider is not None:
+                adhoc_providers.append(skill_provider)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"  skill registry install skipped: {exc}", exc_info=True)
+
         prebuilt_pipeline = await self._environment_service.instantiate_pipeline(
             env_id, api_key=api_key, adhoc_providers=adhoc_providers,
         )
@@ -632,6 +648,28 @@ class AgentSessionManager:
             f"  env_id: {env_id} → manifest-backed pipeline built "
             f"(adhoc_providers={len(adhoc_providers)})"
         )
+
+        # G14: bridge MCP prompts → skill registry. Runs *after*
+        # instantiate_pipeline so the MCPManager has connected to its
+        # configured servers; each connected server's prompts get
+        # registered as Skills under mcp__<server>__<prompt>. No-op
+        # when MCP isn't configured or the registry is None.
+        try:
+            from service.skills import install as _skill_install
+
+            mcp_manager = getattr(prebuilt_pipeline, "_mcp_manager", None) or getattr(
+                prebuilt_pipeline, "mcp_manager", None
+            )
+            if skill_registry is not None and mcp_manager is not None:
+                added = await _skill_install.bridge_mcp_prompts(
+                    skill_registry, mcp_manager
+                )
+                if added:
+                    logger.info(
+                        f"  MCP prompts → skills bridge: {added} skill(s) added"
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"  MCP prompts bridge failed: {exc}", exc_info=True)
 
         # Role-gate the creature-state provider wiring. GameConfig
         # (``vtuber_only=True`` by default) means only ``VTUBER`` role
