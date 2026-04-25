@@ -17,6 +17,9 @@ import {
   Send,
   Plus,
   Minus,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldX,
 } from 'lucide-react';
 
 // ── Level metadata ──
@@ -40,6 +43,69 @@ const LEVEL_CONFIG: Record<string, { icon: typeof Terminal; color: string; bgCol
 const PRIMARY_LEVELS = new Set([
   'COMMAND', 'RESPONSE', 'ERROR', 'WARNING', 'STAGE', 'GRAPH', 'TOOL', 'ITER',
 ]);
+
+/**
+ * Visual override for Stage 11 (tool_review) events. The backend emits
+ * three flavours through `session_logger.log_stage_event`:
+ *   - `tool_review_flag`    — one per reviewer hit, severity-coloured.
+ *   - `tool_review_error`   — a reviewer raised; render as warning.
+ *   - `tool_review_summary` — N flags this turn, dashboard hint.
+ * Returning ``null`` falls back to the generic STAGE rendering.
+ */
+type ReviewVisual = {
+  icon: typeof Terminal;
+  color: string;
+  bgColor: string;
+  label: string;
+  description: string;
+};
+
+function getToolReviewVisual(meta: LogEntryMetadata | undefined): ReviewVisual | null {
+  if (!meta) return null;
+  const evt = meta.event_type;
+  if (evt !== 'tool_review_flag' && evt !== 'tool_review_error' && evt !== 'tool_review_summary') {
+    return null;
+  }
+  const data = (meta.data || {}) as Record<string, unknown>;
+
+  if (evt === 'tool_review_summary') {
+    const flags = typeof data.flags === 'number' ? data.flags : 0;
+    return {
+      icon: ShieldCheck,
+      color: '#f59e0b',
+      bgColor: 'rgba(245,158,11,0.10)',
+      label: 'Review',
+      description: `Tool review: ${flags} flag${flags === 1 ? '' : 's'} this turn`,
+    };
+  }
+
+  if (evt === 'tool_review_error') {
+    const reviewer = typeof data.reviewer === 'string' ? data.reviewer : 'unknown';
+    const err = typeof data.error === 'string' ? data.error : 'reviewer crashed';
+    return {
+      icon: ShieldX,
+      color: '#ef4444',
+      bgColor: 'rgba(239,68,68,0.10)',
+      label: 'Review error',
+      description: `${reviewer}: ${err}`,
+    };
+  }
+
+  // tool_review_flag — colour by severity.
+  const severity = (typeof data.severity === 'string' ? data.severity : 'info').toLowerCase();
+  const reviewer = typeof data.reviewer === 'string' ? data.reviewer : 'unknown';
+  const reason = typeof data.reason === 'string' ? data.reason : '';
+  const sev = severity === 'critical' || severity === 'block' || severity === 'error'
+    ? { icon: ShieldX,     color: '#ef4444', bgColor: 'rgba(239,68,68,0.10)' }
+    : severity === 'warn' || severity === 'warning'
+      ? { icon: ShieldAlert, color: '#f59e0b', bgColor: 'rgba(245,158,11,0.10)' }
+      : { icon: ShieldCheck, color: '#0ea5e9', bgColor: 'rgba(14,165,233,0.10)' };
+  return {
+    ...sev,
+    label: `Flag · ${severity}`,
+    description: `${reviewer}${reason ? `: ${reason}` : ''}`,
+  };
+}
 
 function formatShortTime(ts: string): string {
   try {
@@ -136,11 +202,19 @@ function formatDuration(ms: number): string {
 }
 
 function TimelineEntry({ entry, index, isSelected, isLast, durationMs, onClick }: TimelineEntryProps) {
-  const config = LEVEL_CONFIG[entry.level] || LEVEL_CONFIG.DEBUG;
-  const Icon = config.icon;
   const meta = entry.metadata as LogEntryMetadata | undefined;
-  const description = useMemo(() => getStepDescription(entry), [entry]);
-  const hasDetail = ['TOOL', 'ITER', 'GRAPH', 'COMMAND', 'RESPONSE', 'ERROR'].includes(entry.level);
+  // Stage-11 tool_review entries get a richer severity-coloured rendering;
+  // everything else falls through to the generic per-level config.
+  const reviewOverride = useMemo(() => getToolReviewVisual(meta), [meta]);
+  const baseConfig = LEVEL_CONFIG[entry.level] || LEVEL_CONFIG.DEBUG;
+  const config = reviewOverride ?? baseConfig;
+  const Icon = config.icon;
+  const description = useMemo(
+    () => reviewOverride ? reviewOverride.description : getStepDescription(entry),
+    [entry, reviewOverride],
+  );
+  const hasDetail = !!reviewOverride
+    || ['TOOL', 'ITER', 'GRAPH', 'COMMAND', 'RESPONSE', 'ERROR'].includes(entry.level);
 
   return (
     <div
