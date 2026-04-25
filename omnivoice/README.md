@@ -84,7 +84,9 @@ All knobs use the `OMNIVOICE_` prefix.
 | `OMNIVOICE_HF_CACHE`        | `/models/hf-cache`       | HuggingFace cache; mirrored to `HF_HOME`.          |
 | `OMNIVOICE_AUTO_ASR`        | `false`                  | Load Whisper for ref-text auto-transcription.      |
 | `OMNIVOICE_ASR_MODEL`       | `openai/whisper-large-v3-turbo` | Whisper model id (only when `auto_asr=true`).|
-| `OMNIVOICE_MAX_CONCURRENCY` | `1`                      | In-flight synthesis slots; raise only if you have spare GPU memory. |
+| `OMNIVOICE_MAX_CONCURRENCY` | `4`                      | In-flight synthesis slots. Default tuned for RTX 5070 (12 GB, fp16). Drop to 1–2 on smaller / shared GPUs. |
+| `OMNIVOICE_DEFAULT_NUM_STEP` | `16`                    | Diffusion outer-loop steps. 32 = upstream default, 16 = balanced, 8–12 = speed-first. |
+| `OMNIVOICE_GPU_MEMORY_FRACTION` | `0.85`               | Per-process VRAM cap. 0 disables the cap. |
 | `OMNIVOICE_LOG_LEVEL`       | `info`                   | uvicorn log level.                                 |
 
 ## Running locally (without Docker)

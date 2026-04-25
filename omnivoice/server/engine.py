@@ -18,9 +18,10 @@ Design highlights
   and a pinned host PCM pool are allocated at load time and held for
   the whole process lifetime — runtime should never trigger new large
   allocations.
-* **Pascal safety.** ``resolve_dtype()`` downgrades ``bfloat16`` to
-  ``float16`` on sm < 8.0 (Pascal/Volta) so the GTX 1070 deployment
-  cannot accidentally pick a dtype that has no hardware support.
+* **Pre-Ampere safety.** ``resolve_dtype()`` downgrades ``bfloat16`` to
+  ``float16`` on sm < 8.0. Dormant on the current prod target
+  (RTX 5070, sm_120) but kept for any older dev GPU that gets
+  temporarily attached.
 * **GPU serialisation.** A single ``asyncio.Semaphore`` gates all
   in-flight syntheses to ``Settings.max_concurrency``; synthesis itself
   runs in a worker thread so the event loop stays responsive.
@@ -122,12 +123,12 @@ def _device_capability(device: str) -> Optional[tuple[int, int]]:
 
 
 def resolve_dtype(setting: str, device: str) -> torch.dtype:
-    """Map dtype string → torch.dtype, downgrading ``bfloat16`` on Pascal/Volta.
+    """Map dtype string → torch.dtype, downgrading ``bfloat16`` on pre-Ampere GPUs.
 
-    bf16 has no hardware tensor-core support below sm_80 (Ampere). On
-    sm_61 (GTX 1070) emulated bf16 silently falls back to a slow path,
-    so we hard-downgrade to fp16 — the deployment-supported dtype on
-    Pascal — and log loudly.
+    bf16 has no hardware tensor-core support below sm_80 (Ampere). The
+    current prod target (RTX 5070, sm_120) is well above this gate, so
+    the downgrade path is dormant — kept as a defensive guard for any
+    older dev GPU that gets temporarily attached.
     """
     if setting not in _DTYPE_MAP:
         raise ValueError(f"unsupported dtype: {setting!r}")
@@ -236,14 +237,13 @@ def _should_compile(settings: Settings) -> bool:
     """Decide whether to wrap the model in :func:`torch.compile`.
 
     Tier-C optimisation: torch.compile materially speeds up Ampere+
-    (sm_80) but on Pascal (sm_61) it either no-ops or regresses because
-    Inductor's preferred backends require Triton, which targets
-    sm_70 minimum. We therefore auto-OFF below sm_70 unless the
-    operator explicitly forces ``always``.
+    (sm_80) and Blackwell (sm_120, current prod target). The sm < 7.0
+    auto-off branch is retained for older dev GPUs — Inductor's
+    preferred backends require Triton (sm_70 minimum).
 
     Modes (``settings.use_compile``):
       * ``"never"``  — never compile (default-safe).
-      * ``"auto"``   — compile only on cap >= (7,0).
+      * ``"auto"``   — compile only on cap >= (7,0). On 5070 this is ON.
       * ``"always"`` — compile regardless (operator opt-in for testing).
     """
     mode = settings.use_compile

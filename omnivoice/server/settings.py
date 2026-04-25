@@ -64,16 +64,18 @@ class Settings(BaseSettings):
 
     # ── Concurrency ──────────────────────────────────────────────────
     max_concurrency: int = Field(
-        default=1,
+        default=4,
         ge=1,
         description=(
-            "Maximum concurrent in-flight synthesis calls. Single-GPU hosts "
-            "should keep this at 1 to avoid CUDA OOM."
+            "Maximum concurrent in-flight synthesis calls. Default 4 is "
+            "calibrated for RTX 5070 (12 GB, Blackwell, fp16) under the "
+            "persistent-residency policy. Drop to 1 on shared / lower-VRAM "
+            "hosts to avoid CUDA OOM."
         ),
     )
 
     # ── Generation defaults ──────────────────────────────────────────
-    default_num_step: int = Field(default=32, ge=1, le=128)
+    default_num_step: int = Field(default=16, ge=1, le=128)
     default_guidance_scale: float = Field(default=2.0, ge=0.0, le=10.0)
     default_sample_rate: int = Field(default=24000)
 
@@ -94,8 +96,8 @@ class Settings(BaseSettings):
         description=(
             "If > 0, cap this process at this fraction of total VRAM via "
             "torch.cuda.set_per_process_memory_fraction(). 0 disables the cap. "
-            "Recommended: 0.7 on hosts that share the GPU with a desktop, "
-            "0.9 on dedicated hosts. GTX 1070 (8GB) → ~5.5GB at 0.7."
+            "Recommended: 0.85 on dedicated hosts (RTX 5070 12GB → ~10.2GB), "
+            "0.5–0.7 when sharing the GPU with a desktop."
         ),
     )
     cudnn_benchmark: bool = Field(
@@ -152,8 +154,9 @@ class Settings(BaseSettings):
     use_compile: Literal["auto", "always", "never"] = Field(
         default="auto",
         description=(
-            "torch.compile policy. 'auto' enables on cap >= (7,0). On Pascal "
-            "(sm_61) this is a no-op regardless. Reserved for Phase 3."
+            "torch.compile policy. 'auto' enables on cap >= (7,0). On the "
+            "current prod target (RTX 5070, sm_120) this is ON; on legacy "
+            "Pascal (sm_61) it would no-op. Reserved for Phase 3."
         ),
     )
     ref_cache_size: int = Field(
