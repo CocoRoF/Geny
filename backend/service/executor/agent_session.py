@@ -1202,6 +1202,20 @@ class AgentSession:
         self._pipeline.attach_runtime(**attach_kwargs)
         self._preset_name = f"env:{self._env_id}" if self._env_id else "env"
 
+        # G9.x: register optional Phase-7 strategies on stage slot
+        # registries so manifest preset overrides can select them by
+        # name. Each helper is a no-op when its target stage/slot is
+        # missing or the executor pin is older than the strategy.
+        try:
+            from service.strategies import register_mcp_resource_retriever
+
+            register_mcp_resource_retriever(self._pipeline)
+        except Exception:
+            logger.debug(
+                "_build_pipeline: optional strategy registration failed",
+                exc_info=True,
+            )
+
         # G6.4: populate Stage 4's guard chain. The manifest declares the
         # chain order but the executor's reorder_chain only reorders
         # *existing* items; the default GuardStage starts with an empty
