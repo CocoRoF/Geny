@@ -36,9 +36,23 @@ playwright>=1.49.0
 #   (iteration / cost / tokens / wall-clock / tool calls) — Stage
 #   13 pluggable budget registry replacing the fixed two-dim
 #   controller.
+# 0.42.x (executor uplift Phase 7 sprint batch S7.8 + S7.9 + S7.10):
+# - ModelRouter ABC + Passthrough/Adaptive routers — Stage 6 third
+#   strategy slot for per-call model selection (heuristic Opus /
+#   Sonnet / Haiku tier picking based on thinking flag, char-count
+#   thresholds, tools-on-state). Stage emits api.model_routed on
+#   actual swaps; never blocks on router exceptions.
+# - StructuredReflectiveStrategy + s15_memory.insight helpers —
+#   Stage 15 typed Insight record path replacing the legacy
+#   needs_reflection free-form flag. Re-uses existing
+#   memory.provider.Insight / Importance schema.
+# - ThinkingBudgetPlanner ABC + Static/Adaptive planners — Stage 8
+#   per-turn budget sizing. Hosts call ThinkStage.apply_planned_budget
+#   from a pre-Stage-6 hook to size thinking_budget_tokens by
+#   prompt size + tools + reflection signals.
 # All surfaces independently opt-in; without consuming them
-# behaviour is identical to 0.40.x.
-geny-executor[web]>=0.41.0,<0.42.0
+# behaviour is identical to 0.41.x.
+geny-executor[web]>=0.42.0,<0.43.0
 # MCP (Model Context Protocol)
 mcp>=1.0.0
 # TTS (Text-to-Speech)
