@@ -1166,6 +1166,19 @@ class AgentSession:
                 exc_info=True,
             )
 
+        # G6.5: forward a session-scoped HookRunner when the operator
+        # has set GENY_ALLOW_HOOKS=1 and ~/.geny/hooks.yaml declares
+        # enabled hooks. Returns {} otherwise — Stage 4 / Stage 10 fall
+        # back to no-op hook handling.
+        try:
+            from service.hooks import attach_kwargs as _hook_attach_kwargs
+            attach_kwargs.update(_hook_attach_kwargs())
+        except Exception:
+            logger.debug(
+                "_build_pipeline: hook install failed; continuing without runner",
+                exc_info=True,
+            )
+
         if self._memory_manager is not None:
             attach_kwargs["memory_retriever"] = GenyMemoryRetriever(
                 self._memory_manager,
