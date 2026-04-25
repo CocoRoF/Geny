@@ -9,7 +9,7 @@ import asyncio
 import json
 import time
 from logging import getLogger
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from starlette.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -1318,4 +1318,201 @@ async def restore_checkpoint_endpoint(
         "checkpoint_id": body.checkpoint_id,
         "restored": True,
         "messages_restored": len(getattr(state, "messages", []) or []),
+    }
+
+
+# ============================================================================
+# G8.1 — Per-session MCP admin (Phase 6 MCPManager.connect / disconnect FSM)
+# ============================================================================
+#
+# The executor's MCPManager lives on each pipeline (Pipeline._mcp_manager).
+# These endpoints expose its public API so an operator can add /
+# disable / enable / disconnect MCP servers on a *running* session
+# without restarting the process. State changes flow back over the
+# WebSocket as `mcp_server_state` events (G8.2 wires the bridge).
+
+
+class MCPServerStateInfo(BaseModel):
+    name: str
+    state: str
+    last_error: Optional[str] = None
+
+
+class MCPServerListResponse(BaseModel):
+    session_id: str
+    servers: List[MCPServerStateInfo]
+
+
+class MCPServerAddRequest(BaseModel):
+    name: str = Field(..., description="Unique server name")
+    config: Dict[str, Any] = Field(
+        ..., description="Transport-specific config dict (command, url, env, etc.)"
+    )
+
+
+def _resolve_mcp_manager(session_id: str):
+    pipeline = _resolve_pipeline(session_id)
+    manager = getattr(pipeline, "_mcp_manager", None) or getattr(
+        pipeline, "mcp_manager", None
+    )
+    if manager is None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Session {session_id} pipeline has no MCPManager attached",
+        )
+    return manager
+
+
+def _serialize_server(name: str, manager: Any) -> MCPServerStateInfo:
+    """Best-effort: read state from MCPManager. The exact API varies by
+    executor minor version (`get_state` / `state_of` / `_states[name]`),
+    so try a couple of shapes before falling back to ``unknown``."""
+    state = "unknown"
+    last_error: Optional[str] = None
+    for attr in ("get_state", "state_of"):
+        getter = getattr(manager, attr, None)
+        if callable(getter):
+            try:
+                value = getter(name)
+                state = getattr(value, "value", str(value))
+                break
+            except Exception:
+                continue
+    states_dict = getattr(manager, "_states", None) or getattr(manager, "states", None)
+    if state == "unknown" and isinstance(states_dict, dict) and name in states_dict:
+        value = states_dict[name]
+        state = getattr(value, "value", str(value))
+    errors = getattr(manager, "_errors", None) or getattr(manager, "errors", None)
+    if isinstance(errors, dict):
+        err = errors.get(name)
+        if err:
+            last_error = str(err)
+    return MCPServerStateInfo(name=name, state=state, last_error=last_error)
+
+
+@router.get(
+    "/{session_id}/mcp/servers",
+    response_model=MCPServerListResponse,
+    summary="List MCP servers attached to a session",
+)
+async def list_mcp_servers(
+    session_id: str = Path(...),
+    auth: dict = Depends(require_auth),
+):
+    """Return the MCPManager's current view of every server it knows
+    about, including FSM state."""
+    manager = _resolve_mcp_manager(session_id)
+    names = []
+    for attr in ("server_names", "list_servers"):
+        getter = getattr(manager, attr, None)
+        if callable(getter):
+            try:
+                names = list(getter())
+                break
+            except Exception:
+                continue
+        if isinstance(getter, (list, tuple, set)):
+            names = list(getter)
+            break
+    if not names:
+        configs = getattr(manager, "_configs", None) or getattr(manager, "configs", None)
+        if isinstance(configs, dict):
+            names = list(configs.keys())
+    return MCPServerListResponse(
+        session_id=session_id,
+        servers=[_serialize_server(n, manager) for n in names],
+    )
+
+
+@router.post(
+    "/{session_id}/mcp/servers",
+    summary="Connect a new MCP server on a running session",
+)
+async def add_mcp_server(
+    body: MCPServerAddRequest,
+    session_id: str = Path(...),
+    auth: dict = Depends(require_auth),
+):
+    """Dispatches to ``MCPManager.connect(name, config)``.
+
+    Returns 409 when the executor pin doesn't expose the ``connect``
+    method; 200 with state info on success.
+    """
+    manager = _resolve_mcp_manager(session_id)
+    connect = getattr(manager, "connect", None)
+    if not callable(connect):
+        raise HTTPException(
+            status_code=409,
+            detail="MCPManager has no connect() — geny-executor < 1.0",
+        )
+    try:
+        result = connect(body.name, body.config)
+        if hasattr(result, "__await__"):
+            await result
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"connect failed: {exc}")
+    return {
+        "session_id": session_id,
+        "server": _serialize_server(body.name, manager).model_dump(),
+    }
+
+
+@router.delete(
+    "/{session_id}/mcp/servers/{name}",
+    summary="Disconnect an MCP server from a running session",
+)
+async def disconnect_mcp_server(
+    session_id: str = Path(...),
+    name: str = Path(...),
+    auth: dict = Depends(require_auth),
+):
+    manager = _resolve_mcp_manager(session_id)
+    disc = getattr(manager, "disconnect", None)
+    if not callable(disc):
+        raise HTTPException(status_code=409, detail="MCPManager has no disconnect()")
+    try:
+        result = disc(name)
+        if hasattr(result, "__await__"):
+            await result
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"disconnect failed: {exc}")
+    return {"session_id": session_id, "name": name, "disconnected": True}
+
+
+@router.post(
+    "/{session_id}/mcp/servers/{name}/{action}",
+    summary="Disable / enable / test an MCP server",
+)
+async def control_mcp_server(
+    session_id: str = Path(...),
+    name: str = Path(...),
+    action: str = Path(..., description="One of: disable / enable / test"),
+    auth: dict = Depends(require_auth),
+):
+    if action not in ("disable", "enable", "test"):
+        raise HTTPException(status_code=400, detail=f"Unknown action: {action}")
+    manager = _resolve_mcp_manager(session_id)
+    method_name = {
+        "disable": "disable_server",
+        "enable": "enable_server",
+        "test": "test_connection",
+    }[action]
+    fn = getattr(manager, method_name, None)
+    if not callable(fn):
+        raise HTTPException(
+            status_code=409,
+            detail=f"MCPManager has no {method_name}() — geny-executor < 1.0",
+        )
+    try:
+        result = fn(name)
+        if hasattr(result, "__await__"):
+            result = await result
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"{action} failed: {exc}")
+    return {
+        "session_id": session_id,
+        "name": name,
+        "action": action,
+        "result": str(result) if result is not None else "ok",
+        "server": _serialize_server(name, manager).model_dump(),
     }
