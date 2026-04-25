@@ -1,5 +1,5 @@
 /**
- * Stage metadata for the 16-stage pipeline.
+ * Stage metadata for the 21-stage pipeline (geny-executor 1.0+).
  *
  * Ported from geny-executor-web's
  *   - src/utils/stageMetadata.ts (EN)
@@ -8,11 +8,28 @@
  * Kept self-contained to the Geny frontend so we don't introduce
  * a runtime dependency on the executor-web package. The shape is
  * intentionally identical so a future shared package is trivial.
+ *
+ * G1.2: widened the layout from 16 to 21 entries to match the
+ * Sub-phase 9a renumber. Existing stages moved to their new
+ * orders (agent 11→12, evaluate 12→14, loop 13→16, emit 14→17,
+ * memory 15→18, yield 16→21) and five new categories
+ * (review / orchestration / gate / finalize) host the five new
+ * entries (tool_review / task_registry / hitl / summarize /
+ * persist).
  */
 import type { Locale } from '@/lib/i18n';
 
 export type StagePhase = 'A' | 'B' | 'C';
-export type StageCategory = 'ingress' | 'pre_flight' | 'execution' | 'decision' | 'egress';
+export type StageCategory =
+  | 'ingress'
+  | 'pre_flight'
+  | 'execution'
+  | 'decision'
+  | 'egress'
+  | 'review'        // Sub-phase 9a: tool_review
+  | 'orchestration' // Sub-phase 9a: task_registry
+  | 'gate'          // Sub-phase 9a: hitl
+  | 'finalize';     // Sub-phase 9a: summarize / persist (yield kept on egress)
 
 export interface StrategySlotMeta {
   slot: string;
@@ -419,6 +436,40 @@ const STAGES_EN: StageMetaLocalized[] = [
   },
   {
     order: 11,
+    name: 'tool_review',
+    phase: 'B',
+    category: 'review',
+    canBypass: true,
+    bypassCondition: 'No pending tool calls and no tool results to review',
+    displayName: 'Tool Review',
+    categoryLabel: 'Review',
+    description: 'Inspect tool calls + results, raise advisory flags',
+    detailedDescription:
+      'Sub-phase 9b chain stage that walks an ordered list of Reviewer strategies over the just-executed tool calls and their results. Each reviewer raises zero or more flags (info/warn/error severities) recorded at state.shared.tool_review_flags. Downstream stages — Evaluate especially — can escalate the loop on error-severity flags. Geny forwards each flag to the WebSocket event stream so the UI surfaces them inline.',
+    technicalBehavior: [
+      'Bypasses when both pending_tool_calls and tool_results are empty',
+      'Resets state.shared.tool_review_flags at the start of every turn',
+      'Runs each reviewer in declared order (failure-isolated per reviewer)',
+      'Appends every flag to state.shared.tool_review_flags',
+      "Emits 'tool_review.flag' per record + 'tool_review.completed' summary",
+    ],
+    strategies: [
+      {
+        slot: 'Reviewer Chain',
+        options: [
+          { name: 'SchemaReviewer', description: 'Flag tool calls missing required input fields' },
+          { name: 'SensitivePatternReviewer', description: 'Flag inputs that look like secrets (api keys, AWS keys, bearer tokens)' },
+          { name: 'DestructiveResultReviewer', description: 'Surface results from known-mutating tools (Bash / Write / Edit)' },
+          { name: 'NetworkAuditReviewer', description: 'Audit network egress; allowlist support' },
+          { name: 'SizeReviewer', description: 'Flag oversized tool results (warn / error byte bands)' },
+        ],
+      },
+    ],
+    architectureNotes:
+      'Geny activates this stage on worker_adaptive only — VTuber and worker_easy keep it off by default. Hosts can swap the chain registry per-environment for domain-specific reviewers.',
+  },
+  {
+    order: 12,
     name: 'agent',
     phase: 'B',
     category: 'execution',
@@ -452,7 +503,45 @@ const STAGES_EN: StageMetaLocalized[] = [
       'Sub-agents are fully isolated Pipeline instances. This enables divide-and-conquer architectures where a manager agent decomposes a complex task and delegates parts to expert agents. Each sub-agent can use a different preset and model.',
   },
   {
-    order: 12,
+    order: 13,
+    name: 'task_registry',
+    phase: 'B',
+    category: 'orchestration',
+    canBypass: true,
+    bypassCondition: 'No tasks queued at state.shared.tasks_new_this_turn',
+    displayName: 'Task Registry',
+    categoryLabel: 'Orchestration',
+    description: 'Track agent-spawned tasks across the loop',
+    detailedDescription:
+      'Sub-phase 9b stage that drains tasks queued at state.shared.tasks_new_this_turn (typically populated by Stage 12 Agent or host code), records them via the registry slot, and dispatches them per the policy slot. Publishes a group-by-status snapshot at state.shared.tasks_by_status so downstream stages and the UI can read which tasks are running / done / failed.',
+    technicalBehavior: [
+      'Drains state.shared.tasks_new_this_turn (always clears the queue)',
+      'Coerces dicts → TaskRecord; invalid payloads emit task_registry.invalid_payload',
+      'Calls policy.apply(new_tasks, registry, state) (try/except so a bad policy can\'t wedge the loop)',
+      'Refreshes state.shared.tasks_by_status with the registry snapshot',
+      "Emits 'task.registered' per task + 'task_registry.synced' summary",
+    ],
+    strategies: [
+      {
+        slot: 'Registry',
+        options: [
+          { name: 'InMemoryRegistry', description: 'Process-lifetime dict (default)' },
+        ],
+      },
+      {
+        slot: 'Policy',
+        options: [
+          { name: 'FireAndForgetPolicy', description: 'Register and return; host-driven scheduler (default)' },
+          { name: 'EagerWaitPolicy', description: 'Synchronously await each task (executor wired by host)' },
+          { name: 'TimedWaitPolicy', description: 'Eager wait bounded by timeout_seconds; on timeout the task stays RUNNING' },
+        ],
+      },
+    ],
+    architectureNotes:
+      'Inactive in Geny presets by default — the host opts in when a workflow needs spawn-and-wait semantics. Stage 14 Evaluate can read tasks_by_status to gate completion on terminal task states.',
+  },
+  {
+    order: 14,
     name: 'evaluate',
     phase: 'B',
     category: 'decision',
@@ -491,7 +580,47 @@ const STAGES_EN: StageMetaLocalized[] = [
       'Evaluation can override tool-use continuation — even with pending tools, evaluation can force completion or escalation. This prevents infinite loops and enables policy-driven early exits.',
   },
   {
-    order: 13,
+    order: 15,
+    name: 'hitl',
+    phase: 'B',
+    category: 'gate',
+    canBypass: true,
+    bypassCondition: 'Nothing populated state.shared.hitl_request this turn',
+    displayName: 'HITL',
+    categoryLabel: 'Gate',
+    description: 'Pause the loop until a human decision arrives',
+    detailedDescription:
+      'Sub-phase 9b human-in-the-loop gate. When state.shared.hitl_request carries an HITLRequest, hands the request to the configured Requester and awaits its decision (bounded by the timeout policy). Geny wires PipelineResumeRequester at runtime so an external endpoint — POST /api/agents/{id}/hitl/resume — can satisfy the pause via Pipeline.resume(token, decision). Reject closes the loop with HITL_REJECTED, cancel escalates with HITL_CANCELLED.',
+    technicalBehavior: [
+      'Bypasses when state.shared.hitl_request is empty',
+      'Consumes the request key up front so a failing requester can\'t re-loop',
+      'Awaits the requester (asyncio.wait_for when timeout_seconds is set)',
+      'Appends every decision to state.shared.hitl_history (audit log)',
+      "Emits 'hitl.request' / 'hitl.decision' / 'hitl.timeout' events",
+    ],
+    strategies: [
+      {
+        slot: 'Requester',
+        options: [
+          { name: 'NullRequester', description: 'Always approves (safe default — pipeline never pauses)' },
+          { name: 'CallbackRequester', description: 'Delegate to a host async callable (in-process WebSocket handlers)' },
+          { name: 'PipelineResumeRequester', description: 'Awaits Pipeline.resume(token, decision) — Geny wires this at runtime' },
+        ],
+      },
+      {
+        slot: 'Timeout Policy',
+        options: [
+          { name: 'IndefiniteTimeout', description: 'Wait forever — relies on the UI to resolve (default for Geny)' },
+          { name: 'AutoApproveTimeout', description: 'Auto-approve after timeout_seconds' },
+          { name: 'AutoRejectTimeout', description: 'Auto-reject after timeout_seconds' },
+        ],
+      },
+    ],
+    architectureNotes:
+      'Geny defaults to PipelineResumeRequester + IndefiniteTimeout — pending tokens surface via GET /api/agents/{id}/hitl/pending and the frontend modal posts the operator decision back. DELETE /hitl/{token} drops in-flight approvals on session terminate.',
+  },
+  {
+    order: 16,
     name: 'loop',
     phase: 'B',
     category: 'decision',
@@ -524,7 +653,7 @@ const STAGES_EN: StageMetaLocalized[] = [
       "If loop_decision == 'continue': increment state.iteration and jump back to Stage 2 (Context). Otherwise: break out of Phase B and proceed to Phase C (Finalize). This is the only stage that controls the loop boundary.",
   },
   {
-    order: 14,
+    order: 17,
     name: 'emit',
     phase: 'C',
     category: 'egress',
@@ -558,7 +687,7 @@ const STAGES_EN: StageMetaLocalized[] = [
       'Emitters run conceptually in parallel — response fans out to multiple consumers. This enables multi-channel scenarios: chat UI + voice synthesis + logging, all from the same pipeline result.',
   },
   {
-    order: 15,
+    order: 18,
     name: 'memory',
     phase: 'C',
     category: 'egress',
@@ -597,7 +726,84 @@ const STAGES_EN: StageMetaLocalized[] = [
       "Memory separates 'what to save' (strategy) from 'where to save' (persistence). This decoupling allows the same conversation data to be stored in files, vector databases, or discarded entirely, depending on configuration.",
   },
   {
-    order: 16,
+    order: 19,
+    name: 'summarize',
+    phase: 'C',
+    category: 'finalize',
+    canBypass: true,
+    bypassCondition: 'NoSummarizer (default off — runs only when summarizer slot is real)',
+    displayName: 'Summarize',
+    categoryLabel: 'Finalize',
+    description: 'Distil the turn into a SummaryRecord + grade importance',
+    detailedDescription:
+      'Sub-phase 9b finalize stage that produces a SummaryRecord (turn_id / abstract / key_facts / entities / tags / importance) for the just-completed turn. Importance is graded by a separate slot. When the host wired a memory provider with record_summary the SummaryRecord forwards to it; otherwise it lands at state.shared.turn_summary + appended to state.shared.summary_history.',
+    technicalBehavior: [
+      'Bypasses when summarizer is NoSummarizer (the default)',
+      'Calls summarizer.summarize(state); skips when it returns None',
+      'Calls importance.score(record, state); falls back to summarizer\'s default on error',
+      'Publishes record at state.shared.turn_summary + appends to history',
+      "Emits 'summary.written' (always) + 'summary.provider_recorded' / .provider_error",
+    ],
+    strategies: [
+      {
+        slot: 'Summarizer',
+        options: [
+          { name: 'NoSummarizer', description: 'Skip — bypass the stage (default)' },
+          { name: 'RuleBasedSummarizer', description: 'Sentence-split + capitalised-token extraction (Geny worker_adaptive default)' },
+        ],
+      },
+      {
+        slot: 'Importance',
+        options: [
+          { name: 'FixedImportance', description: 'Single fixed grade (default MEDIUM)' },
+          { name: 'HeuristicImportance', description: 'Keyword + size heuristics; escalates to CRITICAL on tool_review error' },
+        ],
+      },
+    ],
+    architectureNotes:
+      'Geny worker_adaptive activates this stage with rule_based + heuristic. The forwarded record_summary call requires a MemoryProvider attached via MemorySessionRegistry — when missing the record still lives on state.shared for downstream consumers.',
+  },
+  {
+    order: 20,
+    name: 'persist',
+    phase: 'C',
+    category: 'finalize',
+    canBypass: true,
+    bypassCondition: 'NoPersister (default off — Geny swaps in FilePersister at runtime)',
+    displayName: 'Persist',
+    categoryLabel: 'Finalize',
+    description: 'Checkpoint the non-runtime state to durable storage',
+    detailedDescription:
+      'Sub-phase 9b checkpoint writer. Serialises the non-runtime portion of state (messages / shared / metadata / iteration / completion signals / token_usage) and hands it to the persister. Frequency policy decides whether to write this turn — Geny defaults to on_significant so checkpoints land only on meaningful events (HITL decisions, tool review errors, high-importance summaries, terminal turns).',
+    technicalBehavior: [
+      'Bypasses when persister is NoPersister (default)',
+      'Frequency policy gates the write (every_turn / every_n_turns / on_significant)',
+      'Builds payload from non-runtime state only (llm_client / session_runtime excluded by design)',
+      'Persister exceptions emit checkpoint.persister_error (loop continues)',
+      'Records last_checkpoint id at state.shared and appends to checkpoint_history',
+    ],
+    strategies: [
+      {
+        slot: 'Persister',
+        options: [
+          { name: 'NoPersister', description: 'No-op — pipeline pays zero cost (default)' },
+          { name: 'FilePersister', description: 'Atomic JSON files under storage_path/checkpoints/<session> (Geny worker_adaptive default)' },
+        ],
+      },
+      {
+        slot: 'Frequency',
+        options: [
+          { name: 'EveryTurnFrequency', description: 'Write on every turn — highest durability + IO' },
+          { name: 'EveryNTurnsFrequency', description: 'Write every N turns (configurable)' },
+          { name: 'OnSignificantFrequency', description: 'Write only on noteworthy events (Geny default)' },
+        ],
+      },
+    ],
+    architectureNotes:
+      'Geny\'s install_file_persister(pipeline, storage_path) wires the FilePersister at session-build time. restore_state_from_checkpoint(persister, ckpt_id) is the read counterpart for crash-recovery flows.',
+  },
+  {
+    order: 21,
     name: 'yield',
     phase: 'C',
     category: 'egress',
@@ -971,6 +1177,35 @@ const STAGES_KO: Record<number, StageKo> = {
     bypassCondition: '대기 중인 도구 호출 없음 (AI가 도구를 요청하지 않음)',
   },
   11: {
+    displayName: '도구 검토',
+    categoryLabel: '검토',
+    description: '도구 호출 + 결과를 점검하고 권고 플래그 발행',
+    detailedDescription:
+      'Sub-phase 9b 체인 스테이지로, Reviewer 전략 목록을 직전에 실행된 도구 호출과 결과에 순서대로 적용합니다. 각 Reviewer는 0개 이상의 플래그를 발행하며 (info/warn/error 심각도) state.shared.tool_review_flags에 누적됩니다. 다운스트림 스테이지(특히 Evaluate)는 error 심각도 플래그를 보고 루프를 escalate할 수 있습니다. Geny는 각 플래그를 WebSocket 이벤트 스트림으로 전달해 UI가 실시간으로 표시합니다.',
+    technicalBehavior: [
+      'pending_tool_calls와 tool_results가 모두 비어있으면 우회',
+      '매 턴 시작에 state.shared.tool_review_flags를 리셋',
+      'Reviewer를 선언 순서대로 실행 (Reviewer당 실패 격리)',
+      '모든 플래그를 state.shared.tool_review_flags에 추가',
+      "'tool_review.flag' 레코드별 + 'tool_review.completed' 요약 이벤트 발행",
+    ],
+    strategies: [
+      {
+        slot: 'Reviewer Chain',
+        options: [
+          { name: 'SchemaReviewer', description: '필수 입력 필드가 누락된 도구 호출 플래그' },
+          { name: 'SensitivePatternReviewer', description: '비밀 같은 입력 (api 키, AWS 키, bearer 토큰) 플래그' },
+          { name: 'DestructiveResultReviewer', description: '변경 도구 (Bash / Write / Edit) 결과 표시' },
+          { name: 'NetworkAuditReviewer', description: '네트워크 송신 감사; 허용 호스트 목록 지원' },
+          { name: 'SizeReviewer', description: '과도한 도구 결과 플래그 (warn / error 바이트 구간)' },
+        ],
+      },
+    ],
+    architectureNotes:
+      'Geny는 worker_adaptive에서만 이 스테이지를 활성화 — VTuber와 worker_easy는 기본 비활성. 호스트는 도메인별 Reviewer로 체인 레지스트리를 환경별로 교체할 수 있습니다.',
+    bypassCondition: '대기 중인 도구 호출 + 도구 결과가 모두 없음',
+  },
+  12: {
     displayName: '에이전트',
     categoryLabel: '실행',
     description: '멀티 에이전트 오케스트레이션 및 위임',
@@ -999,7 +1234,40 @@ const STAGES_KO: Record<number, StageKo> = {
       '서브 에이전트는 완전히 격리된 Pipeline 인스턴스입니다. 관리자 에이전트가 복잡한 작업을 분해하여 전문가 에이전트에 부분을 위임하는 분할-정복 아키텍처를 가능하게 합니다. 각 서브 에이전트는 다른 프리셋과 모델을 사용할 수 있습니다.',
     bypassCondition: 'SingleAgentOrchestrator 모드에서 위임 요청 없음',
   },
-  12: {
+  13: {
+    displayName: '태스크 레지스트리',
+    categoryLabel: '오케스트레이션',
+    description: '에이전트가 생성한 태스크를 루프 전반에 걸쳐 추적',
+    detailedDescription:
+      'Sub-phase 9b 스테이지로, state.shared.tasks_new_this_turn에 큐된 태스크를 (보통 Stage 12 Agent나 호스트 코드가 채움) 드레인하고 registry 슬롯을 통해 등록한 뒤 policy 슬롯에 따라 처리합니다. registry 스냅샷의 그룹별 상태 뷰를 state.shared.tasks_by_status에 게시해 다운스트림 스테이지와 UI가 실행/완료/실패 상태를 확인할 수 있습니다.',
+    technicalBehavior: [
+      'state.shared.tasks_new_this_turn을 드레인 (큐는 항상 비움)',
+      'dict → TaskRecord 변환; 잘못된 페이로드는 task_registry.invalid_payload 발행',
+      'policy.apply(new_tasks, registry, state) 호출 (try/except로 정책 버그가 루프를 막지 못함)',
+      'registry 스냅샷으로 state.shared.tasks_by_status 갱신',
+      "'task.registered' 태스크별 + 'task_registry.synced' 요약 이벤트 발행",
+    ],
+    strategies: [
+      {
+        slot: 'Registry',
+        options: [
+          { name: 'InMemoryRegistry', description: '프로세스 수명 dict (기본값)' },
+        ],
+      },
+      {
+        slot: 'Policy',
+        options: [
+          { name: 'FireAndForgetPolicy', description: '등록 후 반환; 호스트 스케줄러에 위임 (기본값)' },
+          { name: 'EagerWaitPolicy', description: '각 태스크를 동기적으로 대기 (executor는 호스트가 연결)' },
+          { name: 'TimedWaitPolicy', description: 'timeout_seconds로 제한된 대기; 시간 초과 시 태스크는 RUNNING 유지' },
+        ],
+      },
+    ],
+    architectureNotes:
+      'Geny 프리셋에서는 기본 비활성 — 호스트가 spawn-and-wait 의미가 필요한 워크플로우에서 활성화. Stage 14 Evaluate가 tasks_by_status를 읽어 종료 조건을 게이트할 수 있습니다.',
+    bypassCondition: 'state.shared.tasks_new_this_turn에 큐된 태스크 없음',
+  },
+  14: {
     displayName: '평가',
     categoryLabel: '결정',
     description: '응답 품질 및 완성도 판단',
@@ -1033,7 +1301,42 @@ const STAGES_KO: Record<number, StageKo> = {
     architectureNotes:
       '평가는 도구 사용 계속을 오버라이드할 수 있습니다 — 대기 중인 도구가 있어도 평가가 완료 또는 에스컬레이션을 강제할 수 있습니다. 이는 무한 루프를 방지하고 정책 기반 조기 종료를 가능하게 합니다.',
   },
-  13: {
+  15: {
+    displayName: 'HITL (사람 개입)',
+    categoryLabel: '게이트',
+    description: '사람의 결정이 도착할 때까지 루프를 일시정지',
+    detailedDescription:
+      'Sub-phase 9b human-in-the-loop 게이트. state.shared.hitl_request에 HITLRequest가 있을 때 구성된 Requester에 요청을 전달하고 결정을 대기 (timeout 정책으로 시간 제한). Geny는 런타임에 PipelineResumeRequester를 연결하므로 외부 엔드포인트 — POST /api/agents/{id}/hitl/resume — 가 Pipeline.resume(token, decision)으로 일시정지를 해제할 수 있습니다. Reject는 HITL_REJECTED로 루프 종료, Cancel은 HITL_CANCELLED로 escalate.',
+    technicalBehavior: [
+      'state.shared.hitl_request가 비어있으면 우회',
+      '실패한 Requester가 다시 루프되지 않도록 요청 키를 즉시 소비',
+      'Requester 대기 (timeout_seconds가 설정되면 asyncio.wait_for 사용)',
+      '모든 결정을 state.shared.hitl_history에 추가 (감사 로그)',
+      "'hitl.request' / 'hitl.decision' / 'hitl.timeout' 이벤트 발행",
+    ],
+    strategies: [
+      {
+        slot: 'Requester',
+        options: [
+          { name: 'NullRequester', description: '항상 승인 (안전한 기본값 — 파이프라인이 멈추지 않음)' },
+          { name: 'CallbackRequester', description: '호스트의 async callable에 위임 (in-process WebSocket 핸들러)' },
+          { name: 'PipelineResumeRequester', description: 'Pipeline.resume(token, decision) 대기 — Geny가 런타임에 연결' },
+        ],
+      },
+      {
+        slot: 'Timeout Policy',
+        options: [
+          { name: 'IndefiniteTimeout', description: '무기한 대기 — UI가 해결 (Geny 기본값)' },
+          { name: 'AutoApproveTimeout', description: 'timeout_seconds 후 자동 승인' },
+          { name: 'AutoRejectTimeout', description: 'timeout_seconds 후 자동 거부' },
+        ],
+      },
+    ],
+    architectureNotes:
+      'Geny는 PipelineResumeRequester + IndefiniteTimeout을 기본 — 대기 중인 토큰은 GET /api/agents/{id}/hitl/pending으로 노출되고 프론트엔드 모달이 운영자 결정을 다시 POST. DELETE /hitl/{token}은 세션 종료 시 진행 중인 승인을 정리합니다.',
+    bypassCondition: '이번 턴에 state.shared.hitl_request에 아무것도 쓰여지지 않음',
+  },
+  16: {
     displayName: '루프',
     categoryLabel: '결정',
     description: '루프를 계속할지 종료할지 결정',
@@ -1061,7 +1364,7 @@ const STAGES_KO: Record<number, StageKo> = {
     architectureNotes:
       "loop_decision == 'continue'이면: state.iteration을 증가시키고 Stage 2(Context)로 돌아갑니다. 그렇지 않으면: Phase B를 벗어나 Phase C(Finalize)로 진행합니다. 루프 경계를 제어하는 유일한 스테이지입니다.",
   },
-  14: {
+  17: {
     displayName: '출력',
     categoryLabel: '이그레스',
     description: '결과 출력 (텍스트, 콜백, VTuber, TTS)',
@@ -1090,7 +1393,7 @@ const STAGES_KO: Record<number, StageKo> = {
       'Emitter는 개념적으로 병렬 실행됩니다 — 응답이 여러 소비자에게 팬아웃됩니다. 이는 멀티 채널 시나리오를 가능하게 합니다: 채팅 UI + 음성 합성 + 로깅, 모두 같은 파이프라인 결과에서.',
     bypassCondition: '체인에 등록된 Emitter 없음',
   },
-  15: {
+  18: {
     displayName: '메모리',
     categoryLabel: '이그레스',
     description: '대화 메모리 영속화',
@@ -1124,7 +1427,74 @@ const STAGES_KO: Record<number, StageKo> = {
       "Memory는 '무엇을 저장할지'(전략)와 '어디에 저장할지'(영속성)를 분리합니다. 이 분리를 통해 같은 대화 데이터를 구성에 따라 파일, 벡터 데이터베이스에 저장하거나 완전히 폐기할 수 있습니다.",
     bypassCondition: 'stateless=True 또는 NoMemoryStrategy 구성',
   },
-  16: {
+  19: {
+    displayName: '요약',
+    categoryLabel: '마무리',
+    description: '턴을 SummaryRecord로 정제 + 중요도 등급화',
+    detailedDescription:
+      'Sub-phase 9b 마무리 스테이지로, 방금 완료된 턴에 대한 SummaryRecord (turn_id / abstract / key_facts / entities / tags / importance)를 생성합니다. 중요도는 별도 슬롯에서 등급화됩니다. 호스트가 record_summary가 있는 메모리 프로바이더를 연결한 경우 SummaryRecord가 그쪽으로 전달되며, 그렇지 않으면 state.shared.turn_summary에 게시되고 state.shared.summary_history에 추가됩니다.',
+    technicalBehavior: [
+      'summarizer가 NoSummarizer면 우회 (기본값)',
+      'summarizer.summarize(state) 호출; None을 반환하면 건너뜀',
+      'importance.score(record, state) 호출; 오류 시 summarizer 기본 등급으로 폴백',
+      'state.shared.turn_summary에 레코드 게시 + history에 추가',
+      "'summary.written' (항상) + 'summary.provider_recorded' / .provider_error 발행",
+    ],
+    strategies: [
+      {
+        slot: 'Summarizer',
+        options: [
+          { name: 'NoSummarizer', description: '건너뜀 — 스테이지 우회 (기본값)' },
+          { name: 'RuleBasedSummarizer', description: '문장 분리 + 대문자 토큰 추출 (Geny worker_adaptive 기본값)' },
+        ],
+      },
+      {
+        slot: 'Importance',
+        options: [
+          { name: 'FixedImportance', description: '단일 고정 등급 (기본 MEDIUM)' },
+          { name: 'HeuristicImportance', description: '키워드 + 크기 휴리스틱; tool_review 오류 시 CRITICAL로 격상' },
+        ],
+      },
+    ],
+    architectureNotes:
+      'Geny worker_adaptive는 rule_based + heuristic으로 이 스테이지를 활성화. record_summary 전달 호출은 MemorySessionRegistry로 연결된 MemoryProvider가 필요 — 누락 시에도 레코드는 state.shared에 남아 다운스트림 소비자가 볼 수 있습니다.',
+    bypassCondition: 'NoSummarizer (기본 비활성 — summarizer 슬롯이 실제일 때만 실행)',
+  },
+  20: {
+    displayName: '체크포인트',
+    categoryLabel: '마무리',
+    description: '비-런타임 상태를 영속 저장소에 체크포인트',
+    detailedDescription:
+      'Sub-phase 9b 체크포인트 작성기. state의 비-런타임 부분 (messages / shared / metadata / iteration / completion 신호 / token_usage)을 직렬화하고 persister에 전달합니다. 빈도 정책이 이번 턴에 쓸지 결정 — Geny는 on_significant를 기본값으로 해서 의미 있는 이벤트(HITL 결정, tool review 오류, 높은 중요도 요약, 종료 턴)에만 체크포인트가 떨어집니다.',
+    technicalBehavior: [
+      'persister가 NoPersister면 우회 (기본값)',
+      '빈도 정책이 쓰기를 게이트 (every_turn / every_n_turns / on_significant)',
+      '비-런타임 state로만 페이로드 구성 (llm_client / session_runtime은 의도적으로 제외)',
+      'Persister 예외는 checkpoint.persister_error 발행 (루프 계속)',
+      'state.shared에 last_checkpoint id 기록 + checkpoint_history에 추가',
+    ],
+    strategies: [
+      {
+        slot: 'Persister',
+        options: [
+          { name: 'NoPersister', description: 'No-op — 파이프라인은 0 비용 (기본값)' },
+          { name: 'FilePersister', description: 'storage_path/checkpoints/<session> 아래 atomic JSON 파일 (Geny worker_adaptive 기본값)' },
+        ],
+      },
+      {
+        slot: 'Frequency',
+        options: [
+          { name: 'EveryTurnFrequency', description: '매 턴 쓰기 — 최고 내구성 + IO' },
+          { name: 'EveryNTurnsFrequency', description: 'N 턴마다 쓰기 (구성 가능)' },
+          { name: 'OnSignificantFrequency', description: '주목할 만한 이벤트에만 쓰기 (Geny 기본값)' },
+        ],
+      },
+    ],
+    architectureNotes:
+      'Geny의 install_file_persister(pipeline, storage_path)가 세션 빌드 시 FilePersister를 연결. restore_state_from_checkpoint(persister, ckpt_id)는 크래시 복구용 읽기 짝입니다.',
+    bypassCondition: 'NoPersister (기본 비활성 — Geny가 런타임에 FilePersister로 교체)',
+  },
+  21: {
     displayName: '반환',
     categoryLabel: '이그레스',
     description: '최종 결과 포맷팅 및 반환',
@@ -1200,6 +1570,12 @@ export function getCategoryColor(category: string): {
     execution: tint('var(--pipe-purple)', 10, 28),
     decision: tint('var(--pipe-green)', 10, 28),
     egress: tint('var(--pipe-red)', 10, 28),
+    // Sub-phase 9a additions — kept distinct so the canvas can hint at
+    // the new stage classes without overloading existing colours.
+    review: tint('var(--pipe-amber)', 10, 28),
+    orchestration: tint('var(--pipe-purple)', 10, 28),
+    gate: tint('var(--pipe-amber)', 10, 28),
+    finalize: tint('var(--pipe-green)', 10, 28),
   };
   return (
     map[category] ?? {
@@ -1216,15 +1592,36 @@ export function getCategoryColor(category: string): {
  * metadata doesn't carry a phase/category field explicitly.
  */
 export function inferPhaseFromOrder(order: number): StagePhase {
+  // 21-stage layout: A=1, B=2..16 (agent loop), C=17..21 (final).
   if (order === 1) return 'A';
-  if (order >= 2 && order <= 13) return 'B';
+  if (order >= 2 && order <= 16) return 'B';
   return 'C';
 }
 
 export function inferCategoryFromOrder(order: number): StageCategory {
+  // 21-stage layout (Sub-phase 9a):
+  //  1..3   ingress  (input, context, plan)
+  //  4..5   pre_flight (guard, budget)
+  //  6..10  execution (prompt, tool_select, think, model, tool)
+  //  11     review     (tool_review)
+  //  12     execution  (agent)
+  //  13     orchestration (task_registry)
+  //  14     decision   (evaluate)
+  //  15     gate       (hitl)
+  //  16     decision   (loop)
+  //  17..18 egress     (emit, memory)
+  //  19..20 finalize   (summarize, persist)
+  //  21     egress     (yield)
   if (order >= 1 && order <= 3) return 'ingress';
   if (order >= 4 && order <= 5) return 'pre_flight';
-  if (order >= 6 && order <= 11) return 'execution';
-  if (order >= 12 && order <= 13) return 'decision';
+  if (order >= 6 && order <= 10) return 'execution';
+  if (order === 11) return 'review';
+  if (order === 12) return 'execution';
+  if (order === 13) return 'orchestration';
+  if (order === 14) return 'decision';
+  if (order === 15) return 'gate';
+  if (order === 16) return 'decision';
+  if (order === 17 || order === 18) return 'egress';
+  if (order === 19 || order === 20) return 'finalize';
   return 'egress';
 }

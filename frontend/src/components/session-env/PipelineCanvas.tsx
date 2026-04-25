@@ -1,11 +1,15 @@
 'use client';
 
 /**
- * PipelineCanvas — SVG+HTML hybrid canvas that visualises the 16-stage
- * pipeline shape of an EnvironmentManifest. Ported verbatim from
- * geny-executor-web's `PipelineView`, but stripped of any execution-state
- * concepts (active/completed/error highlights). Geny's session view is
- * purely "which environment is applied", not "is it running right now".
+ * PipelineCanvas — SVG+HTML hybrid canvas that visualises the 21-stage
+ * pipeline shape of an EnvironmentManifest. Read-only: Geny's session
+ * view is purely "which environment is applied", not "is it running
+ * right now".
+ *
+ * G1.2: layout widened from 16 to 21 stages (Sub-phase 9a renumber).
+ * Phase B grew from 12 to 15 stages — laid out as three 5-wide rows
+ * with serpentine flow (left → right → right → left → left → right).
+ * Phase C grew from 3 to 5 stages and is centred under Phase B.
  */
 
 import { useEffect, useRef } from 'react';
@@ -14,16 +18,17 @@ import type { StageManifestEntry } from '@/types/environment';
 import { getStageMetaByOrder } from './stageMetadata';
 import { useZoomPan } from './useZoomPan';
 
-/* ═══ Layout constants (1:1 with executor-web) ═══ */
+/* ═══ Layout constants — sized for the 21-stage layout ═══ */
 const GAP = 110;
 const LM = 120;
 const ROW_A = 55;
 const ROW_B1 = 175;
-const ROW_B2 = 305;
-const ROW_C = 435;
+const ROW_B2 = 295;
+const ROW_B3 = 415;
+const ROW_C = 535;
 const R = 27;
 const CANVAS_W = 770;
-const CANVAS_H = 510;
+const CANVAS_H = 600;
 
 interface Pos {
   x: number;
@@ -32,20 +37,22 @@ interface Pos {
 
 function buildPositions(): Map<number, Pos> {
   const m = new Map<number, Pos>();
-  const midX = LM + 2.5 * GAP;
+  const midX = LM + 2 * GAP; // centre of a 5-wide row (i = 0..4)
 
-  // Phase A — stage 1 centered
+  // Phase A — stage 1 centred
   m.set(1, { x: midX, y: ROW_A });
 
-  // Phase B row 1 — stages 2-7 left → right
-  for (let i = 0; i < 6; i++) m.set(2 + i, { x: LM + i * GAP, y: ROW_B1 });
+  // Phase B row 1 — stages 2-6 left → right
+  for (let i = 0; i < 5; i++) m.set(2 + i, { x: LM + i * GAP, y: ROW_B1 });
 
-  // Phase B row 2 — stages 8-13 reversed (13 at left, 8 at right)
-  for (let i = 0; i < 6; i++) m.set(13 - i, { x: LM + i * GAP, y: ROW_B2 });
+  // Phase B row 2 — stages 7-11 reversed (11 at left, 7 at right)
+  for (let i = 0; i < 5; i++) m.set(11 - i, { x: LM + i * GAP, y: ROW_B2 });
 
-  // Phase C — stages 14-16 centered
-  const cStart = midX - GAP;
-  for (let i = 0; i < 3; i++) m.set(14 + i, { x: cStart + i * GAP, y: ROW_C });
+  // Phase B row 3 — stages 12-16 left → right
+  for (let i = 0; i < 5; i++) m.set(12 + i, { x: LM + i * GAP, y: ROW_B3 });
+
+  // Phase C — stages 17-21 centred
+  for (let i = 0; i < 5; i++) m.set(17 + i, { x: LM + i * GAP, y: ROW_C });
 
   return m;
 }
@@ -175,30 +182,36 @@ function Connections() {
       {/* Phase A → B */}
       {curve(1, 2, 'a-b')}
 
-      {/* Phase B row 1: 2→3→…→7 */}
-      {[2, 3, 4, 5, 6].map((n) => hLine(n, n + 1))}
+      {/* Phase B row 1: 2→3→4→5→6 */}
+      {[2, 3, 4, 5].map((n) => hLine(n, n + 1))}
 
-      {/* U-turn right: 7 → 8 */}
-      {curve(7, 8, 'uturn-r', { bulgeX: positions.get(7)!.x + 55 })}
+      {/* U-turn right: 6 → 7 */}
+      {curve(6, 7, 'uturn-r-1', { bulgeX: positions.get(6)!.x + 55 })}
 
-      {/* Phase B row 2: 8→9→…→13 */}
-      {[8, 9, 10, 11, 12].map((n) => hLine(n, n + 1))}
+      {/* Phase B row 2: 7→8→9→10→11 (rendered right-to-left visually
+          because positions for 7..11 are reversed in buildPositions) */}
+      {[7, 8, 9, 10].map((n) => hLine(n, n + 1))}
 
-      {/* Loop-back: 13 → 2 (left side, dashed) */}
-      {curve(13, 2, 'loop', {
-        bulgeX: positions.get(13)!.x - 55,
+      {/* U-turn left: 11 → 12 */}
+      {curve(11, 12, 'uturn-l-1', { bulgeX: positions.get(11)!.x - 55 })}
+
+      {/* Phase B row 3: 12→13→14→15→16 */}
+      {[12, 13, 14, 15].map((n) => hLine(n, n + 1))}
+
+      {/* Loop-back: 16 → 2 (left side, dashed) */}
+      {curve(16, 2, 'loop', {
+        bulgeX: positions.get(16)!.x - 55,
         dashed: true,
         color: 'var(--pipe-accent)',
         opacity: 0.3,
         className: 'pipe-dash-flow',
       })}
 
-      {/* Phase B → C: 13 → 14 */}
-      {curve(13, 14, 'b-c')}
+      {/* Phase B → C: 16 → 17 */}
+      {curve(16, 17, 'b-c')}
 
-      {/* Phase C: 14→15→16 */}
-      {hLine(14, 15)}
-      {hLine(15, 16)}
+      {/* Phase C: 17→18→19→20→21 */}
+      {[17, 18, 19, 20].map((n) => hLine(n, n + 1))}
     </g>
   );
 }
@@ -207,7 +220,8 @@ function Connections() {
 function Decorations() {
   const locale = useI18n((s) => s.locale);
   const isKo = locale === 'ko';
-  const midY_B = (ROW_B1 + ROW_B2) / 2;
+  // Centre of Phase B's three rows is the middle row (B2).
+  const midY_B = ROW_B2;
 
   return (
     <g>
@@ -251,12 +265,12 @@ function Decorations() {
         </g>
       ))}
 
-      {/* Phase B bounding box */}
+      {/* Phase B bounding box — spans all 3 serpentine rows */}
       <rect
         x={LM - 50}
         y={ROW_B1 - 46}
         width={5 * GAP + 100 + 55}
-        height={ROW_B2 - ROW_B1 + 92}
+        height={ROW_B3 - ROW_B1 + 92}
         rx={16}
         fill="none"
         stroke="var(--pipe-border)"
@@ -334,10 +348,10 @@ export default function PipelineCanvas({
     });
   }, [onResetView, resetView, fitToView]);
 
-  // Render 16 slots so layout stays stable even if the manifest
+  // Render 21 slots so layout stays stable even if the manifest
   // doesn't list every stage (missing stages show as .inactive).
   const slots: number[] = [];
-  for (let i = 1; i <= 16; i++) slots.push(i);
+  for (let i = 1; i <= 21; i++) slots.push(i);
 
   return (
     <div
