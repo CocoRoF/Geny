@@ -80,6 +80,7 @@ const en = {
     graph: 'Environment',
     sessionTools: 'Tools',
     dashboard: 'Dashboard',
+    admin: 'Admin',
     command: 'Command',
     storage: 'Storage',
     logs: 'Logs',

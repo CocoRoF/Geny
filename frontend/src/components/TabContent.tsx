@@ -17,6 +17,7 @@ const SettingsTab = dynamic(() => import('@/components/tabs/SettingsTab'));
 const SharedFolderTab = dynamic(() => import('@/components/tabs/SharedFolderTab'));
 const SessionToolsTab = dynamic(() => import('@/components/tabs/SessionToolsTab'));
 const DashboardTab = dynamic(() => import('@/components/tabs/DashboardTab'));
+const AdminPanel = dynamic(() => import('@/components/admin/AdminPanel'));
 const ToolSetsTab = dynamic(() => import('@/components/tabs/ToolSetsTab'));
 const MemoryTab = dynamic(() => import('@/components/tabs/MemoryTab'));
 const EnvironmentsTab = dynamic(() => import('@/components/tabs/EnvironmentsTab'));
@@ -37,6 +38,7 @@ const TAB_MAP: Record<string, React.ComponentType> = {
   settings: SettingsTab,
   sessionTools: SessionToolsTab,
   dashboard: DashboardTab,
+  admin: AdminPanel,
   toolSets: ToolSetsTab,
   memory: MemoryTab,
   vtuber: VTuberTab,

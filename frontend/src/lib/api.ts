@@ -335,6 +335,22 @@ export const agentApi = {
       }>;
     }>(`/api/skills/list`),
 
+  /** Admin viewers (G13). Read-only — operators still hand-edit YAML. */
+  permissionsList: () =>
+    apiCall<{
+      mode: string;
+      rules: Array<{ tool_name: string; pattern: string | null; behavior: string; source: string; reason: string | null }>;
+      sources_consulted: string[];
+    }>(`/api/permissions/list`),
+
+  hooksList: () =>
+    apiCall<{
+      enabled: boolean;
+      env_opt_in: boolean;
+      config_path: string;
+      entries: Array<{ event: string; command: string[]; timeout_ms: number | null; tool_filter: string[] }>;
+    }>(`/api/hooks/list`),
+
   /** Per-session MCP admin endpoints (G8.1 / G8.3). */
   mcpServersList: (id: string) =>
     apiCall<{

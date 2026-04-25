@@ -35,6 +35,7 @@ from controller.upload_controller import router as upload_router
 from controller.tool_preset_controller import router as tool_preset_router
 from controller.tool_controller import router as tool_catalog_router
 from controller.skills_controller import router as skills_router
+from controller.admin_controller import router as admin_router
 from controller.mcp_oauth_controller import (
     agent_oauth_router,
     mcp_resource_router,
@@ -587,6 +588,7 @@ app.include_router(upload_router)  # File / image uploads (multipart)
 app.include_router(tool_preset_router)  # Tool preset management
 app.include_router(tool_catalog_router)  # Tool catalog API
 app.include_router(skills_router)  # Skills (SKILL.md registry) API
+app.include_router(admin_router)  # Admin viewers — permissions/hooks (G13)
 app.include_router(agent_oauth_router)  # MCP OAuth start (G10.2)
 app.include_router(mcp_resource_router)  # mcp:// URI resolver (G10.3)
 app.include_router(docs_router)  # Documentation API
