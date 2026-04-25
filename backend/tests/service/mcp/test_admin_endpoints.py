@@ -149,6 +149,44 @@ async def test_add_connect_raises_400(_patch_agent_manager) -> None:
     assert exc.value.status_code == 400
 
 
+@pytest.mark.asyncio
+async def test_add_collides_with_manifest_server_409(_patch_agent_manager) -> None:
+    """G8.4: a runtime add for a name already declared in the
+    manifest is refused — manifest servers are immutable at runtime."""
+    manager = _StubManager()
+    # Simulate a manifest-owned server name.
+    manager._manifest_server_names = frozenset({"filesystem"})
+    _bind_agent(_patch_agent_manager, _StubAgent(_StubPipeline(manager)))
+    with pytest.raises(HTTPException) as exc:
+        await add_mcp_server(
+            body=MCPServerAddRequest(name="filesystem", config={}),
+            session_id="s1",
+            auth={},
+        )
+    assert exc.value.status_code == 409
+    assert "manifest" in exc.value.detail.lower()
+
+
+@pytest.mark.asyncio
+async def test_add_collides_via_existing_configs_409(_patch_agent_manager) -> None:
+    """Fallback collision detection: when the manager doesn't expose
+    _manifest_server_names, we treat any name in _configs as
+    manifest-owned (best-effort — anything that was there at session
+    boot)."""
+    manager = _StubManager(servers={"existing": "connected"})
+    # No _manifest_server_names attribute → fallback path.
+    if hasattr(manager, "_manifest_server_names"):
+        delattr(manager, "_manifest_server_names")
+    _bind_agent(_patch_agent_manager, _StubAgent(_StubPipeline(manager)))
+    with pytest.raises(HTTPException) as exc:
+        await add_mcp_server(
+            body=MCPServerAddRequest(name="existing", config={}),
+            session_id="s1",
+            auth={},
+        )
+    assert exc.value.status_code == 409
+
+
 # ── DELETE /mcp/servers/{name} ──────────────────────────────────────
 
 

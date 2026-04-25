@@ -1436,7 +1436,10 @@ async def add_mcp_server(
     """Dispatches to ``MCPManager.connect(name, config)``.
 
     Returns 409 when the executor pin doesn't expose the ``connect``
-    method; 200 with state info on success.
+    method or the server name is already owned by the manifest
+    (G8.4: manifest-declared servers win over runtime add — they
+    survive session restarts and are auditable in git, so we refuse
+    runtime mutation rather than silently shadowing them).
     """
     manager = _resolve_mcp_manager(session_id)
     connect = getattr(manager, "connect", None)
@@ -1445,6 +1448,34 @@ async def add_mcp_server(
             status_code=409,
             detail="MCPManager has no connect() — geny-executor < 1.0",
         )
+
+    # G8.4: collision policy. Manifest server names live in
+    # ``_manifest_server_names`` (a frozen set the install layer
+    # populates from manifest.tools.mcp_servers) — when present, we
+    # refuse a runtime add for the same name so the operator picks
+    # an unambiguous slot. Falls open when the attribute doesn't
+    # exist (older executor pin).
+    manifest_owned = getattr(manager, "_manifest_server_names", None)
+    if manifest_owned is None:
+        # Best-effort: peek at configs that were registered before
+        # any runtime add happened.
+        configs = getattr(manager, "_configs", None) or getattr(manager, "configs", None)
+        manifest_owned = set(configs.keys()) if isinstance(configs, dict) else set()
+    if body.name in manifest_owned:
+        logger.warning(
+            "[%s] runtime MCP add for %r conflicts with manifest server; refused",
+            session_id, body.name,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"server name '{body.name}' is already declared in the "
+                "session manifest. Manifest servers are immutable at "
+                "runtime — pick a different name or update the manifest "
+                "and restart the session."
+            ),
+        )
+
     try:
         result = connect(body.name, body.config)
         if hasattr(result, "__await__"):
