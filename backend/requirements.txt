@@ -83,11 +83,16 @@ playwright>=1.49.0
 # - Stage 15 HITL: requester + timeout slots.
 # - Stage 19 Summarize: summarizer + importance slots.
 # - Stage 20 Persist: persister + frequency slots.
-# Defaults preserve pre-0.46.0 behaviour. Pipeline.resume_from_
-# checkpoint and Pipeline.resume remain on the follow-up backlog.
-# All surfaces independently opt-in; without consuming them
-# behaviour is identical to 0.45.x.
-geny-executor[web]>=0.46.0,<0.47.0
+# Defaults preserve pre-0.46.0 behaviour.
+# 1.0.0 (executor uplift roadmap close — first stable release):
+# - Sub-phase 9c shipped Pipeline.resume(token, decision) +
+#   PipelineResumeRequester for cross-request HITL approvals,
+#   plus restore_state_from_checkpoint helpers for crash recovery.
+# - PyPI classifier Beta → Production/Stable. Stability commitment:
+#   breaking changes require a 2.0 bump; 21-stage layout, slot
+#   interfaces, and manifest v3 schema are stable.
+# No breaking changes vs 0.46.x.
+geny-executor[web]>=1.0.0,<2.0.0
 # MCP (Model Context Protocol)
 mcp>=1.0.0
 # TTS (Text-to-Speech)

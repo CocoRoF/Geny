@@ -118,12 +118,24 @@ dependencies = [
     #   state.shared['last_checkpoint' / 'checkpoint_history'].
     # All defaults preserve pre-0.46.0 behaviour
     # (NullRequester / NoPersister / NoSummarizer etc.).
-    # Pipeline.resume_from_checkpoint and Pipeline.resume for
-    # cross-request HITL / crash recovery remain on the follow-up
-    # backlog — this release ships the in-process write half.
-    # All surfaces independently opt-in; without consuming them
-    # behaviour is identical to 0.45.x.
-    "geny-executor[web]>=0.46.0,<0.47.0",
+    # 1.0.0 (executor uplift roadmap close — first stable release):
+    # - Sub-phase 9c shipped the deferred HITL + checkpoint backlog:
+    #     * Pipeline.resume(token, decision) /
+    #       Pipeline.cancel_pending_hitl /
+    #       Pipeline.list_pending_hitl + PipelineResumeRequester for
+    #       cross-request human approvals (websocket / HTTP gateways).
+    #     * restore_state_from_checkpoint(persister, ckpt_id) +
+    #       state_from_payload / state_from_record helpers for
+    #       crash recovery via FilePersister-saved checkpoints.
+    # - PyPI classifier moved Beta → Production/Stable. Stability
+    #   commitment: breaking changes require a 2.0 bump; additive
+    #   features ship in 1.x.0 with defaults preserved; bug fixes
+    #   in 1.0.x. The 21-stage layout, strategy-slot interfaces,
+    #   Pipeline / PipelineState / PipelineConfig / MCPManager
+    #   surfaces, and manifest v3 schema are all stable.
+    # No breaking changes vs 0.46.x — this pin is a stability marker
+    # that also unlocks the Sub-phase 9c APIs.
+    "geny-executor[web]>=1.0.0,<2.0.0",
     # MCP (Model Context Protocol)
     "mcp>=1.0.0",
     # Auth
