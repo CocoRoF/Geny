@@ -139,6 +139,20 @@ _PRESET_SCAFFOLD_OVERRIDES: Dict[str, Dict[str, Dict[str, Any]]] = {
         "tool_review": {
             "active": True,
         },
+        # G2.5: HITL gate on with the safe ``null`` requester
+        # placeholder. The real PipelineResumeRequester is wired
+        # at runtime by ``service.hitl.install_pipeline_resume_requester``
+        # (it needs a Pipeline ref the manifest cannot serialise).
+        # ``should_bypass`` returns True when nothing wrote to
+        # state.shared['hitl_request'] this turn so the active
+        # flag is a free no-op until something opts in.
+        "hitl": {
+            "active": True,
+            "strategies": {
+                "requester": "null",       # swapped at runtime
+                "timeout": "indefinite",   # rely on UI to resolve
+            },
+        },
         # G2.2: turn-summary writer + heuristic importance grader.
         # Forwards to ``state.session_runtime.memory_provider.record_summary``
         # when the registry has provisioned one (G3.1).

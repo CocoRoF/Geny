@@ -1186,6 +1186,22 @@ class AgentSession:
                 f"[{self._session_id}] FilePersister install failed: {exc}"
             )
 
+        # G2.5: install the PipelineResumeRequester into Stage 15.
+        # Manifest declares the HITL slot active with the safe ``null``
+        # requester placeholder; this swaps in the real requester
+        # bound to the pipeline so an external /api/agents/{id}/hitl/
+        # resume endpoint can satisfy paused requests via
+        # pipeline.resume(token, decision). No-op when Stage 15 isn't
+        # registered.
+        try:
+            from service.hitl import install_pipeline_resume_requester
+
+            install_pipeline_resume_requester(self._pipeline)
+        except Exception as exc:  # noqa: BLE001 — never block run on HITL wiring
+            logger.warning(
+                f"[{self._session_id}] PipelineResumeRequester install failed: {exc}"
+            )
+
         logger.info(
             f"[{self._session_id}] Pipeline adopted + runtime attached: "
             f"preset={self._preset_name}, role={self._role.value}, "
@@ -1657,6 +1673,51 @@ class AgentSession:
                             iteration=iteration or 0,
                             data=dict(event_data),
                         )
+
+                # ── G2.5: HITL (Stage 15) request / decision broadcast ──
+                # ``hitl.request`` is the signal the frontend modal listens
+                # for: token + reason + severity + payload. ``hitl.decision``
+                # closes the loop. ``hitl.timeout`` lands when the timeout
+                # policy fires.
+                elif event_type == "hitl.request":
+                    iteration = event.iteration if hasattr(event, "iteration") else event_data.get("iteration", 0)
+                    token = event_data.get("token", "")
+                    reason = event_data.get("reason", "")
+                    severity = event_data.get("severity", "warn")
+                    session_logger.log_stage_event(
+                        event_type="hitl_request",
+                        message=f"approval requested ({severity}): {reason}",
+                        stage_name="hitl",
+                        stage_order=STAGE_ORDER.get("hitl"),
+                        iteration=iteration or 0,
+                        data=dict(event_data),
+                    )
+                    logger.info(
+                        f"[{self._session_id}] HITL request awaiting decision "
+                        f"(token={token[:8]}…, severity={severity}, reason={reason})"
+                    )
+                elif event_type == "hitl.decision":
+                    iteration = event.iteration if hasattr(event, "iteration") else event_data.get("iteration", 0)
+                    decision = event_data.get("decision", "unknown")
+                    session_logger.log_stage_event(
+                        event_type="hitl_decision",
+                        message=f"approval resolved: {decision}",
+                        stage_name="hitl",
+                        stage_order=STAGE_ORDER.get("hitl"),
+                        iteration=iteration or 0,
+                        data=dict(event_data),
+                    )
+                elif event_type == "hitl.timeout":
+                    iteration = event.iteration if hasattr(event, "iteration") else event_data.get("iteration", 0)
+                    verdict = event_data.get("verdict", "unknown")
+                    session_logger.log_stage_event(
+                        event_type="hitl_timeout",
+                        message=f"approval timed out (verdict={verdict})",
+                        stage_name="hitl",
+                        stage_order=STAGE_ORDER.get("hitl"),
+                        iteration=iteration or 0,
+                        data=dict(event_data),
+                    )
 
             # Accumulate output + log to session_logger for streaming
             if event_type == "text.delta":

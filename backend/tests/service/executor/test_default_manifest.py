@@ -40,8 +40,9 @@ def test_manifest_declares_tool_stage(preset: str) -> None:
 #   G2.2 — summarize   (19) on worker_adaptive
 #   G2.3 — persist     (20) on worker_adaptive (FilePersister swapped at runtime)
 #   G2.4 — tool_review (11) on worker_adaptive
+#   G2.5 — hitl        (15) on worker_adaptive (PipelineResumeRequester swapped at runtime)
 _ACTIVE_SCAFFOLDS_BY_PRESET: dict[str, set[int]] = {
-    "worker_adaptive": {11, 19, 20},
+    "worker_adaptive": {11, 15, 19, 20},
     "worker_easy": set(),
     "vtuber": set(),
 }
@@ -122,6 +123,29 @@ def test_worker_adaptive_activates_tool_review_chain() -> None:
     # turn Q&A path.
     for preset in ("vtuber", "worker_easy"):
         s = next(e for e in build_default_manifest(preset).stages if e["order"] == 11)
+        assert s["active"] is False
+
+
+def test_worker_adaptive_activates_hitl_with_null_requester_placeholder() -> None:
+    """G2.5: worker_adaptive opts the Stage 15 HITL gate in. The
+    requester slot stays at ``null`` in the manifest — the real
+    PipelineResumeRequester is wired by
+    ``service.hitl.install_pipeline_resume_requester`` at session
+    build time because it needs a Pipeline reference. Active
+    state with the always-approve null requester is a free no-op
+    until something writes to ``state.shared['hitl_request']``."""
+    from service.executor.default_manifest import build_default_manifest
+
+    m = build_default_manifest("worker_adaptive")
+    hitl = next(e for e in m.stages if e["order"] == 15)
+    assert hitl["active"] is True
+    assert hitl["strategies"]["requester"] == "null"
+    assert hitl["strategies"]["timeout"] == "indefinite"
+
+    # vtuber + worker_easy keep hitl off — VTuber sessions have no
+    # approval surface and worker_easy is single-turn.
+    for preset in ("vtuber", "worker_easy"):
+        s = next(e for e in build_default_manifest(preset).stages if e["order"] == 15)
         assert s["active"] is False
 
 
