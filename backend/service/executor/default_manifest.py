@@ -341,7 +341,11 @@ def _worker_adaptive_stage_entries(StageManifestEntry) -> List["object"]:
             name="think",
             strategies={
                 "processor": "extract_and_store",
-                "budget_planner": "static",  # S7.10: fixed default
+                # G9.9 / S7.10: adaptive budget planner — first turn gets
+                # high thinking_budget (good for planning), subsequent
+                # turns step down. Catches cost on chatty workers without
+                # losing the deep first-turn analysis.
+                "budget_planner": "adaptive",
             },
         ),
         StageManifestEntry(
