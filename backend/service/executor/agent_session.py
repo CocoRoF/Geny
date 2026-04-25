@@ -1764,6 +1764,30 @@ class AgentSession:
                         data=dict(event_data),
                     )
 
+                # ── G8.2: MCP FSM state broadcast (Phase 6) ──
+                # The executor's MCPManager emits ``mcp.server.state``
+                # whenever a server transitions between
+                # PENDING / CONNECTED / FAILED / NEEDS_AUTH / DISABLED.
+                # Bridge to log_stage_event so the frontend MCP panel
+                # (G8.3) can render live status without subscribing
+                # directly to the EventBus.
+                elif event_type == "mcp.server.state":
+                    name = event_data.get("name") or event_data.get("server") or "unknown"
+                    state = event_data.get("state") or "unknown"
+                    iteration = event.iteration if hasattr(event, "iteration") else 0
+                    session_logger.log_stage_event(
+                        event_type="mcp_server_state",
+                        message=f"MCP {name} → {state}",
+                        # Use Stage 3 (System / tool registration) as the
+                        # nominal stage anchor for MCP state changes —
+                        # that's where MCP tools are exposed to the
+                        # registry.
+                        stage_name="system",
+                        stage_order=STAGE_ORDER.get("system"),
+                        iteration=iteration or 0,
+                        data=dict(event_data),
+                    )
+
             # Accumulate output + log to session_logger for streaming
             if event_type == "text.delta":
                 text = event_data.get("text", "")
