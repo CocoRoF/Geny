@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Boxes, ChevronRight, Eye, EyeOff, RotateCcw, Save, Settings2, Sliders, Wrench, X } from 'lucide-react';
 
 import { catalogApi } from '@/lib/environmentApi';
+import { externalToolCatalogApi } from '@/lib/api';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { useI18n } from '@/lib/i18n';
 import JsonSchemaForm, {
@@ -133,6 +134,11 @@ export default function BuilderTab() {
   const [toolsSaving, setToolsSaving] = useState(false);
   const [toolsError, setToolsError] = useState('');
   const [toolsSavedFlash, setToolsSavedFlash] = useState(false);
+  // T.1 (cycle 20260426_2) — external tool catalog (Geny tool_loader names).
+  // ``null`` = loading; ``[]`` = loaded but empty.
+  const [externalCatalog, setExternalCatalog] = useState<
+    Array<{ name: string; category: string; description: string }> | null
+  >(null);
   // P.2 (cycle 20260426_2) — pipeline + model patch state.
   const [pipelineSaving, setPipelineSaving] = useState(false);
   const [pipelineError, setPipelineError] = useState<string | null>(null);
@@ -155,6 +161,33 @@ export default function BuilderTab() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [builderEnvId]);
+
+  // T.1 (cycle 20260426_2) — load the external tool catalog once per
+  // builder mount. Cached at module level by lib/api so subsequent
+  // mounts hit memory.
+  useEffect(() => {
+    let cancelled = false;
+    externalToolCatalogApi
+      .list()
+      .then((res) => {
+        if (cancelled) return;
+        setExternalCatalog(
+          res.tools.map((t) => ({
+            name: t.name,
+            category: t.category,
+            description: t.description,
+          })),
+        );
+      })
+      .catch(() => {
+        // Empty array → editor renders the "no candidates" empty state,
+        // which is reasonable when the catalog endpoint isn't reachable.
+        if (!cancelled) setExternalCatalog([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const env = selectedEnvironment && selectedEnvironment.id === builderEnvId
     ? selectedEnvironment
@@ -589,6 +622,7 @@ export default function BuilderTab() {
                   <ToolsEditor
                     draft={toolsDraft}
                     onChange={setToolsDraft}
+                    externalCatalog={externalCatalog}
                     labels={{
                       allowlist: t('builderTab.allowlist'),
                       allowlistHint: t('builderTab.allowlistHint'),

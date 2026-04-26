@@ -212,6 +212,54 @@ async def get_mcp_servers():
     return _get_mcp_server_info()
 
 
+# ── External tool catalog (T.1 / cycle 20260426_2) ─────────────────
+
+
+class ExternalToolEntry(BaseModel):
+    """One Geny-provided tool that a manifest can attach via
+    ``manifest.tools.external``. Mirrors the shape of ``ToolInfo`` but
+    only carries the fields the picker UI needs."""
+
+    name: str
+    category: str = Field(..., description='"built_in" | "custom"')
+    description: str = ""
+
+
+class ExternalToolCatalogResponse(BaseModel):
+    tools: List[ExternalToolEntry] = Field(default_factory=list)
+    note: str = (
+        "These are the tools GenyToolProvider advertises. The manifest's "
+        "``tools.external`` whitelist controls which ones attach per session."
+    )
+
+
+@router.get("/catalog/external", response_model=ExternalToolCatalogResponse)
+async def get_external_tools():
+    """T.1 (cycle 20260426_2) — names that ``GenyToolProvider`` would
+    surface to the executor as candidates for ``manifest.tools.external``.
+
+    Returns Geny's tool_loader contents (built-in + custom) flattened
+    into a single picker list. Matches the contract
+    ``GenyToolProvider.list_names()`` would emit at session boot.
+    """
+    loader = get_tool_loader()
+    out: List[ExternalToolEntry] = []
+    for name, tool in (loader.builtin_tools or {}).items():
+        out.append(ExternalToolEntry(
+            name=name,
+            category="built_in",
+            description=getattr(tool, "description", "") or "",
+        ))
+    for name, tool in (loader.custom_tools or {}).items():
+        out.append(ExternalToolEntry(
+            name=name,
+            category="custom",
+            description=getattr(tool, "description", "") or "",
+        ))
+    out.sort(key=lambda r: (r.category != "built_in", r.name))
+    return ExternalToolCatalogResponse(tools=out)
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # Helpers
 # ════════════════════════════════════════════════════════════════════════════

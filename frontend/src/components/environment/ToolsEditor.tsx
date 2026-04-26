@@ -21,6 +21,12 @@ export interface ToolsDraft {
   mcpServersText: string;
   allowlistText: string;
   blocklistText: string;
+  // T.1 (cycle 20260426_2) — checkbox grid driven by the external catalog
+  // endpoint. Selected names map directly to manifest.tools.external.
+  external: string[];
+  // T.2 (placeholder; sprint adds the editor) — kept here so the
+  // snapshot round-trip preserves the field.
+  scopeText: string;
 }
 
 export function toolsDraftFromSnapshot(tools: ToolsSnapshot | undefined): ToolsDraft {
@@ -30,6 +36,8 @@ export function toolsDraftFromSnapshot(tools: ToolsSnapshot | undefined): ToolsD
     mcpServersText: JSON.stringify(t.mcp_servers ?? [], null, 2),
     allowlistText: (t.global_allowlist ?? []).join('\n'),
     blocklistText: (t.global_blocklist ?? []).join('\n'),
+    external: [...(t.external ?? [])],
+    scopeText: t.scope ? JSON.stringify(t.scope, null, 2) : '',
   };
 }
 
@@ -39,6 +47,8 @@ export function emptyTools(): ToolsSnapshot {
     mcp_servers: [],
     global_allowlist: [],
     global_blocklist: [],
+    external: [],
+    scope: undefined,
   };
 }
 
@@ -70,9 +80,26 @@ function parsePatternList(text: string): string[] {
     .filter(line => line.length > 0);
 }
 
+function parseJsonObjectOrEmpty(
+  text: string,
+): { ok: true; value: Record<string, unknown> | undefined } | { ok: false; error: string } {
+  const trimmed = text.trim();
+  if (!trimmed) return { ok: true, value: undefined };
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { ok: false, error: 'Must be a JSON object (or empty for none)' };
+    }
+    return { ok: true, value: parsed as Record<string, unknown> };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Invalid JSON' };
+  }
+}
+
 export interface ToolsValidation {
   adhocError: string | null;
   mcpServersError: string | null;
+  scopeError: string | null;
   hasErrors: boolean;
   snapshot: ToolsSnapshot | null;
 }
@@ -80,9 +107,11 @@ export interface ToolsValidation {
 export function validateToolsDraft(draft: ToolsDraft): ToolsValidation {
   const adhoc = parseJsonArray(draft.adhocText);
   const mcp = parseJsonArray(draft.mcpServersText);
+  const scope = parseJsonObjectOrEmpty(draft.scopeText);
   const adhocError = adhoc.ok ? null : adhoc.error;
   const mcpError = mcp.ok ? null : mcp.error;
-  const hasErrors = !!adhocError || !!mcpError;
+  const scopeError = scope.ok ? null : scope.error;
+  const hasErrors = !!adhocError || !!mcpError || !!scopeError;
   const snapshot: ToolsSnapshot | null = hasErrors
     ? null
     : {
@@ -90,10 +119,13 @@ export function validateToolsDraft(draft: ToolsDraft): ToolsValidation {
         mcp_servers: mcp.ok ? mcp.value : [],
         global_allowlist: parsePatternList(draft.allowlistText),
         global_blocklist: parsePatternList(draft.blocklistText),
+        external: [...draft.external],
+        scope: scope.ok ? scope.value : undefined,
       };
   return {
     adhocError,
     mcpServersError: mcpError,
+    scopeError,
     hasErrors,
     snapshot,
   };
@@ -104,13 +136,26 @@ export function toolsSnapshotsEqual(a: ToolsSnapshot, b: ToolsSnapshot): boolean
     JSON.stringify(a.adhoc ?? []) === JSON.stringify(b.adhoc ?? []) &&
     JSON.stringify(a.mcp_servers ?? []) === JSON.stringify(b.mcp_servers ?? []) &&
     JSON.stringify(a.global_allowlist ?? []) === JSON.stringify(b.global_allowlist ?? []) &&
-    JSON.stringify(a.global_blocklist ?? []) === JSON.stringify(b.global_blocklist ?? [])
+    JSON.stringify(a.global_blocklist ?? []) === JSON.stringify(b.global_blocklist ?? []) &&
+    JSON.stringify((a.external ?? []).slice().sort()) ===
+      JSON.stringify((b.external ?? []).slice().sort()) &&
+    JSON.stringify(a.scope ?? null) === JSON.stringify(b.scope ?? null)
   );
+}
+
+/** T.1 (cycle 20260426_2) — one row in the external tool picker. */
+export interface ExternalToolOption {
+  name: string;
+  category: string;
+  description: string;
 }
 
 interface Props {
   draft: ToolsDraft;
   onChange: (next: ToolsDraft) => void;
+  /** Optional — when supplied, renders the external-tool checkbox grid.
+   *  Pass empty array to show "no candidates discovered". */
+  externalCatalog?: ExternalToolOption[] | null;
   labels: {
     allowlist: string;
     allowlistHint: string;
@@ -174,7 +219,7 @@ function JsonArrayField({
   );
 }
 
-export default function ToolsEditor({ draft, onChange, labels }: Props) {
+export default function ToolsEditor({ draft, onChange, labels, externalCatalog }: Props) {
   const validation = useMemo(() => validateToolsDraft(draft), [draft]);
   const allowlistCount = useMemo(
     () => parsePatternList(draft.allowlistText).length,
@@ -256,6 +301,91 @@ export default function ToolsEditor({ draft, onChange, labels }: Props) {
           </small>
         ) : (
           <small className="text-[0.6875rem] text-[var(--text-muted)]">{labels.mcpServersHint}</small>
+        )}
+      </div>
+
+      {/* T.1 (cycle 20260426_2) — external tools picker. Renders only
+          when the parent passes a catalog; otherwise the section is
+          hidden so older callers keep working. */}
+      {externalCatalog !== undefined && (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wide">
+              External tools <span className="opacity-60 normal-case">(GenyToolProvider)</span>
+            </label>
+            <span className="text-[0.625rem] text-[var(--text-muted)]">
+              {draft.external.length} selected
+            </span>
+          </div>
+          {externalCatalog === null ? (
+            <div className="text-[0.75rem] text-[var(--text-muted)] italic py-2">
+              Loading external tool catalog…
+            </div>
+          ) : externalCatalog.length === 0 ? (
+            <div className="text-[0.75rem] text-[var(--text-muted)] italic py-2">
+              No external tools discovered. Drop a tool into ``backend/tools/custom`` and reload.
+            </div>
+          ) : (
+            <div className="max-h-[260px] overflow-y-auto rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)]">
+              {externalCatalog.map((opt) => {
+                const checked = draft.external.includes(opt.name);
+                return (
+                  <label
+                    key={opt.name}
+                    className={`flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-[var(--bg-tertiary)] border-b border-[var(--border-color)] last:border-b-0 ${
+                      checked ? 'bg-[rgba(59,130,246,0.05)]' : ''
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        const next = e.target.checked
+                          ? [...draft.external, opt.name]
+                          : draft.external.filter((n) => n !== opt.name);
+                        onChange({ ...draft, external: next });
+                      }}
+                      className="cursor-pointer"
+                    />
+                    <span className="font-mono text-[0.75rem] text-[var(--text-primary)] flex-1 truncate">
+                      {opt.name}
+                    </span>
+                    <span className="text-[0.625rem] text-[var(--text-muted)] uppercase tracking-wider shrink-0">
+                      {opt.category}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          <small className="text-[0.6875rem] text-[var(--text-muted)]">
+            Selected names land in <code className="font-mono">manifest.tools.external</code> —
+            ``GenyToolProvider`` advertises every entry; the manifest decides which actually attach.
+          </small>
+        </div>
+      )}
+
+      {/* T.2 (cycle 20260426_2) — tools.scope editor. Free-form JSON
+          object since the executor accepts any shape host plugins
+          declare. Empty = no scope. */}
+      <div className="flex flex-col gap-1.5">
+        <label className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wide">
+          Tool scope <span className="opacity-60 normal-case">(JSON object, optional)</span>
+        </label>
+        <JsonArrayField
+          value={draft.scopeText}
+          onChange={next => onChange({ ...draft, scopeText: next })}
+          placeholder={'(empty = no scope)\n{"workspace_root": "/repo"}'}
+          error={validation.scopeError}
+        />
+        {validation.scopeError ? (
+          <small className="text-[0.6875rem] text-[var(--danger-color)]">
+            {validation.scopeError}
+          </small>
+        ) : (
+          <small className="text-[0.6875rem] text-[var(--text-muted)]">
+            Free-form scope dict consumed by host plugins. Leave empty for the executor default.
+          </small>
         )}
       </div>
     </div>

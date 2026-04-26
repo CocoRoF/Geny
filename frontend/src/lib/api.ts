@@ -557,6 +557,22 @@ export const frameworkToolApi = {
   list: () => apiCall<FrameworkCatalogResponse>('/api/tools/catalog/framework'),
 };
 
+// T.1 (cycle 20260426_2) — Geny external tool catalog (manifest.tools.external).
+export interface ExternalToolEntry {
+  name: string;
+  category: string; // "built_in" | "custom"
+  description: string;
+}
+
+export interface ExternalToolCatalogResponse {
+  tools: ExternalToolEntry[];
+  note: string;
+}
+
+export const externalToolCatalogApi = {
+  list: () => apiCall<ExternalToolCatalogResponse>('/api/tools/catalog/external'),
+};
+
 // ==================== Permissions CRUD API (PR-E.2.1) ============
 //
 // Read-only inspection lives at /api/permissions/list (admin viewer
