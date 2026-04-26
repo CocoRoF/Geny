@@ -82,7 +82,7 @@ const ko: Translations = {
     builder: '빌더',
     settings: '설정',
     info: '정보',
-    environment: '환경',
+    environment: '라이브러리',
     graph: '환경',
     sessionTools: '도구',
     dashboard: '대시보드',

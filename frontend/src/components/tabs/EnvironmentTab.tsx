@@ -1,29 +1,33 @@
 'use client';
 
 /**
- * EnvironmentTab — global consolidated configuration tab.
+ * EnvironmentTab — global *Library* (system-wide pipeline definitions
+ * + shared components).
  *
- * Hosts the 7 sub-tabs that together describe a geny-executor
- * pipeline definition (philosophy: "환경 = 잘 만들어진 파이프라인;
- * 권한·훅·스킬·도구·MCP는 모두 그 구성요소"):
+ * Scope: NEVER session-bound. Always operates on system files /
+ * registries (settings.json, mcp/custom/, env manifest store). The
+ * sister surface is SessionEnvironmentRootTab which mounts under the
+ * session strip and operates on the env *bound* to the active session.
  *
- *   library      → environment CRUD (was: EnvironmentsTab)
+ * Don't confuse the two:
+ *   - "Library" (this tab)             → system catalog & shared rules
+ *   - "Environment" (session-scoped)   → that one session's instance view
+ *
+ * Sub-tabs (all system-wide):
+ *   library      → environment manifest CRUD (was: EnvironmentsTab)
  *   toolSets     → custom tool / MCP presets (was: ToolSetsTab)
  *   toolCatalog  → framework BUILT_IN_TOOL_CLASSES (was: ToolCatalogTab)
  *   permissions  → permission matrix (was: PermissionsTab)
  *   hooks        → hook entries + recent fires (was: HooksTab)
  *   skills       → bundled + user skills (was: SkillsTab)
  *   mcpServers   → custom MCP server JSON CRUD (was: McpServersTab)
- *
- * Each sub-tab keeps its own TabShell internal chrome — the parent
- * tab strip already conveys "Environment" so we don't add a third
- * header level. SubTabNav lives just below the page tab strip.
  */
 
 import dynamic from 'next/dynamic';
 import { useAppStore } from '@/store/useAppStore';
 import { SubTabNav, type SubTabDef } from '@/components/layout';
 import {
+  Library,
   FolderTree,
   Wrench,
   Package,
@@ -33,7 +37,6 @@ import {
   Server,
 } from 'lucide-react';
 
-// Lazy-load each sub-tab so initial Environment mount stays small.
 const EnvironmentsTab = dynamic(() => import('@/components/tabs/EnvironmentsTab'));
 const ToolSetsTab = dynamic(() => import('@/components/tabs/ToolSetsTab'));
 const ToolCatalogTab = dynamic(() =>
@@ -53,7 +56,7 @@ const McpServersTab = dynamic(() =>
 );
 
 const SUB_TABS: SubTabDef[] = [
-  { id: 'library', label: 'Library', icon: FolderTree },
+  { id: 'library', label: 'Environments', icon: FolderTree },
   { id: 'toolSets', label: 'Tool Sets', icon: Wrench },
   { id: 'toolCatalog', label: 'Tool Catalog', icon: Package },
   { id: 'permissions', label: 'Permissions', icon: Shield },
@@ -79,6 +82,17 @@ export default function EnvironmentTab() {
 
   return (
     <div className="flex flex-col h-full min-h-0">
+      {/* Strong scope header — distinguishes this from the session-
+          scoped Environment tab. Color-coded with primary accent. */}
+      <div className="shrink-0 px-4 py-2 border-b border-[var(--border-color)] bg-[rgba(59,130,246,0.04)] flex items-center gap-2">
+        <Library size={14} className="text-[var(--primary-color)]" />
+        <span className="text-[0.8125rem] font-semibold text-[var(--text-primary)]">
+          Library
+        </span>
+        <span className="text-[0.6875rem] text-[var(--text-muted)]">
+          · System-wide pipeline definitions and shared components (settings.json, mcp/custom/, environments/)
+        </span>
+      </div>
       <SubTabNav tabs={SUB_TABS} active={subTab} onSelect={setSubTab} />
       <div className="flex-1 min-h-0 overflow-hidden">
         <Active />

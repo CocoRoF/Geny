@@ -82,7 +82,9 @@ const en = {
     builder: 'Builder',
     settings: 'Settings',
     info: 'Info',
-    environment: 'Environment',
+    // Global tab: Library = system-wide pipeline catalog + components.
+    // Session-scoped 'sessionEnvironment' (above) is the per-session env view.
+    environment: 'Library',
     graph: 'Environment',
     sessionTools: 'Tools',
     dashboard: 'Dashboard',
