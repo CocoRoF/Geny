@@ -98,6 +98,19 @@ export const environmentApi = {
       { method: 'PATCH', body: JSON.stringify(payload) },
     ),
 
+  // P.1 (cycle 20260426_2) — granular pipeline + model patches.
+  updatePipeline: (envId: string, changes: Record<string, unknown>) =>
+    apiCall<EnvironmentDetail>(
+      `/api/environments/${envId}/pipeline`,
+      { method: 'PATCH', body: JSON.stringify(changes) },
+    ),
+
+  updateModel: (envId: string, changes: Record<string, unknown>) =>
+    apiCall<EnvironmentDetail>(
+      `/api/environments/${envId}/model`,
+      { method: 'PATCH', body: JSON.stringify(changes) },
+    ),
+
   exportEnv: (envId: string) => apiCall<string>(`/api/environments/${envId}/export`),
 
   importEnv: (data: Record<string, unknown>) =>

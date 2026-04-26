@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Boxes, ChevronRight, Eye, EyeOff, RotateCcw, Save, Wrench, X } from 'lucide-react';
+import { ArrowLeft, Boxes, ChevronRight, Eye, EyeOff, RotateCcw, Save, Settings2, Sliders, Wrench, X } from 'lucide-react';
 
 import { catalogApi } from '@/lib/environmentApi';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
@@ -30,6 +30,8 @@ import ToolsEditor, {
   validateToolsDraft,
   type ToolsDraft,
 } from '@/components/environment/ToolsEditor';
+import PipelineConfigEditor from '@/components/builder/PipelineConfigEditor';
+import ModelConfigEditor from '@/components/builder/ModelConfigEditor';
 import type {
   ArtifactInfo,
   StageIntrospection,
@@ -87,6 +89,8 @@ export default function BuilderTab() {
     loadEnvironment,
     updateStage,
     replaceManifest,
+    updatePipeline,
+    updateModel,
     closeBuilder,
     clearSelection,
   } = useEnvironmentStore();
@@ -107,11 +111,16 @@ export default function BuilderTab() {
   >({});
   const [showPreview, setShowPreview] = useState(true);
   const [configMode, setConfigMode] = useState<'form' | 'json'>('form');
-  const [builderView, setBuilderView] = useState<'stages' | 'tools'>('stages');
+  const [builderView, setBuilderView] = useState<'stages' | 'tools' | 'pipeline' | 'model'>('stages');
   const [toolsDraft, setToolsDraft] = useState<ToolsDraft | null>(null);
   const [toolsSaving, setToolsSaving] = useState(false);
   const [toolsError, setToolsError] = useState('');
   const [toolsSavedFlash, setToolsSavedFlash] = useState(false);
+  // P.2 (cycle 20260426_2) — pipeline + model patch state.
+  const [pipelineSaving, setPipelineSaving] = useState(false);
+  const [pipelineError, setPipelineError] = useState<string | null>(null);
+  const [modelSaving, setModelSaving] = useState(false);
+  const [modelError, setModelError] = useState<string | null>(null);
 
   // Load env whenever builderEnvId changes
   useEffect(() => {
@@ -286,6 +295,42 @@ export default function BuilderTab() {
     }
   };
 
+  // P.2 (cycle 20260426_2) — pipeline + model save handlers.
+  const handlePipelineSave = async (changes: Record<string, unknown>) => {
+    if (!builderEnvId) return;
+    setPipelineSaving(true);
+    setPipelineError(null);
+    try {
+      await updatePipeline(builderEnvId, changes);
+    } catch (e: unknown) {
+      setPipelineError(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setPipelineSaving(false);
+    }
+  };
+
+  const handleModelSave = async (changes: Record<string, unknown>) => {
+    if (!builderEnvId) return;
+    setModelSaving(true);
+    setModelError(null);
+    try {
+      await updateModel(builderEnvId, changes);
+    } catch (e: unknown) {
+      setModelError(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setModelSaving(false);
+    }
+  };
+
+  const pipelineInitial = useMemo<Record<string, unknown>>(
+    () => (env?.manifest?.pipeline as Record<string, unknown> | undefined) ?? {},
+    [env],
+  );
+  const modelInitial = useMemo<Record<string, unknown>>(
+    () => (env?.manifest?.model as Record<string, unknown> | undefined) ?? {},
+    [env],
+  );
+
   const handleSave = async () => {
     if (!builderEnvId || !selectedStage || !draft) return;
     if (configInvalid) {
@@ -355,6 +400,28 @@ export default function BuilderTab() {
               {t('builderTab.viewStages')}
             </button>
             <button
+              onClick={() => setBuilderView('pipeline')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[0.75rem] font-medium cursor-pointer transition-colors ${
+                builderView === 'pipeline'
+                  ? 'bg-[var(--primary-color)] text-white'
+                  : 'bg-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <Sliders size={12} />
+              Pipeline
+            </button>
+            <button
+              onClick={() => setBuilderView('model')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[0.75rem] font-medium cursor-pointer transition-colors ${
+                builderView === 'model'
+                  ? 'bg-[var(--primary-color)] text-white'
+                  : 'bg-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <Settings2 size={12} />
+              Model
+            </button>
+            <button
               onClick={() => setBuilderView('tools')}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[0.75rem] font-medium cursor-pointer transition-colors ${
                 builderView === 'tools'
@@ -385,7 +452,39 @@ export default function BuilderTab() {
 
       {/* Body */}
       <div className="flex-1 min-h-0 flex overflow-hidden">
-        {builderView === 'tools' ? (
+        {builderView === 'pipeline' ? (
+          <main className="flex-1 min-w-0 overflow-y-auto p-5">
+            {loading && !env ? (
+              <div className="text-[0.8125rem] text-[var(--text-muted)]">
+                {t('builderTab.loading')}
+              </div>
+            ) : (
+              <PipelineConfigEditor
+                initial={pipelineInitial}
+                saving={pipelineSaving}
+                error={pipelineError}
+                onSave={handlePipelineSave}
+                onClearError={() => setPipelineError(null)}
+              />
+            )}
+          </main>
+        ) : builderView === 'model' ? (
+          <main className="flex-1 min-w-0 overflow-y-auto p-5">
+            {loading && !env ? (
+              <div className="text-[0.8125rem] text-[var(--text-muted)]">
+                {t('builderTab.loading')}
+              </div>
+            ) : (
+              <ModelConfigEditor
+                initial={modelInitial}
+                saving={modelSaving}
+                error={modelError}
+                onSave={handleModelSave}
+                onClearError={() => setModelError(null)}
+              />
+            )}
+          </main>
+        ) : builderView === 'tools' ? (
           <main className="flex-1 min-w-0 flex overflow-hidden">
             <section className="flex-1 min-w-0 overflow-y-auto p-5 flex flex-col gap-5">
               <div className="flex flex-col gap-1">

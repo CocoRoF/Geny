@@ -110,6 +110,9 @@ interface EnvironmentState {
     order: number,
     payload: UpdateStageTemplatePayload,
   ) => Promise<void>;
+  // P.2 (cycle 20260426_2)
+  updatePipeline: (envId: string, changes: Record<string, unknown>) => Promise<void>;
+  updateModel: (envId: string, changes: Record<string, unknown>) => Promise<void>;
 
   // Builder tab routing
   builderEnvId: string | null;
@@ -329,6 +332,28 @@ export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
 
   updateStage: async (envId, order, payload) => {
     const updated = await environmentApi.updateStage(envId, order, payload);
+    set((s) => ({
+      selectedEnvironment:
+        s.selectedEnvironment && s.selectedEnvironment.id === envId
+          ? updated
+          : s.selectedEnvironment,
+    }));
+    _warnAffectedSessions(updated.affected_sessions);
+  },
+
+  updatePipeline: async (envId, changes) => {
+    const updated = await environmentApi.updatePipeline(envId, changes);
+    set((s) => ({
+      selectedEnvironment:
+        s.selectedEnvironment && s.selectedEnvironment.id === envId
+          ? updated
+          : s.selectedEnvironment,
+    }));
+    _warnAffectedSessions(updated.affected_sessions);
+  },
+
+  updateModel: async (envId, changes) => {
+    const updated = await environmentApi.updateModel(envId, changes);
     set((s) => ({
       selectedEnvironment:
         s.selectedEnvironment && s.selectedEnvironment.id === envId
