@@ -43,8 +43,36 @@ def user_skills_dir() -> Path:
 
 
 def _user_skills_opted_in() -> bool:
+    """PR-D.2.3 — settings.json:skills.user_skills_enabled wins; legacy
+    env var is the fallback for one operator-adoption cycle.
+
+    settings.json explicit ``false`` overrides any env-set ``1`` —
+    operators editing settings should win.
+    """
+    # 1. settings.json:skills.user_skills_enabled (preferred).
+    try:
+        from geny_executor.settings import get_default_loader
+        section = get_default_loader().get_section("skills")
+        if isinstance(section, dict) and "user_skills_enabled" in section:
+            return bool(section.get("user_skills_enabled"))
+    except ImportError:
+        pass
+    except Exception as exc:  # noqa: BLE001 — never block install on a bad section
+        logger.warning("user_skills opt-in: settings.json read failed: %s", exc)
+
+    # 2. Legacy env fallback.
     raw = os.environ.get(SKILLS_OPT_IN_ENV, "").strip().lower()
-    return raw in {"1", "true", "yes", "on"}
+    if raw in {"1", "true", "yes", "on"}:
+        # Hint operator about the migration path. Logged once per call;
+        # call site is install_skill_registry which fires once per
+        # session build.
+        logger.info(
+            "user_skills opt-in via %s env (consider migrating to "
+            "settings.json:skills.user_skills_enabled)",
+            SKILLS_OPT_IN_ENV,
+        )
+        return True
+    return False
 
 
 def install_skill_registry() -> Tuple[Optional[Any], List[Any]]:
