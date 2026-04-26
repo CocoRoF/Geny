@@ -796,7 +796,22 @@ export const adminTelemetryApi = {
   settingsMigrationStatus: () => apiCall<SettingsMigrationStatusResponse>('/api/admin/settings-migration-status'),
   // C.2 (cycle 20260426_1) — single-call wiring snapshot.
   integrationHealth: () => apiCall<IntegrationHealthResponse>('/api/admin/integration-health'),
+  // E.1 (cycle 20260426_1) — between-turn runtime refresh.
+  reloadRuntime: (scope: 'permissions' | 'hooks' | 'all') =>
+    apiCall<ReloadRuntimeResponse>('/api/admin/reload-runtime', {
+      method: 'POST',
+      body: JSON.stringify({ scope }),
+    }),
 };
+
+// E.1 (cycle 20260426_1).
+export interface ReloadRuntimeResponse {
+  scope: string;
+  queued_session_ids: string[];
+  skipped_session_ids: string[];
+  queued_count: number;
+  note: string;
+}
 
 // C.2 (cycle 20260426_1) — Admin Integration Health card.
 export interface RingFill {

@@ -333,6 +333,12 @@ class AgentSession:
         # Role
         self._role = role
 
+        # E.1 (cycle 20260426_1) — between-turn runtime refresh queue.
+        # Set via :meth:`queue_runtime_refresh` (admin endpoint), drained
+        # at the top of :meth:`invoke` / :meth:`astream`. ``None`` = no
+        # refresh pending; otherwise one of {permissions, hooks, all}.
+        self._pending_runtime_refresh: Optional[str] = None
+
         # Preset (determined during _build_pipeline)
         self._workflow_id = workflow_id  # kept for SessionInfo backward compat
         self._preset_name: str = "default"
@@ -925,6 +931,99 @@ class AgentSession:
         Determines preset from workflow_id string, then calls _build_pipeline().
         """
         self._build_pipeline()
+
+    # ── E.1 (cycle 20260426_1) — between-turn live reload ──
+
+    _RUNTIME_REFRESH_SCOPES = ("permissions", "hooks", "all")
+
+    def queue_runtime_refresh(self, scope: str) -> bool:
+        """Queue a between-turn refresh of permission rules / hook
+        runner from settings.json. The refresh is applied at the
+        start of the next ``invoke`` / ``astream`` — never mid-turn.
+
+        Returns ``True`` when the queue accepts the request, ``False``
+        when scope is unknown or the session isn't initialized yet.
+
+        Why between-turn and not mid-turn:
+        ``Pipeline.attach_runtime`` raises after the first run because
+        executing state holds references to the slot values; swapping
+        them mid-turn produces inconsistent behavior. Between turns is
+        safe — a fresh ``PipelineState`` is built on the next
+        ``run_stream`` and picks up the new slot values via
+        ``Pipeline._init_state``.
+        """
+        if not getattr(self, "_initialized", False) or self._pipeline is None:
+            return False
+        if scope not in self._RUNTIME_REFRESH_SCOPES:
+            return False
+        self._pending_runtime_refresh = scope
+        logger.info(
+            "[%s] runtime refresh queued for next turn (scope=%s)",
+            self._session_id, scope,
+        )
+        return True
+
+    def _apply_pending_runtime_refresh(self) -> None:
+        """Drain the refresh queue at the top of ``invoke`` / ``astream``.
+
+        Re-reads fresh permission rules / hook runner from settings.json
+        and swaps them on the bound Pipeline using the executor's stage
+        slot setters (``_set_tool_stage_permission_matrix`` /
+        ``_set_tool_stage_hook_runner``) — the same path
+        ``attach_runtime`` uses internally. We bypass attach_runtime
+        itself because it errors after ``_has_started`` is True; that
+        guard is for *mid-execution* swaps, which we never do here.
+
+        Each branch logs success / failure independently — a failed
+        permissions reload doesn't block the hooks reload (and vice
+        versa).
+        """
+        scope = getattr(self, "_pending_runtime_refresh", None)
+        if not scope:
+            return
+        # One-shot — clear the flag before applying so a refresh failure
+        # doesn't leave the queue stuck.
+        self._pending_runtime_refresh = None
+        pipeline = self._pipeline
+        if pipeline is None:
+            return
+
+        if scope in ("permissions", "all"):
+            try:
+                from service.permission.install import install_permission_rules
+
+                rules, mode = install_permission_rules()
+                setter = getattr(pipeline, "_set_tool_stage_permission_matrix", None)
+                if setter is not None:
+                    setter(permission_rules=rules, permission_mode=mode)
+                    logger.info(
+                        "[%s] runtime refresh applied: permissions reloaded "
+                        "(%d rule(s), mode=%s)",
+                        self._session_id, len(rules), mode,
+                    )
+            except Exception:
+                logger.exception(
+                    "[%s] runtime refresh: permissions reload failed",
+                    self._session_id,
+                )
+
+        if scope in ("hooks", "all"):
+            try:
+                from service.hooks.install import install_hook_runner
+
+                runner = install_hook_runner()
+                setter = getattr(pipeline, "_set_tool_stage_hook_runner", None)
+                if setter is not None and runner is not None:
+                    setter(runner)
+                    logger.info(
+                        "[%s] runtime refresh applied: hooks reloaded",
+                        self._session_id,
+                    )
+            except Exception:
+                logger.exception(
+                    "[%s] runtime refresh: hooks reload failed",
+                    self._session_id,
+                )
 
     def _apply_session_limits_to_pipeline(self) -> None:
         """B.1 (cycle 20260426_1) — bridge UI session limits into the
@@ -2456,6 +2555,10 @@ class AgentSession:
         thread_id = thread_id or "default"
         effective_max_iterations = max_iterations or self._max_iterations
 
+        # E.1 (cycle 20260426_1) — drain queued runtime refresh at the
+        # turn boundary, before pipeline.run_stream sees the state.
+        self._apply_pending_runtime_refresh()
+
         session_logger = self._get_logger()
 
         # Log execution start
@@ -2533,6 +2636,10 @@ class AgentSession:
         self._status = SessionStatus.RUNNING
         self._is_executing = True              # guard: prevent idle monitor interference
         thread_id = thread_id or "default"
+
+        # E.1 (cycle 20260426_1) — drain queued runtime refresh at the
+        # turn boundary, before pipeline.run_stream sees the state.
+        self._apply_pending_runtime_refresh()
 
         # Initialize logging for graph execution
         session_logger = self._get_logger()

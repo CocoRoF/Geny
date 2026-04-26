@@ -26,6 +26,7 @@
 import dynamic from 'next/dynamic';
 import { useAppStore } from '@/store/useAppStore';
 import { SubTabNav, type SubTabDef, NextSessionBanner } from '@/components/layout';
+import { ReloadRuntimeButton } from '@/components/admin/ReloadRuntimeButton';
 import {
   Library,
   FolderTree,
@@ -89,9 +90,12 @@ export default function EnvironmentTab() {
         <span className="text-[0.8125rem] font-semibold text-[var(--text-primary)]">
           Library
         </span>
-        <span className="text-[0.6875rem] text-[var(--text-muted)]">
+        <span className="text-[0.6875rem] text-[var(--text-muted)] flex-1 truncate">
           · System-wide pipeline definitions and shared components (settings.json, mcp/custom/, environments/)
         </span>
+        {/* E.1 (cycle 20260426_1) — push permission/hook edits into
+            active sessions without restarting them. */}
+        <ReloadRuntimeButton />
       </div>
       <NextSessionBanner variant="library" />
       <SubTabNav tabs={SUB_TABS} active={subTab} onSelect={setSubTab} />

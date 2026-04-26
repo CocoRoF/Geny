@@ -801,3 +801,84 @@ async def integration_health(request: Request, _auth: dict = Depends(require_aut
         cron_history=cron_history,
         notes=notes,
     )
+
+
+# ── Live reload (E.1 / cycle 20260426_1) ─────────────────────────
+
+
+_RELOAD_SCOPES = {"permissions", "hooks", "all"}
+
+
+class ReloadRuntimeRequest(BaseModel):
+    scope: str = Field(..., description="One of: permissions, hooks, all")
+
+
+class ReloadRuntimeResponse(BaseModel):
+    scope: str
+    queued_session_ids: List[str] = Field(default_factory=list)
+    skipped_session_ids: List[str] = Field(
+        default_factory=list,
+        description="Sessions that did not accept the queue (e.g. not initialized).",
+    )
+    queued_count: int = 0
+    note: str = Field(
+        "Refresh applied at the start of the next invoke / astream call. "
+        "Currently-executing turns finish on the pre-refresh runtime; "
+        "the next turn picks up the new permissions / hooks.",
+    )
+
+
+@router.post(
+    "/admin/reload-runtime",
+    response_model=ReloadRuntimeResponse,
+    summary="Queue a between-turn refresh of permissions / hooks",
+)
+async def reload_runtime(
+    body: ReloadRuntimeRequest,
+    _auth: dict = Depends(require_auth),
+):
+    """E.1 (cycle 20260426_1) — push fresh permission rules / hook
+    runner / both into every active AgentSession's bound Pipeline.
+
+    Implementation: each session sets a ``_pending_runtime_refresh``
+    flag; the next ``invoke`` / ``astream`` drains the flag and calls
+    the executor's stage-slot setters with values freshly re-read from
+    settings.json. Because the swap happens between turns, no
+    in-flight execution sees a half-refreshed runtime.
+
+    Returns the per-session breakdown (queued vs skipped) so the
+    operator can confirm the fan-out worked.
+    """
+    if body.scope not in _RELOAD_SCOPES:
+        raise HTTPException(
+            400,
+            f"unknown scope {body.scope!r}; expected one of {sorted(_RELOAD_SCOPES)}",
+        )
+
+    from controller.agent_controller import agent_manager
+
+    queued: List[str] = []
+    skipped: List[str] = []
+    for agent in agent_manager.list_agents():
+        sid = getattr(agent, "_session_id", None) or getattr(agent, "session_id", "?")
+        try:
+            ok = agent.queue_runtime_refresh(body.scope)
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "reload_runtime: queue_runtime_refresh raised for %s",
+                sid,
+            )
+            skipped.append(sid)
+            continue
+        (queued if ok else skipped).append(sid)
+
+    logger.info(
+        "reload_runtime scope=%s queued=%d skipped=%d",
+        body.scope, len(queued), len(skipped),
+    )
+    return ReloadRuntimeResponse(
+        scope=body.scope,
+        queued_session_ids=queued,
+        skipped_session_ids=skipped,
+        queued_count=len(queued),
+    )
