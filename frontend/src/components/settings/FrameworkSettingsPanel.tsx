@@ -150,21 +150,37 @@ export function FrameworkSettingsPanel() {
             {loading ? 'Loading…' : 'No sections registered.'}
           </div>
         ) : (
-          sections.map((s) => (
-            <button
-              key={s.name}
-              type="button"
-              onClick={() => setActive(s.name)}
-              className={`w-full text-left px-2 py-1.5 rounded text-[0.8125rem] hover:bg-[var(--bg-tertiary)] flex items-center justify-between ${
-                active === s.name ? 'bg-[var(--bg-tertiary)] font-semibold' : ''
-              }`}
-            >
-              <span className="font-mono truncate">{s.name}</span>
-              {s.has_data && (
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--success-color)]" title="has data" />
-              )}
-            </button>
-          ))
+          sections.map((s) => {
+            const hasReaders = s.readers && s.readers.length > 0;
+            const readerSummary = hasReaders
+              ? `Read by: ${s.readers.join(', ')}`
+              : 'No registered reader — this section may be unread at runtime.';
+            return (
+              <button
+                key={s.name}
+                type="button"
+                onClick={() => setActive(s.name)}
+                className={`w-full text-left px-2 py-1.5 rounded text-[0.8125rem] hover:bg-[var(--bg-tertiary)] flex flex-col gap-0.5 ${
+                  active === s.name ? 'bg-[var(--bg-tertiary)] font-semibold' : ''
+                }`}
+                title={readerSummary}
+              >
+                <span className="flex items-center justify-between">
+                  <span className="font-mono truncate">{s.name}</span>
+                  {s.has_data && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--success-color)]" title="has data" />
+                  )}
+                </span>
+                <span
+                  className={`text-[0.625rem] truncate ${
+                    hasReaders ? 'text-[var(--text-muted)]' : 'text-[var(--warning-color)]'
+                  }`}
+                >
+                  {hasReaders ? s.readers.join(', ') : 'no reader'}
+                </span>
+              </button>
+            );
+          })
         )}
       </aside>
 

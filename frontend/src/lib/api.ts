@@ -876,6 +876,8 @@ export interface FrameworkSectionSummary {
   name: string;
   has_schema: boolean;
   has_data: boolean;
+  // D.2 (cycle 20260426_1) — modules that read this section at runtime.
+  readers: string[];
 }
 
 export interface FrameworkSectionResponse {

@@ -42,6 +42,11 @@ class FrameworkSectionSummary(BaseModel):
     name: str
     has_schema: bool = True
     has_data: bool = False
+    # D.2 (cycle 20260426_1) — runtime reader modules for this section.
+    # Empty list means either the section name is unknown to the
+    # ``known_sections`` map (likely dead registration) or no module
+    # reads it at runtime — either way a yellow flag for the operator.
+    readers: List[str] = Field(default_factory=list)
 
 
 class FrameworkSectionListResponse(BaseModel):
@@ -161,7 +166,10 @@ def _deep_merge(base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]
 @router.get("", response_model=FrameworkSectionListResponse)
 async def list_sections(_auth: dict = Depends(require_auth)):
     """List every registered section + whether it currently has data
-    in user-scope settings.json."""
+    in user-scope settings.json + which modules read it at runtime
+    (per ``service.settings.known_sections.SECTION_READERS``)."""
+    from service.settings.known_sections import readers_for
+
     names = _registry_names()
     path = _user_settings_path()
     data = _read_settings(path)
@@ -171,6 +179,7 @@ async def list_sections(_auth: dict = Depends(require_auth)):
                 name=n,
                 has_schema=True,
                 has_data=isinstance(data.get(n), dict) and bool(data.get(n)),
+                readers=readers_for(n),
             )
             for n in names
         ],
