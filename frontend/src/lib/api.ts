@@ -792,6 +792,55 @@ export interface FrameworkSectionResponse {
   settings_path: string;
 }
 
+// ==================== Skills CRUD (PR-F.2.x) =====================
+
+export interface SkillDetail {
+  id: string;
+  name: string | null;
+  description: string | null;
+  model: string | null;
+  allowed_tools: string[];
+  category: string | null;
+  effort: string | null;
+  examples: string[];
+  body: string;
+  source: string | null;
+  is_user_skill: boolean;
+}
+
+export interface UserSkillUpsertRequest {
+  id: string;
+  name: string;
+  description: string;
+  body?: string;
+  model_override?: string | null;
+  allowed_tools?: string[];
+  category?: string | null;
+  effort?: string | null;
+  examples?: string[];
+}
+
+export const skillsApi = {
+  get: (skillId: string) => apiCall<SkillDetail>(`/api/skills/${encodeURIComponent(skillId)}`),
+
+  createUserSkill: (req: UserSkillUpsertRequest) =>
+    apiCall<{ id: string; path: string }>('/api/skills/user', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  replaceUserSkill: (req: UserSkillUpsertRequest) =>
+    apiCall<{ id: string; path: string }>(`/api/skills/user/${encodeURIComponent(req.id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(req),
+    }),
+
+  deleteUserSkill: (skillId: string) =>
+    apiCall<{ deleted: boolean; id: string }>(`/api/skills/user/${encodeURIComponent(skillId)}`, {
+      method: 'DELETE',
+    }),
+};
+
 export const frameworkSettingsApi = {
   list: () =>
     apiCall<{ sections: FrameworkSectionSummary[] }>('/api/framework-settings'),

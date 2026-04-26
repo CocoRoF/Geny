@@ -75,6 +75,7 @@ const en = {
     toolCatalog: 'Tool Catalog',
     permissions: 'Permissions',
     hooks: 'Hooks',
+    skills: 'Skills',
     environments: 'Environments',
     builder: 'Builder',
     settings: 'Settings',
