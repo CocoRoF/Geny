@@ -71,6 +71,10 @@ SECTION_READERS: Dict[str, List[str]] = {
     "channels": [
         "service.notifications.install",
     ],
+    # J.1 (cycle 20260426_3) — persona tail-block composition.
+    "persona": [
+        "service.persona.blocks_resolver",
+    ],
 }
 
 

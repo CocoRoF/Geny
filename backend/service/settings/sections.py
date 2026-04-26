@@ -195,6 +195,31 @@ class ChannelsConfigSection(BaseModel):
     send_message: List[SendMessageChannelEntry] = Field(default_factory=list)
 
 
+class PersonaConfigSection(BaseModel):
+    """``settings.persona`` (J.1 / cycle 20260426_3) — system-prompt
+    tail-block composition.
+
+    Geny composes the executor's s03 (System) builder from a persona
+    block (role-driven) plus a fixed tail of ``datetime`` +
+    ``memory_context``. J.1 lets operators reorder / drop tail blocks
+    per role.
+
+    ``tail_blocks_by_role`` maps role names → ordered list of block
+    keys. Unknown keys are skipped with a warning. A role missing from
+    the dict falls back to the ``"default"`` key, which itself falls
+    back to the historical ``["datetime", "memory_context"]`` chain.
+    """
+
+    tail_blocks_by_role: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description=(
+            "{role_name → [block_key, ...]}. Available keys: "
+            "'datetime', 'memory_context'. Add 'default' to override "
+            "the fallback list."
+        ),
+    )
+
+
 class AffectConfigSection(BaseModel):
     """``settings.affect`` schema (G.3 / cycle 20260426_2).
 
@@ -317,4 +342,5 @@ __all__ = [
     "ChannelsConfigSection",
     "SendMessageChannelEntry",
     "VTuberSubWorkerSection",
+    "PersonaConfigSection",
 ]

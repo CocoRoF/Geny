@@ -1418,6 +1418,19 @@ class AgentSession:
         # When no provider is bound (legacy / direct AgentSession
         # construction in tests), the fixed ComposablePromptBuilder path
         # is preserved.
+        # J.1 (cycle 20260426_3) — settings-driven tail-block composition.
+        # Falls back to the historical [DateTimeBlock, MemoryContextBlock]
+        # chain when settings.json:persona.tail_blocks_by_role is silent.
+        from service.persona.blocks_resolver import resolve_tail_blocks
+        _role_key = (
+            self._role.value if self._role and hasattr(self._role, "value")
+            else "worker"
+        )
+        _tail_blocks = resolve_tail_blocks(_role_key) or [
+            DateTimeBlock(),
+            MemoryContextBlock(),
+        ]
+
         if self._persona_provider is not None:
             from service.persona import DynamicPersonaSystemBuilder
             system_builder: Any = DynamicPersonaSystemBuilder(
@@ -1428,15 +1441,11 @@ class AgentSession:
                     "role": self._role.value if self._role else "worker",
                     "owner_username": self._owner_username,
                 },
-                tail_blocks=[DateTimeBlock(), MemoryContextBlock()],
+                tail_blocks=_tail_blocks,
             )
         else:
             system_builder = ComposablePromptBuilder(
-                blocks=[
-                    PersonaBlock(persona_text),
-                    DateTimeBlock(),
-                    MemoryContextBlock(),
-                ]
+                blocks=[PersonaBlock(persona_text), *_tail_blocks]
             )
         # PR-D.5.1 — seed the executor 1.3.0 WorkspaceStack into
         # ToolContext.extras at session-build time. EnterWorktreeTool /

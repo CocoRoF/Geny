@@ -25,6 +25,7 @@ from service.settings.sections import (
     ModelConfigSection,
     NotificationsConfigSection,
     PermissionsConfigSection,
+    PersonaConfigSection,
     PresetSection,
     SkillsConfigSection,
     TelemetryConfigSection,
@@ -83,6 +84,8 @@ def install_geny_settings() -> Optional[Any]:
     register_section("affect", AffectConfigSection)
     # L.1 (cycle 20260426_3) — send-message channel registry config.
     register_section("channels", ChannelsConfigSection)
+    # J.1 (cycle 20260426_3) — persona tail-block composition.
+    register_section("persona", PersonaConfigSection)
 
     loaded = loader.load()
     logger.info(
