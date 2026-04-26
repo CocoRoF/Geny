@@ -235,7 +235,7 @@ services:
       # CUDA 컨텍스트 메모리 단편화 방지. 0.85 = 12GB 5070 에서 ~10.2GB
       # 예약 (전용 GPU 호스트 기준). 공유 시 0.5~0.7 로 낮춰서 운영.
       # 0 으로 두면 비활성화.
-      - OMNIVOICE_GPU_MEMORY_FRACTION=${OMNIVOICE_GPU_MEMORY_FRACTION:-0.4}
+      - OMNIVOICE_GPU_MEMORY_FRACTION=${OMNIVOICE_GPU_MEMORY_FRACTION:-0.5}
       - OMNIVOICE_AUTO_ASR=${OMNIVOICE_AUTO_ASR:-false}
       - OMNIVOICE_LOG_LEVEL=${OMNIVOICE_LOG_LEVEL:-info}
       - HF_ENDPOINT=${HF_ENDPOINT:-https://huggingface.co}
