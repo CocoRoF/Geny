@@ -43,7 +43,7 @@ function formatDuration(start: string | null, end: string | null): string {
 }
 
 export function TasksTab() {
-  const sessionId = useAppStore((s) => s.currentSessionId) || '';
+  const sessionId = useAppStore((s) => s.selectedSessionId) || '';
   const [rows, setRows] = useState<BackgroundTaskRecord[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [loading, setLoading] = useState(false);
