@@ -451,6 +451,69 @@ export const agentApi = {
   },
 };
 
+// ==================== Background Tasks API (PR-A.5.5) ===========
+//
+// Wraps /api/agents/{sid}/tasks/ shipped in PR-A.5.4. session_id
+// scopes the URL but task state is process-global per the runner's
+// registry until a per-session backend is wired.
+
+export interface BackgroundTaskRecord {
+  task_id: string;
+  kind: string;
+  status: 'pending' | 'running' | 'done' | 'failed' | 'cancelled';
+  created_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  error: string | null;
+  payload: Record<string, unknown>;
+  output_path: string | null;
+}
+
+export interface BackgroundTaskListResponse {
+  tasks: BackgroundTaskRecord[];
+}
+
+export interface BackgroundTaskCreateResponse {
+  task_id: string;
+  status: string;
+}
+
+export const backgroundTaskApi = {
+  list: (
+    sessionId: string,
+    opts: { status?: string; kind?: string; limit?: number } = {},
+  ) => {
+    const params = new URLSearchParams();
+    if (opts.status) params.set('status', opts.status);
+    if (opts.kind) params.set('kind', opts.kind);
+    if (opts.limit !== undefined) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    return apiCall<BackgroundTaskListResponse>(
+      `/api/agents/${encodeURIComponent(sessionId)}/tasks${qs ? '?' + qs : ''}`,
+    );
+  },
+
+  create: (sessionId: string, kind: string, payload: Record<string, unknown> = {}) =>
+    apiCall<BackgroundTaskCreateResponse>(
+      `/api/agents/${encodeURIComponent(sessionId)}/tasks`,
+      { method: 'POST', body: JSON.stringify({ kind, payload }) },
+    ),
+
+  get: (sessionId: string, taskId: string) =>
+    apiCall<BackgroundTaskRecord>(
+      `/api/agents/${encodeURIComponent(sessionId)}/tasks/${encodeURIComponent(taskId)}`,
+    ),
+
+  stop: (sessionId: string, taskId: string) =>
+    apiCall<{ task_id: string; stopped: boolean }>(
+      `/api/agents/${encodeURIComponent(sessionId)}/tasks/${encodeURIComponent(taskId)}`,
+      { method: 'DELETE' },
+    ),
+
+  outputUrl: (sessionId: string, taskId: string) =>
+    `${getBackendUrl()}/api/agents/${encodeURIComponent(sessionId)}/tasks/${encodeURIComponent(taskId)}/output`,
+};
+
 // ==================== Shared Folder API ====================
 
 export interface SharedFileItem {
