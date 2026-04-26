@@ -10,8 +10,13 @@
  */
 
 import { useEffect, useState } from 'react';
-import { agentApi } from '@/lib/api';
-import { Shield, Plug, Sparkles, AlertCircle, RefreshCw, FileText } from 'lucide-react';
+import {
+  agentApi,
+  adminTelemetryApi,
+  RecentToolEvent,
+  RecentPermissionDecision,
+} from '@/lib/api';
+import { Shield, Plug, Sparkles, AlertCircle, RefreshCw, FileText, Activity, Lock } from 'lucide-react';
 
 interface PermissionRow {
   tool_name: string;
@@ -75,10 +80,25 @@ function Section({
   );
 }
 
+function formatTime(ts: number): string {
+  try {
+    return new Date(ts * 1000).toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  } catch {
+    return String(ts);
+  }
+}
+
 export default function AdminPanel() {
   const [perms, setPerms] = useState<{ mode: string; rules: PermissionRow[]; sources: string[] } | null>(null);
   const [hooks, setHooks] = useState<{ enabled: boolean; env: boolean; path: string; entries: HookRow[] } | null>(null);
   const [skills, setSkills] = useState<SkillRow[]>([]);
+  // PR-E.4.4 — recent activity rings.
+  const [recentTools, setRecentTools] = useState<RecentToolEvent[]>([]);
+  const [recentPerms, setRecentPerms] = useState<RecentPermissionDecision[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const loadAll = () => {
@@ -92,10 +112,22 @@ export default function AdminPanel() {
     agentApi.skillsList()
       .then((r) => setSkills(r.skills))
       .catch((e) => setError((p) => p ?? `skills: ${e.message}`));
+    adminTelemetryApi.recentToolEvents(50)
+      .then((r) => setRecentTools(r.events))
+      .catch((e) => setError((p) => p ?? `recent tool events: ${e.message}`));
+    adminTelemetryApi.recentPermissions(50)
+      .then((r) => setRecentPerms(r.decisions))
+      .catch((e) => setError((p) => p ?? `recent permissions: ${e.message}`));
   };
 
   useEffect(() => {
     loadAll();
+    // PR-E.4.4 — auto-refresh activity rings every 5s.
+    const id = window.setInterval(() => {
+      adminTelemetryApi.recentToolEvents(50).then((r) => setRecentTools(r.events)).catch(() => {});
+      adminTelemetryApi.recentPermissions(50).then((r) => setRecentPerms(r.decisions)).catch(() => {});
+    }, 5000);
+    return () => window.clearInterval(id);
   }, []);
 
   return (
@@ -106,6 +138,102 @@ export default function AdminPanel() {
           <span>{error}</span>
         </div>
       )}
+
+      {/* ── Recent Activity (PR-E.4.4) ── */}
+      <Section title="Recent activity" Icon={Activity} count={recentTools.length} onReload={loadAll}>
+        <div className="px-3">
+          {recentTools.length === 0 ? (
+            <div className="text-[0.6875rem] text-[var(--text-muted)] italic py-2">
+              No tool calls yet — start a session and run a tool.
+            </div>
+          ) : (
+            <ul className="flex flex-col gap-0.5 max-h-48 overflow-y-auto">
+              {recentTools.slice().reverse().map((ev, i) => (
+                <li
+                  key={i}
+                  className="px-2 py-1 rounded text-[0.6875rem] flex items-center gap-2 hover:bg-[var(--bg-tertiary)]"
+                >
+                  <span className="text-[0.5625rem] text-[var(--text-muted)] font-mono shrink-0 w-16">
+                    {formatTime(ev.ts)}
+                  </span>
+                  <span
+                    className="text-[0.5625rem] uppercase tracking-wider px-1 rounded shrink-0"
+                    style={{
+                      background: ev.kind === 'start'
+                        ? 'rgba(59,130,246,0.10)'
+                        : ev.is_error
+                          ? 'rgba(239,68,68,0.10)'
+                          : 'rgba(16,185,129,0.10)',
+                      color: ev.kind === 'start'
+                        ? 'var(--primary-color)'
+                        : ev.is_error ? 'var(--danger-color)' : 'var(--success-color)',
+                    }}
+                  >
+                    {ev.kind}
+                  </span>
+                  <span className="font-mono truncate flex-1">{ev.tool_name}</span>
+                  {ev.duration_ms != null && (
+                    <span className="text-[0.5625rem] text-[var(--text-muted)] shrink-0">
+                      {ev.duration_ms}ms
+                    </span>
+                  )}
+                  {ev.session_id && (
+                    <span
+                      className="text-[0.5625rem] text-[var(--text-muted)] font-mono shrink-0 truncate max-w-[80px]"
+                      title={ev.session_id}
+                    >
+                      {ev.session_id.slice(0, 8)}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </Section>
+
+      {/* ── Permission Activity (PR-E.4.4) ── */}
+      <Section title="Permission activity" Icon={Lock} count={recentPerms.length} onReload={loadAll}>
+        <div className="px-3">
+          {recentPerms.length === 0 ? (
+            <div className="text-[0.6875rem] text-[var(--text-muted)] italic py-2">
+              No permission decisions captured yet.
+            </div>
+          ) : (
+            <ul className="flex flex-col gap-0.5 max-h-48 overflow-y-auto">
+              {recentPerms.slice().reverse().map((d, i) => {
+                const color = d.decision === 'allow'
+                  ? 'var(--success-color)'
+                  : 'var(--danger-color)';
+                return (
+                  <li
+                    key={i}
+                    className="px-2 py-1 rounded text-[0.6875rem] hover:bg-[var(--bg-tertiary)]"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-[0.5625rem] text-[var(--text-muted)] font-mono shrink-0 w-16">
+                        {formatTime(d.ts)}
+                      </span>
+                      <span
+                        className="text-[0.5625rem] uppercase tracking-wider px-1 rounded shrink-0"
+                        style={{ background: 'rgba(239,68,68,0.10)', color }}
+                      >
+                        {d.decision}
+                      </span>
+                      <span className="font-mono truncate flex-1">{d.tool_name ?? '*'}</span>
+                    </div>
+                    {d.message && (
+                      <div className="text-[var(--text-muted)] mt-0.5 pl-[72px] truncate">
+                        {d.message}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </Section>
 
       {/* ── Permissions ── */}
       <Section title="Permission rules" Icon={Shield} count={perms?.rules.length ?? 0} onReload={loadAll}>

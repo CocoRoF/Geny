@@ -699,6 +699,83 @@ export const permissionApi = {
   inspect: () => apiCall<PermissionListResponse>('/api/permissions/list'),
 };
 
+// ==================== Admin telemetry rings (PR-E.4.1/2) =========
+
+export interface RecentToolEvent {
+  ts: number;
+  kind: 'start' | 'complete' | string;
+  tool_name: string;
+  tool_use_id?: string | null;
+  session_id?: string | null;
+  is_error?: boolean | null;
+  duration_ms?: number | null;
+  extra?: Record<string, unknown> | null;
+}
+
+export interface RecentToolEventsResponse {
+  events: RecentToolEvent[];
+  capacity: number;
+  returned: number;
+}
+
+export interface RecentPermissionDecision {
+  ts: number;
+  decision: string;
+  tool_name?: string | null;
+  rule_tool?: string | null;
+  rule_pattern?: string | null;
+  rule_source?: string | null;
+  rule_reason?: string | null;
+  session_id?: string | null;
+  message?: string | null;
+  extra?: Record<string, unknown> | null;
+}
+
+export interface RecentPermissionsResponse {
+  decisions: RecentPermissionDecision[];
+  capacity: number;
+  returned: number;
+}
+
+export const adminTelemetryApi = {
+  recentToolEvents: (limit = 50) =>
+    apiCall<RecentToolEventsResponse>(`/api/admin/recent-tool-events?limit=${limit}`),
+  recentPermissions: (limit = 50) =>
+    apiCall<RecentPermissionsResponse>(`/api/admin/recent-permissions?limit=${limit}`),
+};
+
+// ==================== Per-agent workspace (PR-E.4.3) =============
+
+export interface WorkspaceFrame {
+  cwd?: string | null;
+  git_branch?: string | null;
+  lsp_session_id?: string | null;
+  env_vars: Record<string, string>;
+  metadata: Record<string, unknown>;
+}
+
+export interface AgentWorkspaceResponse {
+  available: boolean;
+  depth: number;
+  current?: WorkspaceFrame | null;
+  stack: WorkspaceFrame[];
+}
+
+export interface WorkspaceCleanupResponse {
+  available: boolean;
+  popped: number;
+  final_depth: number;
+}
+
+export const agentWorkspaceApi = {
+  get: (sessionId: string) =>
+    apiCall<AgentWorkspaceResponse>(`/api/agents/${sessionId}/workspace`),
+  cleanup: (sessionId: string) =>
+    apiCall<WorkspaceCleanupResponse>(`/api/agents/${sessionId}/workspace/cleanup`, {
+      method: 'POST',
+    }),
+};
+
 // ==================== Slash Commands API (PR-A.6.2) =============
 
 export interface SlashCommandSummary {
