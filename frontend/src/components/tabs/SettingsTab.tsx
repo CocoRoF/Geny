@@ -7,6 +7,8 @@ import { Eye, EyeOff, AlertTriangle, X } from 'lucide-react';
 import NumberStepper from '@/components/ui/NumberStepper';
 import InfoTooltip from '@/components/ui/InfoTooltip';
 import FrameworkSettingsPanel from '@/components/settings/FrameworkSettingsPanel';
+import { TabShell, ActionButton } from '@/components/layout';
+import { Settings as SettingsIcon, Download, Upload, RefreshCw } from 'lucide-react';
 import { useI18n, type Locale } from '@/lib/i18n';
 import type { ConfigItem, ConfigCategory, ConfigField, ConfigSchema, ConfigI18nLocale } from '@/types';
 
@@ -139,23 +141,23 @@ export default function SettingsTab() {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <TabShell
+      title={t('settings.title')}
+      icon={SettingsIcon}
+      actions={
+        <>
+          <ActionButton icon={Download} onClick={exportConfigs}>{t('common.export')}</ActionButton>
+          <ActionButton icon={Upload} onClick={() => setImportOpen(true)}>{t('common.import')}</ActionButton>
+          <ActionButton icon={RefreshCw} onClick={loadConfigs}>{t('common.refresh')}</ActionButton>
+        </>
+      }
+    >
       {/* Toast */}
       {msg && (
         <div className={`fixed top-4 right-4 z-50 px-4 py-2 rounded-[var(--border-radius)] text-[0.875rem] text-white ${msg.type === 'success' ? 'bg-[var(--success-color)]' : 'bg-[var(--danger-color)]'}`}>
           {msg.text}
         </div>
       )}
-
-      {/* Header */}
-      <div className="flex justify-between items-center py-3 md:py-4 px-4 md:px-5 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
-        <h3 className="text-[0.9375rem] md:text-[1rem] font-semibold text-[var(--text-primary)]">{t('settings.title')}</h3>
-        <div className="flex gap-1.5 md:gap-2">
-          <button className={cn("py-1.5 px-2 md:px-3 bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] text-[0.6875rem] md:text-[0.75rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border border-[var(--border-color)]")} onClick={exportConfigs}>{t('common.export')}</button>
-          <button className={cn("py-1.5 px-2 md:px-3 bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] text-[0.6875rem] md:text-[0.75rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border border-[var(--border-color)]")} onClick={() => setImportOpen(true)}>{t('common.import')}</button>
-          <button className={cn("py-1.5 px-2 md:px-3 bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] text-[0.6875rem] md:text-[0.75rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border border-[var(--border-color)]")} onClick={loadConfigs}>{t('common.refresh')}</button>
-        </div>
-      </div>
 
       {/* Content */}
       <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
@@ -315,7 +317,7 @@ export default function SettingsTab() {
           </div>
         </div>
       )}
-    </div>
+    </TabShell>
   );
 }
 
