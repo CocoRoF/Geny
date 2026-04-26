@@ -1810,6 +1810,20 @@ class AgentSession:
                                 **dict(event_data),
                             },
                         )
+                        # PR-E.4.2 — feed the permission ring when the
+                        # rejecting guard is the permission guard.
+                        if guard_name == "permission":
+                            try:
+                                from service.telemetry.permission_ring import record_decision
+
+                                record_decision(
+                                    decision="guard_reject",
+                                    tool_name=event_data.get("tool_name"),
+                                    session_id=getattr(self, "session_id", None),
+                                    message=message,
+                                )
+                            except Exception:  # noqa: BLE001
+                                pass
 
                 # ── G2.4: Tool Review (Stage 11) flag broadcast ──
                 # Each reviewer-emitted flag gets its own log entry so
@@ -2202,6 +2216,20 @@ class AgentSession:
                                 **dict(event_data),
                             },
                         )
+                        # PR-E.4.2 — feed the permission ring when the
+                        # rejecting guard is the permission guard.
+                        if guard_name == "permission":
+                            try:
+                                from service.telemetry.permission_ring import record_decision
+
+                                record_decision(
+                                    decision="guard_reject",
+                                    tool_name=event_data.get("tool_name"),
+                                    session_id=getattr(self, "session_id", None),
+                                    message=message,
+                                )
+                            except Exception:  # noqa: BLE001
+                                pass
 
             # ── Yield events to caller ──
             if event_type == "text.delta":

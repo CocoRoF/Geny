@@ -300,3 +300,53 @@ async def recent_tool_events(
         capacity=capacity(),
         returned=len(rows),
     )
+
+
+# ── Recent permission decisions (PR-E.4.2) ─────────────────────────
+
+
+class PermissionDecisionRow(BaseModel):
+    ts: float
+    decision: str
+    tool_name: Optional[str] = None
+    rule_tool: Optional[str] = None
+    rule_pattern: Optional[str] = None
+    rule_source: Optional[str] = None
+    rule_reason: Optional[str] = None
+    session_id: Optional[str] = None
+    message: Optional[str] = None
+    extra: Optional[Dict[str, Any]] = None
+
+
+class RecentPermissionsResponse(BaseModel):
+    decisions: List[PermissionDecisionRow] = Field(default_factory=list)
+    capacity: int = 0
+    returned: int = 0
+
+
+@router.get(
+    "/admin/recent-permissions",
+    response_model=RecentPermissionsResponse,
+    summary="Process-wide ring buffer of recent permission decisions",
+)
+async def recent_permissions(
+    limit: int = 50,
+    _auth: dict = Depends(require_auth),
+):
+    """Snapshot the agent_session-side permission decision ring.
+
+    Today populated when the permission guard rejects a tool call
+    (guard_reject). Future executor versions are expected to emit
+    explicit allow/ask decisions; this endpoint will pick those up
+    automatically as long as the bridge feeds them.
+    """
+    if limit <= 0 or limit > 500:
+        raise HTTPException(400, "limit must be in 1..500")
+    from service.telemetry.permission_ring import capacity, snapshot
+
+    rows = snapshot(limit=limit)
+    return RecentPermissionsResponse(
+        decisions=[PermissionDecisionRow(**r) for r in rows],
+        capacity=capacity(),
+        returned=len(rows),
+    )
