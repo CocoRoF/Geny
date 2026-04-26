@@ -29,6 +29,7 @@ from fastapi.templating import Jinja2Templates
 from controller.command_controller import router as command_router, get_prompts_list
 from controller.agent_controller import router as agent_router, agent_manager
 from controller.agent_tasks_controller import router as agent_tasks_router
+from controller.cron_controller import router as cron_router
 from controller.config_controller import router as config_router
 from controller.shared_folder_controller import router as shared_folder_router
 from controller.chat_controller import router as chat_router
@@ -461,6 +462,25 @@ async def lifespan(app: FastAPI):
         app.state.task_registry = None
         app.state.task_runner = None
 
+    # ── Cron Runtime ──────────────────────────────────────────────────
+    # Depends on task_runtime above (cron fires submit TaskRecord
+    # through the BackgroundTaskRunner). When task_runner is null,
+    # skip cron — operators see a clean log line instead of a crash.
+    if app.state.task_runner is not None:
+        from service.cron import install_cron_runtime
+        try:
+            cron_runtime = install_cron_runtime(app.state)
+            app.state.cron_store = cron_runtime["store"]
+            app.state.cron_runner = cron_runtime["runner"]
+            logger.info("   ✅ cron_runtime: CronRunner started")
+        except Exception as e:
+            logger.warning(f"   ⚠️  cron_runtime: skipped ({e})")
+            app.state.cron_store = None
+            app.state.cron_runner = None
+    else:
+        app.state.cron_store = None
+        app.state.cron_runner = None
+
     # ── Tool Runtime Health Check ──────────────────────────────────────
     # Verify tools actually execute (not just registered) by invoking a
     # read-only tool directly and checking the response.
@@ -485,6 +505,13 @@ async def lifespan(app: FastAPI):
 
     print_step_banner("SHUTDOWN", "GENY AGENT SHUTDOWN", "Cleaning up sessions...")
     logger.info("Shutting down Geny Agent")
+
+    # Stop cron runner before task runner (cron submits to task runner)
+    if getattr(app.state, "cron_runner", None) is not None:
+        try:
+            await app.state.cron_runner.shutdown(timeout=5)
+        except Exception as e:
+            logger.warning(f"cron_runner shutdown failed: {e}")
 
     # Stop background task runner (geny-executor 1.1.0+)
     if getattr(app.state, "task_runner", None) is not None:
@@ -606,6 +633,7 @@ app.include_router(auth_router)  # Auth (must be first — no auth guard on itse
 app.include_router(command_router)
 app.include_router(agent_router)  # geny-executor agent sessions
 app.include_router(agent_tasks_router)  # background tasks REST (PR-A.5.4)
+app.include_router(cron_router)  # cron REST (PR-A.8.3)
 app.include_router(config_router)  # Configuration management
 app.include_router(shared_folder_router)  # Shared folder
 app.include_router(chat_router)  # Chat broadcast
