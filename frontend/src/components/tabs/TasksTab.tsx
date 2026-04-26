@@ -28,6 +28,16 @@ import {
   ActionButton,
   type BadgeTone,
 } from '@/components/layout';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -326,42 +336,47 @@ export function TasksTab() {
           </>
         }
       >
-        <div className="grid gap-2 text-[0.75rem]">
-          <label>
-            <div className="text-[var(--text-muted)] mb-0.5">Kind</div>
-            <input
+        <div className="grid gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="task-kind">Kind</Label>
+            <Input
+              id="task-kind"
               value={newKind}
               onChange={(e) => setNewKind(e.target.value)}
               placeholder="shell, agent, …"
-              className="w-full border rounded px-2 py-1 text-[0.8125rem]"
             />
-          </label>
+          </div>
           {subagentTypes.length > 0 && (
-            <label>
-              <div className="text-[var(--text-muted)] mb-0.5">Subagent type (optional)</div>
-              <select
-                value={newSubagentType}
-                onChange={(e) => setNewSubagentType(e.target.value)}
-                className="w-full border rounded px-2 py-1 text-[0.8125rem]"
+            <div className="grid gap-1.5">
+              <Label>Subagent type <span className="opacity-60">(optional)</span></Label>
+              <Select
+                value={newSubagentType || '__none__'}
+                onValueChange={(v) => setNewSubagentType(v === '__none__' ? '' : v)}
               >
-                <option value="">— none —</option>
-                {subagentTypes.map((t) => (
-                  <option key={t.agent_type} value={t.agent_type}>
-                    {t.agent_type} — {t.description.slice(0, 60)}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <SelectTrigger>
+                  <SelectValue placeholder="— none —" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— none —</SelectItem>
+                  {subagentTypes.map((t) => (
+                    <SelectItem key={t.agent_type} value={t.agent_type}>
+                      {t.agent_type} — {t.description.slice(0, 60)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
-          <label>
-            <div className="text-[var(--text-muted)] mb-0.5">Payload (JSON object)</div>
-            <textarea
+          <div className="grid gap-1.5">
+            <Label htmlFor="task-payload">Payload <span className="opacity-60">(JSON object)</span></Label>
+            <Textarea
+              id="task-payload"
               value={newPayload}
               onChange={(e) => setNewPayload(e.target.value)}
               rows={6}
-              className="w-full border rounded px-2 py-1 text-[0.75rem] font-mono"
+              className="font-mono text-xs"
             />
-          </label>
+          </div>
         </div>
       </EditorModal>
     </TabShell>

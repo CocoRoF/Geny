@@ -32,6 +32,15 @@ import {
   StatusBadge,
   ActionButton,
 } from '@/components/layout';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface EntryFormState {
   event: HookEvent;
@@ -383,49 +392,54 @@ export function HooksTab() {
           </>
         }
       >
-        <div className="grid gap-2">
-          <label className="text-[0.75rem]">
-            <div className="text-[var(--text-muted)] mb-0.5">Event</div>
-            <select
+        <div className="grid gap-3">
+          <div className="grid gap-1.5">
+            <Label>Event</Label>
+            <Select
               value={form.event}
-              onChange={(e) => setForm({ ...form, event: e.target.value as HookEvent })}
+              onValueChange={(v) => setForm({ ...form, event: v as HookEvent })}
               disabled={!!editingTarget}
-              className="w-full border rounded px-2 py-1 text-[0.8125rem] disabled:opacity-50"
-              title={editingTarget ? 'Change event by deleting and re-adding' : ''}
             >
-              {HOOK_EVENTS.map((ev) => (
-                <option key={ev} value={ev}>{ev}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-[0.75rem]">
-            <div className="text-[var(--text-muted)] mb-0.5">Command (space-separated argv)</div>
-            <input
+              <SelectTrigger title={editingTarget ? 'Change event by deleting and re-adding' : ''}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {HOOK_EVENTS.map((ev) => (
+                  <SelectItem key={ev} value={ev}>{ev}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="hook-cmd">Command <span className="opacity-60">(space-separated argv)</span></Label>
+            <Input
+              id="hook-cmd"
               value={form.command}
               onChange={(e) => setForm({ ...form, command: e.target.value })}
               placeholder="./scripts/log-hook.sh"
-              className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono"
+              className="font-mono"
             />
-          </label>
-          <label className="text-[0.75rem]">
-            <div className="text-[var(--text-muted)] mb-0.5">Timeout (ms, optional)</div>
-            <input
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="hook-timeout">Timeout <span className="opacity-60">(ms, optional)</span></Label>
+            <Input
+              id="hook-timeout"
               value={form.timeout_ms}
               onChange={(e) => setForm({ ...form, timeout_ms: e.target.value })}
               placeholder="1000"
               inputMode="numeric"
-              className="w-full border rounded px-2 py-1 text-[0.8125rem]"
             />
-          </label>
-          <label className="text-[0.75rem]">
-            <div className="text-[var(--text-muted)] mb-0.5">Tool filter (CSV; empty = match any)</div>
-            <input
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="hook-filter">Tool filter <span className="opacity-60">(CSV; empty = match any)</span></Label>
+            <Input
+              id="hook-filter"
               value={form.tool_filter}
               onChange={(e) => setForm({ ...form, tool_filter: e.target.value })}
               placeholder="Bash, Read"
-              className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono"
+              className="font-mono"
             />
-          </label>
+          </div>
         </div>
       </EditorModal>
     </TabShell>

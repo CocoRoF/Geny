@@ -19,6 +19,9 @@ import {
   StatusBadge,
   ActionButton,
 } from '@/components/layout';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 
 interface SkillRow {
   id: string | null;
@@ -312,86 +315,92 @@ export function SkillsTab() {
           </>
         }
       >
-        <div className="grid gap-2 text-[0.75rem]">
-              <label>
-                <div className="text-[var(--text-muted)] mb-0.5">ID *</div>
-                <input
-                  value={form.id}
-                  onChange={(e) => setForm({ ...form, id: e.target.value })}
-                  disabled={editingExisting}
-                  placeholder="lower-case, dash/underscore allowed"
-                  className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono disabled:opacity-50"
-                />
-              </label>
-              <label>
-                <div className="text-[var(--text-muted)] mb-0.5">Name *</div>
-                <input
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full border rounded px-2 py-1 text-[0.8125rem]"
-                />
-              </label>
-              <label>
-                <div className="text-[var(--text-muted)] mb-0.5">Description *</div>
-                <input
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  className="w-full border rounded px-2 py-1 text-[0.8125rem]"
-                />
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                <label>
-                  <div className="text-[var(--text-muted)] mb-0.5">Category</div>
-                  <input
-                    value={form.category}
-                    onChange={(e) => setForm({ ...form, category: e.target.value })}
-                    className="w-full border rounded px-2 py-1 text-[0.8125rem]"
-                  />
-                </label>
-                <label>
-                  <div className="text-[var(--text-muted)] mb-0.5">Effort (low/medium/high)</div>
-                  <input
-                    value={form.effort}
-                    onChange={(e) => setForm({ ...form, effort: e.target.value })}
-                    className="w-full border rounded px-2 py-1 text-[0.8125rem]"
-                  />
-                </label>
-                <label>
-                  <div className="text-[var(--text-muted)] mb-0.5">Model override</div>
-                  <input
-                    value={form.model_override}
-                    onChange={(e) => setForm({ ...form, model_override: e.target.value })}
-                    className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono"
-                  />
-                </label>
-              </div>
-              <label>
-                <div className="text-[var(--text-muted)] mb-0.5">Allowed tools (CSV; empty = inherit)</div>
-                <input
-                  value={form.allowed_tools}
-                  onChange={(e) => setForm({ ...form, allowed_tools: e.target.value })}
-                  placeholder="Read, Write, Bash"
-                  className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono"
-                />
-              </label>
-              <label>
-                <div className="text-[var(--text-muted)] mb-0.5">Examples (one per line)</div>
-                <textarea
-                  value={form.examples}
-                  onChange={(e) => setForm({ ...form, examples: e.target.value })}
-                  rows={2}
-                  className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono"
-                />
-              </label>
-              <label>
-                <div className="text-[var(--text-muted)] mb-0.5">Body (markdown — what the LLM sees)</div>
-                <textarea
-                  value={form.body}
-                  onChange={(e) => setForm({ ...form, body: e.target.value })}
-                  rows={10}
-                  className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono"
-                />
-              </label>
+        <div className="grid gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="skill-id">ID *</Label>
+            <Input
+              id="skill-id"
+              value={form.id}
+              onChange={(e) => setForm({ ...form, id: e.target.value })}
+              disabled={editingExisting}
+              placeholder="lower-case, dash/underscore allowed"
+              className="font-mono"
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="skill-name">Name *</Label>
+            <Input
+              id="skill-name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="skill-desc">Description *</Label>
+            <Input
+              id="skill-desc"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="grid gap-1.5">
+              <Label htmlFor="skill-cat">Category</Label>
+              <Input
+                id="skill-cat"
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="skill-eff">Effort</Label>
+              <Input
+                id="skill-eff"
+                value={form.effort}
+                onChange={(e) => setForm({ ...form, effort: e.target.value })}
+                placeholder="low / medium / high"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="skill-model">Model override</Label>
+              <Input
+                id="skill-model"
+                value={form.model_override}
+                onChange={(e) => setForm({ ...form, model_override: e.target.value })}
+                className="font-mono"
+              />
+            </div>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="skill-tools">Allowed tools <span className="opacity-60">(CSV; empty = inherit)</span></Label>
+            <Input
+              id="skill-tools"
+              value={form.allowed_tools}
+              onChange={(e) => setForm({ ...form, allowed_tools: e.target.value })}
+              placeholder="Read, Write, Bash"
+              className="font-mono"
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="skill-ex">Examples <span className="opacity-60">(one per line)</span></Label>
+            <Textarea
+              id="skill-ex"
+              value={form.examples}
+              onChange={(e) => setForm({ ...form, examples: e.target.value })}
+              rows={2}
+              className="font-mono"
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="skill-body">Body <span className="opacity-60">(markdown — what the LLM sees)</span></Label>
+            <Textarea
+              id="skill-body"
+              value={form.body}
+              onChange={(e) => setForm({ ...form, body: e.target.value })}
+              rows={10}
+              className="font-mono"
+            />
+          </div>
         </div>
       </EditorModal>
     </TabShell>

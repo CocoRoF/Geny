@@ -70,15 +70,15 @@ function Section({
   onReload: () => void;
 }) {
   return (
-    <section className="border-b border-[var(--border-color)] py-3">
+    <section className="border-b border-[hsl(var(--border))] py-3">
       <div className="px-3 flex items-center justify-between gap-2 mb-2">
-        <h3 className="text-[0.6875rem] uppercase tracking-wider font-semibold text-[var(--text-muted)] flex items-center gap-1.5">
-          <Icon size={11} className="text-[var(--primary-color)]" />
+        <h3 className="text-[0.6875rem] uppercase tracking-wider font-semibold text-[hsl(var(--muted-foreground))] flex items-center gap-1.5">
+          <Icon size={11} className="text-[hsl(var(--primary))]" />
           {title}
           <span className="font-normal opacity-70">({count})</span>
         </h3>
         <button
-          className="h-5 w-5 rounded text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] flex items-center justify-center"
+          className="h-5 w-5 rounded text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))] flex items-center justify-center transition-colors"
           onClick={onReload}
           title="Reload"
         >

@@ -22,6 +22,9 @@ import {
   EmptyState,
   ActionButton,
 } from '@/components/layout';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 
 const NAME_RE = /^[a-z0-9][a-z0-9_-]{1,63}$/;
 
@@ -262,36 +265,38 @@ export function McpServersTab() {
           </>
         }
       >
-            <div className="grid gap-2 text-[0.75rem]">
-              <label>
-                <div className="text-[var(--text-muted)] mb-0.5">Name *</div>
-                <input
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  disabled={editingExisting}
-                  placeholder="e.g. github"
-                  className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono disabled:opacity-50"
-                />
-              </label>
-              <label>
-                <div className="text-[var(--text-muted)] mb-0.5">Description (optional)</div>
-                <input
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  className="w-full border rounded px-2 py-1 text-[0.8125rem]"
-                />
-              </label>
-              <label>
-                <div className="text-[var(--text-muted)] mb-0.5">Config (JSON object)</div>
-                <textarea
-                  value={form.configJson}
-                  onChange={(e) => setForm({ ...form, configJson: e.target.value })}
-                  rows={14}
-                  spellCheck={false}
-                  className="w-full border rounded px-2 py-1 text-[0.75rem] font-mono"
-                />
-              </label>
-            </div>
+        <div className="grid gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="mcp-name">Name *</Label>
+            <Input
+              id="mcp-name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              disabled={editingExisting}
+              placeholder="e.g. github"
+              className="font-mono"
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="mcp-desc">Description <span className="opacity-60">(optional)</span></Label>
+            <Input
+              id="mcp-desc"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="mcp-cfg">Config <span className="opacity-60">(JSON object)</span></Label>
+            <Textarea
+              id="mcp-cfg"
+              value={form.configJson}
+              onChange={(e) => setForm({ ...form, configJson: e.target.value })}
+              rows={14}
+              spellCheck={false}
+              className="font-mono text-xs"
+            />
+          </div>
+        </div>
       </EditorModal>
     </TabShell>
   );

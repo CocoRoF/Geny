@@ -33,6 +33,16 @@ import {
   ActionButton,
   type BadgeTone,
 } from '@/components/layout';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const BEHAVIOR_OPTIONS: PermissionBehavior[] = ['allow', 'deny', 'ask'];
 const SOURCE_OPTIONS: PermissionSource[] = ['user', 'project', 'local', 'cli', 'preset'];
@@ -315,58 +325,68 @@ export function PermissionsTab() {
           </>
         }
       >
-        <div className="grid gap-2">
-          <label className="text-[0.75rem]">
-            <div className="text-[var(--text-muted)] mb-0.5">Tool name *</div>
-            <input
+        <div className="grid gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="perm-tool">Tool name *</Label>
+            <Input
+              id="perm-tool"
               value={form.tool_name}
               onChange={(e) => setForm({ ...form, tool_name: e.target.value })}
               placeholder="Bash, Read, * (any), ..."
-              className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono"
+              className="font-mono"
             />
-          </label>
-          <label className="text-[0.75rem]">
-            <div className="text-[var(--text-muted)] mb-0.5">Behavior</div>
-            <select
+          </div>
+          <div className="grid gap-1.5">
+            <Label>Behavior</Label>
+            <Select
               value={form.behavior}
-              onChange={(e) => setForm({ ...form, behavior: e.target.value as PermissionBehavior })}
-              className="w-full border rounded px-2 py-1 text-[0.8125rem]"
+              onValueChange={(v) => setForm({ ...form, behavior: v as PermissionBehavior })}
             >
-              {BEHAVIOR_OPTIONS.map((b) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-[0.75rem]">
-            <div className="text-[var(--text-muted)] mb-0.5">Pattern (optional, glob/regex per executor)</div>
-            <input
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {BEHAVIOR_OPTIONS.map((b) => (
+                  <SelectItem key={b} value={b}>{b}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="perm-pattern">Pattern <span className="opacity-60">(optional, glob/regex per executor)</span></Label>
+            <Input
+              id="perm-pattern"
               value={form.pattern}
               onChange={(e) => setForm({ ...form, pattern: e.target.value })}
               placeholder="git push *"
-              className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono"
+              className="font-mono"
             />
-          </label>
-          <label className="text-[0.75rem]">
-            <div className="text-[var(--text-muted)] mb-0.5">Source</div>
-            <select
+          </div>
+          <div className="grid gap-1.5">
+            <Label>Source</Label>
+            <Select
               value={form.source}
-              onChange={(e) => setForm({ ...form, source: e.target.value as PermissionSource })}
-              className="w-full border rounded px-2 py-1 text-[0.8125rem]"
+              onValueChange={(v) => setForm({ ...form, source: v as PermissionSource })}
             >
-              {SOURCE_OPTIONS.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-[0.75rem]">
-            <div className="text-[var(--text-muted)] mb-0.5">Reason (optional, surfaced in UI)</div>
-            <textarea
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SOURCE_OPTIONS.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="perm-reason">Reason <span className="opacity-60">(optional, surfaced in UI)</span></Label>
+            <Textarea
+              id="perm-reason"
               value={form.reason}
               onChange={(e) => setForm({ ...form, reason: e.target.value })}
               rows={2}
-              className="w-full border rounded px-2 py-1 text-[0.8125rem]"
             />
-          </label>
+          </div>
         </div>
       </EditorModal>
     </TabShell>

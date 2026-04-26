@@ -19,6 +19,16 @@ import {
   ActionButton,
   cn,
 } from '@/components/layout';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 // PR-F.4.2 — show a friendly description of a cron expression next to
 // the raw form. cronstrue is consulted at runtime only; the indirect
@@ -414,51 +424,54 @@ function CreateModal({
         </>
       }
     >
-      <div className="grid gap-3 text-sm">
-        <label className="flex flex-col">
-          Name (alphanumeric / dash / underscore)
-          <input
+      <div className="grid gap-3">
+        <div className="grid gap-1.5">
+          <Label htmlFor="cron-name">Name <span className="opacity-60">(alphanumeric / dash / underscore)</span></Label>
+          <Input
+            id="cron-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
             pattern="[a-zA-Z0-9_-]+"
-            className="border rounded px-2 py-1 mt-1"
           />
-        </label>
-        <label className="flex flex-col">
-          Cron expression (5 fields: m h dom mon dow)
-          <input
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="cron-expr">Cron expression <span className="opacity-60">(m h dom mon dow)</span></Label>
+          <Input
+            id="cron-expr"
             value={cronExpr}
             onChange={(e) => setCronExpr(e.target.value)}
             required
-            className="border rounded px-2 py-1 mt-1 font-mono"
+            className="font-mono"
           />
           {cronDescription && (
-            <span className="text-xs text-slate-500 mt-1 italic">
+            <span className="text-xs text-[hsl(var(--muted-foreground))] italic">
               ⏱ {cronDescription}
             </span>
           )}
-        </label>
-        <label className="flex flex-col">
-          Target kind
-          <select
-            value={targetKind}
-            onChange={(e) => setTargetKind(e.target.value)}
-            className="border rounded px-2 py-1 mt-1"
-          >
-            <option value="local_bash">local_bash</option>
-            <option value="local_agent">local_agent</option>
-          </select>
-        </label>
-        <label className="flex flex-col">
-          Payload (JSON)
-          <textarea
+        </div>
+        <div className="grid gap-1.5">
+          <Label>Target kind</Label>
+          <Select value={targetKind} onValueChange={setTargetKind}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="local_bash">local_bash</SelectItem>
+              <SelectItem value="local_agent">local_agent</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="cron-payload">Payload <span className="opacity-60">(JSON)</span></Label>
+          <Textarea
+            id="cron-payload"
             value={payloadJson}
             onChange={(e) => setPayloadJson(e.target.value)}
             rows={4}
-            className="border rounded px-2 py-1 mt-1 font-mono text-xs"
+            className="font-mono text-xs"
           />
-        </label>
+        </div>
       </div>
     </EditorModal>
   );

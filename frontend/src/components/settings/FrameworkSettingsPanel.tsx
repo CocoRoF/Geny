@@ -21,6 +21,7 @@ import {
   FrameworkSectionSummary,
 } from '@/lib/api';
 import { RefreshCw, Save, AlertCircle } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 
 interface SchemaProperty {
   type?: string;
@@ -205,14 +206,14 @@ export function FrameworkSettingsPanel() {
               </div>
             )}
 
-            <textarea
+            <Textarea
               value={draft}
               onChange={(e) => {
                 setDraft(e.target.value);
                 setHint(null);
               }}
               spellCheck={false}
-              className="flex-1 min-h-0 font-mono text-[0.75rem] border rounded p-2 bg-[var(--bg-secondary)] resize-none"
+              className="flex-1 min-h-0 font-mono text-xs resize-none"
             />
 
             {Object.keys(hints).length > 0 && (
