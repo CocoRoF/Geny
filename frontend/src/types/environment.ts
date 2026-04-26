@@ -95,8 +95,15 @@ export interface UpdateStageTemplatePayload {
   strategies?: Record<string, string>;
   strategy_configs?: Record<string, Record<string, unknown>>;
   config?: Record<string, unknown>;
-  tool_binding?: StageToolBinding | null;
-  model_override?: StageModelOverride | null;
+  // S.1 / S.2 (cycle 20260426_2) — typed payload keys widened to
+  // ``Record<string, unknown>`` to match the backend's
+  // ``Optional[Dict[str, Any]]`` and the JSON-textarea editor's
+  // schema-loose semantics. The strongly-typed
+  // ``StageToolBinding`` / ``StageModelOverride`` interfaces remain
+  // for read paths (manifest display) where the on-disk shape is
+  // canonical.
+  tool_binding?: Record<string, unknown> | null;
+  model_override?: Record<string, unknown> | null;
   chain_order?: Record<string, string[]>;
   active?: boolean;
 }

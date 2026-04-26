@@ -117,7 +117,11 @@ function structuredToJson(f: FormState): Record<string, unknown> {
 /** Parse executor-shape JSON → structured fields (best-effort). */
 function jsonToStructured(raw: Record<string, unknown>): Partial<FormState> {
   const transportRaw = typeof raw.transport === 'string' ? raw.transport : 'stdio';
-  const transport: Transport = TRANSPORTS.includes(transportRaw as Transport)
+  // Cast through ``readonly string[]`` so .includes() accepts the
+  // string-typed ``transportRaw`` — TS strict mode rejects an
+  // ``as Transport`` argument when the source isn't already narrowed
+  // to a tuple element.
+  const transport: Transport = (TRANSPORTS as readonly string[]).includes(transportRaw)
     ? (transportRaw as Transport)
     : 'stdio';
   const out: Partial<FormState> = {
