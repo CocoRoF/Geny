@@ -21,6 +21,7 @@ from service.settings.sections import (
     HooksConfigSection,
     ModelConfigSection,
     NotificationsConfigSection,
+    PermissionsConfigSection,
     PresetSection,
     SkillsConfigSection,
     TelemetryConfigSection,
@@ -67,6 +68,10 @@ def install_geny_settings() -> Optional[Any]:
     register_section("model", ModelConfigSection)
     register_section("telemetry", TelemetryConfigSection)
     register_section("notifications", NotificationsConfigSection)
+    # K.2 (cycle 20260426_2) — typed permissions section so
+    # FrameworkSettingsPanel can edit it consistently with the others
+    # and the D.2 reader map carries the entry.
+    register_section("permissions", PermissionsConfigSection)
 
     loaded = loader.load()
     logger.info(
