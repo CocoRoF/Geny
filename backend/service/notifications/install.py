@@ -2,12 +2,15 @@
 
 Sources (priority highest-first):
 
-    1. ~/.geny/notifications.json   (json: {"endpoints": [...]})
-    2. .geny/notifications.json
-    3. NOTIFICATION_ENDPOINTS env (json string)
+    1. settings.json:notifications.channels (G.4 / cycle 20260426_2)
+    2. ~/.geny/notifications.json   (legacy: {"endpoints": [...]})
+    3. .geny/notifications.json     (legacy)
+    4. NOTIFICATION_ENDPOINTS env (json string)
 
-P1.3 cycle migrates these onto the unified settings.json. For now
-yaml/env keeps the wire simple.
+G.4 added the settings.json:notifications.channels read so the
+existing FrameworkSettingsPanel becomes the canonical UI for endpoint
+CRUD. Legacy JSON files keep working — the install layer concatenates
+all sources.
 
 Channel registry ships with the StdoutSendMessageChannel as the
 "geny" reference; hosts wire Discord / Slack / etc by registering
@@ -36,6 +39,33 @@ def _load_endpoints_from_path(path: Path) -> List[Dict[str, Any]]:
     return list(data.get("endpoints") or [])
 
 
+def _load_endpoints_from_settings() -> List[Dict[str, Any]]:
+    """G.4 — read ``settings.json:notifications.channels`` via the
+    executor's SettingsLoader. Returns ``[]`` when unavailable.
+
+    The schema is ``NotificationsConfigSection`` (already registered
+    in cycle 20260426_2 / install_geny_settings). Each entry is a
+    dict matching ``NotificationsChannel``; downstream construction
+    treats the channels list as endpoint-equivalent for now (the
+    executor's NotificationEndpoint accepts the same fields).
+    """
+    try:
+        from geny_executor.settings import get_default_loader
+    except ImportError:
+        return []
+    section = get_default_loader().get_section("notifications")
+    if section is None:
+        return []
+    if hasattr(section, "model_dump"):
+        section_dict = section.model_dump(exclude_none=True)
+    elif isinstance(section, dict):
+        section_dict = section
+    else:
+        return []
+    raw = section_dict.get("channels") or []
+    return list(raw) if isinstance(raw, list) else []
+
+
 def install_notification_endpoints() -> Optional[Any]:
     """Returns the registry, or None if executor 1.1.0 isn't available."""
     try:
@@ -48,6 +78,8 @@ def install_notification_endpoints() -> Optional[Any]:
 
     registry = NotificationEndpointRegistry()
     sources: List[Dict[str, Any]] = []
+    # G.4 — settings.json wins (highest priority for new operators).
+    sources += _load_endpoints_from_settings()
     sources += _load_endpoints_from_path(Path.home() / ".geny" / "notifications.json")
     sources += _load_endpoints_from_path(Path(".geny") / "notifications.json")
     env_blob = os.getenv("NOTIFICATION_ENDPOINTS")
