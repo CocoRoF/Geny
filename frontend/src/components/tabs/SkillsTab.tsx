@@ -44,6 +44,10 @@ interface FormState {
   model_override: string;
   allowed_tools: string;
   examples: string;
+  // K.1 (cycle 20260426_2) — additional SkillMetadata fields.
+  version: string;
+  execution_mode: string;     // '' | 'inline' | 'fork'
+  extrasText: string;         // JSON object as text; empty = no extras
 }
 
 const EMPTY_FORM: FormState = {
@@ -56,9 +60,30 @@ const EMPTY_FORM: FormState = {
   model_override: '',
   allowed_tools: '',
   examples: '',
+  version: '',
+  execution_mode: '',
+  extrasText: '',
 };
 
 function formToPayload(f: FormState) {
+  let extras: Record<string, string | number | boolean> | undefined;
+  const trimmed = f.extrasText.trim();
+  if (trimmed) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        extras = {};
+        for (const [k, v] of Object.entries(parsed)) {
+          if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+            extras[k] = v;
+          }
+        }
+      }
+    } catch {
+      // Caller validates separately; emit empty extras to fall back.
+      extras = undefined;
+    }
+  }
   return {
     id: f.id.trim(),
     name: f.name.trim(),
@@ -69,6 +94,9 @@ function formToPayload(f: FormState) {
     effort: f.effort.trim() || null,
     allowed_tools: f.allowed_tools.split(',').map((s) => s.trim()).filter(Boolean),
     examples: f.examples.split('\n').map((s) => s.trim()).filter(Boolean),
+    version: f.version.trim() || null,
+    execution_mode: f.execution_mode.trim() || null,
+    ...(extras ? { extras } : {}),
   };
 }
 
@@ -83,6 +111,12 @@ function detailToForm(d: SkillDetail): FormState {
     model_override: d.model ?? '',
     allowed_tools: d.allowed_tools.join(', '),
     examples: d.examples.join('\n'),
+    version: d.version ?? '',
+    execution_mode: d.execution_mode ?? '',
+    extrasText:
+      d.extras && Object.keys(d.extras).length > 0
+        ? JSON.stringify(d.extras, null, 2)
+        : '',
   };
 }
 
@@ -392,6 +426,43 @@ export function SkillsTab() {
               onChange={(e) => setForm({ ...form, examples: e.target.value })}
               rows={2}
               className="font-mono"
+            />
+          </div>
+          {/* K.1 (cycle 20260426_2) — version + execution_mode + extras. */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="grid gap-1.5">
+              <Label htmlFor="skill-version">Version <span className="opacity-60">(optional)</span></Label>
+              <Input
+                id="skill-version"
+                value={form.version}
+                onChange={(e) => setForm({ ...form, version: e.target.value })}
+                placeholder="e.g. 1.0.0"
+                className="font-mono text-[0.75rem]"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="skill-exec">Execution mode</Label>
+              <Input
+                id="skill-exec"
+                value={form.execution_mode}
+                onChange={(e) => setForm({ ...form, execution_mode: e.target.value })}
+                placeholder="(empty = inline) inline | fork"
+                className="font-mono text-[0.75rem]"
+              />
+            </div>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="skill-extras">
+              Extras <span className="opacity-60">(JSON object, optional — host-specific metadata; flat scalars only)</span>
+            </Label>
+            <Textarea
+              id="skill-extras"
+              value={form.extrasText}
+              onChange={(e) => setForm({ ...form, extrasText: e.target.value })}
+              rows={3}
+              spellCheck={false}
+              placeholder={'(empty = no extras)\n{"icon": "🛠", "owner": "ops"}'}
+              className="font-mono text-[0.75rem]"
             />
           </div>
           <div className="grid gap-1.5">
