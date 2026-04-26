@@ -30,6 +30,7 @@ from controller.command_controller import router as command_router, get_prompts_
 from controller.agent_controller import router as agent_router, agent_manager
 from controller.agent_tasks_controller import router as agent_tasks_router
 from controller.cron_controller import router as cron_router
+from controller.slash_commands_controller import router as slash_router
 from controller.config_controller import router as config_router
 from controller.shared_folder_controller import router as shared_folder_router
 from controller.chat_controller import router as chat_router
@@ -462,6 +463,17 @@ async def lifespan(app: FastAPI):
         app.state.task_registry = None
         app.state.task_runner = None
 
+    # ── Slash Commands ────────────────────────────────────────────────
+    # Imports built_in/__init__.py which auto-installs the 12 framework
+    # commands. install_geny_slash_commands then registers Geny-domain
+    # commands and discovery paths under ~/.geny/commands/.
+    try:
+        from service.slash_commands import install_geny_slash_commands
+        slash_count = install_geny_slash_commands()
+        logger.info("   ✅ slash_commands: %d available", slash_count)
+    except Exception as e:
+        logger.warning(f"   ⚠️  slash_commands: skipped ({e})")
+
     # ── Cron Runtime ──────────────────────────────────────────────────
     # Depends on task_runtime above (cron fires submit TaskRecord
     # through the BackgroundTaskRunner). When task_runner is null,
@@ -634,6 +646,7 @@ app.include_router(command_router)
 app.include_router(agent_router)  # geny-executor agent sessions
 app.include_router(agent_tasks_router)  # background tasks REST (PR-A.5.4)
 app.include_router(cron_router)  # cron REST (PR-A.8.3)
+app.include_router(slash_router)  # slash commands REST (PR-A.6.2)
 app.include_router(config_router)  # Configuration management
 app.include_router(shared_folder_router)  # Shared folder
 app.include_router(chat_router)  # Chat broadcast
