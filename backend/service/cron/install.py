@@ -4,6 +4,13 @@ Backend selection mirrors the task runtime:
     GENY_CRON_BACKEND=memory   (default)
     GENY_CRON_BACKEND=file
     GENY_CRON_STORE_PATH=...   (file backend path)
+
+D.1 (cycle 20260426_1): the executor's :class:`CronRunner` doesn't
+expose an audit-callback hook. We subclass and override ``_submit`` so
+every scheduled fire is recorded into Geny's
+``service.telemetry.cron_history`` ring buffer alongside the adhoc
+fires the cron controller already records. Without this the AdminPanel
+"recent fires" panel stays empty even when scheduled jobs run.
 """
 
 from __future__ import annotations
@@ -11,16 +18,54 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from geny_executor.cron import (
     CronRunner,
     FileBackedCronJobStore,
     InMemoryCronJobStore,
 )
+from geny_executor.cron.types import CronJob
 
 logger = logging.getLogger(__name__)
+
+
+class _RecordingCronRunner(CronRunner):
+    """:class:`CronRunner` subclass that records every scheduled fire
+    into ``service.telemetry.cron_history``.
+
+    The executor base class fires by calling ``self._submit`` from
+    inside ``_fire_due_jobs``; we override ``_submit`` so the recording
+    happens regardless of whether submit succeeded (records
+    ``status="submit_failed"`` when the executor returns ``None``).
+    Any failure inside the recording call is swallowed — telemetry must
+    never break the cron loop.
+    """
+
+    async def _submit(
+        self,
+        job: CronJob,
+        fire_time: datetime,
+    ) -> Optional[str]:
+        task_id = await super()._submit(job, fire_time)
+        try:
+            from service.telemetry.cron_history import record_fire
+
+            record_fire(
+                job.name,
+                task_id=task_id,
+                status="fired" if task_id else "submit_failed",
+                fired_at=fire_time,
+            )
+        except Exception:  # noqa: BLE001 — telemetry must not break cron
+            logger.debug(
+                "cron_record_fire_failed for job %s",
+                job.name,
+                exc_info=True,
+            )
+        return task_id
 
 
 def _build_store(app_state=None):
@@ -62,7 +107,7 @@ def install_cron_runtime(app_state) -> Dict[str, Any]:
         raise RuntimeError("install_cron_runtime: task_runner must be wired first")
     store = _build_store(app_state)
     cycle = int(os.getenv("GENY_CRON_CYCLE_SECONDS", "60"))
-    runner = CronRunner(store, task_runner, cycle_seconds=cycle)
+    runner = _RecordingCronRunner(store, task_runner, cycle_seconds=cycle)
     asyncio.get_event_loop().create_task(runner.start())
     return {"store": store, "runner": runner}
 
