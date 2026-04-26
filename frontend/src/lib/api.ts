@@ -392,6 +392,19 @@ export const agentApi = {
       { method: 'POST' },
     ),
 
+  // Cycle G — MCP OAuth start.
+  mcpAuthStart: (id: string, name: string) =>
+    apiCall<{
+      session_id: string;
+      server_name: string;
+      authorization_url: string;
+      callback_path: string;
+      state: string;
+    }>(
+      `/api/agents/${id}/mcp/servers/${encodeURIComponent(name)}/auth/start`,
+      { method: 'POST' },
+    ),
+
   /** GET /api/agents/{id}/graph — graph structure */
   getGraph: (id: string) => apiCall<GraphStructure>(`/api/agents/${id}/graph`),
 
@@ -880,6 +893,40 @@ export interface UserSkillUpsertRequest {
   effort?: string | null;
   examples?: string[];
 }
+
+// ==================== Custom MCP Servers (Cycle G) ==============
+
+export interface CustomMcpServerSummary {
+  name: string;
+  path: string;
+  type?: string | null;
+  description?: string | null;
+}
+
+export interface CustomMcpServerDetail {
+  name: string;
+  path: string;
+  config: Record<string, unknown>;
+}
+
+export const customMcpApi = {
+  list: () => apiCall<{ servers: CustomMcpServerSummary[]; custom_dir: string }>('/api/mcp/custom'),
+  get: (name: string) => apiCall<CustomMcpServerDetail>(`/api/mcp/custom/${encodeURIComponent(name)}`),
+  create: (name: string, config: Record<string, unknown>, description?: string) =>
+    apiCall<CustomMcpServerDetail>('/api/mcp/custom', {
+      method: 'POST',
+      body: JSON.stringify({ name, config, description }),
+    }),
+  replace: (name: string, config: Record<string, unknown>, description?: string) =>
+    apiCall<CustomMcpServerDetail>(`/api/mcp/custom/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name, config, description }),
+    }),
+  remove: (name: string) =>
+    apiCall<{ deleted: boolean; name: string }>(`/api/mcp/custom/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    }),
+};
 
 // ==================== Subagent Types (PR-F.3.1) ==================
 

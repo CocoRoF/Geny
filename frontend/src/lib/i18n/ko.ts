@@ -76,6 +76,7 @@ const ko: Translations = {
     permissions: '권한',
     hooks: '훅',
     skills: '스킬',
+    mcpServers: 'MCP 서버',
     environments: '환경',
     builder: '빌더',
     settings: '설정',

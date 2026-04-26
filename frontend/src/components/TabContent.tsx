@@ -29,6 +29,7 @@ const ToolCatalogTab = dynamic(() => import('@/components/tabs/ToolCatalogTab').
 const PermissionsTab = dynamic(() => import('@/components/tabs/PermissionsTab').then(m => m.PermissionsTab));
 const HooksTab = dynamic(() => import('@/components/tabs/HooksTab').then(m => m.HooksTab));
 const SkillsTab = dynamic(() => import('@/components/tabs/SkillsTab').then(m => m.SkillsTab));
+const McpServersTab = dynamic(() => import('@/components/tabs/McpServersTab').then(m => m.McpServersTab));
 
 const TAB_MAP: Record<string, React.ComponentType> = {
   main: MainTab,
@@ -66,6 +67,8 @@ const TAB_MAP: Record<string, React.ComponentType> = {
   hooks: HooksTab,
   // PR-F.2.4 — Skills CRUD + bundled viewer.
   skills: SkillsTab,
+  // Cycle G — MCP custom server CRUD.
+  mcpServers: McpServersTab,
 };
 
 // Tabs that should stay mounted once activated (KeepAlive)

@@ -76,6 +76,7 @@ const en = {
     permissions: 'Permissions',
     hooks: 'Hooks',
     skills: 'Skills',
+    mcpServers: 'MCP Servers',
     environments: 'Environments',
     builder: 'Builder',
     settings: 'Settings',

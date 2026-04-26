@@ -219,6 +219,31 @@ export default function MCPAdminPanel({ sessionId }: Props) {
                 )}
               </div>
               <div className="flex items-center gap-1 shrink-0">
+                {/* Cycle G — MCP OAuth start. Show only when the
+                    server is in NEEDS_AUTH (executor surfaces this
+                    state when a server requires OAuth before its
+                    next reconnect). */}
+                {srv.state.toLowerCase() === 'needs_auth' && (
+                  <button
+                    className="px-2 py-[2px] text-[0.625rem] text-[var(--warning-color)] border border-[var(--warning-color)] rounded hover:bg-[var(--bg-tertiary)] disabled:opacity-50"
+                    onClick={async () => {
+                      setBusy(`oauth:${srv.name}`);
+                      try {
+                        const r = await agentApi.mcpAuthStart(sessionId, srv.name);
+                        window.open(r.authorization_url, '_blank', 'noopener,noreferrer');
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : String(err));
+                      } finally {
+                        setBusy(null);
+                        await reload();
+                      }
+                    }}
+                    disabled={isBusy}
+                    title="Start OAuth — opens consent in a new tab"
+                  >
+                    Authorize
+                  </button>
+                )}
                 {srv.state.toLowerCase() === 'disabled' ? (
                   <button
                     className="px-2 py-[2px] text-[0.625rem] text-[var(--success-color)] border border-[var(--border-color)] rounded hover:bg-[var(--bg-tertiary)] disabled:opacity-50"
