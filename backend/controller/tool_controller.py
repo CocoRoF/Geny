@@ -112,15 +112,14 @@ class FrameworkCatalogResponse(BaseModel):
     total: int = 0
 
 
-@router.get("/catalog/framework", response_model=FrameworkCatalogResponse)
-async def get_framework_tools():
-    """List every tool in geny-executor's BUILT_IN_TOOL_CLASSES.
+def build_framework_tool_index() -> Dict[str, FrameworkToolDetail]:
+    """Inspect every executor BUILT_IN_TOOL_CLASSES entry once.
 
-    Each row carries enough metadata for the UI catalog viewer to
-    render description / capability badges / JSONSchema preview without
-    a follow-up request.
+    Returns a {name: FrameworkToolDetail} mapping. Used by:
+      - GET /api/tools/catalog/framework (list view)
+      - GET /api/environments/{id}/tools/resolved (PR-E.1.3)
 
-    Empty (graceful) when geny-executor isn't importable.
+    Empty dict when geny-executor isn't importable.
     """
     try:
         from geny_executor.tools.built_in import (
@@ -128,22 +127,19 @@ async def get_framework_tools():
             BUILT_IN_TOOL_FEATURES,
         )
     except ImportError:
-        return FrameworkCatalogResponse(tools=[], groups=[], total=0)
+        return {}
 
-    # Reverse the feature map so we can answer "what group does <name>
-    # belong to?" in O(1).
     name_to_group: Dict[str, str] = {}
     for group, names in BUILT_IN_TOOL_FEATURES.items():
         for name in names:
             name_to_group[name] = group
 
-    tools: List[FrameworkToolDetail] = []
+    index: Dict[str, FrameworkToolDetail] = {}
     for name, cls in BUILT_IN_TOOL_CLASSES.items():
         try:
             inst = cls()
             description = inst.description or ""
             input_schema = inst.input_schema or {}
-            # Capabilities: tools may take input arg, default empty dict.
             try:
                 caps_obj = inst.capabilities({})
                 capabilities = {
@@ -165,17 +161,40 @@ async def get_framework_tools():
             input_schema = {}
             capabilities = {}
 
-        tools.append(FrameworkToolDetail(
+        index[name] = FrameworkToolDetail(
             name=name,
             description=description,
             feature_group=name_to_group.get(name, "uncategorized"),
             capabilities=capabilities,
             input_schema=input_schema,
-        ))
+        )
+    return index
 
+
+def framework_feature_groups() -> List[str]:
+    """Sorted list of BUILT_IN_TOOL_FEATURES keys; empty on import failure."""
+    try:
+        from geny_executor.tools.built_in import BUILT_IN_TOOL_FEATURES
+    except ImportError:
+        return []
+    return sorted(BUILT_IN_TOOL_FEATURES.keys())
+
+
+@router.get("/catalog/framework", response_model=FrameworkCatalogResponse)
+async def get_framework_tools():
+    """List every tool in geny-executor's BUILT_IN_TOOL_CLASSES.
+
+    Each row carries enough metadata for the UI catalog viewer to
+    render description / capability badges / JSONSchema preview without
+    a follow-up request.
+
+    Empty (graceful) when geny-executor isn't importable.
+    """
+    index = build_framework_tool_index()
+    tools = sorted(index.values(), key=lambda t: (t.feature_group, t.name))
     return FrameworkCatalogResponse(
-        tools=sorted(tools, key=lambda t: (t.feature_group, t.name)),
-        groups=sorted(BUILT_IN_TOOL_FEATURES.keys()),
+        tools=tools,
+        groups=framework_feature_groups(),
         total=len(tools),
     )
 

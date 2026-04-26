@@ -208,6 +208,59 @@ async def get_environment(
     return _detail_response(data)
 
 
+# ── PR-E.1.3 — Resolved built-in tool list ───────────────
+
+
+@router.get("/{env_id}/tools/resolved")
+async def get_resolved_tools(
+    request: Request, env_id: str, auth: dict = Depends(require_auth)
+):
+    """Return manifest's ``tools.built_in`` enriched with executor metadata.
+
+    The manifest only stores tool *names*. The frontend (Environments
+    tab → tool list) needs description / feature_group / capabilities to
+    render the same way as the global Tool Catalog. This endpoint is the
+    join point — it cross-references each name against the executor's
+    BUILT_IN_TOOL_CLASSES registry.
+
+    Response::
+
+        {
+          "tools": [FrameworkToolDetail, ...],   # known + resolved
+          "unknown": [str, ...],                 # names not in registry
+          "total": int                           # tools.length
+        }
+
+    Unknown names are surfaced rather than dropped so operators see
+    stale manifests caused by tool removals across executor versions.
+    """
+    data = _env_svc(request).load(env_id)
+    if data is None:
+        raise HTTPException(404, "Environment not found")
+
+    manifest = data.get("manifest") or {}
+    manifest_tools = manifest.get("tools") or {}
+    raw_names = list(manifest_tools.get("built_in") or [])
+
+    from controller.tool_controller import build_framework_tool_index
+
+    index = build_framework_tool_index()
+    resolved = []
+    unknown = []
+    for name in raw_names:
+        detail = index.get(name)
+        if detail is None:
+            unknown.append(name)
+        else:
+            resolved.append(detail.model_dump())
+
+    return {
+        "tools": resolved,
+        "unknown": unknown,
+        "total": len(resolved),
+    }
+
+
 @router.put("/{env_id}")
 async def update_environment(
     request: Request,
