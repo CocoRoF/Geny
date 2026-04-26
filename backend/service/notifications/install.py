@@ -99,9 +99,49 @@ def install_notification_endpoints() -> Optional[Any]:
     return registry
 
 
+def _load_send_message_channels_from_settings() -> List[Dict[str, Any]]:
+    """L.1 (cycle 20260426_3) — read
+    ``settings.json:channels.send_message``.
+
+    Returns an empty list when the section is unavailable; same
+    coercion pattern as the other install layers.
+    """
+    try:
+        from geny_executor.settings import get_default_loader
+    except ImportError:
+        return []
+    section = get_default_loader().get_section("channels")
+    if section is None:
+        return []
+    if hasattr(section, "model_dump"):
+        section_dict = section.model_dump(exclude_none=True)
+    elif isinstance(section, dict):
+        section_dict = section
+    else:
+        return []
+    raw = section_dict.get("send_message") or []
+    return list(raw) if isinstance(raw, list) else []
+
+
 def install_send_message_channels() -> Optional[Any]:
-    """Wire SendMessage channels. Default ships only StdoutSendMessageChannel
-    under the 'geny' name — hosts register Discord/Slack/etc here."""
+    """Wire SendMessage channels.
+
+    L.1 (cycle 20260426_3) — operators can declare channels in
+    ``settings.json:channels.send_message``; the install layer looks
+    up each entry's ``kind`` in
+    ``service.notifications.channel_factory`` and registers the
+    constructed instance under the entry's ``name``.
+
+    The shipped factory handles ``stdout`` only. Hosts shipping
+    Discord / Slack / etc register their own factories in code; this
+    install layer never tries to import unknown channel implementations.
+
+    The legacy ``"geny" -> StdoutSendMessageChannel()`` default is kept
+    for backwards compat — when the settings section is absent, the
+    registry behaves as before. When the section IS present, the
+    operator's entries win on name collision (last register wins per
+    the executor's registry semantics).
+    """
     try:
         from geny_executor.channels import (
             SendMessageChannelRegistry,
@@ -110,11 +150,30 @@ def install_send_message_channels() -> Optional[Any]:
     except ImportError:
         return None
 
+    from service.notifications.channel_factory import channel_from_entry
+
     registry = SendMessageChannelRegistry()
+    # 1. Code-registered legacy default (back-compat).
     registry.register("geny", StdoutSendMessageChannel())
-    # Hosts that want richer channels add them by mutating
-    # app.state.send_message_channels post-install. Future PR can
-    # auto-discover from settings.json (P1.3 cycle).
+    # 2. Settings-driven entries — operator-extensible without code edits.
+    skipped: List[str] = []
+    for entry in _load_send_message_channels_from_settings():
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        channel = channel_from_entry(entry)
+        if channel is None:
+            skipped.append(f"{name}({entry.get('kind')})")
+            continue
+        registry.register(name.strip(), channel)
+    if skipped:
+        logger.warning(
+            "send_message_channels: skipped %d settings entry(ies) — "
+            "unknown kind or factory raised: %s",
+            len(skipped), ", ".join(skipped),
+        )
     logger.info("send_message_channels registered=%d", len(registry.list()))
     return registry
 

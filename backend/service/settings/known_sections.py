@@ -67,6 +67,10 @@ SECTION_READERS: Dict[str, List[str]] = {
     "affect": [
         "service.emit.chain_install",
     ],
+    # L.1 (cycle 20260426_3) — SendMessageChannel registry config.
+    "channels": [
+        "service.notifications.install",
+    ],
 }
 
 

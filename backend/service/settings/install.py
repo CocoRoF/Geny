@@ -19,6 +19,7 @@ from typing import Any, Optional
 
 from service.settings.sections import (
     AffectConfigSection,
+    ChannelsConfigSection,
     HooksConfigSection,
     MemoryConfigSection,
     ModelConfigSection,
@@ -80,6 +81,8 @@ def install_geny_settings() -> Optional[Any]:
     register_section("memory", MemoryConfigSection)
     # G.3 (cycle 20260426_2) — affect tag emitter knob.
     register_section("affect", AffectConfigSection)
+    # L.1 (cycle 20260426_3) — send-message channel registry config.
+    register_section("channels", ChannelsConfigSection)
 
     loaded = loader.load()
     logger.info(

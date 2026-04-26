@@ -125,6 +125,35 @@ class NotificationsConfigSection(BaseModel):
         return v
 
 
+class SendMessageChannelEntry(BaseModel):
+    """One row in ``settings.json:channels.send_message`` (L.1 / cycle 20260426_3).
+
+    The actual channel implementation must be registered in code via
+    ``service.notifications.channel_factory.register_channel_factory(kind, ...)``
+    before the install layer runs — settings drives *which entries
+    activate*, not the implementation. The shipped factory handles
+    ``stdout`` only; hosts add Discord / Slack / etc by registering
+    their own.
+    """
+
+    name: str = Field(..., min_length=1, description="Registry key")
+    kind: str = Field(
+        ...,
+        description="Factory key (e.g. 'stdout'). Host-registered factories add more.",
+    )
+    config: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Free-form per-channel config consumed by the factory.",
+    )
+
+
+class ChannelsConfigSection(BaseModel):
+    """``settings.channels`` (L.1 / cycle 20260426_3) — host-side
+    SendMessageChannel registry config."""
+
+    send_message: List[SendMessageChannelEntry] = Field(default_factory=list)
+
+
 class AffectConfigSection(BaseModel):
     """``settings.affect`` schema (G.3 / cycle 20260426_2).
 
@@ -244,4 +273,6 @@ __all__ = [
     "MemoryConfigSection",
     "MemoryTuningSection",
     "AffectConfigSection",
+    "ChannelsConfigSection",
+    "SendMessageChannelEntry",
 ]

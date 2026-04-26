@@ -61,6 +61,7 @@ def test_readers_for_returns_a_copy() -> None:
         "permissions",  # K.2 (cycle 20260426_2)
         "memory",       # G.1 (cycle 20260426_2)
         "affect",       # G.3 (cycle 20260426_2)
+        "channels",     # L.1 (cycle 20260426_3)
     ],
 )
 def test_install_registered_sections_have_readers(name: str) -> None:
