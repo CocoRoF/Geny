@@ -444,6 +444,22 @@ async def lifespan(app: FastAPI):
     curation_scheduler.start()
     app.state.curation_scheduler = curation_scheduler
 
+    # ── Background Task Runtime ────────────────────────────────────────
+    # geny-executor 1.1.0 ships TaskRegistry + BackgroundTaskRunner
+    # primitives. Wire them with the in-memory store as the default
+    # backend; operators that need durable persistence swap in
+    # FileBackedRegistry (or a custom Postgres backend) via env.
+    from service.tasks import install_task_runtime
+    try:
+        task_runtime = install_task_runtime(app.state)
+        app.state.task_registry = task_runtime["registry"]
+        app.state.task_runner = task_runtime["runner"]
+        logger.info("   ✅ task_runtime: BackgroundTaskRunner started")
+    except Exception as e:
+        logger.warning(f"   ⚠️  task_runtime: skipped ({e})")
+        app.state.task_registry = None
+        app.state.task_runner = None
+
     # ── Tool Runtime Health Check ──────────────────────────────────────
     # Verify tools actually execute (not just registered) by invoking a
     # read-only tool directly and checking the response.
@@ -468,6 +484,13 @@ async def lifespan(app: FastAPI):
 
     print_step_banner("SHUTDOWN", "GENY AGENT SHUTDOWN", "Cleaning up sessions...")
     logger.info("Shutting down Geny Agent")
+
+    # Stop background task runner (geny-executor 1.1.0+)
+    if getattr(app.state, "task_runner", None) is not None:
+        try:
+            await app.state.task_runner.shutdown(timeout=10)
+        except Exception as e:
+            logger.warning(f"task_runner shutdown failed: {e}")
 
     # Stop thinking trigger service
     if hasattr(app.state, 'thinking_trigger'):
