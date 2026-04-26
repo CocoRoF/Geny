@@ -20,7 +20,10 @@ interface ToolPresetState {
   loadPresets: () => Promise<void>;
   loadCatalog: () => Promise<void>;
   createPreset: (data: { name: string; description?: string; custom_tools?: string[]; mcp_servers?: string[] }) => Promise<ToolPresetDefinition>;
-  updatePreset: (id: string, data: Partial<Pick<ToolPresetDefinition, 'name' | 'description' | 'icon' | 'custom_tools' | 'mcp_servers'>>) => Promise<void>;
+  updatePreset: (id: string, data: Partial<Pick<ToolPresetDefinition,
+    'name' | 'description' | 'icon' | 'custom_tools' | 'mcp_servers'
+    | 'built_in_mode' | 'built_in_tools' | 'built_in_deny'
+  >>) => Promise<void>;
   deletePreset: (id: string) => Promise<void>;
   clonePreset: (id: string, newName: string) => Promise<ToolPresetDefinition>;
 }
