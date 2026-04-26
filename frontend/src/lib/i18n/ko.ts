@@ -74,6 +74,7 @@ const ko: Translations = {
     toolSets: '도구 세트',
     toolCatalog: '도구 카탈로그',
     permissions: '권한',
+    hooks: '훅',
     environments: '환경',
     builder: '빌더',
     settings: '설정',

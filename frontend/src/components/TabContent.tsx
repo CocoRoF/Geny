@@ -27,6 +27,7 @@ const TasksTab = dynamic(() => import('@/components/tabs/TasksTab').then(m => m.
 const CronTab = dynamic(() => import('@/components/tabs/CronTab').then(m => m.CronTab));
 const ToolCatalogTab = dynamic(() => import('@/components/tabs/ToolCatalogTab').then(m => m.ToolCatalogTab));
 const PermissionsTab = dynamic(() => import('@/components/tabs/PermissionsTab').then(m => m.PermissionsTab));
+const HooksTab = dynamic(() => import('@/components/tabs/HooksTab').then(m => m.HooksTab));
 
 const TAB_MAP: Record<string, React.ComponentType> = {
   main: MainTab,
@@ -60,6 +61,8 @@ const TAB_MAP: Record<string, React.ComponentType> = {
   toolCatalog: ToolCatalogTab,
   // PR-E.2.2 — Permission rules viewer + editor.
   permissions: PermissionsTab,
+  // PR-E.3.3 — Hook entries viewer + editor + recent fires.
+  hooks: HooksTab,
 };
 
 // Tabs that should stay mounted once activated (KeepAlive)

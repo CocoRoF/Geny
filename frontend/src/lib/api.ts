@@ -580,6 +580,100 @@ export interface PermissionListResponse {
   sources_consulted: string[];
 }
 
+// ==================== Hooks CRUD API (PR-E.3.1) =================
+
+export const HOOK_EVENTS = [
+  'PRE_TOOL_USE',
+  'POST_TOOL_USE',
+  'USER_PROMPT_SUBMIT',
+  'STOP',
+  'SESSION_START',
+  'SESSION_END',
+  'SUBAGENT_STOP',
+  'PRE_COMPACT',
+] as const;
+export type HookEvent = typeof HOOK_EVENTS[number];
+
+export interface HookEntryPayload {
+  event: HookEvent;
+  command: string[];
+  timeout_ms?: number | null;
+  tool_filter?: string[];
+}
+
+export interface HookEntryRow {
+  event: string;
+  idx: number;
+  command: string[];
+  timeout_ms?: number | null;
+  tool_filter: string[];
+}
+
+export interface HookEntriesResponse {
+  enabled: boolean;
+  audit_log_path?: string | null;
+  entries: HookEntryRow[];
+  settings_path: string;
+}
+
+export interface HookListResponse {
+  enabled: boolean;
+  env_opt_in: boolean;
+  config_path: string;
+  entries: Array<{
+    event: string;
+    command: string[];
+    timeout_ms?: number | null;
+    tool_filter: string[];
+  }>;
+}
+
+export interface HookFireRecord {
+  record: Record<string, unknown>;
+}
+
+export interface HookFiresResponse {
+  audit_path?: string | null;
+  exists: boolean;
+  fires: HookFireRecord[];
+  truncated: boolean;
+}
+
+export const hookApi = {
+  // Editable file content (user-scope settings.json only).
+  listEditable: () => apiCall<HookEntriesResponse>('/api/hooks/entries'),
+
+  append: (entry: HookEntryPayload) =>
+    apiCall<HookEntriesResponse>('/api/hooks/entries', {
+      method: 'POST',
+      body: JSON.stringify(entry),
+    }),
+
+  replace: (event: string, idx: number, entry: HookEntryPayload) =>
+    apiCall<HookEntriesResponse>(`/api/hooks/entries/${event}/${idx}`, {
+      method: 'PUT',
+      body: JSON.stringify(entry),
+    }),
+
+  remove: (event: string, idx: number) =>
+    apiCall<HookEntriesResponse>(`/api/hooks/entries/${event}/${idx}`, {
+      method: 'DELETE',
+    }),
+
+  setEnabled: (enabled: boolean) =>
+    apiCall<HookEntriesResponse>('/api/hooks/enabled', {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    }),
+
+  // Cascade-merged inspection (config_path + env_opt_in gate).
+  inspect: () => apiCall<HookListResponse>('/api/hooks/list'),
+
+  // Recent fire ring (PR-E.3.2 — JSONL tail).
+  recentFires: (limit = 100) =>
+    apiCall<HookFiresResponse>(`/api/admin/hook-fires?limit=${limit}`),
+};
+
 export const permissionApi = {
   // Editable file content (user-scope settings.json only).
   listEditable: () => apiCall<PermissionRulesResponse>('/api/permissions/rules'),
