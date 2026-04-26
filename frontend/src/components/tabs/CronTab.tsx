@@ -14,13 +14,22 @@ import { twMerge } from 'tailwind-merge';
 import { RefreshCw, Plus, Trash2, Play, Power, ChevronDown, ChevronRight } from 'lucide-react';
 
 // PR-F.4.2 — show a friendly description of a cron expression next to
-// the raw form. We use `cronstrue` only when present at runtime; the
-// dynamic import keeps it out of the main bundle and avoids forcing
-// a new dependency for users who don't open this tab.
+// the raw form. cronstrue is consulted at runtime only; the indirect
+// module name keeps Next.js / TS from trying to statically resolve it
+// so installs without the package still build cleanly.
 async function describeCron(expr: string): Promise<string | null> {
   try {
-    const mod = await import('cronstrue');
-    return (mod as unknown as { toString: (s: string) => string }).toString(expr);
+    const moduleName = 'cronstrue';
+    const dynamicImport = new Function('m', 'return import(m);') as (m: string) => Promise<unknown>;
+    const mod = await dynamicImport(moduleName);
+    const fn = (mod as { default?: { toString?: (s: string) => string }; toString?: (s: string) => string });
+    if (fn.default && typeof fn.default.toString === 'function') {
+      return fn.default.toString(expr);
+    }
+    if (typeof fn.toString === 'function') {
+      return fn.toString(expr);
+    }
+    return null;
   } catch {
     return null;
   }
