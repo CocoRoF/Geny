@@ -492,10 +492,19 @@ class AgentSession:
 
     @property
     def max_turns(self) -> int:
+        # B.1 (cycle 20260426_1): With env-driven pipelines this field is
+        # advisory only — "turn" reduces to "one ``invoke`` call" (one
+        # chat message), which is governed by the chat layer, not the
+        # executor pipeline. The per-invoke iteration cap is
+        # ``max_iterations`` and is enforced via
+        # ``_apply_session_limits_to_pipeline``.
         return self._max_turns
 
     @property
     def timeout(self) -> float:
+        # B.1 (cycle 20260426_1): enforced at the chat-execution layer
+        # via ``asyncio.wait_for(agent.invoke(...), timeout=...)`` —
+        # see ``service/execution/agent_executor.py:_execute_core``.
         return self._timeout
 
     @property
@@ -917,6 +926,66 @@ class AgentSession:
         """
         self._build_pipeline()
 
+    def _apply_session_limits_to_pipeline(self) -> None:
+        """B.1 (cycle 20260426_1) — bridge UI session limits into the
+        bound Pipeline's ``PipelineConfig``.
+
+        The user-supplied ``max_iterations`` from the Sessions UI is the
+        cap on graph iterations per ``invoke``. Without this hook,
+        ``Pipeline._config`` keeps the value baked in at manifest-load
+        time (typically 50), and ``PipelineConfig.apply_to_state`` writes
+        that value into every fresh ``PipelineState`` regardless of what
+        Geny set on the session — making the Sessions UI control
+        cosmetic.
+
+        Each ``AgentSession`` owns its Pipeline (one Pipeline per session
+        via ``EnvironmentService.instantiate_pipeline``), so per-session
+        mutation of ``Pipeline._config`` is safe — no other caller
+        observes it.
+
+        Called once at the end of :meth:`_build_pipeline`. Idempotent —
+        re-calling with unchanged values has no extra effect.
+
+        Skipped silently when:
+        - ``self._pipeline`` is ``None`` (not yet built / older path).
+        - The pipeline lacks ``_config`` (older executor versions).
+        - The session value is falsy — leave manifest default in place.
+
+        ``timeout`` is *not* mutated here: it is enforced at the
+        chat-execution layer via
+        ``asyncio.wait_for(agent.invoke(...), timeout=...)`` —
+        see ``service/execution/agent_executor.py:_execute_core``.
+
+        ``max_turns`` is *not* mutated here either: with env-driven
+        pipelines, "turn" reduces to "one chat message", which is
+        governed by the chat layer, not the executor pipeline.
+        """
+        pipeline = getattr(self, "_pipeline", None)
+        if pipeline is None:
+            return
+        config = getattr(pipeline, "_config", None)
+        if config is None:
+            return
+        if hasattr(config, "max_iterations") and self._max_iterations:
+            try:
+                desired = int(self._max_iterations)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "[%s] _apply_session_limits: invalid max_iterations=%r — "
+                    "leaving manifest default",
+                    self._session_id, self._max_iterations,
+                )
+                return
+            if desired <= 0:
+                return
+            previous = getattr(config, "max_iterations", None)
+            if previous != desired:
+                config.max_iterations = desired
+                logger.info(
+                    "[%s] session limit applied: max_iterations %s → %s",
+                    self._session_id, previous, desired,
+                )
+
     # ========================================================================
     # geny-executor Pipeline Mode
     # ========================================================================
@@ -1225,6 +1294,12 @@ class AgentSession:
 
         self._pipeline = self._prebuilt_pipeline
         self._pipeline.attach_runtime(**attach_kwargs)
+        # B.1 (cycle 20260426_1) — bridge UI session limits into the
+        # bound Pipeline's PipelineConfig so user-supplied
+        # ``max_iterations`` is enforced by the executor's iteration
+        # guards / loop controllers. Without this the manifest default
+        # (typically 50) wins and the Sessions UI control is cosmetic.
+        self._apply_session_limits_to_pipeline()
         self._preset_name = f"env:{self._env_id}" if self._env_id else "env"
 
         # G9.x: register optional Phase-7 strategies on stage slot
