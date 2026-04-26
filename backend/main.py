@@ -28,6 +28,7 @@ from fastapi.responses import FileResponse, RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from controller.command_controller import router as command_router, get_prompts_list
 from controller.agent_controller import router as agent_router, agent_manager
+from controller.agent_tasks_controller import router as agent_tasks_router
 from controller.config_controller import router as config_router
 from controller.shared_folder_controller import router as shared_folder_router
 from controller.chat_controller import router as chat_router
@@ -604,6 +605,7 @@ async def health_check():
 app.include_router(auth_router)  # Auth (must be first — no auth guard on itself)
 app.include_router(command_router)
 app.include_router(agent_router)  # geny-executor agent sessions
+app.include_router(agent_tasks_router)  # background tasks REST (PR-A.5.4)
 app.include_router(config_router)  # Configuration management
 app.include_router(shared_folder_router)  # Shared folder
 app.include_router(chat_router)  # Chat broadcast
