@@ -14,7 +14,6 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { twMerge } from 'tailwind-merge';
 import {
   hookApi,
   HOOK_EVENTS,
@@ -25,11 +24,14 @@ import {
   HookListResponse,
   HookFiresResponse,
 } from '@/lib/api';
-import { RefreshCw, Plus, Pencil, Trash2, X, Power } from 'lucide-react';
-
-function cn(...c: (string | boolean | undefined | null)[]) {
-  return twMerge(c.filter(Boolean).join(' '));
-}
+import { RefreshCw, Plus, Pencil, Trash2, Power, Plug } from 'lucide-react';
+import {
+  TabShell,
+  EditorModal,
+  EmptyState,
+  StatusBadge,
+  ActionButton,
+} from '@/components/layout';
 
 interface EntryFormState {
   event: HookEvent;
@@ -194,90 +196,65 @@ export function HooksTab() {
   const willFire = fileEnabled && envOptIn;
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      <header className="px-4 py-3 border-b border-[var(--border-color)] flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold flex items-center gap-2">
-            Hooks
-            <span
-              className={cn(
-                'text-[0.625rem] font-mono uppercase px-1.5 py-0.5 rounded border',
-                willFire
-                  ? 'bg-green-100 text-green-800 border-green-300'
-                  : 'bg-amber-100 text-amber-800 border-amber-300',
-              )}
-              title={
-                willFire
-                  ? 'Both file flag and GENY_ALLOW_HOOKS are set — hooks will fire.'
-                  : 'Hooks will NOT fire — both file flag AND GENY_ALLOW_HOOKS env var must be set.'
-              }
-            >
-              {willFire ? 'live' : 'gated'}
-            </span>
-          </h2>
-          <p className="text-[0.75rem] text-[var(--text-muted)]">
-            File: <button
-              type="button"
-              onClick={toggleEnabled}
-              className={cn(
-                'inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[0.625rem]',
-                fileEnabled
-                  ? 'bg-green-100 text-green-800 border-green-300'
-                  : 'bg-gray-100 text-gray-800 border-gray-300',
-              )}
-            >
-              <Power className="w-3 h-3" />
-              {fileEnabled ? 'enabled' : 'disabled'}
-            </button>
-            {' · '}
-            Env <span className="font-mono">GENY_ALLOW_HOOKS</span>:{' '}
-            <span className={cn('font-mono', envOptIn ? 'text-green-700' : 'text-red-600')}>
-              {envOptIn ? 'set' : 'unset'}
-            </span>
-            {' · '}
-            {totalEditable} editable / {totalLoaded} loaded
-            {editable && (
-              <> · <span className="font-mono">{editable.settings_path}</span></>
-            )}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={openCreate}
-            className="flex items-center gap-1 text-xs bg-[var(--primary-color)] text-white rounded px-2 py-1"
+    <TabShell
+      title="Hooks"
+      icon={Plug}
+      subtitle={
+        <>
+          File:{' '}
+          <StatusBadge
+            tone={fileEnabled ? 'success' : 'neutral'}
+            icon={Power}
+            onClick={toggleEnabled}
           >
-            <Plus className="w-3 h-3" />
+            {fileEnabled ? 'enabled' : 'disabled'}
+          </StatusBadge>
+          {' · Env '}
+          <span className="font-mono">GENY_ALLOW_HOOKS</span>:{' '}
+          <span className={'font-mono ' + (envOptIn ? 'text-green-700' : 'text-red-600')}>
+            {envOptIn ? 'set' : 'unset'}
+          </span>
+          {' · '}
+          {totalEditable} editable / {totalLoaded} loaded
+          {editable && <> · <span className="font-mono">{editable.settings_path}</span></>}
+        </>
+      }
+      actions={
+        <>
+          <StatusBadge
+            tone={willFire ? 'success' : 'warning'}
+            uppercase
+            title={
+              willFire
+                ? 'Both file flag and GENY_ALLOW_HOOKS are set — hooks will fire.'
+                : 'Hooks will NOT fire — both file flag AND GENY_ALLOW_HOOKS env var must be set.'
+            }
+          >
+            {willFire ? 'live' : 'gated'}
+          </StatusBadge>
+          <ActionButton variant="primary" icon={Plus} onClick={openCreate}>
             Add hook
-          </button>
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={loading}
-            className="flex items-center gap-1 text-xs border rounded px-2 py-1 disabled:opacity-50"
-          >
-            <RefreshCw className={cn('w-3 h-3', loading && 'animate-spin')} />
+          </ActionButton>
+          <ActionButton icon={RefreshCw} spinIcon={loading} onClick={refresh} disabled={loading}>
             Refresh
-          </button>
-        </div>
-      </header>
-
-      {error && (
-        <div className="m-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2">
-          {error}
-        </div>
-      )}
-
-      <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-4">
+          </ActionButton>
+        </>
+      }
+      error={error}
+      onDismissError={() => setError(null)}
+    >
+      <div className="h-full min-h-0 overflow-y-auto p-3 space-y-4">
         {/* ── Entries grouped by event ── */}
         <section>
           <h3 className="text-[0.6875rem] uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-2">
             Entries
           </h3>
           {totalEditable === 0 && !loading ? (
-            <div className="text-sm text-[var(--text-muted)] text-center py-4">
-              No entries. Click <span className="font-mono">Add hook</span> to create one.
-            </div>
+            <EmptyState
+              compact
+              title="No entries"
+              description={<>Click <span className="font-mono">Add hook</span> to create one.</>}
+            />
           ) : (
             <div className="space-y-3">
               {Array.from(grouped.entries()).map(([event, rows]) => (
@@ -386,94 +363,72 @@ export function HooksTab() {
         </section>
       </div>
 
-      {editorOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
-          onClick={() => !saving && setEditorOpen(false)}
-        >
-          <div
-            className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border-color)] w-full max-w-md p-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <header className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">
-                {editingTarget ? `Edit ${editingTarget.event}#${editingTarget.idx}` : 'Add hook'}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setEditorOpen(false)}
-                disabled={saving}
-                className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </header>
-            <div className="grid gap-2">
-              <label className="text-[0.75rem]">
-                <div className="text-[var(--text-muted)] mb-0.5">Event</div>
-                <select
-                  value={form.event}
-                  onChange={(e) => setForm({ ...form, event: e.target.value as HookEvent })}
-                  disabled={!!editingTarget}
-                  className="w-full border rounded px-2 py-1 text-[0.8125rem] disabled:opacity-50"
-                  title={editingTarget ? 'Change event by deleting and re-adding' : ''}
-                >
-                  {HOOK_EVENTS.map((ev) => (
-                    <option key={ev} value={ev}>{ev}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-[0.75rem]">
-                <div className="text-[var(--text-muted)] mb-0.5">Command (space-separated argv)</div>
-                <input
-                  value={form.command}
-                  onChange={(e) => setForm({ ...form, command: e.target.value })}
-                  placeholder="./scripts/log-hook.sh"
-                  className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono"
-                />
-              </label>
-              <label className="text-[0.75rem]">
-                <div className="text-[var(--text-muted)] mb-0.5">Timeout (ms, optional)</div>
-                <input
-                  value={form.timeout_ms}
-                  onChange={(e) => setForm({ ...form, timeout_ms: e.target.value })}
-                  placeholder="1000"
-                  inputMode="numeric"
-                  className="w-full border rounded px-2 py-1 text-[0.8125rem]"
-                />
-              </label>
-              <label className="text-[0.75rem]">
-                <div className="text-[var(--text-muted)] mb-0.5">Tool filter (CSV; empty = match any)</div>
-                <input
-                  value={form.tool_filter}
-                  onChange={(e) => setForm({ ...form, tool_filter: e.target.value })}
-                  placeholder="Bash, Read"
-                  className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono"
-                />
-              </label>
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setEditorOpen(false)}
-                disabled={saving}
-                className="text-xs border rounded px-3 py-1"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={submitForm}
-                disabled={saving || !form.command.trim()}
-                className="text-xs bg-[var(--primary-color)] text-white rounded px-3 py-1 disabled:opacity-50"
-              >
-                {saving ? 'Saving…' : editingTarget ? 'Save' : 'Create'}
-              </button>
-            </div>
-          </div>
+      <EditorModal
+        open={editorOpen}
+        onClose={() => setEditorOpen(false)}
+        title={editingTarget ? `Edit ${editingTarget.event}#${editingTarget.idx}` : 'Add hook'}
+        saving={saving}
+        footer={
+          <>
+            <ActionButton onClick={() => setEditorOpen(false)} disabled={saving}>
+              Cancel
+            </ActionButton>
+            <ActionButton
+              variant="primary"
+              onClick={submitForm}
+              disabled={saving || !form.command.trim()}
+            >
+              {saving ? 'Saving…' : editingTarget ? 'Save' : 'Create'}
+            </ActionButton>
+          </>
+        }
+      >
+        <div className="grid gap-2">
+          <label className="text-[0.75rem]">
+            <div className="text-[var(--text-muted)] mb-0.5">Event</div>
+            <select
+              value={form.event}
+              onChange={(e) => setForm({ ...form, event: e.target.value as HookEvent })}
+              disabled={!!editingTarget}
+              className="w-full border rounded px-2 py-1 text-[0.8125rem] disabled:opacity-50"
+              title={editingTarget ? 'Change event by deleting and re-adding' : ''}
+            >
+              {HOOK_EVENTS.map((ev) => (
+                <option key={ev} value={ev}>{ev}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-[0.75rem]">
+            <div className="text-[var(--text-muted)] mb-0.5">Command (space-separated argv)</div>
+            <input
+              value={form.command}
+              onChange={(e) => setForm({ ...form, command: e.target.value })}
+              placeholder="./scripts/log-hook.sh"
+              className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono"
+            />
+          </label>
+          <label className="text-[0.75rem]">
+            <div className="text-[var(--text-muted)] mb-0.5">Timeout (ms, optional)</div>
+            <input
+              value={form.timeout_ms}
+              onChange={(e) => setForm({ ...form, timeout_ms: e.target.value })}
+              placeholder="1000"
+              inputMode="numeric"
+              className="w-full border rounded px-2 py-1 text-[0.8125rem]"
+            />
+          </label>
+          <label className="text-[0.75rem]">
+            <div className="text-[var(--text-muted)] mb-0.5">Tool filter (CSV; empty = match any)</div>
+            <input
+              value={form.tool_filter}
+              onChange={(e) => setForm({ ...form, tool_filter: e.target.value })}
+              placeholder="Bash, Read"
+              className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono"
+            />
+          </label>
         </div>
-      )}
-    </div>
+      </EditorModal>
+    </TabShell>
   );
 }
 

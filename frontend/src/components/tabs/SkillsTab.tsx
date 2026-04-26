@@ -11,7 +11,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { agentApi, skillsApi, frameworkSettingsApi, SkillDetail } from '@/lib/api';
-import { Sparkles, Plus, Pencil, Trash2, X, RefreshCw, Power } from 'lucide-react';
+import { Sparkles, Plus, Pencil, Trash2, RefreshCw, Power } from 'lucide-react';
+import {
+  TabShell,
+  EditorModal,
+  EmptyState,
+  StatusBadge,
+  ActionButton,
+} from '@/components/layout';
 
 interface SkillRow {
   id: string | null;
@@ -199,62 +206,40 @@ export function SkillsTab() {
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      <header className="px-4 py-3 border-b border-[var(--border-color)] flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold flex items-center gap-2">
-            <Sparkles size={14} className="text-[var(--primary-color)]" />
-            Skills
-          </h2>
-          <p className="text-[0.75rem] text-[var(--text-muted)]">
-            {skills.length} loaded · {userIds.size} user
-            {userSkillsEnabled !== null && (
-              <>
-                {' · '}
-                <button
-                  type="button"
-                  onClick={onToggleEnabled}
-                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[0.625rem] ${
-                    userSkillsEnabled
-                      ? 'bg-green-100 text-green-800 border-green-300'
-                      : 'bg-gray-100 text-gray-800 border-gray-300'
-                  }`}
-                >
-                  <Power className="w-3 h-3" />
-                  user_skills_enabled: {userSkillsEnabled ? 'true' : 'false'}
-                </button>
-              </>
-            )}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={openCreate}
-            className="flex items-center gap-1 text-xs bg-[var(--primary-color)] text-white rounded px-2 py-1"
-          >
-            <Plus className="w-3 h-3" />
+    <TabShell
+      title="Skills"
+      icon={Sparkles}
+      subtitle={
+        <>
+          {skills.length} loaded · {userIds.size} user
+          {userSkillsEnabled !== null && (
+            <>
+              {' · '}
+              <StatusBadge
+                tone={userSkillsEnabled ? 'success' : 'neutral'}
+                icon={Power}
+                onClick={onToggleEnabled}
+              >
+                user_skills_enabled: {userSkillsEnabled ? 'true' : 'false'}
+              </StatusBadge>
+            </>
+          )}
+        </>
+      }
+      actions={
+        <>
+          <ActionButton variant="primary" icon={Plus} onClick={openCreate}>
             Add user skill
-          </button>
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={loading}
-            className="flex items-center gap-1 text-xs border rounded px-2 py-1 disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+          </ActionButton>
+          <ActionButton icon={RefreshCw} spinIcon={loading} onClick={refresh} disabled={loading}>
             Refresh
-          </button>
-        </div>
-      </header>
-
-      {error && (
-        <div className="m-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2">
-          {error}
-        </div>
-      )}
-
-      <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-4">
+          </ActionButton>
+        </>
+      }
+      error={error}
+      onDismissError={() => setError(null)}
+    >
+      <div className="h-full min-h-0 overflow-y-auto p-3 space-y-4">
         {Array.from(grouped.entries()).map(([cat, rows]) => (
           <section key={cat}>
             <h3 className="text-[0.6875rem] uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">
@@ -306,35 +291,28 @@ export function SkillsTab() {
           </section>
         ))}
         {!loading && skills.length === 0 && (
-          <div className="text-sm text-[var(--text-muted)] text-center py-8">
-            No skills loaded.
-          </div>
+          <EmptyState icon={Sparkles} title="No skills loaded." />
         )}
       </div>
 
-      {editorOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
-          onClick={() => !saving && setEditorOpen(false)}
-        >
-          <div
-            className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border-color)] w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <header className="px-4 py-2 border-b border-[var(--border-color)] flex items-center justify-between">
-              <h3 className="text-sm font-semibold">
-                {editingExisting ? `Edit /${form.id}` : 'New user skill'}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setEditorOpen(false)}
-                disabled={saving}
-                className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-              >
-                <X size={14} />
-              </button>
-            </header>
-            <div className="overflow-y-auto p-4 grid gap-2 text-[0.75rem]">
+      <EditorModal
+        open={editorOpen}
+        onClose={() => setEditorOpen(false)}
+        title={editingExisting ? `Edit /${form.id}` : 'New user skill'}
+        saving={saving}
+        width="xl"
+        footer={
+          <>
+            <ActionButton onClick={() => setEditorOpen(false)} disabled={saving}>
+              Cancel
+            </ActionButton>
+            <ActionButton variant="primary" onClick={submitForm} disabled={saving}>
+              {saving ? 'Saving…' : editingExisting ? 'Save' : 'Create'}
+            </ActionButton>
+          </>
+        }
+      >
+        <div className="grid gap-2 text-[0.75rem]">
               <label>
                 <div className="text-[var(--text-muted)] mb-0.5">ID *</div>
                 <input
@@ -414,29 +392,9 @@ export function SkillsTab() {
                   className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono"
                 />
               </label>
-            </div>
-            <footer className="px-4 py-2 border-t border-[var(--border-color)] flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setEditorOpen(false)}
-                disabled={saving}
-                className="text-xs border rounded px-3 py-1"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={submitForm}
-                disabled={saving}
-                className="text-xs bg-[var(--primary-color)] text-white rounded px-3 py-1 disabled:opacity-50"
-              >
-                {saving ? 'Saving…' : editingExisting ? 'Save' : 'Create'}
-              </button>
-            </footer>
-          </div>
         </div>
-      )}
-    </div>
+      </EditorModal>
+    </TabShell>
   );
 }
 

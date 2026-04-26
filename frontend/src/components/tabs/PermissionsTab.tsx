@@ -17,7 +17,6 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { twMerge } from 'tailwind-merge';
 import {
   permissionApi,
   PermissionRulePayload,
@@ -26,19 +25,22 @@ import {
   PermissionListResponse,
   PermissionRulesResponse,
 } from '@/lib/api';
-import { RefreshCw, Plus, Pencil, Trash2, X } from 'lucide-react';
-
-function cn(...c: (string | boolean | undefined | null)[]) {
-  return twMerge(c.filter(Boolean).join(' '));
-}
+import { RefreshCw, Plus, Pencil, Trash2, Shield } from 'lucide-react';
+import {
+  TabShell,
+  EditorModal,
+  StatusBadge,
+  ActionButton,
+  type BadgeTone,
+} from '@/components/layout';
 
 const BEHAVIOR_OPTIONS: PermissionBehavior[] = ['allow', 'deny', 'ask'];
 const SOURCE_OPTIONS: PermissionSource[] = ['user', 'project', 'local', 'cli', 'preset'];
 
-const BEHAVIOR_BADGE: Record<string, string> = {
-  allow: 'bg-green-100 text-green-800 border-green-300',
-  deny: 'bg-red-100 text-red-800 border-red-300',
-  ask: 'bg-amber-100 text-amber-800 border-amber-300',
+const BEHAVIOR_TONE: Record<string, BadgeTone> = {
+  allow: 'success',
+  deny: 'danger',
+  ask: 'warning',
 };
 
 interface RuleFormState {
@@ -181,49 +183,32 @@ export function PermissionsTab() {
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      <header className="px-4 py-3 border-b border-[var(--border-color)] flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold">Permissions</h2>
-          <p className="text-[0.75rem] text-[var(--text-muted)]">
-            Mode:{' '}
-            <span className="font-mono uppercase">
-              {inspect?.mode ?? '—'}
-            </span>{' '}
-            · {inspectCount} rule{inspectCount === 1 ? '' : 's'} loaded
-            {editable && (
-              <span> · {editableCount} editable in <span className="font-mono">{editable.settings_path}</span></span>
-            )}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={openCreate}
-            className="flex items-center gap-1 text-xs bg-[var(--primary-color)] text-white rounded px-2 py-1"
-          >
-            <Plus className="w-3 h-3" />
+    <TabShell
+      title="Permissions"
+      icon={Shield}
+      subtitle={
+        <>
+          Mode: <span className="font-mono uppercase">{inspect?.mode ?? '—'}</span>{' '}
+          · {inspectCount} rule{inspectCount === 1 ? '' : 's'} loaded
+          {editable && (
+            <> · {editableCount} editable in <span className="font-mono">{editable.settings_path}</span></>
+          )}
+        </>
+      }
+      actions={
+        <>
+          <ActionButton variant="primary" icon={Plus} onClick={openCreate}>
             Add rule
-          </button>
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={loading}
-            className="flex items-center gap-1 text-xs border rounded px-2 py-1 disabled:opacity-50"
-          >
-            <RefreshCw className={cn('w-3 h-3', loading && 'animate-spin')} />
+          </ActionButton>
+          <ActionButton icon={RefreshCw} spinIcon={loading} onClick={refresh} disabled={loading}>
             Refresh
-          </button>
-        </div>
-      </header>
-
-      {error && (
-        <div className="m-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2">
-          {error}
-        </div>
-      )}
-
-      <div className="flex-1 min-h-0 overflow-y-auto p-3">
+          </ActionButton>
+        </>
+      }
+      error={error}
+      onDismissError={() => setError(null)}
+    >
+      <div className="h-full min-h-0 overflow-y-auto p-3">
         <table className="w-full text-[0.8125rem]">
           <thead>
             <tr className="text-[0.6875rem] uppercase tracking-wider text-[var(--text-muted)] border-b border-[var(--border-color)]">
@@ -247,14 +232,9 @@ export function PermissionsTab() {
                 >
                   <td className="py-1.5 px-2 font-mono">{r.tool_name}</td>
                   <td className="py-1.5 px-2">
-                    <span
-                      className={cn(
-                        'inline-block text-[0.6875rem] px-1.5 py-0.5 rounded border',
-                        BEHAVIOR_BADGE[r.behavior] ?? 'bg-gray-100 text-gray-800 border-gray-300',
-                      )}
-                    >
+                    <StatusBadge tone={BEHAVIOR_TONE[r.behavior] ?? 'neutral'}>
                       {r.behavior}
-                    </span>
+                    </StatusBadge>
                   </td>
                   <td className="py-1.5 px-2 font-mono text-[0.75rem]">{r.pattern ?? '—'}</td>
                   <td className="py-1.5 px-2 text-[0.75rem]">{r.source}</td>
@@ -315,103 +295,81 @@ export function PermissionsTab() {
         )}
       </div>
 
-      {editorOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
-          onClick={() => !saving && setEditorOpen(false)}
-        >
-          <div
-            className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border-color)] w-full max-w-md p-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <header className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">
-                {editingIdx === null ? 'Add rule' : `Edit rule #${editingIdx}`}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setEditorOpen(false)}
-                disabled={saving}
-                className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </header>
-            <div className="grid gap-2">
-              <label className="text-[0.75rem]">
-                <div className="text-[var(--text-muted)] mb-0.5">Tool name *</div>
-                <input
-                  value={form.tool_name}
-                  onChange={(e) => setForm({ ...form, tool_name: e.target.value })}
-                  placeholder="Bash, Read, * (any), ..."
-                  className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono"
-                />
-              </label>
-              <label className="text-[0.75rem]">
-                <div className="text-[var(--text-muted)] mb-0.5">Behavior</div>
-                <select
-                  value={form.behavior}
-                  onChange={(e) => setForm({ ...form, behavior: e.target.value as PermissionBehavior })}
-                  className="w-full border rounded px-2 py-1 text-[0.8125rem]"
-                >
-                  {BEHAVIOR_OPTIONS.map((b) => (
-                    <option key={b} value={b}>{b}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-[0.75rem]">
-                <div className="text-[var(--text-muted)] mb-0.5">Pattern (optional, glob/regex per executor)</div>
-                <input
-                  value={form.pattern}
-                  onChange={(e) => setForm({ ...form, pattern: e.target.value })}
-                  placeholder="git push *"
-                  className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono"
-                />
-              </label>
-              <label className="text-[0.75rem]">
-                <div className="text-[var(--text-muted)] mb-0.5">Source</div>
-                <select
-                  value={form.source}
-                  onChange={(e) => setForm({ ...form, source: e.target.value as PermissionSource })}
-                  className="w-full border rounded px-2 py-1 text-[0.8125rem]"
-                >
-                  {SOURCE_OPTIONS.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-[0.75rem]">
-                <div className="text-[var(--text-muted)] mb-0.5">Reason (optional, surfaced in UI)</div>
-                <textarea
-                  value={form.reason}
-                  onChange={(e) => setForm({ ...form, reason: e.target.value })}
-                  rows={2}
-                  className="w-full border rounded px-2 py-1 text-[0.8125rem]"
-                />
-              </label>
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setEditorOpen(false)}
-                disabled={saving}
-                className="text-xs border rounded px-3 py-1"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={submitForm}
-                disabled={saving || !form.tool_name.trim()}
-                className="text-xs bg-[var(--primary-color)] text-white rounded px-3 py-1 disabled:opacity-50"
-              >
-                {saving ? 'Saving…' : editingIdx === null ? 'Create' : 'Save'}
-              </button>
-            </div>
-          </div>
+      <EditorModal
+        open={editorOpen}
+        onClose={() => setEditorOpen(false)}
+        title={editingIdx === null ? 'Add rule' : `Edit rule #${editingIdx}`}
+        saving={saving}
+        footer={
+          <>
+            <ActionButton onClick={() => setEditorOpen(false)} disabled={saving}>
+              Cancel
+            </ActionButton>
+            <ActionButton
+              variant="primary"
+              onClick={submitForm}
+              disabled={saving || !form.tool_name.trim()}
+            >
+              {saving ? 'Saving…' : editingIdx === null ? 'Create' : 'Save'}
+            </ActionButton>
+          </>
+        }
+      >
+        <div className="grid gap-2">
+          <label className="text-[0.75rem]">
+            <div className="text-[var(--text-muted)] mb-0.5">Tool name *</div>
+            <input
+              value={form.tool_name}
+              onChange={(e) => setForm({ ...form, tool_name: e.target.value })}
+              placeholder="Bash, Read, * (any), ..."
+              className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono"
+            />
+          </label>
+          <label className="text-[0.75rem]">
+            <div className="text-[var(--text-muted)] mb-0.5">Behavior</div>
+            <select
+              value={form.behavior}
+              onChange={(e) => setForm({ ...form, behavior: e.target.value as PermissionBehavior })}
+              className="w-full border rounded px-2 py-1 text-[0.8125rem]"
+            >
+              {BEHAVIOR_OPTIONS.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-[0.75rem]">
+            <div className="text-[var(--text-muted)] mb-0.5">Pattern (optional, glob/regex per executor)</div>
+            <input
+              value={form.pattern}
+              onChange={(e) => setForm({ ...form, pattern: e.target.value })}
+              placeholder="git push *"
+              className="w-full border rounded px-2 py-1 text-[0.8125rem] font-mono"
+            />
+          </label>
+          <label className="text-[0.75rem]">
+            <div className="text-[var(--text-muted)] mb-0.5">Source</div>
+            <select
+              value={form.source}
+              onChange={(e) => setForm({ ...form, source: e.target.value as PermissionSource })}
+              className="w-full border rounded px-2 py-1 text-[0.8125rem]"
+            >
+              {SOURCE_OPTIONS.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-[0.75rem]">
+            <div className="text-[var(--text-muted)] mb-0.5">Reason (optional, surfaced in UI)</div>
+            <textarea
+              value={form.reason}
+              onChange={(e) => setForm({ ...form, reason: e.target.value })}
+              rows={2}
+              className="w-full border rounded px-2 py-1 text-[0.8125rem]"
+            />
+          </label>
         </div>
-      )}
-    </div>
+      </EditorModal>
+    </TabShell>
   );
 }
 

@@ -19,21 +19,24 @@ import {
   SubagentTypeRow,
   adminTelemetryApi,
 } from '@/lib/api';
-import { twMerge } from 'tailwind-merge';
-import { RefreshCw, Square, Eye, Plus, X, Clock } from 'lucide-react';
-
-function cn(...c: (string | boolean | undefined | null)[]) {
-  return twMerge(c.filter(Boolean).join(' '));
-}
+import { RefreshCw, Square, Eye, Plus, Clock, ListChecks } from 'lucide-react';
+import {
+  TabShell,
+  EditorModal,
+  EmptyState,
+  StatusBadge,
+  ActionButton,
+  type BadgeTone,
+} from '@/components/layout';
 
 const POLL_INTERVAL_MS = 5_000;
 
-const STATUS_COLORS: Record<BackgroundTaskRecord['status'], string> = {
-  pending: 'bg-slate-200 text-slate-800',
-  running: 'bg-blue-200 text-blue-900',
-  done: 'bg-green-200 text-green-900',
-  failed: 'bg-red-200 text-red-900',
-  cancelled: 'bg-amber-200 text-amber-900',
+const STATUS_TONE: Record<BackgroundTaskRecord['status'], BadgeTone> = {
+  pending: 'neutral',
+  running: 'info',
+  done: 'success',
+  failed: 'danger',
+  cancelled: 'warning',
 };
 
 function formatDuration(start: string | null, end: string | null): string {
@@ -52,7 +55,6 @@ export function TasksTab() {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   // PR-F.3.2 — New Task modal.
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -181,31 +183,34 @@ export function TasksTab() {
 
   if (!sessionId) {
     return (
-      <div className="p-6 text-sm text-slate-500">
-        Select a session to view its background tasks.
-      </div>
+      <TabShell title="Background Tasks" icon={ListChecks}>
+        <EmptyState
+          title="No session selected"
+          description="Select a session to view its background tasks."
+        />
+      </TabShell>
     );
   }
 
   return (
-    <div className="flex flex-col h-full p-4 gap-4">
-      <header className="flex items-center justify-between gap-4">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          Background Tasks
+    <TabShell
+      title="Background Tasks"
+      icon={ListChecks}
+      actions={
+        <>
           {capacity && (capacity.in_flight !== null || capacity.max !== null) && (
-            <span
-              className="text-[0.625rem] px-1.5 py-0.5 rounded border font-mono uppercase tracking-wider bg-blue-100 text-blue-800 border-blue-300"
+            <StatusBadge
+              tone="info"
+              uppercase
               title="Process-wide BackgroundTaskRunner load"
             >
               {capacity.in_flight ?? '?'} / {capacity.max ?? '∞'}
-            </span>
+            </StatusBadge>
           )}
-        </h2>
-        <div className="flex items-center gap-2">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="text-sm border rounded px-2 py-1"
+            className="text-xs border rounded px-2 py-1 bg-[var(--bg-primary)]"
           >
             <option value="">All statuses</option>
             <option value="pending">Pending</option>
@@ -214,37 +219,24 @@ export function TasksTab() {
             <option value="failed">Failed</option>
             <option value="cancelled">Cancelled</option>
           </select>
-          <button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            className="flex items-center gap-1 text-sm bg-[var(--primary-color)] text-white rounded px-2 py-1"
-          >
-            <Plus className="w-4 h-4" />
+          <ActionButton variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>
             New task
-          </button>
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={loading}
-            className="flex items-center gap-1 text-sm border rounded px-2 py-1 disabled:opacity-50"
-          >
-            <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
+          </ActionButton>
+          <ActionButton icon={RefreshCw} spinIcon={loading} onClick={refresh} disabled={loading}>
             Refresh
-          </button>
-        </div>
-      </header>
-
-      {error && (
-        <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2">
-          {error}
-        </div>
-      )}
-
+          </ActionButton>
+        </>
+      }
+      error={error}
+      onDismissError={() => setError(null)}
+    >
+      <div className="h-full min-h-0 overflow-y-auto p-4">
       {rows.length === 0 ? (
-        <div className="text-sm text-slate-500 p-4 border rounded text-center">
-          No tasks. Tools that submit background work (TaskCreate / Cron-fired
-          jobs) will appear here.
-        </div>
+        <EmptyState
+          icon={ListChecks}
+          title="No tasks"
+          description="Tools that submit background work (TaskCreate / Cron-fired jobs) will appear here."
+        />
       ) : (
         <div className="overflow-auto border rounded">
           <table className="min-w-full text-sm">
@@ -268,14 +260,7 @@ export function TasksTab() {
                     <td className="px-3 py-2 font-mono text-xs">{row.task_id.slice(0, 12)}…</td>
                     <td className="px-3 py-2">{row.kind}</td>
                     <td className="px-3 py-2">
-                      <span
-                        className={cn(
-                          'inline-block rounded px-2 py-0.5 text-xs font-medium',
-                          STATUS_COLORS[row.status],
-                        )}
-                      >
-                        {row.status}
-                      </span>
+                      <StatusBadge tone={STATUS_TONE[row.status]}>{row.status}</StatusBadge>
                       {row.error && (
                         <span className="ml-2 text-xs text-red-600 truncate inline-block max-w-xs align-middle">
                           {row.error}
@@ -318,87 +303,68 @@ export function TasksTab() {
           </table>
         </div>
       )}
+      </div>
 
-      {/* PR-F.3.2 — New Task modal */}
-      {createOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
-          onClick={() => !creating && setCreateOpen(false)}
-        >
-          <div
-            className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border-color)] w-full max-w-lg p-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <header className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">New background task</h3>
-              <button
-                type="button"
-                onClick={() => setCreateOpen(false)}
-                disabled={creating}
-                className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+      <EditorModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="New background task"
+        saving={creating}
+        width="lg"
+        footer={
+          <>
+            <ActionButton onClick={() => setCreateOpen(false)} disabled={creating}>
+              Cancel
+            </ActionButton>
+            <ActionButton
+              variant="primary"
+              onClick={handleCreate}
+              disabled={creating || !newKind.trim()}
+            >
+              {creating ? 'Submitting…' : 'Create'}
+            </ActionButton>
+          </>
+        }
+      >
+        <div className="grid gap-2 text-[0.75rem]">
+          <label>
+            <div className="text-[var(--text-muted)] mb-0.5">Kind</div>
+            <input
+              value={newKind}
+              onChange={(e) => setNewKind(e.target.value)}
+              placeholder="shell, agent, …"
+              className="w-full border rounded px-2 py-1 text-[0.8125rem]"
+            />
+          </label>
+          {subagentTypes.length > 0 && (
+            <label>
+              <div className="text-[var(--text-muted)] mb-0.5">Subagent type (optional)</div>
+              <select
+                value={newSubagentType}
+                onChange={(e) => setNewSubagentType(e.target.value)}
+                className="w-full border rounded px-2 py-1 text-[0.8125rem]"
               >
-                <X className="w-4 h-4" />
-              </button>
-            </header>
-            <div className="grid gap-2 text-[0.75rem]">
-              <label>
-                <div className="text-[var(--text-muted)] mb-0.5">Kind</div>
-                <input
-                  value={newKind}
-                  onChange={(e) => setNewKind(e.target.value)}
-                  placeholder="shell, agent, …"
-                  className="w-full border rounded px-2 py-1 text-[0.8125rem]"
-                />
-              </label>
-              {subagentTypes.length > 0 && (
-                <label>
-                  <div className="text-[var(--text-muted)] mb-0.5">Subagent type (optional)</div>
-                  <select
-                    value={newSubagentType}
-                    onChange={(e) => setNewSubagentType(e.target.value)}
-                    className="w-full border rounded px-2 py-1 text-[0.8125rem]"
-                  >
-                    <option value="">— none —</option>
-                    {subagentTypes.map((t) => (
-                      <option key={t.agent_type} value={t.agent_type}>
-                        {t.agent_type} — {t.description.slice(0, 60)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              <label>
-                <div className="text-[var(--text-muted)] mb-0.5">Payload (JSON object)</div>
-                <textarea
-                  value={newPayload}
-                  onChange={(e) => setNewPayload(e.target.value)}
-                  rows={6}
-                  className="w-full border rounded px-2 py-1 text-[0.75rem] font-mono"
-                />
-              </label>
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setCreateOpen(false)}
-                disabled={creating}
-                className="text-xs border rounded px-3 py-1"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleCreate}
-                disabled={creating || !newKind.trim()}
-                className="text-xs bg-[var(--primary-color)] text-white rounded px-3 py-1 disabled:opacity-50"
-              >
-                {creating ? 'Submitting…' : 'Create'}
-              </button>
-            </div>
-          </div>
+                <option value="">— none —</option>
+                {subagentTypes.map((t) => (
+                  <option key={t.agent_type} value={t.agent_type}>
+                    {t.agent_type} — {t.description.slice(0, 60)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label>
+            <div className="text-[var(--text-muted)] mb-0.5">Payload (JSON object)</div>
+            <textarea
+              value={newPayload}
+              onChange={(e) => setNewPayload(e.target.value)}
+              rows={6}
+              className="w-full border rounded px-2 py-1 text-[0.75rem] font-mono"
+            />
+          </label>
         </div>
-      )}
-    </div>
+      </EditorModal>
+    </TabShell>
   );
 }
 
