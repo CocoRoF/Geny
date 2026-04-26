@@ -904,6 +904,19 @@ export interface CronJobRecord {
   created_at: string | null;
   last_fired_at: string | null;
   last_task_id: string | null;
+  next_fire_at?: string | null;
+}
+
+export interface CronJobHistoryEntry {
+  fired_at: string;
+  task_id: string | null;
+  status: string | null;
+  error: string | null;
+}
+
+export interface CronJobHistoryResponse {
+  name: string;
+  fires: CronJobHistoryEntry[];
 }
 
 export interface CronJobCreateRequest {
@@ -936,6 +949,19 @@ export const cronApi = {
     apiCall<{ task_id: string; name: string }>(
       `/api/cron/jobs/${encodeURIComponent(name)}/run-now`,
       { method: 'POST' },
+    ),
+
+  // PR-F.4.1
+  setStatus: (name: string, status: 'enabled' | 'disabled') =>
+    apiCall<CronJobRecord>(`/api/cron/jobs/${encodeURIComponent(name)}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+
+  // PR-F.4.4
+  history: (name: string, limit = 20) =>
+    apiCall<CronJobHistoryResponse>(
+      `/api/cron/jobs/${encodeURIComponent(name)}/history?limit=${limit}`,
     ),
 };
 

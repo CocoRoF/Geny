@@ -8,10 +8,42 @@
  * Run-now + Delete.
  */
 
-import { useState, useEffect, useCallback, FormEvent } from 'react';
-import { cronApi, CronJobRecord, CronJobCreateRequest } from '@/lib/api';
+import { useState, useEffect, useCallback, FormEvent, Fragment } from 'react';
+import { cronApi, CronJobRecord, CronJobCreateRequest, CronJobHistoryEntry } from '@/lib/api';
 import { twMerge } from 'tailwind-merge';
-import { RefreshCw, Plus, Trash2, Play } from 'lucide-react';
+import { RefreshCw, Plus, Trash2, Play, Power, ChevronDown, ChevronRight } from 'lucide-react';
+
+// PR-F.4.2 — show a friendly description of a cron expression next to
+// the raw form. We use `cronstrue` only when present at runtime; the
+// dynamic import keeps it out of the main bundle and avoids forcing
+// a new dependency for users who don't open this tab.
+async function describeCron(expr: string): Promise<string | null> {
+  try {
+    const mod = await import('cronstrue');
+    return (mod as unknown as { toString: (s: string) => string }).toString(expr);
+  } catch {
+    return null;
+  }
+}
+
+function formatRelative(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  try {
+    const target = new Date(iso).getTime();
+    const diff = target - Date.now();
+    const abs = Math.abs(diff);
+    const sec = Math.round(abs / 1000);
+    if (sec < 60) return diff >= 0 ? `in ${sec}s` : `${sec}s ago`;
+    const min = Math.round(sec / 60);
+    if (min < 60) return diff >= 0 ? `in ${min}m` : `${min}m ago`;
+    const hr = Math.round(min / 60);
+    if (hr < 24) return diff >= 0 ? `in ${hr}h` : `${hr}h ago`;
+    const day = Math.round(hr / 24);
+    return diff >= 0 ? `in ${day}d` : `${day}d ago`;
+  } catch {
+    return iso;
+  }
+}
 
 function cn(...c: (string | boolean | undefined | null)[]) {
   return twMerge(c.filter(Boolean).join(' '));
@@ -24,6 +56,9 @@ export function CronTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  // PR-F.4.3 — per-row expansion + cached history.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [histories, setHistories] = useState<Record<string, CronJobHistoryEntry[]>>({});
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -71,6 +106,37 @@ export function CronTab() {
     },
     [refresh],
   );
+
+  const handleToggleStatus = useCallback(
+    async (row: CronJobRecord) => {
+      const target = row.status === 'enabled' ? 'disabled' : 'enabled';
+      try {
+        await cronApi.setStatus(row.name, target);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        refresh();
+      }
+    },
+    [refresh],
+  );
+
+  const toggleExpand = useCallback(async (name: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+    if (!histories[name]) {
+      try {
+        const h = await cronApi.history(name, 30);
+        setHistories((m) => ({ ...m, [name]: h.fires }));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    }
+  }, [histories]);
 
   return (
     <div className="flex flex-col h-full p-4 gap-4">
@@ -120,46 +186,108 @@ export function CronTab() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.name} className="border-t hover:bg-slate-50">
-                  <td className="px-3 py-2 font-mono text-xs">{row.name}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{row.cron_expr}</td>
-                  <td className="px-3 py-2">{row.target_kind}</td>
-                  <td className="px-3 py-2 font-mono text-xs">
-                    {row.last_fired_at
-                      ? new Date(row.last_fired_at).toLocaleString()
-                      : '—'}
-                  </td>
-                  <td className="px-3 py-2">
-                    <span
-                      className={cn(
-                        'inline-block rounded px-2 py-0.5 text-xs',
-                        row.status === 'enabled'
-                          ? 'bg-green-200 text-green-900'
-                          : 'bg-slate-200 text-slate-800',
-                      )}
-                    >
-                      {row.status}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <button
-                      type="button"
-                      onClick={() => handleRunNow(row.name)}
-                      className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mr-3"
-                    >
-                      <Play className="w-3 h-3" /> Run now
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(row.name)}
-                      className="inline-flex items-center gap-1 text-xs text-red-600 hover:underline"
-                    >
-                      <Trash2 className="w-3 h-3" /> Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {rows.map((row) => {
+                const isExpanded = expanded.has(row.name);
+                return (
+                  <Fragment key={row.name}>
+                    <tr className="border-t hover:bg-slate-50">
+                      <td className="px-3 py-2 font-mono text-xs">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(row.name)}
+                          className="inline-flex items-center gap-1 hover:text-blue-600"
+                        >
+                          {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                          {row.name}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs">{row.cron_expr}</td>
+                      <td className="px-3 py-2">{row.target_kind}</td>
+                      <td className="px-3 py-2 font-mono text-xs">
+                        {row.last_fired_at
+                          ? new Date(row.last_fired_at).toLocaleString()
+                          : '—'}
+                      </td>
+                      <td className="px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStatus(row)}
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs',
+                            row.status === 'enabled'
+                              ? 'bg-green-200 text-green-900 hover:bg-green-300'
+                              : 'bg-slate-200 text-slate-800 hover:bg-slate-300',
+                          )}
+                          title="Click to toggle"
+                        >
+                          <Power className="w-3 h-3" />
+                          {row.status}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleRunNow(row.name)}
+                          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mr-3"
+                        >
+                          <Play className="w-3 h-3" /> Run now
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(row.name)}
+                          className="inline-flex items-center gap-1 text-xs text-red-600 hover:underline"
+                        >
+                          <Trash2 className="w-3 h-3" /> Delete
+                        </button>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="bg-slate-50/50">
+                        <td colSpan={6} className="px-4 py-2 text-xs">
+                          <div className="grid grid-cols-2 gap-2 mb-2">
+                            <div>
+                              <span className="text-slate-500">Next fire:</span>{' '}
+                              <span className="font-mono">
+                                {row.next_fire_at ? new Date(row.next_fire_at).toLocaleString() : '—'}
+                              </span>
+                              {row.next_fire_at && (
+                                <span className="ml-1 text-slate-500">({formatRelative(row.next_fire_at)})</span>
+                              )}
+                            </div>
+                            <div>
+                              <span className="text-slate-500">Created:</span>{' '}
+                              <span className="font-mono">
+                                {row.created_at ? new Date(row.created_at).toLocaleString() : '—'}
+                              </span>
+                            </div>
+                            <div className="col-span-2">
+                              <span className="text-slate-500">Payload:</span>{' '}
+                              <code className="font-mono">{JSON.stringify(row.payload)}</code>
+                            </div>
+                          </div>
+                          <div className="font-semibold mt-2 mb-1 text-slate-600">Recent fires</div>
+                          {histories[row.name] === undefined ? (
+                            <div className="text-slate-500">Loading…</div>
+                          ) : histories[row.name].length === 0 ? (
+                            <div className="text-slate-500">No fires recorded yet.</div>
+                          ) : (
+                            <ul className="space-y-0.5 font-mono">
+                              {histories[row.name].slice().reverse().map((f, i) => (
+                                <li key={i}>
+                                  <span>{new Date(f.fired_at).toLocaleString()}</span>
+                                  {f.task_id && <span className="ml-2 text-slate-500">task: {f.task_id.slice(0, 12)}</span>}
+                                  {f.status && <span className="ml-2">[{f.status}]</span>}
+                                  {f.error && <span className="ml-2 text-red-600">{f.error}</span>}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -193,6 +321,29 @@ function CreateModal({
   const [targetKind, setTargetKind] = useState('local_bash');
   const [payloadJson, setPayloadJson] = useState('{"command":"echo hello"}');
   const [submitting, setSubmitting] = useState(false);
+  // PR-F.4.2 — friendly cron description.
+  const [cronDescription, setCronDescription] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    describeCron(cronExpr).then((desc) => {
+      if (!cancelled) setCronDescription(desc);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cronExpr]);
+
+  // PR-F.4.2 — kind-aware payload presets so the operator doesn't
+  // have to remember the right keys.
+  useEffect(() => {
+    if (targetKind === 'local_bash' && payloadJson.trim() === '{}') {
+      setPayloadJson('{"command":"echo hello"}');
+    } else if (targetKind === 'local_agent' && !payloadJson.includes('input_text')) {
+      setPayloadJson('{"input_text":"What\'s the time?"}');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetKind]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -246,6 +397,11 @@ function CreateModal({
             required
             className="border rounded px-2 py-1 mt-1 font-mono"
           />
+          {cronDescription && (
+            <span className="text-xs text-slate-500 mt-1 italic">
+              ⏱ {cronDescription}
+            </span>
+          )}
         </label>
         <label className="flex flex-col text-sm">
           Target kind
