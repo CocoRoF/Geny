@@ -1,16 +1,21 @@
 'use client';
 
 /**
- * HooksTab — view & edit the executor's HookConfig (PR-E.3.3).
+ * HooksTab — view & edit the executor's HookConfig.
  *
- * Three sections:
- *   1. Header: enabled gate + env-opt-in (GENY_ALLOW_HOOKS) + audit path.
- *   2. Entries: per-event grouped table + Add/Edit modal.
- *   3. Recent fires: tail of audit_log_path JSONL (PR-E.3.2).
+ * H.2 (cycle 20260426_2) — full schema rewrite to match the executor's
+ * ``HookConfigEntry`` after H.1 fixed the backend. Inputs:
+ *   - event picker (16 lowercase HookEvent values)
+ *   - command (single executable) + args (one per line)
+ *   - match dict editor (key/value rows; today's only meaningful key is "tool")
+ *   - env table (key/value rows)
+ *   - working_dir (optional)
+ *   - timeout_ms (optional)
+ *   - top-level audit_log_path
  *
- * Both gates (config-side enabled + env opt-in) must be open for hooks
- * to actually fire. The header surfaces both so an operator can see at
- * a glance why an entry isn't firing.
+ * Header still surfaces the dual gate (file-side ``enabled`` + env opt-in
+ * ``GENY_ALLOW_HOOKS``) so the operator sees at a glance why an entry
+ * isn't firing.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -25,7 +30,7 @@ import {
   HookListResponse,
   HookFiresResponse,
 } from '@/lib/api';
-import { RefreshCw, Plus, Pencil, Trash2, Power, Plug } from 'lucide-react';
+import { RefreshCw, Plus, Pencil, Trash2, Power, Plug, X } from 'lucide-react';
 import {
   TabShell,
   EditorModal,
@@ -35,6 +40,7 @@ import {
 } from '@/components/layout';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -43,41 +49,142 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+interface KvRow {
+  key: string;
+  value: string;
+}
+
 interface EntryFormState {
   event: HookEvent;
-  command: string;       // free-text shell-split
-  timeout_ms: string;    // free-text → parseInt
-  tool_filter: string;   // CSV
+  command: string;        // single executable
+  argsText: string;       // one per line
+  timeout_ms: string;     // free-text → parseInt
+  match: KvRow[];         // dict rows
+  env: KvRow[];           // dict rows
+  working_dir: string;
 }
 
 const EMPTY_FORM: EntryFormState = {
-  event: 'PRE_TOOL_USE',
+  event: 'pre_tool_use',
   command: '',
+  argsText: '',
   timeout_ms: '',
-  tool_filter: '',
+  match: [],
+  env: [],
+  working_dir: '',
 };
 
-function splitShell(s: string): string[] {
-  // Naive split — good enough for the common case (one command + a
-  // few args). Operators with complex pipelines should pass a single
-  // sh -c ... entry.
-  return s
-    .trim()
-    .split(/\s+/)
-    .filter((p) => p.length > 0);
+function rowsToDict(rows: KvRow[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const r of rows) {
+    const k = r.key.trim();
+    if (!k) continue;
+    out[k] = r.value;
+  }
+  return out;
+}
+
+function dictToRows(d: Record<string, unknown> | null | undefined): KvRow[] {
+  if (!d || typeof d !== 'object') return [];
+  return Object.entries(d).map(([k, v]) => ({ key: k, value: String(v ?? '') }));
 }
 
 function formToPayload(f: EntryFormState): HookEntryPayload {
   const ms = f.timeout_ms.trim() ? Number.parseInt(f.timeout_ms.trim(), 10) : null;
+  const args = f.argsText
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  const wd = f.working_dir.trim();
   return {
     event: f.event,
-    command: splitShell(f.command),
+    command: f.command.trim(),
+    args: args.length ? args : undefined,
     timeout_ms: ms !== null && !Number.isNaN(ms) ? ms : null,
-    tool_filter: f.tool_filter
-      .split(',')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0),
+    match: f.match.length ? rowsToDict(f.match) : undefined,
+    env: f.env.length ? rowsToDict(f.env) : undefined,
+    working_dir: wd.length ? wd : null,
   };
+}
+
+function rowToForm(row: HookEntryRow): EntryFormState {
+  return {
+    event: row.event as HookEvent,
+    command: row.command,
+    argsText: (row.args ?? []).join('\n'),
+    timeout_ms: row.timeout_ms != null ? String(row.timeout_ms) : '',
+    match: dictToRows(row.match),
+    env: dictToRows(row.env),
+    working_dir: row.working_dir ?? '',
+  };
+}
+
+function summarizeMatch(m: Record<string, unknown> | undefined): string {
+  if (!m) return '*';
+  const entries = Object.entries(m);
+  if (entries.length === 0) return '*';
+  return entries.map(([k, v]) => `${k}=${String(v)}`).join(', ');
+}
+
+function KvEditor({
+  rows,
+  onChange,
+  keyPlaceholder = 'key',
+  valuePlaceholder = 'value',
+  emptyHint,
+}: {
+  rows: KvRow[];
+  onChange: (rows: KvRow[]) => void;
+  keyPlaceholder?: string;
+  valuePlaceholder?: string;
+  emptyHint?: string;
+}) {
+  return (
+    <div className="grid gap-1.5">
+      {rows.length === 0 && emptyHint && (
+        <div className="text-[0.6875rem] text-[var(--text-muted)] italic">{emptyHint}</div>
+      )}
+      {rows.map((row, i) => (
+        <div key={i} className="flex gap-1.5 items-center">
+          <Input
+            value={row.key}
+            placeholder={keyPlaceholder}
+            onChange={(e) => {
+              const next = [...rows];
+              next[i] = { ...next[i], key: e.target.value };
+              onChange(next);
+            }}
+            className="font-mono text-[0.75rem] flex-1"
+          />
+          <Input
+            value={row.value}
+            placeholder={valuePlaceholder}
+            onChange={(e) => {
+              const next = [...rows];
+              next[i] = { ...next[i], value: e.target.value };
+              onChange(next);
+            }}
+            className="font-mono text-[0.75rem] flex-1"
+          />
+          <button
+            type="button"
+            onClick={() => onChange(rows.filter((_, j) => j !== i))}
+            className="text-[var(--text-muted)] hover:text-red-600 p-1"
+            title="Remove"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...rows, { key: '', value: '' }])}
+        className="text-[0.75rem] text-[var(--primary-color)] hover:underline self-start"
+      >
+        + Add row
+      </button>
+    </div>
+  );
 }
 
 export function HooksTab() {
@@ -92,6 +199,9 @@ export function HooksTab() {
   const [form, setForm] = useState<EntryFormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
+  const [auditDraft, setAuditDraft] = useState('');
+  const [savingAudit, setSavingAudit] = useState(false);
+
   const refresh = async () => {
     setLoading(true);
     setError(null);
@@ -104,6 +214,7 @@ export function HooksTab() {
       setEditable(edit);
       setInspect(ins);
       setFires(recent);
+      setAuditDraft(edit.audit_log_path ?? '');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -132,18 +243,13 @@ export function HooksTab() {
 
   const openEdit = (row: HookEntryRow) => {
     setEditingTarget({ event: row.event, idx: row.idx });
-    setForm({
-      event: row.event as HookEvent,
-      command: row.command.join(' '),
-      timeout_ms: row.timeout_ms != null ? String(row.timeout_ms) : '',
-      tool_filter: (row.tool_filter ?? []).join(', '),
-    });
+    setForm(rowToForm(row));
     setEditorOpen(true);
   };
 
   const submitForm = async () => {
     const payload = formToPayload(form);
-    if (payload.command.length === 0) {
+    if (!payload.command) {
       setError('command is required');
       return;
     }
@@ -154,6 +260,7 @@ export function HooksTab() {
         ? await hookApi.replace(editingTarget.event, editingTarget.idx, payload)
         : await hookApi.append(payload);
       setEditable(res);
+      setAuditDraft(res.audit_log_path ?? '');
       try {
         const ins = await hookApi.inspect();
         setInspect(ins);
@@ -169,7 +276,7 @@ export function HooksTab() {
 
   const deleteEntry = async (row: HookEntryRow) => {
     const confirmed = window.confirm(
-      `Delete hook ${row.event}#${row.idx} (${row.command.join(' ')})?`,
+      `Delete hook ${row.event}#${row.idx} (${row.command})?`,
     );
     if (!confirmed) return;
     setError(null);
@@ -198,6 +305,22 @@ export function HooksTab() {
       } catch {/* ignore */}
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const saveAuditLog = async () => {
+    setSavingAudit(true);
+    setError(null);
+    try {
+      const trimmed = auditDraft.trim();
+      const res = await hookApi.setAuditLog(trimmed.length ? trimmed : null);
+      setEditable(res);
+      setAuditDraft(res.audit_log_path ?? '');
+      toast.success(trimmed ? 'Audit log path saved' : 'Audit log path cleared');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingAudit(false);
     }
   };
 
@@ -256,6 +379,30 @@ export function HooksTab() {
       onDismissError={() => setError(null)}
     >
       <div className="h-full min-h-0 overflow-y-auto p-3 space-y-4">
+        {/* ── Audit log path ── */}
+        <section className="border border-[var(--border-color)] rounded p-3">
+          <h3 className="text-[0.6875rem] uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-2">
+            Audit log
+          </h3>
+          <div className="flex gap-1.5 items-center">
+            <Input
+              value={auditDraft}
+              onChange={(e) => setAuditDraft(e.target.value)}
+              placeholder="/var/log/geny/hooks.jsonl"
+              className="font-mono text-[0.75rem]"
+            />
+            <ActionButton
+              onClick={saveAuditLog}
+              disabled={savingAudit || (auditDraft.trim() === (editable?.audit_log_path ?? ''))}
+            >
+              {savingAudit ? 'Saving…' : 'Save'}
+            </ActionButton>
+          </div>
+          <div className="mt-1 text-[0.6875rem] text-[var(--text-muted)]">
+            Empty = no audit log. Recommended for production so each fire is traceable.
+          </div>
+        </section>
+
         {/* ── Entries grouped by event ── */}
         <section>
           <h3 className="text-[0.6875rem] uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-2">
@@ -279,8 +426,9 @@ export function HooksTab() {
                       <tr className="text-[0.6875rem] uppercase tracking-wider text-[var(--text-muted)]">
                         <th className="text-left py-1 px-2 w-8">#</th>
                         <th className="text-left py-1 px-2">Command</th>
+                        <th className="text-left py-1 px-2">Args</th>
                         <th className="text-left py-1 px-2 w-20">Timeout</th>
-                        <th className="text-left py-1 px-2 w-40">Tool filter</th>
+                        <th className="text-left py-1 px-2 w-40">Match</th>
                         <th className="text-right py-1 px-2 w-20">Actions</th>
                       </tr>
                     </thead>
@@ -288,10 +436,13 @@ export function HooksTab() {
                       {rows.map((row) => (
                         <tr key={`${row.event}-${row.idx}`} className="border-t border-[var(--border-color)] hover:bg-[var(--bg-tertiary)]">
                           <td className="py-1 px-2 text-[var(--text-muted)] font-mono text-[0.75rem]">{row.idx}</td>
-                          <td className="py-1 px-2 font-mono text-[0.75rem]">{row.command.join(' ') || '—'}</td>
+                          <td className="py-1 px-2 font-mono text-[0.75rem] truncate max-w-[200px]">{row.command || '—'}</td>
+                          <td className="py-1 px-2 font-mono text-[0.75rem] text-[var(--text-secondary)] truncate max-w-[200px]">
+                            {(row.args ?? []).join(' ') || '—'}
+                          </td>
                           <td className="py-1 px-2 text-[0.75rem]">{row.timeout_ms != null ? `${row.timeout_ms}ms` : '—'}</td>
-                          <td className="py-1 px-2 text-[0.75rem] font-mono text-[var(--text-secondary)]">
-                            {(row.tool_filter ?? []).join(', ') || '*'}
+                          <td className="py-1 px-2 text-[0.75rem] font-mono text-[var(--text-secondary)] truncate">
+                            {summarizeMatch(row.match)}
                           </td>
                           <td className="py-1 px-2 text-right">
                             <div className="flex items-center justify-end gap-1">
@@ -335,7 +486,7 @@ export function HooksTab() {
           </h3>
           {!fires?.audit_path ? (
             <div className="text-[0.75rem] text-[var(--text-muted)]">
-              No <span className="font-mono">audit_log_path</span> configured. Add one to <span className="font-mono">hooks</span> in settings.json to see fires here.
+              No <span className="font-mono">audit_log_path</span> configured. Set one above to capture fires.
             </div>
           ) : !fires.exists ? (
             <div className="text-[0.75rem] text-[var(--text-muted)]">
@@ -413,34 +564,72 @@ export function HooksTab() {
               </SelectContent>
             </Select>
           </div>
+
           <div className="grid gap-1.5">
-            <Label htmlFor="hook-cmd">Command <span className="opacity-60">(space-separated argv)</span></Label>
+            <Label htmlFor="hook-cmd">Command <span className="opacity-60">(single executable path)</span></Label>
             <Input
               id="hook-cmd"
               value={form.command}
               onChange={(e) => setForm({ ...form, command: e.target.value })}
-              placeholder="./scripts/log-hook.sh"
+              placeholder="/usr/local/bin/audit-hook"
               className="font-mono"
             />
           </div>
+
           <div className="grid gap-1.5">
-            <Label htmlFor="hook-timeout">Timeout <span className="opacity-60">(ms, optional)</span></Label>
-            <Input
-              id="hook-timeout"
-              value={form.timeout_ms}
-              onChange={(e) => setForm({ ...form, timeout_ms: e.target.value })}
-              placeholder="1000"
-              inputMode="numeric"
+            <Label htmlFor="hook-args">Args <span className="opacity-60">(one per line; no shell interpolation)</span></Label>
+            <Textarea
+              id="hook-args"
+              value={form.argsText}
+              onChange={(e) => setForm({ ...form, argsText: e.target.value })}
+              placeholder={'--session\n${session_id}'}
+              className="font-mono text-[0.75rem]"
+              rows={3}
             />
           </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="hook-timeout">Timeout <span className="opacity-60">(ms)</span></Label>
+              <Input
+                id="hook-timeout"
+                value={form.timeout_ms}
+                onChange={(e) => setForm({ ...form, timeout_ms: e.target.value })}
+                placeholder="5000"
+                inputMode="numeric"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="hook-wd">Working dir <span className="opacity-60">(optional)</span></Label>
+              <Input
+                id="hook-wd"
+                value={form.working_dir}
+                onChange={(e) => setForm({ ...form, working_dir: e.target.value })}
+                placeholder="/tmp"
+                className="font-mono"
+              />
+            </div>
+          </div>
+
           <div className="grid gap-1.5">
-            <Label htmlFor="hook-filter">Tool filter <span className="opacity-60">(CSV; empty = match any)</span></Label>
-            <Input
-              id="hook-filter"
-              value={form.tool_filter}
-              onChange={(e) => setForm({ ...form, tool_filter: e.target.value })}
-              placeholder="Bash, Read"
-              className="font-mono"
+            <Label>Match <span className="opacity-60">(empty = match every event of this kind; today only the &quot;tool&quot; key is honored)</span></Label>
+            <KvEditor
+              rows={form.match}
+              onChange={(rows) => setForm({ ...form, match: rows })}
+              keyPlaceholder="tool"
+              valuePlaceholder="Bash"
+              emptyHint='No match filter — fires for every event. Add e.g. tool=Bash to limit.'
+            />
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label>Env <span className="opacity-60">(extra environment variables for the subprocess)</span></Label>
+            <KvEditor
+              rows={form.env}
+              onChange={(rows) => setForm({ ...form, env: rows })}
+              keyPlaceholder="DEBUG"
+              valuePlaceholder="1"
+              emptyHint="No extra env. Parent env is inherited."
             />
           </div>
         </div>

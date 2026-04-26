@@ -593,33 +593,53 @@ export interface PermissionListResponse {
   sources_consulted: string[];
 }
 
-// ==================== Hooks CRUD API (PR-E.3.1) =================
+// ==================== Hooks CRUD API ===========================
+//
+// H.1 (cycle 20260426_2) rewrote the schema to match
+// ``geny_executor.hooks.HookConfigEntry`` exactly. Lowercase event
+// values, single ``command: string`` + separate ``args``, ``match``
+// dict instead of ``tool_filter`` list, plus ``env`` / ``working_dir``
+// / ``audit_log_path``.
 
 export const HOOK_EVENTS = [
-  'PRE_TOOL_USE',
-  'POST_TOOL_USE',
-  'USER_PROMPT_SUBMIT',
-  'STOP',
-  'SESSION_START',
-  'SESSION_END',
-  'SUBAGENT_STOP',
-  'PRE_COMPACT',
+  'session_start',
+  'session_end',
+  'pipeline_start',
+  'pipeline_end',
+  'stage_enter',
+  'stage_exit',
+  'user_prompt_submit',
+  'pre_tool_use',
+  'post_tool_use',
+  'post_tool_failure',
+  'permission_request',
+  'permission_denied',
+  'loop_iteration_end',
+  'cwd_changed',
+  'mcp_server_state',
+  'notification',
 ] as const;
 export type HookEvent = typeof HOOK_EVENTS[number];
 
 export interface HookEntryPayload {
   event: HookEvent;
-  command: string[];
+  command: string;
+  args?: string[];
   timeout_ms?: number | null;
-  tool_filter?: string[];
+  match?: Record<string, unknown>;
+  env?: Record<string, string>;
+  working_dir?: string | null;
 }
 
 export interface HookEntryRow {
   event: string;
   idx: number;
-  command: string[];
+  command: string;
+  args: string[];
   timeout_ms?: number | null;
-  tool_filter: string[];
+  match: Record<string, unknown>;
+  env: Record<string, string>;
+  working_dir?: string | null;
 }
 
 export interface HookEntriesResponse {
@@ -627,6 +647,7 @@ export interface HookEntriesResponse {
   audit_log_path?: string | null;
   entries: HookEntryRow[];
   settings_path: string;
+  known_events: string[];
 }
 
 export interface HookListResponse {
@@ -635,9 +656,11 @@ export interface HookListResponse {
   config_path: string;
   entries: Array<{
     event: string;
-    command: string[];
+    command?: string | string[];
+    args?: string[];
     timeout_ms?: number | null;
-    tool_filter: string[];
+    match?: Record<string, unknown>;
+    tool_filter?: string[]; // legacy admin endpoint may still report this
   }>;
 }
 
@@ -677,6 +700,13 @@ export const hookApi = {
     apiCall<HookEntriesResponse>('/api/hooks/enabled', {
       method: 'PATCH',
       body: JSON.stringify({ enabled }),
+    }),
+
+  // H.1 (cycle 20260426_2) — set / clear the audit_log_path top-level.
+  setAuditLog: (audit_log_path: string | null) =>
+    apiCall<HookEntriesResponse>('/api/hooks/audit-log', {
+      method: 'PATCH',
+      body: JSON.stringify({ audit_log_path }),
     }),
 
   // Cascade-merged inspection (config_path + env_opt_in gate).
