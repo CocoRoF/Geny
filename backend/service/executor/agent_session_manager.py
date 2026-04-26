@@ -60,7 +60,7 @@ _VTUBER_CHARACTERS_DIR = _Path(__file__).resolve().parent.parent.parent / "promp
 # (cycle 20260422_6 PR4 — see ``_build_system_prompt``'s long comment).
 # ``append_context`` is idempotent on identical text, so re-registering
 # this string for an already-paired VTuber is a no-op.
-_VTUBER_SUB_WORKER_NOTICE = (
+_VTUBER_SUB_WORKER_NOTICE_DEFAULT = (
     "\n\n## Sub-Worker Agent\n"
     "You have a Worker agent bound to you by the runtime. "
     "For complex tasks (coding, file operations, research, "
@@ -74,6 +74,42 @@ _VTUBER_SUB_WORKER_NOTICE = (
     "`## Triggers` section of your role prompt and summarize "
     "the result for the user."
 )
+
+
+def _load_vtuber_sub_worker_section() -> dict:
+    """M.1 (cycle 20260426_3) — best-effort read of
+    ``settings.json:vtuber.sub_worker``. Returns ``{}`` when the
+    section / sub-block is absent so the caller falls back to defaults.
+    """
+    try:
+        from geny_executor.settings import get_default_loader
+    except ImportError:
+        return {}
+    section = get_default_loader().get_section("vtuber")
+    if section is None:
+        return {}
+    if hasattr(section, "model_dump"):
+        section_dict = section.model_dump(exclude_none=True)
+    elif isinstance(section, dict):
+        section_dict = section
+    else:
+        return {}
+    sub = section_dict.get("sub_worker") or {}
+    return sub if isinstance(sub, dict) else {}
+
+
+def _vtuber_sub_worker_notice() -> str:
+    """Settings-driven notice template; falls back to the built-in
+    default when ``settings.json:vtuber.sub_worker.notice_template``
+    is absent or empty."""
+    sub = _load_vtuber_sub_worker_section()
+    template = sub.get("notice_template")
+    if isinstance(template, str) and template.strip():
+        text = template if template.startswith("\n") else "\n\n" + template
+        return text
+    return _VTUBER_SUB_WORKER_NOTICE_DEFAULT
+
+
 
 
 class AgentSessionManager:
@@ -713,7 +749,7 @@ class AgentSessionManager:
             and request.linked_session_id
         ):
             self._persona_provider.append_context(
-                session_id, _VTUBER_SUB_WORKER_NOTICE
+                session_id, _vtuber_sub_worker_notice()
             )
 
         # Create AgentSession
@@ -879,6 +915,13 @@ class AgentSessionManager:
                     request.working_dir
                     or (agent.storage_path if hasattr(agent, 'storage_path') else None)
                 )
+                # M.1 (cycle 20260426_3) — sub-worker defaults can come
+                # from settings.json:vtuber.sub_worker. Per-request
+                # overrides still win; the settings layer is the
+                # fallback before resolve_env_id picks the system default.
+                _sub_worker_cfg = _load_vtuber_sub_worker_section()
+                _settings_default_env_id = _sub_worker_cfg.get("default_env_id")
+                _settings_default_model = _sub_worker_cfg.get("default_model")
                 # Let resolve_env_id(role=WORKER, explicit=sub_worker_env_id)
                 # pick template-worker-env by default, or honor an
                 # explicit override. workflow_id/graph_name/tool_preset_id
@@ -887,13 +930,19 @@ class AgentSessionManager:
                 worker_request = CreateSessionRequest(
                     session_name=worker_name,
                     working_dir=shared_dir,
-                    model=request.sub_worker_model or None,
+                    model=(
+                        request.sub_worker_model
+                        or (_settings_default_model if isinstance(_settings_default_model, str) and _settings_default_model.strip() else None)
+                    ),
                     max_turns=request.max_turns or 50,
                     timeout=request.timeout or 1800.0,
                     max_iterations=request.max_iterations or 50,
                     role=SessionRole.WORKER,
                     system_prompt=request.sub_worker_system_prompt,
-                    env_id=request.sub_worker_env_id,
+                    env_id=(
+                        request.sub_worker_env_id
+                        or (_settings_default_env_id if isinstance(_settings_default_env_id, str) and _settings_default_env_id.strip() else None)
+                    ),
                     linked_session_id=session_id,
                     session_type="sub",
                     env_vars=request.env_vars,
@@ -926,7 +975,7 @@ class AgentSessionManager:
                 # text, so re-registration of an already-paired VTuber is
                 # safe.
                 self._persona_provider.append_context(
-                    session_id, _VTUBER_SUB_WORKER_NOTICE
+                    session_id, _vtuber_sub_worker_notice()
                 )
 
                 # SESSION_PAIRED — fires once per pair, after both sides'

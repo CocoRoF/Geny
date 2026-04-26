@@ -36,6 +36,45 @@ class PresetSection(BaseModel):
     )
 
 
+class VTuberSubWorkerSection(BaseModel):
+    """``settings.vtuber.sub_worker`` (M.1 / cycle 20260426_3) — knobs
+    for the VTuber-paired sub-worker auto-spawn.
+
+    The runtime auto-spawns a Worker session for every VTuber session
+    so the VTuber can delegate complex tasks via
+    ``send_direct_message_internal``. Until M.1 the spawn config was
+    code-only (notice template hardcoded; default env_id implicit via
+    ``resolve_env_id(role=WORKER)``).
+
+    All fields optional. Empty values fall back to the hardcoded
+    defaults the previous behaviour shipped.
+    """
+
+    notice_template: Optional[str] = Field(
+        None,
+        description=(
+            "Markdown template appended to the VTuber persona prompt "
+            "explaining the paired sub-worker. Empty = use the built-in "
+            "default."
+        ),
+    )
+    default_env_id: Optional[str] = Field(
+        None,
+        description=(
+            "env_id used when ``CreateSessionRequest.sub_worker_env_id`` "
+            "is not set. Empty = ``resolve_env_id(role=WORKER)`` resolves "
+            "the system default."
+        ),
+    )
+    default_model: Optional[str] = Field(
+        None,
+        description=(
+            "Model used when ``CreateSessionRequest.sub_worker_model`` "
+            "is not set."
+        ),
+    )
+
+
 class VTuberSection(BaseModel):
     """``settings.vtuber`` schema.
 
@@ -48,6 +87,8 @@ class VTuberSection(BaseModel):
     tick_interval_seconds: int = Field(60, ge=5)
     background_topics: List[str] = Field(default_factory=list)
     persona_voice: Optional[str] = None
+    # M.1 (cycle 20260426_3) — paired sub-worker config.
+    sub_worker: Optional[VTuberSubWorkerSection] = None
 
 
 # ── Framework settings sections (PR-F.1.1..F.1.5) ──────────────────
@@ -275,4 +316,5 @@ __all__ = [
     "AffectConfigSection",
     "ChannelsConfigSection",
     "SendMessageChannelEntry",
+    "VTuberSubWorkerSection",
 ]
