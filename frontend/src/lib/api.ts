@@ -514,6 +514,53 @@ export const backgroundTaskApi = {
     `${getBackendUrl()}/api/agents/${encodeURIComponent(sessionId)}/tasks/${encodeURIComponent(taskId)}/output`,
 };
 
+// ==================== Cron API (PR-A.8.3) ======================
+
+export interface CronJobRecord {
+  name: string;
+  cron_expr: string;
+  target_kind: string;
+  payload: Record<string, unknown>;
+  description: string | null;
+  status: string;
+  created_at: string | null;
+  last_fired_at: string | null;
+  last_task_id: string | null;
+}
+
+export interface CronJobCreateRequest {
+  name: string;
+  cron_expr: string;
+  target_kind: string;
+  payload?: Record<string, unknown>;
+  description?: string;
+}
+
+export const cronApi = {
+  list: (onlyEnabled = false) =>
+    apiCall<CronJobRecord[]>(`/api/cron/jobs?only_enabled=${onlyEnabled}`),
+
+  get: (name: string) =>
+    apiCall<CronJobRecord>(`/api/cron/jobs/${encodeURIComponent(name)}`),
+
+  create: (req: CronJobCreateRequest) =>
+    apiCall<CronJobRecord>('/api/cron/jobs', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  delete: (name: string) =>
+    apiCall<{ deleted: string }>(`/api/cron/jobs/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    }),
+
+  runNow: (name: string) =>
+    apiCall<{ task_id: string; name: string }>(
+      `/api/cron/jobs/${encodeURIComponent(name)}/run-now`,
+      { method: 'POST' },
+    ),
+};
+
 // ==================== Shared Folder API ====================
 
 export interface SharedFileItem {
