@@ -1665,6 +1665,19 @@ class AgentSession:
                         tool_input=event_data.get("input") or {},
                         tool_id=event_data.get("tool_use_id"),
                     )
+                    # PR-E.4.1 — process-wide tool event ring for the
+                    # AdminPanel "Recent Activity" panel.
+                    try:
+                        from service.telemetry.tool_event_ring import record_event
+
+                        record_event(
+                            kind="start",
+                            tool_name=str(event_data.get("name", "unknown")),
+                            tool_use_id=event_data.get("tool_use_id"),
+                            session_id=getattr(self, "session_id", None),
+                        )
+                    except Exception:  # noqa: BLE001 — telemetry must never break execution
+                        pass
                 elif event_type == "tool.call_complete":
                     if event_data.get("is_error"):
                         name = event_data.get("name", "unknown")
@@ -1679,6 +1692,21 @@ class AgentSession:
                                 "duration_ms": duration_ms,
                             },
                         )
+                    # PR-E.4.1 — append complete events too so the panel
+                    # can show success/failure + duration.
+                    try:
+                        from service.telemetry.tool_event_ring import record_event
+
+                        record_event(
+                            kind="complete",
+                            tool_name=str(event_data.get("name", "unknown")),
+                            tool_use_id=event_data.get("tool_use_id"),
+                            session_id=getattr(self, "session_id", None),
+                            is_error=bool(event_data.get("is_error", False)),
+                            duration_ms=int(event_data.get("duration_ms", 0) or 0),
+                        )
+                    except Exception:  # noqa: BLE001
+                        pass
                 elif event_type == "tool.execute_start":
                     count = event_data.get("count", 0)
                     tools = event_data.get("tools", [])

@@ -253,3 +253,50 @@ async def list_hook_fires(
         fires=fires,
         truncated=truncated,
     )
+
+
+# ── Recent tool events (PR-E.4.1) ──────────────────────────────────
+
+
+class ToolEventRow(BaseModel):
+    ts: float
+    kind: str  # "start" | "complete"
+    tool_name: str
+    tool_use_id: Optional[str] = None
+    session_id: Optional[str] = None
+    is_error: Optional[bool] = None
+    duration_ms: Optional[int] = None
+    extra: Optional[Dict[str, Any]] = None
+
+
+class RecentToolEventsResponse(BaseModel):
+    events: List[ToolEventRow] = Field(default_factory=list)
+    capacity: int = 0
+    returned: int = 0
+
+
+@router.get(
+    "/admin/recent-tool-events",
+    response_model=RecentToolEventsResponse,
+    summary="Process-wide ring buffer of recent tool start/complete events",
+)
+async def recent_tool_events(
+    limit: int = 50,
+    _auth: dict = Depends(require_auth),
+):
+    """Snapshot the agent_session-side tool event ring. Newest last.
+
+    Used by the AdminPanel "Recent Activity" panel to surface what
+    every session in this process has been calling lately — spans
+    sessions because the ring is process-wide.
+    """
+    if limit <= 0 or limit > 500:
+        raise HTTPException(400, "limit must be in 1..500")
+    from service.telemetry.tool_event_ring import capacity, snapshot
+
+    rows = snapshot(limit=limit)
+    return RecentToolEventsResponse(
+        events=[ToolEventRow(**r) for r in rows],
+        capacity=capacity(),
+        returned=len(rows),
+    )
