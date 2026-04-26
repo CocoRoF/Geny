@@ -50,10 +50,16 @@ export interface StageManifestEntry {
 }
 
 export interface ToolsSnapshot {
+  // Names of geny-executor BUILT_IN_TOOL_CLASSES tools enabled for this env.
+  built_in?: string[];
+  // Adhoc tool definitions, MCP servers, and external (host-provided)
+  // tool whitelists.
   adhoc: Array<Record<string, unknown>>;
   mcp_servers: Array<Record<string, unknown>>;
-  global_allowlist: string[];
-  global_blocklist: string[];
+  external?: string[];
+  scope?: Record<string, unknown>;
+  global_allowlist?: string[];
+  global_blocklist?: string[];
 }
 
 export interface EnvironmentManifest {

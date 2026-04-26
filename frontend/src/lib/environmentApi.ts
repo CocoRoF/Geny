@@ -139,6 +139,22 @@ export const environmentApi = {
 
   sessionCounts: () =>
     apiCall<EnvironmentSessionCountsResponse>('/api/environments/session-counts'),
+
+  // PR-E.1.3 — Resolved built-in tool list for one env. Each entry is
+  // a FrameworkToolDetail row from /api/tools/catalog/framework, joined
+  // server-side against manifest.tools.built_in.
+  resolvedTools: (envId: string) =>
+    apiCall<{
+      tools: Array<{
+        name: string;
+        description: string;
+        feature_group: string;
+        capabilities: Record<string, unknown>;
+        input_schema: Record<string, unknown>;
+      }>;
+      unknown: string[];
+      total: number;
+    }>(`/api/environments/${envId}/tools/resolved`),
 };
 
 // ==================== Catalog ====================

@@ -15,7 +15,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
 import { useI18n } from '@/lib/i18n';
 import { frameworkToolApi, FrameworkToolDetail } from '@/lib/api';
-import { RefreshCw, X } from 'lucide-react';
+import { environmentApi } from '@/lib/environmentApi';
+import type { EnvironmentSummary, EnvironmentDetail } from '@/types/environment';
+import { RefreshCw, X, Check } from 'lucide-react';
 
 function cn(...c: (string | boolean | undefined | null)[]) {
   return twMerge(c.filter(Boolean).join(' '));
@@ -41,13 +43,28 @@ export function ToolCatalogTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ── PR-E.1.4 — Active-in-preset toggle state ─────────────
+  // List of "preset" environments (tag === "preset") and the currently
+  // selected one. When a preset is selected the card grid shows a per-
+  // tool checkbox that mutates manifest.tools.built_in.
+  const [presets, setPresets] = useState<EnvironmentSummary[]>([]);
+  const [activePresetId, setActivePresetId] = useState<string | null>(null);
+  const [activePresetDetail, setActivePresetDetail] = useState<EnvironmentDetail | null>(null);
+  const [enabledNames, setEnabledNames] = useState<Set<string>>(new Set());
+  const [presetLoading, setPresetLoading] = useState(false);
+  const [savingTool, setSavingTool] = useState<string | null>(null);
+
   const refresh = async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await frameworkToolApi.list();
-      setTools(res.tools);
-      setGroups(res.groups);
+      const [catalog, envs] = await Promise.all([
+        frameworkToolApi.list(),
+        environmentApi.list(),
+      ]);
+      setTools(catalog.tools);
+      setGroups(catalog.groups);
+      setPresets(envs.filter((e) => (e.tags || []).includes('preset')));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -58,6 +75,68 @@ export function ToolCatalogTab() {
   useEffect(() => {
     refresh();
   }, []);
+
+  // Load the selected preset's manifest + currently-enabled built-ins.
+  useEffect(() => {
+    if (!activePresetId) {
+      setActivePresetDetail(null);
+      setEnabledNames(new Set());
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setPresetLoading(true);
+      try {
+        const detail = await environmentApi.get(activePresetId);
+        if (cancelled) return;
+        setActivePresetDetail(detail);
+        const names: string[] = detail.manifest?.tools?.built_in ?? [];
+        setEnabledNames(new Set(names));
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!cancelled) setPresetLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activePresetId]);
+
+  // Toggle one tool inside the active preset's manifest. Optimistic
+  // update; reverts the local set on failure.
+  const toggleTool = async (toolName: string) => {
+    if (!activePresetDetail || !activePresetId) return;
+    const next = new Set(enabledNames);
+    const wasEnabled = next.has(toolName);
+    if (wasEnabled) next.delete(toolName);
+    else next.add(toolName);
+
+    setEnabledNames(next);
+    setSavingTool(toolName);
+    try {
+      const baseManifest = activePresetDetail.manifest ?? null;
+      if (!baseManifest) {
+        throw new Error('Preset has no manifest to update');
+      }
+      const nextTools = {
+        ...(baseManifest.tools ?? { adhoc: [], mcp_servers: [] }),
+        built_in: Array.from(next).sort(),
+      };
+      const nextManifest = { ...baseManifest, tools: nextTools };
+      const updated = await environmentApi.replaceManifest(activePresetId, nextManifest);
+      setActivePresetDetail(updated);
+    } catch (e) {
+      // Revert
+      const reverted = new Set(enabledNames);
+      if (wasEnabled) reverted.add(toolName);
+      else reverted.delete(toolName);
+      setEnabledNames(reverted);
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingTool(null);
+    }
+  };
 
   const visible = useMemo(() => {
     if (activeGroup === ALL) return tools;
@@ -110,7 +189,7 @@ export function ToolCatalogTab() {
 
       {/* ── Card grid ── */}
       <main className="flex-1 min-w-0 overflow-y-auto p-4">
-        <header className="flex items-center justify-between mb-4">
+        <header className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <div>
             <h2 className="text-base font-semibold">Framework tools</h2>
             <p className="text-[0.75rem] text-[var(--text-muted)]">
@@ -118,16 +197,43 @@ export function ToolCatalogTab() {
               {activeGroup !== ALL && <span>· filter: {activeGroup}</span>}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={loading}
-            className="flex items-center gap-1 text-xs border rounded px-2 py-1 disabled:opacity-50"
-          >
-            <RefreshCw className={cn('w-3 h-3', loading && 'animate-spin')} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            {/* PR-E.1.4 — Preset selector. Tag-filtered list of envs. */}
+            <select
+              value={activePresetId ?? ''}
+              onChange={(e) => setActivePresetId(e.target.value || null)}
+              disabled={loading || presetLoading}
+              className="text-xs border rounded px-2 py-1 bg-[var(--bg-primary)] disabled:opacity-50"
+              title="Edit which built-ins are enabled in a preset environment"
+            >
+              <option value="">— No preset —</option>
+              {presets.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={refresh}
+              disabled={loading}
+              className="flex items-center gap-1 text-xs border rounded px-2 py-1 disabled:opacity-50"
+            >
+              <RefreshCw className={cn('w-3 h-3', loading && 'animate-spin')} />
+              Refresh
+            </button>
+          </div>
         </header>
+
+        {activePresetId && (
+          <div className="text-[0.75rem] text-[var(--text-muted)] mb-3">
+            Editing <span className="font-mono">{activePresetDetail?.name ?? activePresetId}</span> ·{' '}
+            <span className="text-[var(--text-secondary)]">
+              {enabledNames.size} / {tools.length} enabled
+            </span>
+            {presetLoading && <span> · loading…</span>}
+          </div>
+        )}
 
         {error && (
           <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2 mb-3">
@@ -141,45 +247,77 @@ export function ToolCatalogTab() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {visible.map((tt) => (
-              <button
-                key={tt.name}
-                type="button"
-                onClick={() => setSelected(tt)}
-                className={cn(
-                  'text-left border border-[var(--border-color)] rounded-md p-3 hover:border-[var(--primary-color)] hover:shadow-sm transition-all',
-                  selected?.name === tt.name &&
-                    'border-[var(--primary-color)] shadow-sm',
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-semibold text-[0.875rem]">
-                    {tt.name}
-                  </span>
-                  <span className="text-[0.625rem] text-[var(--text-muted)] uppercase">
-                    {tt.feature_group}
-                  </span>
-                </div>
-                <div className="text-[0.75rem] text-[var(--text-secondary)] mt-1 line-clamp-2">
-                  {tt.description || '—'}
-                </div>
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {CAPABILITY_BADGES.map(([key, label, cls]) =>
-                    tt.capabilities[key] ? (
-                      <span
-                        key={String(key)}
-                        className={cn(
-                          'inline-block text-[0.5625rem] px-1.5 py-0.5 rounded',
-                          cls,
-                        )}
-                      >
-                        {label}
-                      </span>
-                    ) : null,
+            {visible.map((tt) => {
+              const isEnabled = enabledNames.has(tt.name);
+              const isSaving = savingTool === tt.name;
+              return (
+                <div
+                  key={tt.name}
+                  className={cn(
+                    'relative border border-[var(--border-color)] rounded-md p-3 transition-all',
+                    'hover:border-[var(--primary-color)] hover:shadow-sm',
+                    selected?.name === tt.name &&
+                      'border-[var(--primary-color)] shadow-sm',
+                    activePresetId && isEnabled &&
+                      'bg-[rgba(59,130,246,0.04)]',
                   )}
+                >
+                  {/* PR-E.1.4 — Per-tool toggle. Hidden when no preset. */}
+                  {activePresetId && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleTool(tt.name);
+                      }}
+                      disabled={presetLoading || isSaving || !activePresetDetail?.manifest}
+                      title={isEnabled ? 'Disable in preset' : 'Enable in preset'}
+                      className={cn(
+                        'absolute top-2 right-2 w-5 h-5 rounded border flex items-center justify-center transition-all',
+                        isEnabled
+                          ? 'bg-[var(--primary-color)] border-[var(--primary-color)] text-white'
+                          : 'bg-[var(--bg-primary)] border-[var(--border-color)] hover:border-[var(--primary-color)]',
+                        (isSaving || presetLoading) && 'opacity-50',
+                      )}
+                    >
+                      {isEnabled && <Check className="w-3 h-3" />}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setSelected(tt)}
+                    className="text-left w-full"
+                  >
+                    <div className="flex items-center justify-between pr-7">
+                      <span className="font-mono font-semibold text-[0.875rem]">
+                        {tt.name}
+                      </span>
+                      <span className="text-[0.625rem] text-[var(--text-muted)] uppercase">
+                        {tt.feature_group}
+                      </span>
+                    </div>
+                    <div className="text-[0.75rem] text-[var(--text-secondary)] mt-1 line-clamp-2">
+                      {tt.description || '—'}
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {CAPABILITY_BADGES.map(([key, label, cls]) =>
+                        tt.capabilities[key] ? (
+                          <span
+                            key={String(key)}
+                            className={cn(
+                              'inline-block text-[0.5625rem] px-1.5 py-0.5 rounded',
+                              cls,
+                            )}
+                          >
+                            {label}
+                          </span>
+                        ) : null,
+                      )}
+                    </div>
+                  </button>
                 </div>
-              </button>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>
