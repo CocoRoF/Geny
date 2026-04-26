@@ -1163,14 +1163,28 @@ class AgentSession:
         system_prompt = self._system_prompt or ""
         if is_vtuber:
             persona_text = system_prompt or _DEFAULT_VTUBER_PROMPT
-            max_inject_chars = 8000
         else:
             persona_text = (
                 (system_prompt or _DEFAULT_WORKER_PROMPT)
                 + "\n\n"
                 + _ADAPTIVE_PROMPT
             )
-            max_inject_chars = 10000
+
+        # G.2 (cycle 20260426_2) — per-session memory tuning knobs.
+        # Defaults match the historical hardcoded values exactly; an
+        # operator setting settings.json:memory.tuning.<field>
+        # overrides them without a code change.
+        try:
+            from service.memory_provider.config import load_memory_tuning
+            _tuning = load_memory_tuning(is_vtuber=is_vtuber)
+        except Exception:
+            _tuning = {
+                "max_inject_chars": 8000 if is_vtuber else 10000,
+                "recent_turns": 6,
+                "enable_vector_search": True,
+                "enable_reflection": True,
+            }
+        max_inject_chars = _tuning["max_inject_chars"]
 
         curated_km = None
         if self._owner_username:
@@ -1376,13 +1390,13 @@ class AgentSession:
             attach_kwargs["memory_retriever"] = GenyMemoryRetriever(
                 self._memory_manager,
                 max_inject_chars=max_inject_chars,
-                enable_vector_search=True,
+                enable_vector_search=_tuning["enable_vector_search"],
                 curated_knowledge_manager=curated_km,
-                recent_turns=6,
+                recent_turns=_tuning["recent_turns"],
             )
             attach_kwargs["memory_strategy"] = GenyMemoryStrategy(
                 self._memory_manager,
-                enable_reflection=True,
+                enable_reflection=_tuning["enable_reflection"],
                 llm_reflect=llm_reflect,
                 curated_knowledge_manager=curated_km,
                 resolver=reflection_resolver,

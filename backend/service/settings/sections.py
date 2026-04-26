@@ -125,6 +125,32 @@ class NotificationsConfigSection(BaseModel):
         return v
 
 
+class MemoryTuningSection(BaseModel):
+    """``settings.memory.tuning`` knobs (G.2 / cycle 20260426_2).
+
+    Per-session memory wiring previously hardcoded in
+    ``agent_session._build_pipeline``. Operators tuning recall
+    behaviour without a code change set these keys.
+
+    Defaults below match the historical hardcoded values so the
+    migration is a no-op when the section is absent.
+    ``max_inject_chars`` accepts an int (applied to every role) or a
+    nested object ``{"vtuber": int, "worker": int}`` to keep the
+    role-aware pre-G.2 defaults editable.
+    """
+
+    max_inject_chars: Optional[Any] = Field(
+        None,
+        description=(
+            "int (single value) or {vtuber: int, worker: int}. "
+            "Defaults: vtuber=8000, worker=10000."
+        ),
+    )
+    recent_turns: Optional[int] = Field(None, ge=0)
+    enable_vector_search: Optional[bool] = None
+    enable_reflection: Optional[bool] = None
+
+
 class MemoryConfigSection(BaseModel):
     """``settings.memory`` schema (G.1 / cycle 20260426_2).
 
@@ -156,6 +182,9 @@ class MemoryConfigSection(BaseModel):
         description="sqlite | postgres (overrides DSN auto-detect)",
     )
     timezone: Optional[str] = None
+    # G.2 — tuning sub-block. Optional; absence preserves the legacy
+    # hardcoded defaults exactly.
+    tuning: Optional[MemoryTuningSection] = None
 
 
 class PermissionsConfigSection(BaseModel):
@@ -194,4 +223,5 @@ __all__ = [
     "NotificationsChannel",
     "PermissionsConfigSection",
     "MemoryConfigSection",
+    "MemoryTuningSection",
 ]

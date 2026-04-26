@@ -111,6 +111,59 @@ def build_default_memory_config() -> Optional[Dict[str, Any]]:
     return cfg
 
 
+def load_memory_tuning(*, is_vtuber: bool) -> Dict[str, Any]:
+    """G.2 (cycle 20260426_2) — return the per-session memory tuning
+    knobs the agent_session._build_pipeline path consumes.
+
+    Resolution order per knob (matches G.1's per-field convention):
+      1. ``settings.json:memory.tuning.<field>``
+      2. Hardcoded historical default (role-aware for ``max_inject_chars``).
+
+    Returns a dict with keys:
+      - ``max_inject_chars`` (int)
+      - ``recent_turns`` (int)
+      - ``enable_vector_search`` (bool)
+      - ``enable_reflection`` (bool)
+
+    ``max_inject_chars`` accepts int OR ``{"vtuber": int, "worker":
+    int}`` to match the executor's role-aware historical defaults.
+    """
+    tuning = (_settings_section().get("tuning") or {})
+    if not isinstance(tuning, dict):
+        tuning = {}
+
+    # max_inject_chars — role-aware historical defaults preserved.
+    raw_mic = tuning.get("max_inject_chars")
+    default_mic = 8000 if is_vtuber else 10000
+    if isinstance(raw_mic, int):
+        max_inject_chars = raw_mic
+    elif isinstance(raw_mic, dict):
+        # Per-role dict — pick the one matching is_vtuber, fall back.
+        candidate = raw_mic.get("vtuber" if is_vtuber else "worker")
+        max_inject_chars = candidate if isinstance(candidate, int) else default_mic
+    else:
+        max_inject_chars = default_mic
+
+    return {
+        "max_inject_chars": max_inject_chars,
+        "recent_turns": (
+            int(tuning["recent_turns"])
+            if isinstance(tuning.get("recent_turns"), int)
+            else 6
+        ),
+        "enable_vector_search": (
+            bool(tuning["enable_vector_search"])
+            if isinstance(tuning.get("enable_vector_search"), bool)
+            else True
+        ),
+        "enable_reflection": (
+            bool(tuning["enable_reflection"])
+            if isinstance(tuning.get("enable_reflection"), bool)
+            else True
+        ),
+    }
+
+
 def is_attach_enabled() -> bool:
     """Return True when providers should be attached to pipeline Stage 2.
 
