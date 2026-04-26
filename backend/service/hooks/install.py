@@ -34,44 +34,85 @@ def hooks_yaml_path() -> Path:
 
 
 def _build_config_from_settings_section() -> Optional[Any]:
-    """PR-D.2.2 — settings.json:hooks reader.
+    """settings.json:hooks reader (H.1, cycle 20260426_2 rewrite).
 
-    Returns a HookConfig when settings.json declares one, ``None``
-    when the section is absent. Schema mirrors the yaml form so the
-    migrator output (B.3.3) parses cleanly via the executor's existing
-    HookConfig.from_mapping (or equivalent dict ingest)."""
+    Returns a parsed :class:`HookConfig` when settings.json declares
+    one, ``None`` otherwise. Routes the section through
+    ``geny_executor.hooks.parse_hook_config`` so the result is
+    type-correct (events as :class:`HookEvent`, entries as
+    :class:`HookConfigEntry`) — the prior path returned a
+    HookConfig with raw dicts that the runner couldn't dispatch.
+
+    Three issues were fixed in H.1:
+      1. ``get_section`` returns the registered Pydantic model
+         (:class:`HooksConfigSection`) when the section is registered,
+         not a dict. The prior ``isinstance(section, dict)`` check
+         short-circuited the modern path.
+      2. The fallback constructor path stored raw dicts as
+         ``entries`` values; ``HookRunner.fire`` reads them as
+         :class:`HookConfigEntry` objects → silent no-op.
+      3. ``parse_hook_config`` expects the wrapper shape
+         ``{"enabled": ..., "hooks": {event: [...]}}`` while Geny
+         persists ``{"enabled": ..., "entries": {EVENT: [...]}}``.
+         We rebuild the wrapper here so settings.json keeps the
+         (more discoverable) ``entries`` key while the executor sees
+         what it expects.
+    """
     try:
         from geny_executor.settings import get_default_loader
-        from geny_executor.hooks import HookConfig
+        from geny_executor.hooks import parse_hook_config
     except ImportError:
         return None
-    section = get_default_loader().get_section("hooks")
-    if section is None or not isinstance(section, dict):
+
+    raw_section = get_default_loader().get_section("hooks")
+    if raw_section is None:
         return None
-    # Try the executor's dict ingest if available; otherwise build via
-    # constructor with defensive defaults.
-    from_mapping = getattr(HookConfig, "from_mapping", None)
-    if callable(from_mapping):
-        try:
-            return from_mapping(section)
-        except Exception as exc:
-            logger.warning(
-                "install_hook_runner: settings.json:hooks parse failed: %s; "
-                "ignoring section", exc,
-            )
-            return None
-    # Defensive: construct directly. The executor's HookConfig always
-    # accepts enabled / entries / audit_log_path.
-    try:
-        return HookConfig(
-            enabled=bool(section.get("enabled", False)),
-            entries=dict(section.get("entries") or {}),
-            audit_log_path=section.get("audit_log_path"),
+
+    # ``get_section`` may return a Pydantic model (when the section is
+    # registered) or a raw dict (when it isn't). Both have the keys we
+    # need; coerce to a dict so the rest of this function is uniform.
+    if hasattr(raw_section, "model_dump"):
+        section = raw_section.model_dump(exclude_none=True)
+    elif isinstance(raw_section, dict):
+        section = dict(raw_section)
+    else:
+        logger.warning(
+            "install_hook_runner: unexpected settings.json:hooks shape %r — "
+            "ignoring", type(raw_section).__name__,
         )
+        return None
+
+    # Translate Geny's on-disk shape into the wrapper
+    # ``parse_hook_config`` consumes. Event keys are normalized to
+    # lowercase here so legacy uppercase ("PRE_TOOL_USE") records keep
+    # working until the controller rewrites them on the next save.
+    entries_raw = section.get("entries") or {}
+    if not isinstance(entries_raw, dict):
+        logger.warning(
+            "install_hook_runner: settings.json:hooks.entries must be a "
+            "mapping, got %r — ignoring section", type(entries_raw).__name__,
+        )
+        return None
+    hooks_lower: Dict[str, Any] = {}
+    for event_name, raw_list in entries_raw.items():
+        if not isinstance(event_name, str):
+            continue
+        hooks_lower[event_name.strip().lower()] = raw_list
+
+    wrapper: Dict[str, Any] = {
+        "enabled": bool(section.get("enabled", False)),
+        "hooks": hooks_lower,
+    }
+    audit_log_path = section.get("audit_log_path")
+    if audit_log_path:
+        wrapper["audit_log_path"] = audit_log_path
+
+    try:
+        return parse_hook_config(wrapper, source="settings.json:hooks")
     except Exception as exc:
         logger.warning(
-            "install_hook_runner: settings.json:hooks construct failed: %s",
-            exc,
+            "install_hook_runner: settings.json:hooks parse failed: %s; "
+            "ignoring section", exc,
         )
         return None
 
