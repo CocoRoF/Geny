@@ -544,6 +544,67 @@ export const frameworkToolApi = {
   list: () => apiCall<FrameworkCatalogResponse>('/api/tools/catalog/framework'),
 };
 
+// ==================== Permissions CRUD API (PR-E.2.1) ============
+//
+// Read-only inspection lives at /api/permissions/list (admin viewer
+// — see permissionAdminApi below). The CRUD surface mutates the
+// user-scope settings.json. After every write the backend reloads the
+// executor's SettingsLoader so live sessions pick up the change.
+
+export type PermissionBehavior = 'allow' | 'deny' | 'ask';
+export type PermissionSource = 'user' | 'project' | 'local' | 'cli' | 'preset';
+
+export interface PermissionRulePayload {
+  tool_name: string;
+  behavior: PermissionBehavior;
+  pattern?: string | null;
+  source?: PermissionSource;
+  reason?: string | null;
+}
+
+export interface PermissionRulesResponse {
+  rules: PermissionRulePayload[];
+  settings_path: string;
+}
+
+// Admin viewer's enriched response (cascade-merged + sources_consulted).
+export interface PermissionListResponse {
+  mode: string;  // advisory | enforce
+  rules: Array<{
+    tool_name: string;
+    pattern: string | null;
+    behavior: string;
+    source: string;
+    reason: string | null;
+  }>;
+  sources_consulted: string[];
+}
+
+export const permissionApi = {
+  // Editable file content (user-scope settings.json only).
+  listEditable: () => apiCall<PermissionRulesResponse>('/api/permissions/rules'),
+
+  append: (rule: PermissionRulePayload) =>
+    apiCall<PermissionRulesResponse>('/api/permissions/rules', {
+      method: 'POST',
+      body: JSON.stringify(rule),
+    }),
+
+  replace: (idx: number, rule: PermissionRulePayload) =>
+    apiCall<PermissionRulesResponse>(`/api/permissions/rules/${idx}`, {
+      method: 'PUT',
+      body: JSON.stringify(rule),
+    }),
+
+  remove: (idx: number) =>
+    apiCall<PermissionRulesResponse>(`/api/permissions/rules/${idx}`, {
+      method: 'DELETE',
+    }),
+
+  // Cascade-merged inspection (advisory|enforce + every source).
+  inspect: () => apiCall<PermissionListResponse>('/api/permissions/list'),
+};
+
 // ==================== Slash Commands API (PR-A.6.2) =============
 
 export interface SlashCommandSummary {

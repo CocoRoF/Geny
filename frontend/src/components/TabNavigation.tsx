@@ -12,7 +12,7 @@ function cn(...classes: (string | boolean | undefined | null)[]) {
   return twMerge(classes.filter(Boolean).join(' '));
 }
 
-const GLOBAL_TAB_IDS = ['main', 'playground', 'playground2d', 'toolSets', 'toolCatalog', 'environments', 'sharedFolder', 'admin', 'settings'] as const;
+const GLOBAL_TAB_IDS = ['main', 'playground', 'playground2d', 'toolSets', 'toolCatalog', 'permissions', 'environments', 'sharedFolder', 'admin', 'settings'] as const;
 const SESSION_TAB_DEFS = [
   { id: 'command', accent: true },
   { id: 'vtuber' },
@@ -27,7 +27,7 @@ const SESSION_TAB_DEFS = [
 ] as const;
 
 // Tabs hidden in Normal mode
-const DEV_ONLY_GLOBAL = new Set(['toolSets', 'toolCatalog', 'environments', 'admin', 'settings']);
+const DEV_ONLY_GLOBAL = new Set(['toolSets', 'toolCatalog', 'permissions', 'environments', 'admin', 'settings']);
 // 'logs' is intentionally NOT in this set — it must be visible in User mode too (e.g. mobile)
 const DEV_ONLY_SESSION = new Set(['environment']);
 
