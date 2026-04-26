@@ -514,6 +514,8 @@ export interface AvailableToolsResponse {
 
 // ==================== Tool Preset Types ====================
 
+export type BuiltInMode = 'inherit' | 'allowlist' | 'blocklist';
+
 export interface ToolPresetDefinition {
   id: string;
   name: string;
@@ -521,6 +523,10 @@ export interface ToolPresetDefinition {
   icon?: string;
   custom_tools: string[];
   mcp_servers: string[];
+  // PR-F.5.1 — per-preset framework built-in selection.
+  built_in_mode?: BuiltInMode;
+  built_in_tools?: string[];
+  built_in_deny?: string[];
   created_at: string;
   updated_at: string;
   is_template: boolean;

@@ -9,6 +9,7 @@ import {
   ChevronDown, ChevronRight, Wrench, Server, Package,
 } from 'lucide-react';
 import type { ToolPresetDefinition, ToolInfo } from '@/types';
+import { frameworkToolApi, FrameworkToolDetail } from '@/lib/api';
 
 function cn(...classes: (string | boolean | undefined | null)[]) {
   return twMerge(classes.filter(Boolean).join(' '));
@@ -150,11 +151,32 @@ function ToolSetEditor({
   const [selectedMcpServers, setSelectedMcpServers] = useState<Set<string>>(
     () => new Set(preset.mcp_servers.includes('*') ? ['*'] : preset.mcp_servers),
   );
+  // PR-F.5.3 — per-preset framework built-ins.
+  const [builtInMode, setBuiltInMode] = useState<'inherit' | 'allowlist' | 'blocklist'>(
+    (preset.built_in_mode as 'inherit' | 'allowlist' | 'blocklist') ?? 'inherit',
+  );
+  const [builtInTools, setBuiltInTools] = useState<Set<string>>(
+    () => new Set(preset.built_in_tools ?? []),
+  );
+  const [builtInDeny, setBuiltInDeny] = useState<Set<string>>(
+    () => new Set(preset.built_in_deny ?? []),
+  );
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   useEffect(() => { if (!catalog) loadCatalog(); }, [catalog, loadCatalog]);
+
+  // PR-F.5.3 — load the executor's framework tool catalog so the
+  // built-in selector knows what names exist.
+  const [frameworkTools, setFrameworkTools] = useState<FrameworkToolDetail[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    frameworkToolApi.list()
+      .then((r) => { if (!cancelled) setFrameworkTools(r.tools); })
+      .catch(() => {/* keep empty — section just shows "no tools" */});
+    return () => { cancelled = true; };
+  }, []);
 
   const allCustomToolNames = useMemo(
     () => catalog?.custom.map(t => t.name) ?? [],
@@ -247,6 +269,10 @@ function ToolSetEditor({
         description: description.trim(),
         custom_tools: Array.from(selectedCustomTools),
         mcp_servers: Array.from(selectedMcpServers),
+        // PR-F.5.3 — persist built-in selection alongside existing fields.
+        built_in_mode: builtInMode,
+        built_in_tools: Array.from(builtInTools),
+        built_in_deny: Array.from(builtInDeny),
       });
       onBack();
     } catch {
@@ -347,6 +373,99 @@ function ToolSetEditor({
               onChange={e => setSearchTerm(e.target.value)}
             />
           </div>
+
+          {/* PR-F.5.3 — Framework built-in tools per-preset */}
+          <section className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg overflow-hidden">
+            <button
+              className="w-full flex items-center gap-2 px-4 py-3 text-[0.8125rem] font-semibold text-[var(--text-primary)] bg-transparent border-none cursor-pointer hover:bg-[var(--bg-hover)] transition-colors text-left"
+              onClick={() => toggleGroup('framework_builtin')}
+            >
+              {expandedGroups.framework_builtin ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              <Wrench size={14} className="text-[var(--primary-color)]" />
+              Framework built-ins
+              <span className="text-[0.6875rem] font-normal text-[var(--text-muted)]">
+                (executor BUILT_IN_TOOL_CLASSES) — mode: {builtInMode}
+              </span>
+            </button>
+            {expandedGroups.framework_builtin && (
+              <div className="px-4 pb-3">
+                <div className="flex items-center gap-3 text-[0.75rem] mb-2">
+                  <label className="flex items-center gap-1">
+                    <input
+                      type="radio"
+                      name={`bim-${preset.id}`}
+                      checked={builtInMode === 'inherit'}
+                      onChange={() => !readOnly && setBuiltInMode('inherit')}
+                      disabled={readOnly}
+                    />
+                    inherit (all enabled)
+                  </label>
+                  <label className="flex items-center gap-1">
+                    <input
+                      type="radio"
+                      name={`bim-${preset.id}`}
+                      checked={builtInMode === 'allowlist'}
+                      onChange={() => !readOnly && setBuiltInMode('allowlist')}
+                      disabled={readOnly}
+                    />
+                    allowlist
+                  </label>
+                  <label className="flex items-center gap-1">
+                    <input
+                      type="radio"
+                      name={`bim-${preset.id}`}
+                      checked={builtInMode === 'blocklist'}
+                      onChange={() => !readOnly && setBuiltInMode('blocklist')}
+                      disabled={readOnly}
+                    />
+                    blocklist
+                  </label>
+                </div>
+                {builtInMode === 'inherit' ? (
+                  <p className="text-[0.6875rem] text-[var(--text-muted)]">
+                    All {frameworkTools.length} framework built-ins are exposed.
+                  </p>
+                ) : (
+                  <ul className="grid grid-cols-2 gap-1 max-h-72 overflow-y-auto">
+                    {frameworkTools.map((tool) => {
+                      const set = builtInMode === 'allowlist' ? builtInTools : builtInDeny;
+                      const setter = builtInMode === 'allowlist' ? setBuiltInTools : setBuiltInDeny;
+                      const isOn = set.has(tool.name);
+                      return (
+                        <li key={tool.name} className="text-[0.75rem]">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={isOn}
+                              onChange={() => {
+                                if (readOnly) return;
+                                setter((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(tool.name)) next.delete(tool.name);
+                                  else next.add(tool.name);
+                                  return next;
+                                });
+                              }}
+                              disabled={readOnly}
+                            />
+                            <code className="text-[var(--primary-color)] text-[0.6875rem] bg-[var(--bg-hover)] px-1 rounded">{tool.name}</code>
+                            <span className="text-[var(--text-muted)] text-[0.6875rem]">
+                              {tool.feature_group}
+                            </span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                    {frameworkTools.length === 0 && (
+                      <li className="text-[var(--text-muted)] italic col-span-2">
+                        Framework tool catalog unavailable.
+                      </li>
+                    )}
+                  </ul>
+                )}
+              </div>
+            )}
+          </section>
 
           {/* Built-in Tools (always included, read-only) */}
           <section className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg overflow-hidden">

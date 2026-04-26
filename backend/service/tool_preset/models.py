@@ -50,6 +50,36 @@ class ToolPresetDefinition(BaseModel):
         description="External MCP server names to include. ['*'] = all, [] = none.",
     )
 
+    # PR-F.5.1 — per-preset framework built-in selection. Existing
+    # behaviour ("framework built-ins always on, no filtering") is
+    # preserved by the default ``built_in_mode='inherit'`` — old
+    # preset records on disk parse cleanly because every new field has
+    # a default. The manifest builder (PR-F.5.2) only consults these
+    # fields when ``built_in_mode != 'inherit'``.
+    built_in_mode: str = Field(
+        "inherit",
+        description=(
+            "How built_in_tools / built_in_deny apply: "
+            "'inherit' = ignore both, executor uses every BUILT_IN_TOOL_CLASS; "
+            "'allowlist' = manifest.tools.built_in = built_in_tools (deny ignored); "
+            "'blocklist' = every BUILT_IN_TOOL_CLASS minus built_in_deny."
+        ),
+    )
+    built_in_tools: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Allow-listed framework built-in tool names — "
+            "consulted when built_in_mode='allowlist'."
+        ),
+    )
+    built_in_deny: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Deny-listed framework built-in tool names — "
+            "consulted when built_in_mode='blocklist'."
+        ),
+    )
+
     created_at: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
