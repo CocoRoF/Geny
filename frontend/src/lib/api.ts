@@ -514,6 +514,36 @@ export const backgroundTaskApi = {
     `${getBackendUrl()}/api/agents/${encodeURIComponent(sessionId)}/tasks/${encodeURIComponent(taskId)}/output`,
 };
 
+// ==================== Framework Tool Catalog API (PR-E.1.1) =====
+
+export interface FrameworkToolCapabilities {
+  concurrency_safe?: boolean;
+  read_only?: boolean;
+  destructive?: boolean;
+  idempotent?: boolean;
+  network_egress?: boolean;
+  interrupt?: string;
+  max_result_chars?: number;
+}
+
+export interface FrameworkToolDetail {
+  name: string;
+  description: string;
+  feature_group: string;
+  capabilities: FrameworkToolCapabilities;
+  input_schema: Record<string, unknown>;
+}
+
+export interface FrameworkCatalogResponse {
+  tools: FrameworkToolDetail[];
+  groups: string[];
+  total: number;
+}
+
+export const frameworkToolApi = {
+  list: () => apiCall<FrameworkCatalogResponse>('/api/tools/catalog/framework'),
+};
+
 // ==================== Slash Commands API (PR-A.6.2) =============
 
 export interface SlashCommandSummary {

@@ -72,6 +72,7 @@ const ko: Translations = {
     workflows: '워크플로우',
     tools: '도구',
     toolSets: '도구 세트',
+    toolCatalog: '도구 카탈로그',
     environments: '환경',
     builder: '빌더',
     settings: '설정',

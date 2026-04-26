@@ -25,6 +25,7 @@ const VTuberTab = dynamic(() => import('@/components/tabs/VTuberTab'), { ssr: fa
 const Playground2DTab = dynamic(() => import('@/components/tabs/Playground2DTab'), { ssr: false });
 const TasksTab = dynamic(() => import('@/components/tabs/TasksTab').then(m => m.TasksTab));
 const CronTab = dynamic(() => import('@/components/tabs/CronTab').then(m => m.CronTab));
+const ToolCatalogTab = dynamic(() => import('@/components/tabs/ToolCatalogTab').then(m => m.ToolCatalogTab));
 
 const TAB_MAP: Record<string, React.ComponentType> = {
   main: MainTab,
@@ -54,6 +55,8 @@ const TAB_MAP: Record<string, React.ComponentType> = {
   // CronRunner state in the sidebar.
   tasks: TasksTab,
   cron: CronTab,
+  // PR-E.1.2 — Framework tool catalog viewer (executor's BUILT_IN_TOOL_CLASSES).
+  toolCatalog: ToolCatalogTab,
 };
 
 // Tabs that should stay mounted once activated (KeepAlive)

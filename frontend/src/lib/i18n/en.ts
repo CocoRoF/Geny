@@ -72,6 +72,7 @@ const en = {
     workflows: 'Workflows',
     tools: 'Tools',
     toolSets: 'Tool Sets',
+    toolCatalog: 'Tool Catalog',
     environments: 'Environments',
     builder: 'Builder',
     settings: 'Settings',
