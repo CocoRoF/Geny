@@ -1058,6 +1058,8 @@ const en = {
     // C.3 (cycle 20260426_1) — preset semantics in env-driven sessions.
     toolPreset: 'Tool Preset',
     toolPresetHelp: 'In env-driven sessions the tool list is owned by the bound environment manifest. The selected preset mainly influences MCP server filtering. Default is determined by role.',
+    // Q.1 (cycle 20260426_3) — per-session memory tuning override.
+    memoryTuningHeader: 'Memory tuning (advanced) — overrides the global setting per-session',
     environment: 'Environment',
     environmentHelp: 'Optional v2 EnvironmentManifest. When set, the session uses the manifest\'s pipeline + stage templates + tools snapshot instead of the role-based preset.',
     environmentNone: 'None — use role preset',
