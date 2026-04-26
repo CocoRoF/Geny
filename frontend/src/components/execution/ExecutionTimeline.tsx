@@ -75,12 +75,22 @@ function getToolReviewVisual(meta: LogEntryMetadata | undefined): ReviewVisual |
   if (evt === 'loop_signal') {
     const signal = (typeof data.signal === 'string' ? data.signal : '').toLowerCase();
     if (signal.includes('permission')) {
+      // PR-E.2.3 — when the executor includes matched_rule details on
+      // the loop event, splice them into the description so operators
+      // see *which* rule fired without opening the detail panel.
+      const matched = data.matched_rule as Record<string, unknown> | undefined;
+      const ruleSummary = matched
+        ? ` · rule [${String(matched.tool_name ?? '*')}` +
+          (matched.pattern ? ` ${String(matched.pattern)}` : '') +
+          `→${String(matched.behavior ?? 'deny')}` +
+          (matched.source ? ` from ${String(matched.source)}` : '') + ']'
+        : '';
       return {
         icon: Lock,
         color: '#ef4444',
         bgColor: 'rgba(239,68,68,0.10)',
         label: 'Denied',
-        description: `Permission denied: ${signal}`,
+        description: `Permission denied: ${signal}${ruleSummary}`,
       };
     }
     if (signal.includes('hook')) {
@@ -108,6 +118,21 @@ function getToolReviewVisual(meta: LogEntryMetadata | undefined): ReviewVisual |
       bgColor: 'rgba(245,158,11,0.10)',
       label: 'Loop signal',
       description: signal || 'loop escalation',
+    };
+  }
+
+  // PR-E.2.3 — Stage 4 guard outcomes (permission/iteration/budget).
+  if (evt === 'guard_event') {
+    const guardName = typeof data.guard_name === 'string' ? data.guard_name : 'guard';
+    const message = typeof data.message === 'string' ? data.message : '';
+    const passed = data.passed === true;
+    const isPermission = guardName === 'permission';
+    return {
+      icon: isPermission ? Lock : ShieldAlert,
+      color: passed ? '#f59e0b' : '#ef4444',
+      bgColor: passed ? 'rgba(245,158,11,0.10)' : 'rgba(239,68,68,0.10)',
+      label: passed ? `Guard warn · ${guardName}` : `Guard reject · ${guardName}`,
+      description: message || `${guardName} ${passed ? 'warned' : 'rejected'}`,
     };
   }
 
