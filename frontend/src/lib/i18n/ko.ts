@@ -615,6 +615,11 @@ const ko: Translations = {
     allSelected: '전체 선택됨',
     noToolsFound: '도구를 찾을 수 없습니다',
     newPresetTitle: '새 도구 세트',
+    // C.3 (cycle 20260426_1) — env-driven semantics note.
+    envDrivenNote: {
+      title: '도구 목록은 바인딩된 환경 매니페스트가 결정합니다.',
+      body: '환경 기반 세션에서는 매니페스트가 빌트인/커스텀 도구의 적재 여부를 결정합니다. 여기 프리셋은 주로 MCP 서버 필터링에 영향을 줍니다. 세션의 실제 도구 목록을 바꾸려면 해당 환경 매니페스트를 수정하세요.',
+    },
   },
 
   // ─── Environments Tab ───
@@ -1050,6 +1055,9 @@ const ko: Translations = {
     promptTemplate: '프롬프트 템플릿',
     promptTemplateHelp: '기본 역할 프롬프트 위에 추가되는 선택적 전문화 프롬프트입니다. 특정 도메인에 맞게 에이전트를 미세 조정할 수 있습니다.',
     templateNone: '없음',
+    // C.3 (cycle 20260426_1) — env-driven semantics 안내.
+    toolPreset: '도구 프리셋',
+    toolPresetHelp: '환경 기반 세션에서는 도구 목록을 바인딩된 환경 매니페스트가 결정합니다. 선택한 프리셋은 주로 MCP 서버 필터링에 영향을 줍니다. 기본값은 역할에 따라 자동 선택됩니다.',
     environment: '환경',
     environmentHelp: '선택 사항인 v2 EnvironmentManifest. 설정하면 role 기반 preset 대신 manifest 의 pipeline + stage 템플릿 + 도구 스냅샷을 사용합니다.',
     environmentNone: '없음 — role preset 사용',

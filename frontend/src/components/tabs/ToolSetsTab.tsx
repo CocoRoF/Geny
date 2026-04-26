@@ -752,6 +752,14 @@ export default function ToolSetsTab() {
         </button>
       </div>
 
+      {/* C.3 (cycle 20260426_1) — env-driven semantics note. */}
+      <div className="shrink-0 px-4 py-2 border-b border-[var(--border-color)] bg-[hsl(var(--muted))] text-[0.75rem] text-[var(--text-secondary)]">
+        <span className="font-medium text-[var(--text-primary)] mr-1">
+          {t('toolSetsTab.envDrivenNote.title')}
+        </span>
+        {t('toolSetsTab.envDrivenNote.body')}
+      </div>
+
       {/* Error */}
       {error && (
         <div className="mx-6 mt-3 p-2.5 rounded-md bg-[rgba(239,68,68,0.1)] text-[0.8125rem] text-[var(--danger-color)]">

@@ -615,6 +615,11 @@ const en = {
     allSelected: 'All Selected',
     noToolsFound: 'No tools found',
     newPresetTitle: 'New Tool Set',
+    // C.3 (cycle 20260426_1) — env-driven semantics note.
+    envDrivenNote: {
+      title: 'Tool list is owned by the bound environment manifest.',
+      body: 'In env-driven sessions the manifest decides which built-in / custom tools the agent loads. Presets here mainly influence MCP server filtering. To change the actual tool list of a session, edit its environment manifest.',
+    },
   },
 
   // ─── Environments Tab ───
@@ -1050,6 +1055,9 @@ const en = {
     promptTemplate: 'Prompt Template',
     promptTemplateHelp: 'Optional specialization prompt added on top of the base role prompt. Use to fine-tune the agent for a specific domain.',
     templateNone: 'None',
+    // C.3 (cycle 20260426_1) — preset semantics in env-driven sessions.
+    toolPreset: 'Tool Preset',
+    toolPresetHelp: 'In env-driven sessions the tool list is owned by the bound environment manifest. The selected preset mainly influences MCP server filtering. Default is determined by role.',
     environment: 'Environment',
     environmentHelp: 'Optional v2 EnvironmentManifest. When set, the session uses the manifest\'s pipeline + stage templates + tools snapshot instead of the role-based preset.',
     environmentNone: 'None — use role preset',

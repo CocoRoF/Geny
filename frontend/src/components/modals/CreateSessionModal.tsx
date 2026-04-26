@@ -356,7 +356,7 @@ export default function CreateSessionModal({ onClose }: Props) {
           {/* Tool Preset */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">
-              Tool Preset <InfoTooltip text="Select which Python tools and MCP servers are available to the agent. Default is determined by the role." />
+              {t('createSession.toolPreset')} <InfoTooltip text={t('createSession.toolPresetHelp')} />
             </label>
             <select className="w-full py-2.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.875rem] text-[var(--text-primary)] appearance-none cursor-pointer transition-[border-color] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] pr-8" style={selectArrow} value={selectedPreset} onChange={e => setSelectedPreset(e.target.value)}>
               <option value="">Default (based on role)</option>
