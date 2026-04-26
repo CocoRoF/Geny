@@ -77,6 +77,7 @@ const ko: Translations = {
     hooks: '훅',
     skills: '스킬',
     mcpServers: 'MCP 서버',
+    sessionEnvironment: '환경',
     environments: '환경',
     builder: '빌더',
     settings: '설정',

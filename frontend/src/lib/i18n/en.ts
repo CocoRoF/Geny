@@ -78,6 +78,7 @@ const en = {
     skills: 'Skills',
     mcpServers: 'MCP Servers',
     environments: 'Environments',
+    sessionEnvironment: 'Environment',
     builder: 'Builder',
     settings: 'Settings',
     info: 'Info',

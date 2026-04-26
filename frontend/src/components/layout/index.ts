@@ -15,4 +15,5 @@ export { EditorModal, type EditorModalProps } from './EditorModal';
 export { EmptyState, type EmptyStateProps } from './EmptyState';
 export { StatusBadge, type StatusBadgeProps, type BadgeTone } from './StatusBadge';
 export { ActionButton, type ActionButtonProps } from './ActionButton';
+export { SubTabNav, type SubTabNavProps, type SubTabDef } from './SubTabNav';
 export { cn } from './cn';

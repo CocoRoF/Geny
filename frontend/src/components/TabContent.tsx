@@ -30,6 +30,10 @@ const PermissionsTab = dynamic(() => import('@/components/tabs/PermissionsTab').
 const HooksTab = dynamic(() => import('@/components/tabs/HooksTab').then(m => m.HooksTab));
 const SkillsTab = dynamic(() => import('@/components/tabs/SkillsTab').then(m => m.SkillsTab));
 const McpServersTab = dynamic(() => import('@/components/tabs/McpServersTab').then(m => m.McpServersTab));
+// Consolidated Environment tabs (philosophy: env = pipeline; tools /
+// permissions / hooks / skills / mcp are all components of it).
+const EnvironmentTab = dynamic(() => import('@/components/tabs/EnvironmentTab'));
+const SessionEnvironmentRootTab = dynamic(() => import('@/components/tabs/SessionEnvironmentRootTab'));
 
 const TAB_MAP: Record<string, React.ComponentType> = {
   main: MainTab,
@@ -37,8 +41,15 @@ const TAB_MAP: Record<string, React.ComponentType> = {
   command: CommandTab,
   logs: LogsTab,
   storage: StorageTab,
-  environment: SessionEnvironmentTab,
-  // Legacy 'graph' tab is now the per-session Environment view (manifest-driven).
+  // Consolidated Environment (global + session). Old activeTab values
+  // for the now-sub-tabs are handled by useAppStore.setActiveTab,
+  // which redirects them to environment / sessionEnvironment with the
+  // appropriate sub-tab pre-selected.
+  environment: EnvironmentTab,
+  sessionEnvironment: SessionEnvironmentRootTab,
+  // Legacy aliases — kept so direct mounts still work even if a code
+  // path bypasses setActiveTab. They render the same components the
+  // sub-tabs do.
   graph: SessionEnvironmentTab,
   sharedFolder: SharedFolderTab,
   info: InfoTab,
@@ -51,23 +62,13 @@ const TAB_MAP: Record<string, React.ComponentType> = {
   vtuber: VTuberTab,
   playground2d: Playground2DTab,
   environments: EnvironmentsTab,
-  // Legacy 'builder' tab merged into Environments — route any stale
-  // activeTab values to the same component, which switches into builder
-  // mode when useEnvironmentStore.builderEnvId is set.
   builder: EnvironmentsTab,
-  // PR-D.3.1 — Cycle A+B follow-up: surface BackgroundTaskRunner +
-  // CronRunner state in the sidebar.
   tasks: TasksTab,
   cron: CronTab,
-  // PR-E.1.2 — Framework tool catalog viewer (executor's BUILT_IN_TOOL_CLASSES).
   toolCatalog: ToolCatalogTab,
-  // PR-E.2.2 — Permission rules viewer + editor.
   permissions: PermissionsTab,
-  // PR-E.3.3 — Hook entries viewer + editor + recent fires.
   hooks: HooksTab,
-  // PR-F.2.4 — Skills CRUD + bundled viewer.
   skills: SkillsTab,
-  // Cycle G — MCP custom server CRUD.
   mcpServers: McpServersTab,
 };
 

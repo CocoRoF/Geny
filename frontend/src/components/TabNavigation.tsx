@@ -12,28 +12,30 @@ function cn(...classes: (string | boolean | undefined | null)[]) {
   return twMerge(classes.filter(Boolean).join(' '));
 }
 
-// Playground / Playground2D are intentionally omitted — code path is
-// kept in TAB_MAP / dynamic imports so the bundle and routes still work,
-// but the operator UI doesn't surface them. Re-add when those views
-// become first-class again.
-const GLOBAL_TAB_IDS = ['main', 'toolSets', 'toolCatalog', 'permissions', 'hooks', 'skills', 'mcpServers', 'environments', 'sharedFolder', 'admin', 'settings'] as const;
+// Consolidated tab strip: pipeline-component tabs (toolSets /
+// toolCatalog / permissions / hooks / skills / mcpServers /
+// environments) live as sub-tabs of `environment` now. They stay in
+// TabContent.TAB_MAP for back-compat but aren't surfaced here.
+//
+// Playground / Playground2D are intentionally omitted — code path
+// kept; UI surface hidden until they become first-class again.
+const GLOBAL_TAB_IDS = ['main', 'environment', 'sharedFolder', 'admin', 'settings'] as const;
 const SESSION_TAB_DEFS = [
   { id: 'command', accent: true },
   { id: 'vtuber' },
-  { id: 'environment' },
+  { id: 'sessionEnvironment' },
   { id: 'memory' },
-  { id: 'tasks' },     // PR-D.3.1 — BackgroundTaskRunner viewer
-  { id: 'cron' },      // PR-D.3.1 — CronRunner viewer
+  { id: 'tasks' },     // PR-D.3.1 — BackgroundTaskRunner viewer (runtime state, stays separate)
+  { id: 'cron' },      // PR-D.3.1 — CronRunner viewer (runtime state, stays separate)
   { id: 'storage' },
-  { id: 'sessionTools' },
   { id: 'dashboard' },
   { id: 'logs' },
 ] as const;
 
 // Tabs hidden in Normal mode
-const DEV_ONLY_GLOBAL = new Set(['toolSets', 'toolCatalog', 'permissions', 'hooks', 'skills', 'mcpServers', 'environments', 'admin', 'settings']);
+const DEV_ONLY_GLOBAL = new Set(['environment', 'admin', 'settings']);
 // 'logs' is intentionally NOT in this set — it must be visible in User mode too (e.g. mobile)
-const DEV_ONLY_SESSION = new Set(['environment']);
+const DEV_ONLY_SESSION = new Set(['sessionEnvironment']);
 
 const TAB_BASE =
   'relative py-1.5 px-3.5 text-[0.8125rem] font-medium bg-transparent border-none rounded-[6px] cursor-pointer transition-all duration-150 whitespace-nowrap';

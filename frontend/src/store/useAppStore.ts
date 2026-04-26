@@ -4,7 +4,22 @@ import { agentApi, commandApi, healthApi, configApi } from '@/lib/api';
 import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 
 // Session-scoped tab IDs (must match TabNavigation)
-const SESSION_TAB_IDS = new Set(['command', 'logs', 'storage', 'environment', 'graph', 'info', 'sessionTools', 'dashboard', 'memory', 'vtuber']);
+const SESSION_TAB_IDS = new Set([
+  'command',
+  'logs',
+  'storage',
+  'sessionEnvironment', // consolidated session-env tab
+  'environment',        // back-compat alias
+  'graph',              // back-compat alias
+  'info',
+  'sessionTools',       // legacy direct mount
+  'tools',              // legacy
+  'dashboard',
+  'memory',
+  'tasks',
+  'cron',
+  'vtuber',
+]);
 
 // ==================== Session Data Cache ====================
 
@@ -60,6 +75,11 @@ interface AppState {
 
   // UI state
   activeTab: string;
+  // Sub-tab selection inside the consolidated Environment tab.
+  // Keyed separately because the global Environment tab and the
+  // session-scoped Environment tab share no semantics.
+  envSubTab: string;       // global: library/toolSets/toolCatalog/permissions/hooks/skills/mcpServers
+  sessionEnvSubTab: string; // session: manifest/tools/workspace
   sidebarCollapsed: boolean;
   mobileSidebarOpen: boolean;
   deletedSectionOpen: boolean;
@@ -76,6 +96,8 @@ interface AppState {
   permanentDeleteSession: (id: string) => Promise<void>;
   restoreSession: (id: string) => Promise<void>;
   setActiveTab: (tab: string) => void;
+  setEnvSubTab: (id: string) => void;
+  setSessionEnvSubTab: (id: string) => void;
   toggleSidebar: () => void;
   setMobileSidebarOpen: (open: boolean) => void;
   toggleDeletedSection: () => void;
@@ -106,6 +128,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   prompts: [],
   promptContents: {},
   activeTab: 'main',
+  envSubTab: 'library',
+  sessionEnvSubTab: 'manifest',
   sidebarCollapsed: false,
   mobileSidebarOpen: false,
   deletedSectionOpen: false,
@@ -183,7 +207,40 @@ export const useAppStore = create<AppState>((set, get) => ({
     await get().loadDeletedSessions();
   },
 
-  setActiveTab: (tab) => set({ activeTab: tab }),
+  setActiveTab: (tab) => {
+    // Back-compat: tabs that were promoted to sub-tabs of the
+    // consolidated Environment tab redirect transparently. Old
+    // sidebar bookmarks / persisted state keep working.
+    const ENV_SUB_REDIRECT: Record<string, string> = {
+      toolSets: 'toolSets',
+      toolCatalog: 'toolCatalog',
+      permissions: 'permissions',
+      hooks: 'hooks',
+      skills: 'skills',
+      mcpServers: 'mcpServers',
+      environments: 'library',
+      builder: 'library',
+    };
+    const SESSION_ENV_SUB_REDIRECT: Record<string, string> = {
+      environment: 'manifest',
+      graph: 'manifest',
+      sessionTools: 'tools',
+    };
+    if (ENV_SUB_REDIRECT[tab]) {
+      set({ activeTab: 'environment', envSubTab: ENV_SUB_REDIRECT[tab] });
+      return;
+    }
+    if (SESSION_ENV_SUB_REDIRECT[tab]) {
+      set({
+        activeTab: 'sessionEnvironment',
+        sessionEnvSubTab: SESSION_ENV_SUB_REDIRECT[tab],
+      });
+      return;
+    }
+    set({ activeTab: tab });
+  },
+  setEnvSubTab: (id) => set({ envSubTab: id }),
+  setSessionEnvSubTab: (id) => set({ sessionEnvSubTab: id }),
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
   toggleDeletedSection: () => set((s) => ({ deletedSectionOpen: !s.deletedSectionOpen })),
