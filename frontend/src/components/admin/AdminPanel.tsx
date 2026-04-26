@@ -27,6 +27,7 @@ import {
 } from '@/lib/api';
 import { Shield, Plug, Sparkles, AlertCircle, RefreshCw, FileText, Activity, Lock, Users, Server, BarChart3, Cog, GitMerge, Bell, MessageSquare } from 'lucide-react';
 import { TabShell, ActionButton } from '@/components/layout';
+import { IntegrationHealthCard } from '@/components/admin/IntegrationHealthCard';
 
 interface PermissionRow {
   tool_name: string;
@@ -184,6 +185,9 @@ export default function AdminPanel() {
       onDismissError={() => setError(null)}
     >
       <div className="h-full overflow-auto">
+
+      {/* ── Integration Health (C.2 / cycle 20260426_1) ── */}
+      <IntegrationHealthCard />
 
       {/* ── System Status (PR-F.6.2) ── */}
       <Section

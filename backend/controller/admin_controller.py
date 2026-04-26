@@ -645,3 +645,159 @@ async def settings_migration_status(_auth: dict = Depends(require_auth)):
         settings_json_sections=sections,
         notes=notes,
     )
+
+
+# ── Integration health (C.2 / cycle 20260426_1) ──────────────────
+
+
+class RingFill(BaseModel):
+    """Capacity + current fill of a process-wide ring buffer.
+
+    Telemetry rings are populated from the executor event loop. A
+    long-running process with a `0` fill on a ring whose call sites
+    we expect to fire is the signal something is unwired."""
+    capacity: int
+    filled: int
+
+
+class IntegrationHealthResponse(BaseModel):
+    """Single-call snapshot of the wiring state between Geny and the
+    executor + on-disk config sources. Each field is a separate
+    "did the bridge wire correctly?" question that the audit cycle
+    20260426_1 surfaced as invisible to the operator.
+
+    Each field is independently set so the AdminPanel card can render
+    a per-row badge (success / warning / danger) without dispatching
+    multiple requests.
+    """
+
+    settings_path: str = Field(..., description="Resolved ~/.geny/settings.json path")
+    settings_exists: bool
+
+    hooks_yaml_legacy_present: bool = Field(
+        ...,
+        description="True when ~/.geny/hooks.yaml exists. Modern path is "
+                    "settings.json:hooks; legacy yaml is silently demoted "
+                    "(warning logged once at session boot).",
+    )
+    hooks_env_gate: bool = Field(
+        ...,
+        description="True iff GENY_ALLOW_HOOKS env is one of "
+                    "{1,true,yes,on}. When false, registered hooks "
+                    "never fire even if settings.json:hooks declares "
+                    "enabled=true.",
+    )
+
+    task_runner_running: bool = Field(
+        ...,
+        description="True iff app.state.task_runner is non-None and "
+                    "(if introspectable) not stopped. Tasks/Cron tabs "
+                    "depend on this.",
+    )
+
+    tool_event_ring: RingFill
+    permission_ring: RingFill
+    cron_history: RingFill
+
+    notes: List[str] = Field(
+        default_factory=list,
+        description="Operator-facing remarks for any state worth flagging "
+                    "(legacy file present, env gate closed, ring empty).",
+    )
+
+
+def _ring_fill(ring_module_name: str) -> RingFill:
+    """Best-effort load of ``capacity`` + current ``snapshot()`` length
+    from a telemetry ring module. Falls back to (0, 0) when the module
+    isn't importable so the endpoint stays useful even if a ring is
+    temporarily missing.
+    """
+    try:
+        mod = __import__(ring_module_name, fromlist=["capacity", "snapshot"])
+        cap = int(getattr(mod, "capacity", lambda: 0)())
+        rows = getattr(mod, "snapshot", lambda: [])()
+        return RingFill(capacity=cap, filled=len(rows))
+    except Exception:  # noqa: BLE001
+        return RingFill(capacity=0, filled=0)
+
+
+@router.get(
+    "/admin/integration-health",
+    response_model=IntegrationHealthResponse,
+    summary="Wiring snapshot — Geny ↔ executor ↔ on-disk config",
+)
+async def integration_health(request: Request, _auth: dict = Depends(require_auth)):
+    """C.2 (cycle 20260426_1) — single-call snapshot of the wiring
+    state the post-D4 audit found invisible to operators.
+
+    Surfaces:
+    - Whether settings.json exists where the loader expects it.
+    - Whether legacy ``~/.geny/hooks.yaml`` is still around (silent
+      demotion case).
+    - Whether the ``GENY_ALLOW_HOOKS`` env gate is open (without it
+      hooks never fire even if registered in the UI).
+    - Whether the in-process ``task_runner`` is alive (Tasks/Cron tabs
+      depend on it).
+    - Fill state of every telemetry ring buffer — a long-running
+      process with a 0-fill ring is a likely "call site missing"
+      signal (e.g. cron_history before D.1).
+    """
+    notes: List[str] = []
+
+    # Settings.json
+    settings_path = Path.home() / ".geny" / "settings.json"
+    settings_exists = settings_path.exists()
+    if not settings_exists:
+        notes.append(
+            "No ~/.geny/settings.json — installation is using framework "
+            "defaults across the board.",
+        )
+
+    # Hooks.yaml legacy presence + env gate
+    hooks_yaml_legacy_present = False
+    try:
+        from service.hooks.install import hooks_yaml_path
+
+        hooks_yaml_legacy_present = hooks_yaml_path().exists()
+    except Exception:  # noqa: BLE001
+        pass
+    hooks_env_gate = os.environ.get("GENY_ALLOW_HOOKS", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+    if hooks_yaml_legacy_present:
+        notes.append(
+            "Legacy ~/.geny/hooks.yaml present alongside settings.json — "
+            "settings.json wins; consider deleting the yaml after "
+            "verifying the migration.",
+        )
+    if not hooks_env_gate:
+        notes.append(
+            "GENY_ALLOW_HOOKS env is closed — registered hooks will not "
+            "fire. Set it to 1 in the host process env (and restart) to "
+            "open the gate.",
+        )
+
+    # Task runner
+    task_runner = getattr(request.app.state, "task_runner", None)
+    task_runner_running = task_runner is not None
+    if not task_runner_running:
+        notes.append(
+            "task_runner is not installed — Tasks and Cron tabs will return 503.",
+        )
+
+    # Telemetry rings
+    tool_event_ring = _ring_fill("service.telemetry.tool_event_ring")
+    permission_ring = _ring_fill("service.telemetry.permission_ring")
+    cron_history = _ring_fill("service.telemetry.cron_history")
+
+    return IntegrationHealthResponse(
+        settings_path=str(settings_path),
+        settings_exists=settings_exists,
+        hooks_yaml_legacy_present=hooks_yaml_legacy_present,
+        hooks_env_gate=hooks_env_gate,
+        task_runner_running=task_runner_running,
+        tool_event_ring=tool_event_ring,
+        permission_ring=permission_ring,
+        cron_history=cron_history,
+        notes=notes,
+    )

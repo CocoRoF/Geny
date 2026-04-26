@@ -794,7 +794,27 @@ export const adminTelemetryApi = {
   toolUsage: () => apiCall<ToolUsageResponse>('/api/admin/tool-usage'),
   hookInProcessHandlers: () => apiCall<InProcessHandlersResponse>('/api/admin/hook-in-process-handlers'),
   settingsMigrationStatus: () => apiCall<SettingsMigrationStatusResponse>('/api/admin/settings-migration-status'),
+  // C.2 (cycle 20260426_1) — single-call wiring snapshot.
+  integrationHealth: () => apiCall<IntegrationHealthResponse>('/api/admin/integration-health'),
 };
+
+// C.2 (cycle 20260426_1) — Admin Integration Health card.
+export interface RingFill {
+  capacity: number;
+  filled: number;
+}
+
+export interface IntegrationHealthResponse {
+  settings_path: string;
+  settings_exists: boolean;
+  hooks_yaml_legacy_present: boolean;
+  hooks_env_gate: boolean;
+  task_runner_running: boolean;
+  tool_event_ring: RingFill;
+  permission_ring: RingFill;
+  cron_history: RingFill;
+  notes: string[];
+}
 
 export interface SubsystemStatusRow {
   name: string;
