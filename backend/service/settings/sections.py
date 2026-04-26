@@ -125,6 +125,31 @@ class NotificationsConfigSection(BaseModel):
         return v
 
 
+class PermissionsConfigSection(BaseModel):
+    """``settings.permissions`` schema (K.2 / cycle 20260426_2).
+
+    Mirrors the on-disk shape that ``permission_controller`` writes —
+    the ``rules`` list is the same data the cycle's existing
+    PermissionsTab CRUD operates on; ``mode`` and ``executor_mode``
+    were added in R.1.
+
+    The schema accepts arbitrary mode strings + an arbitrary rule list
+    so older deployments with hand-written values keep loading. Strict
+    validation lives in the controllers (`_BEHAVIORS` / `_GENY_MODES`
+    / `_EXECUTOR_MODES`).
+    """
+
+    mode: Optional[str] = Field(
+        None,
+        description='Geny gate: "advisory" (log only) | "enforce" (block)',
+    )
+    executor_mode: Optional[str] = Field(
+        None,
+        description='Executor PermissionMode: default|plan|auto|bypass|acceptEdits|dontAsk',
+    )
+    rules: List[Dict[str, Any]] = Field(default_factory=list)
+
+
 __all__ = [
     "PresetSection",
     "VTuberSection",
@@ -134,4 +159,5 @@ __all__ = [
     "TelemetryConfigSection",
     "NotificationsConfigSection",
     "NotificationsChannel",
+    "PermissionsConfigSection",
 ]
