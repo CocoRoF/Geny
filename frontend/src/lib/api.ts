@@ -514,6 +514,33 @@ export const backgroundTaskApi = {
     `${getBackendUrl()}/api/agents/${encodeURIComponent(sessionId)}/tasks/${encodeURIComponent(taskId)}/output`,
 };
 
+// ==================== Slash Commands API (PR-A.6.2) =============
+
+export interface SlashCommandSummary {
+  name: string;
+  description: string;
+  category: string;
+  aliases: string[];
+}
+
+export interface SlashExecuteResponse {
+  matched: boolean;
+  success: boolean;
+  content: string | null;
+  follow_up_prompt: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export const slashCommandApi = {
+  list: () => apiCall<{ commands: SlashCommandSummary[] }>('/api/slash-commands'),
+
+  execute: (input_text: string) =>
+    apiCall<SlashExecuteResponse>('/api/slash-commands/execute', {
+      method: 'POST',
+      body: JSON.stringify({ input_text }),
+    }),
+};
+
 // ==================== Cron API (PR-A.8.3) ======================
 
 export interface CronJobRecord {
