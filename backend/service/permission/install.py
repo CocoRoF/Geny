@@ -87,24 +87,112 @@ def _candidate_paths() -> List[Tuple[Path, str]]:
     return out
 
 
+def _load_from_settings_section() -> Optional[List]:
+    """PR-D.2.1 — settings.json:permissions section reader.
+
+    Returns a parsed PermissionRule list when settings.json has a
+    ``permissions`` section, ``None`` otherwise. The migrator
+    (service.settings.migrator) preserves the existing yaml shape
+    1:1 so the same parsing helpers work for both flows.
+
+    Schema mirrors the yaml form::
+
+        {
+          "permissions": {
+            "rules": [
+              {"tool_name": "Bash", "behavior": "ask",
+               "pattern": "git push *", "reason": "destructive"}
+            ]
+          }
+        }
+
+    Returns ``None`` (not an empty list) when the section is absent
+    so the caller distinguishes "no settings.json yet" from
+    "settings.json says: no rules".
+    """
+    try:
+        from geny_executor.settings import get_default_loader
+        from geny_executor.permission.types import (
+            PermissionBehavior,
+            PermissionRule,
+            PermissionSource,
+        )
+    except ImportError:
+        return None
+    section = get_default_loader().get_section("permissions")
+    if section is None:
+        return None
+    raw_rules = section.get("rules") if isinstance(section, dict) else None
+    if not isinstance(raw_rules, list):
+        return []
+    out: List = []
+    for raw in raw_rules:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            behavior = PermissionBehavior(str(raw.get("behavior", "ask")).lower())
+        except ValueError:
+            logger.warning(
+                "install_permission_rules: settings.json rule has unknown "
+                "behavior=%r; skipping", raw.get("behavior"),
+            )
+            continue
+        # source defaults to USER when settings.json doesn't specify one
+        # — the cascade is already handled by the loader (user → project
+        # → local).
+        try:
+            source = PermissionSource(
+                str(raw.get("source", "user")).lower(),
+            )
+        except ValueError:
+            source = PermissionSource.USER
+        out.append(PermissionRule(
+            tool_name=str(raw.get("tool_name", "*")),
+            behavior=behavior,
+            source=source,
+            pattern=raw.get("pattern"),
+            reason=raw.get("reason"),
+        ))
+    return out
+
+
 def install_permission_rules() -> Tuple[List, str]:
     """Resolve and load every permission rule source into a flat list.
 
-    Returns:
-        ``(rules, mode)`` — rules is the executor's
-        ``List[PermissionRule]`` (empty when no file was found); mode
-        is one of :data:`PERMISSION_MODES`. Both are forwarded as
-        ``Pipeline.attach_runtime(permission_rules=…, permission_mode=…)``.
+    PR-D.2.1 — dual-read priority:
+      1. settings.json:permissions section (via SettingsLoader)
+      2. legacy yaml fallback at the candidate paths
 
-    Failures (malformed YAML, unreadable file) degrade to an empty list
-    with a logged warning — the session must still boot. Use
-    ``GENY_PERMISSIONS_STRICT=1`` to re-raise instead.
+    settings.json wins when present. When BOTH exist (operator forgot
+    to delete the yaml after migration) the yaml is logged with a
+    deprecation hint but its rules are NOT merged — settings.json is
+    the single source of truth.
+
+    Failures degrade to an empty list with a warning; ``GENY_PERMISSIONS_STRICT=1``
+    re-raises instead.
     """
     mode = _resolve_mode()
 
+    # Try settings.json first.
+    settings_rules = _load_from_settings_section()
+    if settings_rules is not None:
+        # Note any leftover yaml so operator knows to clean up.
+        legacy_present = any(p.exists() for p, _ in _candidate_paths())
+        if legacy_present:
+            logger.warning(
+                "install_permission_rules: settings.json:permissions wins; "
+                "legacy yaml files still present (consider deleting after "
+                "verifying the migration)",
+            )
+        if settings_rules:
+            logger.info(
+                "install_permission_rules: %d rule(s) total from settings.json, mode=%s",
+                len(settings_rules), mode,
+            )
+        return settings_rules, mode
+
+    # Legacy yaml flow.
     try:
-        # Local import keeps this module importable on hosts that haven't
-        # yet pinned geny-executor 1.0.
         from geny_executor.permission import (
             PermissionSource,
             load_permission_rules,
@@ -134,7 +222,8 @@ def install_permission_rules() -> Tuple[List, str]:
             continue
         if loaded:
             logger.info(
-                "install_permission_rules: loaded %d rule(s) from %s [%s]",
+                "install_permission_rules: loaded %d rule(s) from %s [%s] "
+                "(yaml — consider migrating to settings.json)",
                 len(loaded), path, source_name,
             )
             rules.extend(loaded)
