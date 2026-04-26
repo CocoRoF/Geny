@@ -1745,14 +1745,43 @@ class AgentSession:
                 elif event_type in ("loop.escalate", "loop.error"):
                     signal = event_data.get("signal") or "unknown"
                     iteration = event.iteration if hasattr(event, "iteration") else event_data.get("iteration", 0)
+                    # PR-E.2.3 — forward full event_data so future executor
+                    # versions that emit matched_rule / guard_name details
+                    # surface in the timeline detail panel without another
+                    # bridge change.
                     session_logger.log_stage_event(
                         event_type="loop_signal",
                         message=f"{event_type}: {signal}",
                         stage_name="loop",
                         stage_order=STAGE_ORDER.get("loop"),
                         iteration=iteration or 0,
-                        data={"signal": signal},
+                        data={"signal": signal, **dict(event_data)},
                     )
+
+                # PR-E.2.3 — Stage 4 guard outcomes. Today the executor
+                # emits guard.check / guard.warn with {passed, guard_name,
+                # message}. Surface the failed/warn cases in the timeline
+                # so operators can correlate "Denied" loop_signal rows
+                # with the guard that produced them.
+                elif event_type in ("guard.check", "guard.warn"):
+                    iteration = event.iteration if hasattr(event, "iteration") else event_data.get("iteration", 0)
+                    passed = bool(event_data.get("passed", True))
+                    if not (event_type == "guard.check" and passed):
+                        guard_name = event_data.get("guard_name") or "unknown"
+                        message = event_data.get("message") or ""
+                        session_logger.log_stage_event(
+                            event_type="guard_event",
+                            message=f"{event_type}: {guard_name} — {message}",
+                            stage_name="guard",
+                            stage_order=STAGE_ORDER.get("guard"),
+                            iteration=iteration or 0,
+                            data={
+                                "guard_name": guard_name,
+                                "message": message,
+                                "passed": passed,
+                                **dict(event_data),
+                            },
+                        )
 
                 # ── G2.4: Tool Review (Stage 11) flag broadcast ──
                 # Each reviewer-emitted flag gets its own log entry so
@@ -2108,14 +2137,43 @@ class AgentSession:
                 elif event_type in ("loop.escalate", "loop.error"):
                     signal = event_data.get("signal") or "unknown"
                     iteration = event.iteration if hasattr(event, "iteration") else event_data.get("iteration", 0)
+                    # PR-E.2.3 — forward full event_data so future executor
+                    # versions that emit matched_rule / guard_name details
+                    # surface in the timeline detail panel without another
+                    # bridge change.
                     session_logger.log_stage_event(
                         event_type="loop_signal",
                         message=f"{event_type}: {signal}",
                         stage_name="loop",
                         stage_order=STAGE_ORDER.get("loop"),
                         iteration=iteration or 0,
-                        data={"signal": signal},
+                        data={"signal": signal, **dict(event_data)},
                     )
+
+                # PR-E.2.3 — Stage 4 guard outcomes. Today the executor
+                # emits guard.check / guard.warn with {passed, guard_name,
+                # message}. Surface the failed/warn cases in the timeline
+                # so operators can correlate "Denied" loop_signal rows
+                # with the guard that produced them.
+                elif event_type in ("guard.check", "guard.warn"):
+                    iteration = event.iteration if hasattr(event, "iteration") else event_data.get("iteration", 0)
+                    passed = bool(event_data.get("passed", True))
+                    if not (event_type == "guard.check" and passed):
+                        guard_name = event_data.get("guard_name") or "unknown"
+                        message = event_data.get("message") or ""
+                        session_logger.log_stage_event(
+                            event_type="guard_event",
+                            message=f"{event_type}: {guard_name} — {message}",
+                            stage_name="guard",
+                            stage_order=STAGE_ORDER.get("guard"),
+                            iteration=iteration or 0,
+                            data={
+                                "guard_name": guard_name,
+                                "message": message,
+                                "passed": passed,
+                                **dict(event_data),
+                            },
+                        )
 
             # ── Yield events to caller ──
             if event_type == "text.delta":
