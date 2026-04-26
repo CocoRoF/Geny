@@ -42,7 +42,10 @@ export const toolPresetApi = {
   create: (data: { name: string; description?: string; icon?: string; custom_tools?: string[]; mcp_servers?: string[] }) =>
     apiCall<ToolPresetDefinition>('/api/tool-presets/', { method: 'POST', body: JSON.stringify(data) }),
 
-  update: (id: string, data: Partial<Pick<ToolPresetDefinition, 'name' | 'description' | 'icon' | 'custom_tools' | 'mcp_servers'>>) =>
+  update: (id: string, data: Partial<Pick<ToolPresetDefinition,
+    'name' | 'description' | 'icon' | 'custom_tools' | 'mcp_servers'
+    | 'built_in_mode' | 'built_in_tools' | 'built_in_deny'
+  >>) =>
     apiCall<ToolPresetDefinition>(`/api/tool-presets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   delete: (id: string) =>

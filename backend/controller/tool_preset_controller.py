@@ -43,6 +43,12 @@ class UpdateToolPresetRequest(BaseModel):
     icon: Optional[str] = None
     custom_tools: Optional[List[str]] = None
     mcp_servers: Optional[List[str]] = None
+    # PR-F.5.x — per-preset framework built-in selection. Optional so
+    # older PUT payloads (no built-in fields) leave existing values
+    # intact via exclude_none on the service side.
+    built_in_mode: Optional[str] = None
+    built_in_tools: Optional[List[str]] = None
+    built_in_deny: Optional[List[str]] = None
 
 
 class ClonePresetRequest(BaseModel):
@@ -124,6 +130,12 @@ async def update_preset(preset_id: str, req: UpdateToolPresetRequest, auth: dict
         preset.custom_tools = req.custom_tools
     if req.mcp_servers is not None:
         preset.mcp_servers = req.mcp_servers
+    if req.built_in_mode is not None:
+        preset.built_in_mode = req.built_in_mode
+    if req.built_in_tools is not None:
+        preset.built_in_tools = req.built_in_tools
+    if req.built_in_deny is not None:
+        preset.built_in_deny = req.built_in_deny
 
     store.save(preset)
     return preset
