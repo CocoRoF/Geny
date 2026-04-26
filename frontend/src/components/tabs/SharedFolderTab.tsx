@@ -24,6 +24,7 @@ import {
   FolderSync,
   Info,
 } from 'lucide-react';
+import { TabShell, ActionButton } from '@/components/layout';
 
 function cn(...classes: (string | boolean | undefined | null)[]) {
   return twMerge(classes.filter(Boolean).join(' '));
@@ -299,63 +300,29 @@ export default function SharedFolderTab() {
   const tree = buildFileTree(files);
 
   return (
-    <div className="flex flex-col flex-1 p-3 md:p-6 gap-3 md:gap-5 min-h-0 overflow-y-auto md:overflow-hidden">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-[var(--border-color)] shrink-0">
-        <div className="flex items-center gap-3">
-          <FolderSync size={20} className="text-[var(--primary-color)]" />
-          <div>
-            <h3 className="text-[15px] md:text-[16px] font-semibold text-[var(--text-primary)]">
-              {t('sharedFolderTab.title')}
-            </h3>
-            <p className="text-[11px] md:text-[12px] text-[var(--text-muted)] mt-0.5">
-              {t('sharedFolderTab.description')}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 md:gap-2 flex-wrap">
+    <TabShell
+      title={t('sharedFolderTab.title')}
+      icon={FolderSync}
+      subtitle={t('sharedFolderTab.description')}
+      actions={
+        <>
           <input ref={fileInputRef} type="file" className="hidden" onChange={handleUpload} />
-          <button
-            className={cn(
-              'py-2 px-4 bg-transparent hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border border-[var(--border-color)]',
-              '!py-1.5 !px-3 text-[0.75rem] inline-flex items-center gap-1.5',
-            )}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Upload size={12} /> <span className="hidden sm:inline">{t('sharedFolderTab.uploadFile')}</span>
-          </button>
-          <button
-            className={cn(
-              'py-2 px-4 bg-transparent hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border border-[var(--border-color)]',
-              '!py-1.5 !px-3 text-[0.75rem] inline-flex items-center gap-1.5',
-            )}
-            onClick={() => setShowCreateModal(true)}
-          >
-            <Plus size={12} /> <span className="hidden sm:inline">{t('sharedFolderTab.createFile')}</span>
-          </button>
-          <button
-            className={cn(
-              'py-2 px-4 bg-transparent hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border border-[var(--border-color)]',
-              '!py-1.5 !px-3 text-[0.75rem] inline-flex items-center gap-1.5',
-            )}
-            onClick={handleDownload}
-            disabled={downloading}
-          >
-            <Download size={12} />{' '}
+          <ActionButton icon={Upload} onClick={() => fileInputRef.current?.click()}>
+            <span className="hidden sm:inline">{t('sharedFolderTab.uploadFile')}</span>
+          </ActionButton>
+          <ActionButton icon={Plus} onClick={() => setShowCreateModal(true)}>
+            <span className="hidden sm:inline">{t('sharedFolderTab.createFile')}</span>
+          </ActionButton>
+          <ActionButton icon={Download} onClick={handleDownload} disabled={downloading}>
             <span className="hidden sm:inline">{downloading ? t('common.loading') : t('sharedFolderTab.downloadFolder')}</span>
-          </button>
-          <button
-            className={cn(
-              'py-2 px-4 bg-transparent hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border border-[var(--border-color)]',
-              '!py-1.5 !px-3 text-[0.75rem] inline-flex items-center gap-1.5',
-            )}
-            onClick={fetchFiles}
-          >
-            <RefreshCw size={12} /> <span className="hidden sm:inline">{t('sharedFolderTab.refresh')}</span>
-          </button>
-        </div>
-      </div>
-
+          </ActionButton>
+          <ActionButton icon={RefreshCw} onClick={fetchFiles}>
+            <span className="hidden sm:inline">{t('sharedFolderTab.refresh')}</span>
+          </ActionButton>
+        </>
+      }
+    >
+      <div className="flex flex-col h-full p-3 md:p-6 gap-3 md:gap-5 min-h-0 overflow-y-auto md:overflow-hidden">
       {/* Info banner */}
       {info && (
         <div className="flex flex-wrap items-center gap-3 md:gap-6 py-2 px-3 md:px-4 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg text-[11px] md:text-[12px] text-[var(--text-muted)] shrink-0">
@@ -418,6 +385,7 @@ export default function SharedFolderTab() {
           onCreated={fetchFiles}
         />
       )}
-    </div>
+      </div>
+    </TabShell>
   );
 }

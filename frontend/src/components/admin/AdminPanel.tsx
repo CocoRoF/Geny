@@ -26,6 +26,7 @@ import {
   SendMessageChannelRow,
 } from '@/lib/api';
 import { Shield, Plug, Sparkles, AlertCircle, RefreshCw, FileText, Activity, Lock, Users, Server, BarChart3, Cog, GitMerge, Bell, MessageSquare } from 'lucide-react';
+import { TabShell, ActionButton } from '@/components/layout';
 
 interface PermissionRow {
   tool_name: string;
@@ -172,13 +173,17 @@ export default function AdminPanel() {
   }, []);
 
   return (
-    <div className="flex flex-col h-full overflow-auto bg-[var(--bg-primary)]">
-      {error && (
-        <div className="m-3 px-3 py-2 rounded-md bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.2)] text-[0.75rem] text-[var(--danger-color)] flex items-start gap-2">
-          <AlertCircle size={11} className="mt-[2px]" />
-          <span>{error}</span>
-        </div>
-      )}
+    <TabShell
+      title="Admin"
+      icon={Server}
+      subtitle="Read-only viewer for permissions / hooks / skills / runtime telemetry."
+      actions={
+        <ActionButton icon={RefreshCw} onClick={loadAll}>Refresh all</ActionButton>
+      }
+      error={error}
+      onDismissError={() => setError(null)}
+    >
+      <div className="h-full overflow-auto">
 
       {/* ── System Status (PR-F.6.2) ── */}
       <Section
@@ -659,6 +664,7 @@ export default function AdminPanel() {
           )}
         </div>
       </Section>
-    </div>
+      </div>
+    </TabShell>
   );
 }

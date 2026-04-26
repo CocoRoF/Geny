@@ -5,9 +5,10 @@ import { useAppStore } from '@/store/useAppStore';
 import { agentApi } from '@/lib/api';
 import { twMerge } from 'tailwind-merge';
 import { useI18n } from '@/lib/i18n';
-import { ChevronDown, ChevronRight, FolderOpen, Download, RefreshCw, FileJson, FileText, FileCode, Globe, Palette, ScrollText, Settings, File } from 'lucide-react';
+import { ChevronDown, ChevronRight, FolderOpen, Download, RefreshCw, FileJson, FileText, FileCode, Globe, Palette, ScrollText, Settings, File, HardDrive } from 'lucide-react';
 import type { StorageFile } from '@/types';
 import { FileViewer } from '@/components/file-viewer';
+import { TabShell, ActionButton, EmptyState } from '@/components/layout';
 
 function cn(...classes: (string | boolean | undefined | null)[]) {
   return twMerge(classes.filter(Boolean).join(' '));
@@ -151,30 +152,34 @@ export default function StorageTab() {
 
   if (!selectedSessionId) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="flex flex-col items-center justify-center py-12 px-4">
-          <h3 className="text-[1rem] font-medium text-[var(--text-secondary)] mb-2">{t('storageTab.selectSession')}</h3>
-          <p className="text-[0.8125rem] text-[var(--text-muted)]">{t('storageTab.selectSessionDesc')}</p>
-        </div>
-      </div>
+      <TabShell title={t('storageTab.title')} icon={HardDrive}>
+        <EmptyState
+          title={t('storageTab.selectSession')}
+          description={t('storageTab.selectSessionDesc')}
+        />
+      </TabShell>
     );
   }
 
   const tree = buildFileTree(files);
 
   return (
-    <div className="flex flex-col flex-1 p-3 md:p-6 gap-3 md:gap-5 min-h-0 overflow-hidden">
-      {/* Header */}
-      <div className="flex justify-between items-center pb-3 border-b border-[var(--border-color)] shrink-0">
-        <h3 className="text-[15px] md:text-[16px] font-semibold text-[var(--text-primary)]">{t('storageTab.title')}</h3>
-        <div className="flex items-center gap-2">
-          <button className={cn("py-2 px-4 bg-transparent hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border border-[var(--border-color)]", "!py-1.5 !px-3 text-[0.75rem] inline-flex items-center gap-1.5")} onClick={handleDownloadFolder} disabled={downloading}><Download size={12} /> {downloading ? t('common.loading') : t('storageTab.downloadFolder')}</button>
-          <button className={cn("py-2 px-4 bg-transparent hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border border-[var(--border-color)]", "!py-1.5 !px-3 text-[0.75rem] inline-flex items-center gap-1.5")} onClick={fetchFiles}><RefreshCw size={12} /> {t('common.refresh')}</button>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 min-h-0">
+    <TabShell
+      title={t('storageTab.title')}
+      icon={HardDrive}
+      actions={
+        <>
+          <ActionButton icon={Download} onClick={handleDownloadFolder} disabled={downloading}>
+            {downloading ? t('common.loading') : t('storageTab.downloadFolder')}
+          </ActionButton>
+          <ActionButton icon={RefreshCw} onClick={fetchFiles}>
+            {t('common.refresh')}
+          </ActionButton>
+        </>
+      }
+    >
+      <div className="h-full p-3 md:p-6">
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 h-full min-h-0">
         {/* File Tree */}
         <div className="md:w-[280px] shrink-0 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-[var(--border-radius)] p-3 overflow-y-auto max-h-[200px] md:max-h-none">
           {files.length === 0 ? (
@@ -209,6 +214,7 @@ export default function StorageTab() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </TabShell>
   );
 }

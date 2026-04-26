@@ -7,7 +7,9 @@ import { useI18n } from '@/lib/i18n';
 import {
   Search, Plus, RefreshCw, X, ChevronDown, ChevronRight,
   Trash2, Edit3, Save, FolderOpen, FileText, Upload, ExternalLink,
+  Database,
 } from 'lucide-react';
+import { TabShell, EmptyState } from '@/components/layout';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { twMerge } from 'tailwind-merge';
@@ -752,12 +754,12 @@ export default function MemoryTab() {
   // No session selected (and not global mode)
   if (!sessionId && !isGlobal) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="flex flex-col items-center justify-center py-12 px-4">
-          <h3 className="text-[1rem] font-medium text-[var(--text-secondary)] mb-2">Select a session</h3>
-          <p className="text-[0.8125rem] text-[var(--text-muted)]">Choose a session to view and manage its memory</p>
-        </div>
-      </div>
+      <TabShell title={t('memory')} icon={Database}>
+        <EmptyState
+          title="Select a session"
+          description="Choose a session to view and manage its memory"
+        />
+      </TabShell>
     );
   }
 
@@ -776,13 +778,11 @@ export default function MemoryTab() {
   const sortedTags = Object.entries(tags).sort((a, b) => b[1] - a[1]);
 
   return (
+    <TabShell title={t('memory')} icon={Database}>
     <div className="flex flex-col flex-1 p-3 md:p-6 gap-3 md:gap-5 min-h-0 overflow-hidden">
       {/* Header */}
       <div className="flex justify-between items-center pb-3 border-b border-[var(--border-color)] shrink-0">
         <div className="flex items-center gap-3">
-          <h3 className="text-[15px] md:text-[16px] font-semibold text-[var(--text-primary)]">
-            {t('memory')}
-          </h3>
           {/* Scope toggle */}
           <div className="flex items-center rounded-[var(--border-radius)] border border-[var(--border-color)] overflow-hidden">
             <button
@@ -914,5 +914,6 @@ export default function MemoryTab() {
         <MemoryEditModal detail={fileDetail} onClose={() => setShowEditModal(false)} onSave={handleUpdate} />
       )}
     </div>
+    </TabShell>
   );
 }

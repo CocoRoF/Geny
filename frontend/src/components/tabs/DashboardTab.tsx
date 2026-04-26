@@ -19,49 +19,48 @@ import TokenMeter from '@/components/dashboard/TokenMeter';
 import MutationLog from '@/components/dashboard/MutationLog';
 import StageStrategyHeatmap from '@/components/dashboard/StageStrategyHeatmap';
 import { LayoutDashboard } from 'lucide-react';
+import { TabShell, EmptyState } from '@/components/layout';
 
 export default function DashboardTab() {
   const selectedSessionId = useAppStore((s) => s.selectedSessionId);
 
   if (!selectedSessionId) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)] gap-2">
-        <LayoutDashboard size={28} className="opacity-40" />
-        <p className="text-[0.875rem]">Select a session to view its observability dashboard.</p>
-      </div>
+      <TabShell title="Dashboard" icon={LayoutDashboard} subtitle="Per-session observability">
+        <EmptyState
+          icon={LayoutDashboard}
+          title="No session selected"
+          description="Select a session to view its observability dashboard."
+        />
+      </TabShell>
     );
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[var(--bg-primary)]">
-      <div className="shrink-0 px-3 py-1.5 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] flex items-center gap-2">
-        <LayoutDashboard size={12} className="text-[var(--primary-color)]" />
-        <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-[var(--text-muted)]">
-          Observability
-        </span>
+    <TabShell title="Dashboard" icon={LayoutDashboard} subtitle="Per-session observability">
+      <div className="flex flex-col h-full overflow-hidden">
+        <TokenMeter sessionId={selectedSessionId} />
+
+        <div className="flex-1 overflow-auto">
+          <section>
+            <h3 className="text-[0.625rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider px-3 pt-3">
+              Stage execution
+            </h3>
+            <StageGrid sessionId={selectedSessionId} />
+          </section>
+
+          <section className="border-t border-[var(--border-color)] pt-2">
+            <StageStrategyHeatmap sessionId={selectedSessionId} />
+          </section>
+
+          <section className="border-t border-[var(--border-color)]">
+            <h3 className="text-[0.625rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider px-3 pt-3">
+              Pipeline mutations
+            </h3>
+            <MutationLog sessionId={selectedSessionId} />
+          </section>
+        </div>
       </div>
-
-      <TokenMeter sessionId={selectedSessionId} />
-
-      <div className="flex-1 overflow-auto">
-        <section>
-          <h3 className="text-[0.625rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider px-3 pt-3">
-            Stage execution
-          </h3>
-          <StageGrid sessionId={selectedSessionId} />
-        </section>
-
-        <section className="border-t border-[var(--border-color)] pt-2">
-          <StageStrategyHeatmap sessionId={selectedSessionId} />
-        </section>
-
-        <section className="border-t border-[var(--border-color)]">
-          <h3 className="text-[0.625rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider px-3 pt-3">
-            Pipeline mutations
-          </h3>
-          <MutationLog sessionId={selectedSessionId} />
-        </section>
-      </div>
-    </div>
+    </TabShell>
   );
 }

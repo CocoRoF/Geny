@@ -6,10 +6,11 @@ import { useCreatureStateStore } from '@/store/useCreatureStateStore';
 import { agentApi } from '@/lib/api';
 import { twMerge } from 'tailwind-merge';
 import { useI18n } from '@/lib/i18n';
-import { RotateCcw, Trash2, Pencil, Save, X, FileText, Eraser, Link2, Terminal, Brain, ExternalLink } from 'lucide-react';
+import { RotateCcw, Trash2, Pencil, Save, X, FileText, Eraser, Link2, Terminal, Brain, ExternalLink, Info } from 'lucide-react';
 import type { SessionInfo } from '@/types';
 import ConfirmModal from '@/components/modals/ConfirmModal';
 import EnvironmentDetailDrawer from '@/components/EnvironmentDetailDrawer';
+import { TabShell, EmptyState } from '@/components/layout';
 import CreatureStatePanel from '@/components/info/CreatureStatePanel';
 
 function cn(...classes: (string | boolean | undefined | null)[]) {
@@ -153,17 +154,25 @@ export default function InfoTab() {
 
   if (!selectedSessionId) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="flex flex-col items-center justify-center py-12 px-4">
-          <h3 className="text-[1rem] font-medium text-[var(--text-secondary)] mb-2">{t('info.selectSession')}</h3>
-          <p className="text-[0.8125rem] text-[var(--text-muted)]">{t('info.selectSessionDesc')}</p>
-        </div>
-      </div>
+      <TabShell title={t('info.sessionDetails')} icon={Info}>
+        <EmptyState
+          title={t('info.selectSession')}
+          description={t('info.selectSessionDesc')}
+        />
+      </TabShell>
     );
   }
 
-  if (loading) return <div className="flex items-center justify-center h-full text-[var(--text-muted)]">{t('common.loading')}</div>;
-  if (error) return <div className="flex items-center justify-center h-full text-[var(--danger-color)] text-[0.875rem]">{error}</div>;
+  if (loading) return (
+    <TabShell title={t('info.sessionDetails')} icon={Info}>
+      <EmptyState title={t('common.loading')} />
+    </TabShell>
+  );
+  if (error) return (
+    <TabShell title={t('info.sessionDetails')} icon={Info} error={error}>
+      <EmptyState title={t('info.sessionDetails')} description={error} />
+    </TabShell>
+  );
   if (!data) return null;
 
   const isDeleted = data.is_deleted === true;
@@ -222,16 +231,17 @@ export default function InfoTab() {
   ];
 
   return (
-    <div className="p-3 md:p-5 overflow-y-auto h-full bg-[var(--bg-primary)]">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h4 className="text-[16px] font-semibold text-[var(--text-primary)] m-0">{data.session_name || t('info.sessionDetails')}</h4>
+    <TabShell
+      title={data.session_name || t('info.sessionDetails')}
+      icon={Info}
+      actions={
         <span className="text-[11px] font-semibold py-[3px] px-2.5 rounded-[12px] uppercase tracking-[0.5px]"
               style={getStatusBadgeStyle()}>
           {isDeleted ? t('info.deleted') : (data.status || t('info.unknown'))}
         </span>
-      </div>
-
+      }
+    >
+    <div className="p-3 md:p-5 overflow-y-auto h-full">
       {/* Sub-tab navigation: VTuber / Status / Worker */}
       <div className="flex items-center gap-1 mb-4 border-b border-[var(--border-color)]">
         {([
@@ -597,5 +607,6 @@ export default function InfoTab() {
         />
       )}
     </div>
+    </TabShell>
   );
 }
