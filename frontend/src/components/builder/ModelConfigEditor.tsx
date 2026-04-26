@@ -55,12 +55,21 @@ export interface ModelConfigEditorProps {
 }
 
 function snapshotToDraft(src: Record<string, unknown>): ModelDraft {
-  const tt = typeof src.thinking_type === 'string' && THINKING_TYPE_VALUES.includes(src.thinking_type as ThinkingType)
-    ? (src.thinking_type as ThinkingType)
-    : '';
-  const td = typeof src.thinking_display === 'string' && THINKING_DISPLAY_VALUES.includes(src.thinking_display as ThinkingDisplay)
-    ? (src.thinking_display as ThinkingDisplay)
-    : '';
+  // Cast the readonly tuples through ``readonly string[]`` so .includes()
+  // accepts any string — the union types include ``''`` (empty = use
+  // global), but the tuple itself doesn't list it. Without this cast
+  // ``includes(... as ThinkingDisplay)`` fails to compile because
+  // ``''`` isn't a member of the tuple's element type.
+  const tt =
+    typeof src.thinking_type === 'string' &&
+    (THINKING_TYPE_VALUES as readonly string[]).includes(src.thinking_type)
+      ? (src.thinking_type as ThinkingType)
+      : '';
+  const td =
+    typeof src.thinking_display === 'string' &&
+    (THINKING_DISPLAY_VALUES as readonly string[]).includes(src.thinking_display)
+      ? (src.thinking_display as ThinkingDisplay)
+      : '';
   const stop = Array.isArray(src.stop_sequences)
     ? (src.stop_sequences as string[]).join('\n')
     : '';
