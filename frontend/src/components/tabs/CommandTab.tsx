@@ -11,6 +11,7 @@ import StepDetailPanel from '@/components/execution/StepDetailPanel';
 import HITLApprovalModal from '@/components/modals/HITLApprovalModal';
 import RestoreCheckpointModal from '@/components/modals/RestoreCheckpointModal';
 import SkillPanel from '@/components/skills/SkillPanel';
+import SlashCommandAutocomplete from '@/components/SlashCommandAutocomplete';
 import {
   Square,
   Loader2,
@@ -307,6 +308,53 @@ export default function CommandTab() {
   const handleExecute = useCallback(async () => {
     if (!selectedSessionId || !sessionData?.input?.trim()) return;
     const prompt = sessionData.input.trim();
+
+    // PR-D.3.2 — slash command server-side dispatch.
+    // When the input begins with '/', try the registered command first.
+    // - matched + follow_up_prompt → swap input to the prompt and run
+    //   the regular pipeline path (the command's "set up the prompt
+    //   for the LLM" semantics).
+    // - matched + content only → render system message inline, no LLM
+    //   round trip.
+    // - not matched → fall through to the regular execute below.
+    if (prompt.startsWith('/')) {
+      try {
+        const { slashCommandApi } = await import('@/lib/api');
+        const resp = await slashCommandApi.execute(prompt);
+        if (resp.matched) {
+          if (resp.follow_up_prompt) {
+            // Re-run with the substituted prompt; clear the slash input.
+            updateSessionData(selectedSessionId, { input: resp.follow_up_prompt });
+            // Recurse via setTimeout so the input update lands before
+            // handleExecute reads it.
+            setTimeout(() => handleExecute(), 0);
+            return;
+          }
+          // Pure server-side dispatch — show the result as a system
+          // log entry and stop. No LLM call.
+          const cur = useAppStore.getState().sessionDataCache[selectedSessionId];
+          updateSessionData(selectedSessionId, {
+            input: '',
+            logEntries: [
+              ...(cur?.logEntries || []),
+              {
+                level: 'INFO',
+                message: resp.content || '(empty result)',
+                timestamp: new Date().toISOString(),
+                metadata: { source: 'slash_command', success: resp.success },
+              } as unknown as LogEntry,
+            ],
+          });
+          if (textareaRef.current) textareaRef.current.style.height = 'auto';
+          return;
+        }
+      } catch (err) {
+        // Slash dispatch failed — fall through to the regular pipeline
+        // path; the prompt may still be a valid LLM input.
+        console.warn('slash dispatch failed', err);
+      }
+    }
+
     setSelectedStepIndex(null);
     const now = Date.now();
     executionStartRef.current = now;
@@ -620,6 +668,24 @@ export default function CommandTab() {
 
       {/* ── Command input ── */}
       <div className="shrink-0 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2">
+        {/* PR-D.3.2 — slash command autocomplete; renders nothing when
+            input doesn't start with '/'. Selecting replaces the slash
+            token with /<name> + space. */}
+        {selectedSessionId && (sessionData?.input ?? '').trimStart().startsWith('/') && (
+          <div className="mb-2">
+            <SlashCommandAutocomplete
+              inputValue={sessionData?.input ?? ''}
+              onSelect={(name) => {
+                const cur = (sessionData?.input ?? '');
+                // Preserve everything past the first whitespace token (= args).
+                const tail = cur.trimStart().replace(/^\/\S*\s?/, '');
+                const next = `/${name} ${tail}`;
+                updateSessionData(selectedSessionId, { input: next });
+                textareaRef.current?.focus();
+              }}
+            />
+          </div>
+        )}
         <textarea
           ref={textareaRef}
           className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-md px-3 py-[6px] text-[var(--text-primary)] text-[0.8125rem] resize-none outline-none placeholder:text-[var(--text-muted)] leading-relaxed max-h-[160px] transition-all focus:border-[var(--primary-color)] focus:shadow-[0_0_0_2px_rgba(59,130,246,0.1)]"
