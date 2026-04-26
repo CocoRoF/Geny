@@ -17,6 +17,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import {
   permissionApi,
   PermissionRulePayload,
@@ -164,6 +165,9 @@ export function PermissionsTab() {
         const ins = await permissionApi.inspect();
         setInspect(ins);
       } catch {/* keep stale inspect — no harm */}
+      toast.success(
+        editingIdx === null ? 'Permission rule added' : 'Permission rule updated',
+      );
       setEditorOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -187,6 +191,7 @@ export function PermissionsTab() {
         const ins = await permissionApi.inspect();
         setInspect(ins);
       } catch {/* keep stale inspect */}
+      toast.success(`Removed rule for ${target.tool_name}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }

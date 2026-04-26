@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { customMcpApi, CustomMcpServerSummary, CustomMcpServerDetail } from '@/lib/api';
 import { Plus, RefreshCw, Save, Trash2, Plug } from 'lucide-react';
 import {
@@ -127,6 +128,7 @@ export function McpServersTab() {
       } else {
         await customMcpApi.create(form.name, parsed, form.description || undefined);
       }
+      toast.success(editingExisting ? `Updated ${form.name}` : `Created ${form.name}`);
       setEditorOpen(false);
       await refresh();
     } catch (e) {
@@ -141,6 +143,7 @@ export function McpServersTab() {
     try {
       await customMcpApi.remove(name);
       if (active === name) setActive(null);
+      toast.success(`Deleted ${name}`);
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

@@ -49,7 +49,7 @@ export default function Header() {
   const devModeTitle = devMode ? t('header.normalMode') : t('header.devMode');
 
   return (
-    <header className="flex justify-between items-center px-3 md:px-6 h-12 md:h-14 bg-[var(--bg-secondary)] border-b border-[var(--border-color)]">
+    <header className="flex justify-between items-center px-3 md:px-6 h-12 md:h-14 bg-[hsl(var(--card))] border-b border-[hsl(var(--border))]">
       <div className="flex items-center gap-2 md:gap-3">
         {/* Mobile hamburger button */}
         <button

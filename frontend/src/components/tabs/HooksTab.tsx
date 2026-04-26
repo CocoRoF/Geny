@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import {
   hookApi,
   HOOK_EVENTS,
@@ -157,6 +158,7 @@ export function HooksTab() {
         const ins = await hookApi.inspect();
         setInspect(ins);
       } catch {/* ignore */}
+      toast.success(editingTarget ? 'Hook updated' : 'Hook added');
       setEditorOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -178,6 +180,7 @@ export function HooksTab() {
         const ins = await hookApi.inspect();
         setInspect(ins);
       } catch {/* ignore */}
+      toast.success(`Removed hook ${row.event}#${row.idx}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }

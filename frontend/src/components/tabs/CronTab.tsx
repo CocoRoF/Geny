@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect, useCallback, Fragment } from 'react';
+import { toast } from 'sonner';
 import { cronApi, CronJobRecord, CronJobCreateRequest, CronJobHistoryEntry, CronStatusResponse } from '@/lib/api';
 import { RefreshCw, Plus, Trash2, Play, Power, ChevronDown, ChevronRight, Clock } from 'lucide-react';
 import {
@@ -117,6 +118,7 @@ export function CronTab() {
       if (!window.confirm(`Delete cron job "${name}"?`)) return;
       try {
         await cronApi.delete(name);
+        toast.success(`Deleted ${name}`);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -130,7 +132,9 @@ export function CronTab() {
     async (name: string) => {
       try {
         const res = await cronApi.runNow(name);
-        alert(`Adhoc fired. task_id=${res.task_id}`);
+        toast.success(`Adhoc fired ${name}`, {
+          description: `task_id=${res.task_id}`,
+        });
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -145,6 +149,7 @@ export function CronTab() {
       const target = row.status === 'enabled' ? 'disabled' : 'enabled';
       try {
         await cronApi.setStatus(row.name, target);
+        toast.success(`${row.name} → ${target}`);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -397,6 +402,7 @@ function CreateModal({
     };
     try {
       await cronApi.create(req);
+      toast.success(`Created cron job ${req.name}`);
       onCreated();
     } catch (err) {
       onError(err instanceof Error ? err.message : String(err));

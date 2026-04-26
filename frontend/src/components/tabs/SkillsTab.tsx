@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { agentApi, skillsApi, frameworkSettingsApi, SkillDetail } from '@/lib/api';
 import { Sparkles, Plus, Pencil, Trash2, RefreshCw, Power } from 'lucide-react';
 import {
@@ -176,6 +177,7 @@ export function SkillsTab() {
       } else {
         await skillsApi.createUserSkill(payload);
       }
+      toast.success(editingExisting ? `Updated /${payload.id}` : `Created /${payload.id}`);
       setEditorOpen(false);
       await refresh();
     } catch (e) {
@@ -189,6 +191,7 @@ export function SkillsTab() {
     if (!window.confirm(`Delete user skill /${id}?`)) return;
     try {
       await skillsApi.deleteUserSkill(id);
+      toast.success(`Deleted /${id}`);
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

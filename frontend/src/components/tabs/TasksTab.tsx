@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import {
   backgroundTaskApi,
@@ -154,6 +155,7 @@ export function TasksTab() {
     setError(null);
     try {
       await backgroundTaskApi.create(sessionId, newKind.trim() || 'shell', payload);
+      toast.success(`Submitted ${newKind || 'shell'} task`);
       setCreateOpen(false);
       setNewPayload('{}');
       setNewSubagentType('');
@@ -183,9 +185,9 @@ export function TasksTab() {
         payload: { ...row.payload, scheduled_from_task: row.task_id },
         description: `Cloned from background task ${row.task_id}`,
       });
-      window.alert(
-        `Scheduled. View it in the Cron tab as task-${row.task_id.slice(0, 12)}.`,
-      );
+      toast.success(`Scheduled as task-${row.task_id.slice(0, 12)}`, {
+        description: 'View it in the Cron tab.',
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
