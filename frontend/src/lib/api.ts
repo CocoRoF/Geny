@@ -742,7 +742,31 @@ export const adminTelemetryApi = {
     apiCall<RecentToolEventsResponse>(`/api/admin/recent-tool-events?limit=${limit}`),
   recentPermissions: (limit = 50) =>
     apiCall<RecentPermissionsResponse>(`/api/admin/recent-permissions?limit=${limit}`),
+  // PR-F.6.1/2/5
+  systemStatus: () => apiCall<SystemStatusResponse>('/api/admin/system-status'),
 };
+
+export interface SubsystemStatusRow {
+  name: string;
+  present: boolean;
+  detail: string | null;
+  extra: Record<string, unknown> | null;
+}
+
+export interface SystemStatusResponse {
+  subsystems: SubsystemStatusRow[];
+  cron: { running?: boolean; cycle_seconds?: number | null; jobs?: number | null } | null;
+  task_runner: { running?: boolean; in_flight?: number | null; max_concurrency?: number | null } | null;
+  started_at: string | null;
+}
+
+// PR-F.6.3
+export interface CronStatusResponse {
+  running: boolean;
+  cycle_seconds: number | null;
+  jobs_total: number;
+  jobs_enabled: number;
+}
 
 // ==================== Per-agent workspace (PR-E.4.3) =============
 
@@ -963,6 +987,9 @@ export const cronApi = {
     apiCall<CronJobHistoryResponse>(
       `/api/cron/jobs/${encodeURIComponent(name)}/history?limit=${limit}`,
     ),
+
+  // PR-F.6.3
+  status: () => apiCall<CronStatusResponse>('/api/cron/status'),
 };
 
 // ==================== Shared Folder API ====================

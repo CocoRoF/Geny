@@ -1,8 +1,11 @@
 """Read-only admin endpoints (G13).
 
-- GET /api/permissions/list   — current rule list with source breakdown
-- GET /api/hooks/list         — current hook config + env opt-in status
-- GET /api/admin/hook-fires   — recent HookRunner audit events (PR-E.3.2)
+- GET /api/permissions/list      — current rule list with source breakdown
+- GET /api/hooks/list            — current hook config + env opt-in status
+- GET /api/admin/hook-fires      — recent HookRunner audit events (PR-E.3.2)
+- GET /api/admin/recent-tool-events  — recent tool event ring (PR-E.4.1)
+- GET /api/admin/recent-permissions  — recent permission decisions (PR-E.4.2)
+- GET /api/admin/system-status   — subsystem health snapshot (PR-F.6.1/2/5)
 
 Skills are already covered by /api/skills/list (G7.4).
 """
@@ -15,7 +18,7 @@ from logging import getLogger
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from controller.auth_controller import require_auth
@@ -349,4 +352,122 @@ async def recent_permissions(
         decisions=[PermissionDecisionRow(**r) for r in rows],
         capacity=capacity(),
         returned=len(rows),
+    )
+
+
+# ── System status (PR-F.6.1, PR-F.6.3, PR-F.6.5) ───────────────────
+
+
+class SubsystemStatus(BaseModel):
+    name: str
+    present: bool
+    detail: Optional[str] = None
+    extra: Optional[Dict[str, Any]] = None
+
+
+class SystemStatusResponse(BaseModel):
+    subsystems: List[SubsystemStatus] = Field(default_factory=list)
+    cron: Optional[Dict[str, Any]] = None  # {running, jobs, cycle_seconds}
+    task_runner: Optional[Dict[str, Any]] = None  # {running, in_flight, max_concurrency}
+    started_at: Optional[str] = None
+
+
+_LIFESPAN_KEYS = (
+    "app_db",
+    "auth_service",
+    "config_manager",
+    "tool_loader",
+    "mcp_loader",
+    "global_mcp_config",
+    "shared_folder_manager",
+    "ws_abandoned_detector",
+    "environment_service",
+    "task_runner",
+    "cron_runner",
+    "cron_store",
+    "state_provider",
+)
+
+
+def _subsystem_row(state: Any, key: str) -> SubsystemStatus:
+    val = getattr(state, key, None)
+    present = val is not None
+    detail = None
+    if present:
+        try:
+            detail = type(val).__name__
+        except Exception:
+            detail = str(val)
+    return SubsystemStatus(name=key, present=present, detail=detail)
+
+
+@router.get(
+    "/admin/system-status",
+    response_model=SystemStatusResponse,
+    summary="Subsystem health snapshot",
+)
+async def system_status(request: Request, _auth: dict = Depends(require_auth)):
+    """One-call snapshot of every lifespan-installed subsystem plus
+    the cron + task runner liveness signals.
+
+    Pairs F.6.1 (lifespan inventory), F.6.3 (cron status), and F.6.5
+    (task-runner stats) so the AdminPanel "System Status" panel
+    needs exactly one request.
+    """
+    state = request.app.state
+    rows = [_subsystem_row(state, k) for k in _LIFESPAN_KEYS]
+
+    # Cron runner introspection. The runner doesn't expose a public
+    # "running" — fall back to the internal _daemon task's done()
+    # state which is observable across executor versions.
+    cron_block: Optional[Dict[str, Any]] = None
+    cron_runner = getattr(state, "cron_runner", None)
+    cron_store = getattr(state, "cron_store", None)
+    if cron_runner is not None:
+        daemon = getattr(cron_runner, "_daemon", None)
+        running = bool(daemon is not None and not daemon.done())
+        cycle = getattr(cron_runner, "_cycle", None)
+        jobs_count = None
+        if cron_store is not None:
+            try:
+                jobs = await cron_store.list()
+                jobs_count = len(jobs)
+            except Exception:
+                jobs_count = None
+        cron_block = {
+            "running": running,
+            "cycle_seconds": cycle,
+            "jobs": jobs_count,
+        }
+
+    # Task runner queue stats — best-effort introspection.
+    tr_block: Optional[Dict[str, Any]] = None
+    task_runner = getattr(state, "task_runner", None)
+    if task_runner is not None:
+        # geny-executor BackgroundTaskRunner exposes _registry +
+        # _max_concurrency by convention; lookups are guarded.
+        registry = getattr(task_runner, "_registry", None)
+        in_flight = None
+        if registry is not None:
+            list_method = getattr(registry, "list", None)
+            try:
+                if callable(list_method):
+                    rows_ = list_method()
+                    in_flight = sum(
+                        1 for r in rows_
+                        if getattr(r, "status", None)
+                        and getattr(r.status, "value", str(r.status)) in {"pending", "running"}
+                    )
+            except Exception:
+                in_flight = None
+        tr_block = {
+            "running": True,
+            "in_flight": in_flight,
+            "max_concurrency": getattr(task_runner, "_max_concurrency", None),
+        }
+
+    return SystemStatusResponse(
+        subsystems=rows,
+        cron=cron_block,
+        task_runner=tr_block,
     )

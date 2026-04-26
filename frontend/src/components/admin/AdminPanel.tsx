@@ -17,8 +17,9 @@ import {
   RecentToolEvent,
   RecentPermissionDecision,
   SubagentTypeRow,
+  SystemStatusResponse,
 } from '@/lib/api';
-import { Shield, Plug, Sparkles, AlertCircle, RefreshCw, FileText, Activity, Lock, Users } from 'lucide-react';
+import { Shield, Plug, Sparkles, AlertCircle, RefreshCw, FileText, Activity, Lock, Users, Server } from 'lucide-react';
 
 interface PermissionRow {
   tool_name: string;
@@ -103,6 +104,8 @@ export default function AdminPanel() {
   const [recentPerms, setRecentPerms] = useState<RecentPermissionDecision[]>([]);
   // PR-F.3.4 — Subagent types panel.
   const [subagentTypes, setSubagentTypes] = useState<SubagentTypeRow[]>([]);
+  // PR-F.6.2 — System status snapshot.
+  const [systemStatus, setSystemStatus] = useState<SystemStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadAll = () => {
@@ -125,6 +128,9 @@ export default function AdminPanel() {
     subagentTypeApi.list()
       .then((r) => setSubagentTypes(r.types))
       .catch((e) => setError((p) => p ?? `subagent types: ${e.message}`));
+    adminTelemetryApi.systemStatus()
+      .then(setSystemStatus)
+      .catch((e) => setError((p) => p ?? `system status: ${e.message}`));
   };
 
   useEffect(() => {
@@ -145,6 +151,59 @@ export default function AdminPanel() {
           <span>{error}</span>
         </div>
       )}
+
+      {/* ── System Status (PR-F.6.2) ── */}
+      <Section
+        title="System status"
+        Icon={Server}
+        count={systemStatus?.subsystems.filter((s) => s.present).length ?? 0}
+        onReload={loadAll}
+      >
+        <div className="px-3 text-[0.6875rem]">
+          {!systemStatus ? (
+            <div className="text-[var(--text-muted)] py-2">Loading…</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-1 mb-2">
+                {systemStatus.subsystems.map((s) => (
+                  <div
+                    key={s.name}
+                    className="flex items-center gap-1.5 truncate"
+                    title={s.detail ?? ''}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                        s.present ? 'bg-[var(--success-color)]' : 'bg-[var(--text-muted)]'
+                      }`}
+                    />
+                    <span className={s.present ? '' : 'text-[var(--text-muted)]'}>{s.name}</span>
+                  </div>
+                ))}
+              </div>
+              {systemStatus.cron && (
+                <div className="text-[var(--text-muted)] mb-1">
+                  cron: {systemStatus.cron.running ? 'running' : 'stopped'}
+                  {systemStatus.cron.cycle_seconds != null && (
+                    <> · cycle {systemStatus.cron.cycle_seconds}s</>
+                  )}
+                  {systemStatus.cron.jobs != null && <> · {systemStatus.cron.jobs} jobs</>}
+                </div>
+              )}
+              {systemStatus.task_runner && (
+                <div className="text-[var(--text-muted)]">
+                  task_runner: {systemStatus.task_runner.running ? 'running' : 'stopped'}
+                  {systemStatus.task_runner.in_flight != null && (
+                    <> · in-flight {systemStatus.task_runner.in_flight}</>
+                  )}
+                  {systemStatus.task_runner.max_concurrency != null && (
+                    <> / max {systemStatus.task_runner.max_concurrency}</>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </Section>
 
       {/* ── Recent Activity (PR-E.4.4) ── */}
       <Section title="Recent activity" Icon={Activity} count={recentTools.length} onReload={loadAll}>

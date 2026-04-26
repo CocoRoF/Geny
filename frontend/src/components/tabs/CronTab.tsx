@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useCallback, FormEvent, Fragment } from 'react';
-import { cronApi, CronJobRecord, CronJobCreateRequest, CronJobHistoryEntry } from '@/lib/api';
+import { cronApi, CronJobRecord, CronJobCreateRequest, CronJobHistoryEntry, CronStatusResponse } from '@/lib/api';
 import { twMerge } from 'tailwind-merge';
 import { RefreshCw, Plus, Trash2, Play, Power, ChevronDown, ChevronRight } from 'lucide-react';
 
@@ -59,6 +59,8 @@ export function CronTab() {
   // PR-F.4.3 — per-row expansion + cached history.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [histories, setHistories] = useState<Record<string, CronJobHistoryEntry[]>>({});
+  // PR-F.6.4 — runner status badge in the header.
+  const [status, setStatus] = useState<CronStatusResponse | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -78,6 +80,15 @@ export function CronTab() {
     const id = setInterval(refresh, POLL_INTERVAL_MS);
     return () => clearInterval(id);
   }, [refresh]);
+
+  useEffect(() => {
+    const load = () => {
+      cronApi.status().then(setStatus).catch(() => {});
+    };
+    load();
+    const id = setInterval(load, POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
 
   const handleDelete = useCallback(
     async (name: string) => {
@@ -141,7 +152,22 @@ export function CronTab() {
   return (
     <div className="flex flex-col h-full p-4 gap-4">
       <header className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Cron Jobs</h2>
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          Cron Jobs
+          {status && (
+            <span
+              className={cn(
+                'text-[0.625rem] px-1.5 py-0.5 rounded border font-mono uppercase tracking-wider',
+                status.running
+                  ? 'bg-green-100 text-green-800 border-green-300'
+                  : 'bg-red-100 text-red-800 border-red-300',
+              )}
+              title={`cycle ${status.cycle_seconds ?? '?'}s · ${status.jobs_enabled}/${status.jobs_total} enabled`}
+            >
+              {status.running ? 'live' : 'down'} · {status.jobs_enabled}/{status.jobs_total}
+            </span>
+          )}
+        </h2>
         <div className="flex gap-2">
           <button
             type="button"

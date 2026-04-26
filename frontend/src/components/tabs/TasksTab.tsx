@@ -17,6 +17,7 @@ import {
   cronApi,
   subagentTypeApi,
   SubagentTypeRow,
+  adminTelemetryApi,
 } from '@/lib/api';
 import { twMerge } from 'tailwind-merge';
 import { RefreshCw, Square, Eye, Plus, X, Clock } from 'lucide-react';
@@ -59,11 +60,28 @@ export function TasksTab() {
   const [newPayload, setNewPayload] = useState('{}');
   const [newSubagentType, setNewSubagentType] = useState<string>('');
   const [subagentTypes, setSubagentTypes] = useState<SubagentTypeRow[]>([]);
+  // PR-F.6.6 — runner capacity meter.
+  const [capacity, setCapacity] = useState<{ in_flight: number | null; max: number | null } | null>(null);
 
   useEffect(() => {
     subagentTypeApi.list()
       .then((r) => setSubagentTypes(r.types))
       .catch(() => {/* viewer is optional */});
+    const loadStatus = () => {
+      adminTelemetryApi.systemStatus()
+        .then((r) => {
+          if (r.task_runner) {
+            setCapacity({
+              in_flight: r.task_runner.in_flight ?? null,
+              max: r.task_runner.max_concurrency ?? null,
+            });
+          }
+        })
+        .catch(() => {});
+    };
+    loadStatus();
+    const id = setInterval(loadStatus, POLL_INTERVAL_MS);
+    return () => clearInterval(id);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -172,7 +190,17 @@ export function TasksTab() {
   return (
     <div className="flex flex-col h-full p-4 gap-4">
       <header className="flex items-center justify-between gap-4">
-        <h2 className="text-lg font-semibold">Background Tasks</h2>
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          Background Tasks
+          {capacity && (capacity.in_flight !== null || capacity.max !== null) && (
+            <span
+              className="text-[0.625rem] px-1.5 py-0.5 rounded border font-mono uppercase tracking-wider bg-blue-100 text-blue-800 border-blue-300"
+              title="Process-wide BackgroundTaskRunner load"
+            >
+              {capacity.in_flight ?? '?'} / {capacity.max ?? '∞'}
+            </span>
+          )}
+        </h2>
         <div className="flex items-center gap-2">
           <select
             value={statusFilter}
