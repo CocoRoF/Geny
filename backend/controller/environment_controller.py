@@ -47,6 +47,8 @@ from service.environment.schemas import (
     ShareLinkResponse,
     UpdateEnvironmentRequest,
     UpdateManifestRequest,
+    UpdateModelConfigRequest,
+    UpdatePipelineConfigRequest,
     UpdateStageTemplateRequest,
 )
 
@@ -334,6 +336,48 @@ async def replace_manifest(
         raise HTTPException(404, "Environment not found")
     detail = _detail_response(record)
     # D.3 — see update_environment.
+    detail.affected_sessions = _affected_sessions_summary(env_id)
+    return detail
+
+
+@router.patch("/{env_id}/pipeline", response_model=EnvironmentDetailResponse)
+async def patch_pipeline(
+    request: Request,
+    env_id: str,
+    body: UpdatePipelineConfigRequest,
+    auth: dict = Depends(require_auth),
+):
+    """P.1 (cycle 20260426_2) — partial update of ``manifest.pipeline``.
+
+    Shallow-merge: keys not present in the request body are preserved
+    on disk. ``model_dump(exclude_none=True)`` filters out unset fields
+    so an explicit ``null`` would clear (currently unused — none of the
+    fields are nullable in this schema).
+    """
+    changes = body.model_dump(exclude_none=True)
+    try:
+        record = _env_svc(request).update_pipeline(env_id, changes)
+    except EnvironmentNotFoundError:
+        raise HTTPException(404, "Environment not found")
+    detail = _detail_response(record)
+    detail.affected_sessions = _affected_sessions_summary(env_id)
+    return detail
+
+
+@router.patch("/{env_id}/model", response_model=EnvironmentDetailResponse)
+async def patch_model(
+    request: Request,
+    env_id: str,
+    body: UpdateModelConfigRequest,
+    auth: dict = Depends(require_auth),
+):
+    """P.1 (cycle 20260426_2) — partial update of ``manifest.model``."""
+    changes = body.model_dump(exclude_none=True)
+    try:
+        record = _env_svc(request).update_model(env_id, changes)
+    except EnvironmentNotFoundError:
+        raise HTTPException(404, "Environment not found")
+    detail = _detail_response(record)
     detail.affected_sessions = _affected_sessions_summary(env_id)
     return detail
 

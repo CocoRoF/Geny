@@ -94,6 +94,55 @@ class UpdateStageTemplateRequest(BaseModel):
     active: Optional[bool] = None
 
 
+class UpdatePipelineConfigRequest(BaseModel):
+    """P.1 (cycle 20260426_2) — partial PipelineConfig update.
+
+    Fields mirror ``geny_executor.core.config.PipelineConfig``. Any
+    field set to ``None`` is ignored (existing value preserved); to
+    explicitly clear an optional field, omit the key entirely (``model_dump
+    (exclude_none=True)`` on the controller side).
+
+    Note: ``model`` and ``api_key`` are intentionally not editable here:
+    - ``model`` is its own block (use ``UpdateModelConfigRequest``).
+    - ``api_key`` is a deploy-time secret; never accepted via the API.
+    """
+
+    name: Optional[str] = None
+    base_url: Optional[str] = None
+    max_iterations: Optional[int] = Field(None, ge=1)
+    cost_budget_usd: Optional[float] = Field(None, ge=0.0)
+    context_window_budget: Optional[int] = Field(None, ge=1024)
+    stream: Optional[bool] = None
+    single_turn: Optional[bool] = None
+    artifacts: Optional[Dict[str, str]] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class UpdateModelConfigRequest(BaseModel):
+    """P.1 (cycle 20260426_2) — partial ModelConfig update.
+
+    Fields mirror ``geny_executor.core.config.ModelConfig``. Any field
+    set to ``None`` is ignored.
+    """
+
+    model: Optional[str] = None
+    max_tokens: Optional[int] = Field(None, ge=1)
+    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
+    top_p: Optional[float] = Field(None, ge=0.0, le=1.0)
+    top_k: Optional[int] = Field(None, ge=1)
+    stop_sequences: Optional[List[str]] = None
+    thinking_enabled: Optional[bool] = None
+    thinking_budget_tokens: Optional[int] = Field(None, ge=1)
+    thinking_type: Optional[str] = Field(
+        None,
+        description='Currently "enabled" | "disabled" | "adaptive"',
+    )
+    thinking_display: Optional[str] = Field(
+        None,
+        description='"summarized" | "omitted" | None',
+    )
+
+
 class DuplicateEnvironmentRequest(BaseModel):
     new_name: str
 

@@ -467,6 +467,47 @@ class EnvironmentService:
         manifest.metadata.updated_at = _iso_now()
         return self._write_manifest(env_id, manifest)
 
+    def update_pipeline(
+        self,
+        env_id: str,
+        changes: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """P.1 (cycle 20260426_2) — patch the manifest's ``pipeline``
+        block with shallow-merge semantics.
+
+        ``changes`` is a dict of ``PipelineConfig`` field names → new
+        values. Existing keys not in ``changes`` are preserved. Use this
+        instead of :meth:`update_manifest` for granular edits so the UI
+        doesn't need to round-trip the whole manifest just to change
+        ``max_iterations``.
+        """
+        manifest = self.load_manifest(env_id)
+        if manifest is None:
+            raise EnvironmentNotFoundError(env_id)
+        if changes:
+            manifest.pipeline.update(changes)
+        manifest.metadata.updated_at = _iso_now()
+        return self._write_manifest(env_id, manifest)
+
+    def update_model(
+        self,
+        env_id: str,
+        changes: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """P.1 (cycle 20260426_2) — patch the manifest's ``model`` block
+        with shallow-merge semantics.
+
+        ``changes`` is a dict of ``ModelConfig`` field names → new
+        values. Existing keys not in ``changes`` are preserved.
+        """
+        manifest = self.load_manifest(env_id)
+        if manifest is None:
+            raise EnvironmentNotFoundError(env_id)
+        if changes:
+            manifest.model.update(changes)
+        manifest.metadata.updated_at = _iso_now()
+        return self._write_manifest(env_id, manifest)
+
     def duplicate(self, env_id: str, new_name: str) -> Optional[str]:
         """Deep-copy the environment under a fresh id + name."""
         manifest = self.load_manifest(env_id)
