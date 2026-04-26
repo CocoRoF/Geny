@@ -146,6 +146,17 @@ export interface ChatRoomMessage {
   /** Attachment metadata (image / file refs uploaded via POST /api/uploads). */
   attachments?: ChatAttachment[];
   meta?: Record<string, unknown>;
+  /**
+   * TTS-fix (2026-04-26): backend-tagged origin so the frontend can
+   * suppress auto-TTS for messages the user didn't initiate.
+   *
+   * Known values:
+   * - ``thinking_trigger`` — VTuber idle / heartbeat output.
+   * - ``sub_worker_reply`` — VTuber's response to a [SUB_WORKER_RESULT].
+   * - ``inbox_drain`` — sub-worker output forwarded to the VTuber.
+   * - ``undefined`` — direct user-initiated reply (default; spoken).
+   */
+  source?: string | null;
 }
 
 /**

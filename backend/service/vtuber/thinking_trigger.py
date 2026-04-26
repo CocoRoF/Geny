@@ -844,6 +844,13 @@ class ThinkingTriggerService:
                 "role": role,
                 "duration_ms": result.duration_ms,
                 "cost_usd": result.cost_usd,
+                # TTS-fix (2026-04-26): tag the message source so the
+                # frontend can suppress auto-TTS for trigger-driven
+                # outputs (the user didn't initiate this; auto-speaking
+                # would queue voice on top of any in-flight turn). The
+                # message still appears in the chat panel; users can
+                # click the per-message Speak button if they want it.
+                "source": "thinking_trigger",
             })
 
             logger.info(

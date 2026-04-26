@@ -1128,6 +1128,11 @@ def _save_drain_to_chat_room(session_id: str, result: 'ExecutionResult') -> None
             "role": role,
             "duration_ms": result.duration_ms,
             "cost_usd": result.cost_usd,
+            # TTS-fix (2026-04-26): tag the source so the frontend can
+            # suppress auto-TTS for inbox-drain outputs (the user
+            # didn't initiate this turn). Mirrors the
+            # ``thinking_trigger`` / ``sub_worker_reply`` markers.
+            "source": "inbox_drain",
         })
 
         # Notify SSE listeners

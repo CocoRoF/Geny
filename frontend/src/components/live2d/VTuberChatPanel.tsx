@@ -142,6 +142,12 @@ export default function VTuberChatPanel({
   const isTabVisibleRef = useRef(typeof document !== 'undefined' ? !document.hidden : true);
   const pendingTTSRef = useRef<{ text: string; emotion: string } | null>(null);
 
+  // TTS-fix (2026-04-26): per-msg-id dedup so duplicate WS subscriptions
+  // (StrictMode double-mount, panel re-render with stale closure, etc.)
+  // can't make the same message trigger TTS twice. Each message id can
+  // only enter the TTS pipeline once for the lifetime of this panel.
+  const ttsHandledMsgIdsRef = useRef<Set<string>>(new Set());
+
   // TTS store
   const ttsEnabled = useVTuberStore((s) => s.ttsEnabled);
   const ttsSpeaking = useVTuberStore((s) => s.ttsSpeaking[sessionId] ?? false);
@@ -245,23 +251,45 @@ export default function VTuberChatPanel({
 
               // Auto TTS for assistant messages
               if (displayMsg.role === 'assistant') {
-                const [emotion, cleanText] = parseEmotion(displayMsg.content);
-                if (cleanText.trim()) {
-                  const store = useVTuberStore.getState();
-                  if (store.ttsEnabled) {
-                    if (isTabVisibleRef.current) {
-                      // beginTTSTurn 이 handleSend 시점에 호출되어 새 턴이
-                      // 이미 열렸다. live 가 한 클립이라도 뿌렸으면 finalize
-                      // 가 꼬리만 flush 하고, 뿌린 게 없으면 (스트리밍 미진입
-                      // / agent.session_id 불일치 / 토큰이 한꺼번에 도착해
-                      // push 가 한 번도 호출 안 됨 등) finalize 가 fullText
-                      // 전체를 한 클립으로 합성한다. 어느 경로든 단일 발화
-                      // 보장. 절대 speakResponse 와 함께 호출하지 말 것
-                      // (= 같은 텍스트 중복 발화의 원인).
-                      store.finalizeTTSTurn(sessionId, cleanText, emotion);
-                    } else {
-                      // 백그라운드 탭: 마지막 메시지만 기록 (탭 복귀 시 재생)
-                      pendingTTSRef.current = { text: cleanText, emotion };
+                // TTS-fix (2026-04-26): suppress auto-TTS for messages
+                // the user didn't initiate. ``thinking_trigger`` /
+                // ``sub_worker_reply`` / ``inbox_drain`` come from
+                // background pathways (idle reflections, sub-worker
+                // forwarding) — auto-speaking them queues voice on
+                // top of any in-flight turn and produces the
+                // "multiple voices played for one user message" bug
+                // the user reported. The message still appears in the
+                // chat panel; the per-message Speak button is the
+                // explicit-opt-in path.
+                const isAutoTriggered =
+                  msg.source === 'thinking_trigger' ||
+                  msg.source === 'sub_worker_reply' ||
+                  msg.source === 'inbox_drain';
+                if (isAutoTriggered) {
+                  // skip auto-TTS for auto-triggered messages
+                } else if (ttsHandledMsgIdsRef.current.has(msg.id)) {
+                  // TTS-fix: dedup against double-fired handlers
+                  // (StrictMode, stale closure rebinds, etc.)
+                } else {
+                  ttsHandledMsgIdsRef.current.add(msg.id);
+                  const [emotion, cleanText] = parseEmotion(displayMsg.content);
+                  if (cleanText.trim()) {
+                    const store = useVTuberStore.getState();
+                    if (store.ttsEnabled) {
+                      if (isTabVisibleRef.current) {
+                        // beginTTSTurn 이 handleSend 시점에 호출되어 새 턴이
+                        // 이미 열렸다. live 가 한 클립이라도 뿌렸으면 finalize
+                        // 가 꼬리만 flush 하고, 뿌린 게 없으면 (스트리밍 미진입
+                        // / agent.session_id 불일치 / 토큰이 한꺼번에 도착해
+                        // push 가 한 번도 호출 안 됨 등) finalize 가 fullText
+                        // 전체를 한 클립으로 합성한다. 어느 경로든 단일 발화
+                        // 보장. 절대 speakResponse 와 함께 호출하지 말 것
+                        // (= 같은 텍스트 중복 발화의 원인).
+                        store.finalizeTTSTurn(sessionId, cleanText, emotion);
+                      } else {
+                        // 백그라운드 탭: 마지막 메시지만 기록 (탭 복귀 시 재생)
+                        pendingTTSRef.current = { text: cleanText, emotion };
+                      }
                     }
                   }
                 }

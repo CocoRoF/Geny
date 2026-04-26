@@ -81,6 +81,13 @@ async def _send_event(ws: WebSocket, event_type: str, data: dict, session_id: st
         return False
 
 
+# Per-session dedupe of (emotion, expression_index) so identical avatar
+# states emitted on consecutive RESPONSE log entries don't spam the
+# frontend. Cleared lazily — entries die naturally with the session;
+# the upper bound is "one tuple per active VTuber session".
+_LAST_EMITTED_AVATAR_STATE: dict = {}
+
+
 async def _emit_avatar_state_for_log(
     entry_dict: dict, session_id: str, app_state: Any
 ) -> None:
@@ -88,6 +95,14 @@ async def _emit_avatar_state_for_log(
     Emit avatar state update based on log content.
     Mirrors the SSE implementation in agent_controller.py.
     Best-effort: never raises.
+
+    TTS-fix (2026-04-26): dedupes consecutive identical
+    ``(emotion, expression_index)`` for ``trigger=agent_output`` so a
+    long response producing many RESPONSE log entries doesn't flood
+    the frontend with redundant ``agent_output: joy`` events. The
+    dedup is per-session and only applies to ``agent_output`` —
+    ``state_change`` triggers (TOOL / GRAPH) keep firing because they
+    represent transitions the operator wants to see.
     """
     if app_state is None:
         return
@@ -113,6 +128,11 @@ async def _emit_avatar_state_for_log(
 
         if level == "RESPONSE":
             emotion, index = extractor.resolve_emotion(message, None)
+            # Dedupe: skip if (emotion, index) hasn't changed.
+            key = (emotion, index)
+            if _LAST_EMITTED_AVATAR_STATE.get(session_id) == key:
+                return
+            _LAST_EMITTED_AVATAR_STATE[session_id] = key
             await state_manager.update_state(
                 session_id=session_id,
                 emotion=emotion,
