@@ -30,35 +30,74 @@ except ImportError:  # pragma: no cover — only triggers on stale exec
     SubagentTypeRegistry = None  # type: ignore[assignment]
 
 
+_SEED = (
+    (
+        "worker",
+        "General-purpose worker. Full default toolset (Read / Write / "
+        "Edit / Bash / Grep / Glob / NotebookEdit / WebFetch).",
+    ),
+    (
+        "researcher",
+        "Read-only investigation. Read / Grep / Glob / WebFetch / "
+        "WebSearch only — no write/edit/bash so research can't "
+        "accidentally mutate state.",
+    ),
+    (
+        "vtuber-narrator",
+        "VTuber persona for short stream narrations. Memory + "
+        "Knowledge tools only.",
+    ),
+)
+
+
+def _placeholder_factory():
+    """Stub factory for descriptors that don't need a real sub-pipeline
+    (viewer-only). The executor's Stage 12 only invokes the factory
+    when the LLM actually delegates to that agent_type — registering
+    the descriptor is enough to surface the name in the registry/UI.
+    """
+    raise NotImplementedError(
+        "Subagent factory not wired — Geny does not currently spawn "
+        "sub-pipelines from this descriptor.",
+    )
+
+
 def _make_descriptors() -> List[Any]:
     """Build the descriptor list lazily so test environments without
-    geny-executor installed still import this module."""
+    geny-executor installed still import this module.
+
+    Tolerates executor signature drift: each constructor is tried with
+    the canonical kwargs first, falls back to the legacy
+    no-factory shape, and swallows any remaining TypeError so a single
+    bad seed can't crash module import (which cascades into a 500 on
+    boot for every controller that imports this package)."""
     if SubagentTypeDescriptor is None:
         return []
-    return [
-        SubagentTypeDescriptor(
-            agent_type="worker",
-            description=(
-                "General-purpose worker. Full default toolset (Read / Write / "
-                "Edit / Bash / Grep / Glob / NotebookEdit / WebFetch)."
-            ),
-        ),
-        SubagentTypeDescriptor(
-            agent_type="researcher",
-            description=(
-                "Read-only investigation. Read / Grep / Glob / WebFetch / "
-                "WebSearch only — no write/edit/bash so research can't "
-                "accidentally mutate state."
-            ),
-        ),
-        SubagentTypeDescriptor(
-            agent_type="vtuber-narrator",
-            description=(
-                "VTuber persona for short stream narrations. Memory + "
-                "Knowledge tools only."
-            ),
-        ),
-    ]
+
+    out: List[Any] = []
+    for agent_type, description in _SEED:
+        # Try the new (1.2.0+) signature first.
+        try:
+            out.append(SubagentTypeDescriptor(
+                agent_type=agent_type,
+                factory=_placeholder_factory,
+                description=description,
+            ))
+            continue
+        except TypeError:
+            pass
+        # Legacy signature without factory.
+        try:
+            out.append(SubagentTypeDescriptor(
+                agent_type=agent_type,
+                description=description,
+            ))
+        except TypeError as exc:
+            logger.warning(
+                "subagent_descriptor_build_failed agent_type=%s err=%s",
+                agent_type, exc,
+            )
+    return out
 
 
 DESCRIPTORS = _make_descriptors()

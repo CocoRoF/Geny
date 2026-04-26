@@ -51,12 +51,18 @@ class FrameworkSectionListResponse(BaseModel):
 class FrameworkSectionResponse(BaseModel):
     name: str
     has_schema: bool
-    schema: Optional[Dict[str, Any]] = Field(
+    # ``schema`` shadows BaseModel's reserved attribute on Pydantic v2;
+    # keep the on-the-wire key but use a non-shadowing python name.
+    json_schema: Optional[Dict[str, Any]] = Field(
         default=None,
+        alias="schema",
         description="JSON Schema of the section model (Pydantic .model_json_schema()).",
+        serialization_alias="schema",
     )
     values: Dict[str, Any] = Field(default_factory=dict)
     settings_path: str
+
+    model_config = {"populate_by_name": True}
 
 
 class FrameworkSectionPatch(BaseModel):
@@ -185,7 +191,7 @@ async def get_section(name: str, _auth: dict = Depends(require_auth)):
     return FrameworkSectionResponse(
         name=name,
         has_schema=True,
-        schema=_section_json_schema(_schema_for(name)),
+        json_schema=_section_json_schema(_schema_for(name)),
         values=values,
         settings_path=str(path),
     )
@@ -224,7 +230,7 @@ async def patch_section(
     return FrameworkSectionResponse(
         name=name,
         has_schema=True,
-        schema=_section_json_schema(schema),
+        json_schema=_section_json_schema(schema),
         values=merged,
         settings_path=str(path),
     )
