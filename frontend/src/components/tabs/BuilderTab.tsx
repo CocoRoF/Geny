@@ -51,6 +51,10 @@ interface StageDraft {
   // "no override" and operators can paste any subset of ModelConfig
   // fields without the editor enforcing a particular shape.
   modelOverrideText: string;
+  // S.2 (cycle 20260426_2) — per-stage StageToolBinding (s10).
+  // Same rationale as modelOverrideText. Empty = inherit pipeline
+  // tool roster.
+  toolBindingText: string;
 }
 
 function stageDraftFromEntry(entry: StageManifestEntry): StageDraft {
@@ -72,6 +76,10 @@ function stageDraftFromEntry(entry: StageManifestEntry): StageDraft {
       entry.model_override == null
         ? ''
         : JSON.stringify(entry.model_override, null, 2),
+    toolBindingText:
+      entry.tool_binding == null
+        ? ''
+        : JSON.stringify(entry.tool_binding, null, 2),
   };
 }
 
@@ -235,6 +243,12 @@ export default function BuilderTab() {
         ? ''
         : JSON.stringify(selectedStage.model_override, null, 2);
     if (draft.modelOverrideText.trim() !== moOriginal.trim()) return true;
+    // S.2 — tool_binding.
+    const tbOriginal =
+      selectedStage.tool_binding == null
+        ? ''
+        : JSON.stringify(selectedStage.tool_binding, null, 2);
+    if (draft.toolBindingText.trim() !== tbOriginal.trim()) return true;
     if (
       JSON.stringify(draft.strategies) !==
       JSON.stringify(selectedStage.strategies ?? {})
@@ -374,6 +388,25 @@ export default function BuilderTab() {
       }
     }
 
+    // S.2 — tool_binding: same shape contract.
+    let toolBinding: Record<string, unknown> | null = null;
+    const tbTrim = draft.toolBindingText.trim();
+    if (tbTrim) {
+      try {
+        const v = JSON.parse(tbTrim);
+        if (typeof v !== 'object' || v === null || Array.isArray(v)) {
+          setSaveError('tool_binding must be a JSON object (or empty to inherit)');
+          return;
+        }
+        toolBinding = v as Record<string, unknown>;
+      } catch (e) {
+        setSaveError(
+          'tool_binding: invalid JSON (' + (e instanceof Error ? e.message : 'parse error') + ')',
+        );
+        return;
+      }
+    }
+
     setSaving(true);
     setSaveError('');
     setSavedFlash(false);
@@ -391,6 +424,7 @@ export default function BuilderTab() {
         // edit the manifest via ImportManifestModal — same convention
         // as the Pipeline / Model editors.
         ...(modelOverride !== null ? { model_override: modelOverride } : {}),
+        ...(toolBinding !== null ? { tool_binding: toolBinding } : {}),
       });
       setSavedFlash(true);
     } catch (e: unknown) {
@@ -910,6 +944,33 @@ export default function BuilderTab() {
                   <small className="text-[0.6875rem] text-[var(--text-muted)]">
                     Subset of ModelConfig fields (model / temperature / max_tokens / thinking_*) applied
                     only to this stage. Empty textarea inherits the pipeline-level model.
+                  </small>
+                </div>
+
+                {/* S.2 (cycle 20260426_2) — per-stage tool_binding.
+                    Mostly meaningful on s10 (Tool stage); shown on every
+                    stage for symmetry with the manifest schema. The
+                    canonical shape is {"mode": "inherit" | "allowlist"
+                    | "blocklist", "patterns": [...]} but the executor
+                    accepts any dict so we keep the editor schema-loose. */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wide">
+                    Tool binding <span className="opacity-60 normal-case">(optional, mostly s10)</span>
+                  </label>
+                  <textarea
+                    value={draft.toolBindingText}
+                    onChange={e =>
+                      setDraft({ ...draft, toolBindingText: e.target.value })
+                    }
+                    rows={5}
+                    spellCheck={false}
+                    placeholder={'(empty = inherit pipeline tool roster)\nExample:\n{"mode": "allowlist", "patterns": ["Bash", "Read"]}'}
+                    className="py-2 px-3 rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-[var(--primary-color)] font-mono text-[0.75rem] leading-[1.5] text-[var(--text-primary)] focus:outline-none focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] resize-y"
+                  />
+                  <small className="text-[0.6875rem] text-[var(--text-muted)]">
+                    Restricts which tools this stage can dispatch.
+                    Canonical shape: <code className="font-mono">{'{"mode": "inherit"|"allowlist"|"blocklist", "patterns": [...]}'}</code>.
+                    Empty textarea inherits the pipeline tool roster.
                   </small>
                 </div>
 
