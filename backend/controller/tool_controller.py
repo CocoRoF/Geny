@@ -83,6 +83,103 @@ async def get_builtin_tools():
     return _tools_to_info(loader.builtin_tools, "built_in", loader)
 
 
+# ── Executor framework tools (PR-E.1.1) ──────────────────────────────
+#
+# *Different* concept from /catalog/built-in above. The endpoint above
+# lists Geny's tool_loader builtins (web_search / browser / memory_*).
+# This endpoint lists the geny-executor framework's BUILT_IN_TOOL_CLASSES
+# (Read / Write / Edit / Bash / AgentTool / TaskCreate / ... — the 33
+# tools shipped with executor 1.0.0~1.3.0).
+#
+# These are the tools every executor consumer gets out of the box; the
+# UI surface (ToolCatalogTab) shows them grouped by feature_group with
+# input_schema + capabilities.
+
+
+class FrameworkToolDetail(BaseModel):
+    """Detailed metadata for a single executor framework built-in tool."""
+    name: str
+    description: str = ""
+    feature_group: str = "uncategorized"
+    capabilities: Dict[str, Any] = Field(default_factory=dict)
+    input_schema: Dict[str, Any] = Field(default_factory=dict)
+
+
+class FrameworkCatalogResponse(BaseModel):
+    """Full executor framework catalog response."""
+    tools: List[FrameworkToolDetail] = Field(default_factory=list)
+    groups: List[str] = Field(default_factory=list)
+    total: int = 0
+
+
+@router.get("/catalog/framework", response_model=FrameworkCatalogResponse)
+async def get_framework_tools():
+    """List every tool in geny-executor's BUILT_IN_TOOL_CLASSES.
+
+    Each row carries enough metadata for the UI catalog viewer to
+    render description / capability badges / JSONSchema preview without
+    a follow-up request.
+
+    Empty (graceful) when geny-executor isn't importable.
+    """
+    try:
+        from geny_executor.tools.built_in import (
+            BUILT_IN_TOOL_CLASSES,
+            BUILT_IN_TOOL_FEATURES,
+        )
+    except ImportError:
+        return FrameworkCatalogResponse(tools=[], groups=[], total=0)
+
+    # Reverse the feature map so we can answer "what group does <name>
+    # belong to?" in O(1).
+    name_to_group: Dict[str, str] = {}
+    for group, names in BUILT_IN_TOOL_FEATURES.items():
+        for name in names:
+            name_to_group[name] = group
+
+    tools: List[FrameworkToolDetail] = []
+    for name, cls in BUILT_IN_TOOL_CLASSES.items():
+        try:
+            inst = cls()
+            description = inst.description or ""
+            input_schema = inst.input_schema or {}
+            # Capabilities: tools may take input arg, default empty dict.
+            try:
+                caps_obj = inst.capabilities({})
+                capabilities = {
+                    k: getattr(caps_obj, k)
+                    for k in (
+                        "concurrency_safe", "read_only", "destructive",
+                        "idempotent", "network_egress", "interrupt",
+                        "max_result_chars",
+                    )
+                    if hasattr(caps_obj, k)
+                }
+            except Exception:
+                capabilities = {}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "framework_tool_inspect_failed name=%s err=%s", name, exc,
+            )
+            description = ""
+            input_schema = {}
+            capabilities = {}
+
+        tools.append(FrameworkToolDetail(
+            name=name,
+            description=description,
+            feature_group=name_to_group.get(name, "uncategorized"),
+            capabilities=capabilities,
+            input_schema=input_schema,
+        ))
+
+    return FrameworkCatalogResponse(
+        tools=sorted(tools, key=lambda t: (t.feature_group, t.name)),
+        groups=sorted(BUILT_IN_TOOL_FEATURES.keys()),
+        total=len(tools),
+    )
+
+
 @router.get("/catalog/custom", response_model=List[ToolInfo])
 async def get_custom_tools():
     """Return all custom Python tools."""
