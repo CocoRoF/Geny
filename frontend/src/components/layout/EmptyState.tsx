@@ -7,9 +7,7 @@ export interface EmptyStateProps {
   icon?: LucideIcon;
   title: ReactNode;
   description?: ReactNode;
-  /** Single CTA element rendered below the description. */
   action?: ReactNode;
-  /** Compact variant — half the padding, smaller text. Default false. */
   compact?: boolean;
 }
 
@@ -24,24 +22,41 @@ export function EmptyState({
     <div
       className={
         compact
-          ? 'text-center text-[var(--text-muted)] py-4 text-[0.75rem]'
-          : 'flex flex-col items-center justify-center text-center text-[var(--text-muted)] py-12 px-4'
+          ? 'text-center text-[hsl(var(--muted-foreground))] py-4 text-xs'
+          : 'flex flex-col items-center justify-center text-center py-12 px-4 h-full'
       }
     >
       {Icon && (
         <Icon
-          className={compact ? 'w-4 h-4 mx-auto mb-1 opacity-60' : 'w-8 h-8 mx-auto mb-2 opacity-60'}
+          className={
+            compact
+              ? 'w-4 h-4 mx-auto mb-1 opacity-50 text-[hsl(var(--muted-foreground))]'
+              : 'w-10 h-10 mx-auto mb-3 opacity-40 text-[hsl(var(--muted-foreground))]'
+          }
+          strokeWidth={1.5}
         />
       )}
-      <div className={compact ? '' : 'text-[0.875rem] font-medium text-[var(--text-secondary)]'}>
+      <div
+        className={
+          compact
+            ? 'text-[hsl(var(--muted-foreground))]'
+            : 'text-sm font-medium text-[hsl(var(--foreground))]'
+        }
+      >
         {title}
       </div>
       {description && (
-        <div className={compact ? 'mt-0.5' : 'mt-1 text-[0.75rem] max-w-md'}>
+        <div
+          className={
+            compact
+              ? 'mt-0.5 text-[hsl(var(--muted-foreground))]'
+              : 'mt-1.5 text-xs max-w-md text-[hsl(var(--muted-foreground))]'
+          }
+        >
           {description}
         </div>
       )}
-      {action && <div className="mt-3">{action}</div>}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }

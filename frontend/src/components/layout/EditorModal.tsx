@@ -1,33 +1,32 @@
 'use client';
 
 /**
- * EditorModal — shared Add/Edit modal scaffold.
+ * EditorModal — Add/Edit modal scaffold (shadcn-backed).
  *
- * Centered overlay with consistent header/body/footer layout. Closes
- * on outer click + ESC unless `saving` is true. The body can be a
- * form, JSON textarea, or anything else — caller owns the content.
- *
- * Convention: use this for tabs that have a "create new entity" + "edit
- * existing entity" path. Confirm dialogs (delete) stay on
- * window.confirm — that's deliberately ugly so destructive actions
- * surface as friction rather than nice modals.
+ * Wraps shadcn's Dialog with the same prop API the existing tabs use.
+ * `width` maps to a max-w preset; `saving` disables the close behavior;
+ * `error` renders inline above the body.
  */
 
-import { ReactNode, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { ReactNode } from 'react';
+import { AlertCircle } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogCloseButton,
+} from '@/components/ui/dialog';
 import { cn } from './cn';
 
 export interface EditorModalProps {
   open: boolean;
   onClose: () => void;
   title: ReactNode;
-  /** Disables outer-click-to-close + ESC + the close button. */
   saving?: boolean;
-  /** Footer actions; usually Cancel + Save. */
   footer?: ReactNode;
-  /** Width preset. */
   width?: 'sm' | 'md' | 'lg' | 'xl';
-  /** Optional inline error banner inside the modal body. */
   error?: string | null;
   children: ReactNode;
 }
@@ -49,59 +48,41 @@ export function EditorModal({
   error,
   children,
 }: EditorModalProps) {
-  // ESC closes when not saving.
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !saving) onClose();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [open, saving, onClose]);
-
-  if (!open) return null;
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
-      onClick={() => !saving && onClose()}
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && !saving) onClose();
+      }}
     >
-      <div
-        className={cn(
-          WIDTH[width],
-          'w-full max-h-[85vh] bg-[var(--bg-primary)] rounded-lg border border-[var(--border-color)] flex flex-col overflow-hidden',
-        )}
-        onClick={(e) => e.stopPropagation()}
+      <DialogContent
+        className={cn(WIDTH[width], 'p-0 max-h-[85vh] flex flex-col gap-0')}
+        onPointerDownOutside={(e) => {
+          if (saving) e.preventDefault();
+        }}
+        onEscapeKeyDown={(e) => {
+          if (saving) e.preventDefault();
+        }}
       >
-        <header className="flex items-center justify-between gap-2 px-4 py-2 border-b border-[var(--border-color)] shrink-0">
-          <h3 className="text-sm font-semibold flex-1 truncate">{title}</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-30"
-            aria-label="Close"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </header>
+        <DialogHeader>
+          <DialogTitle className="flex-1 truncate">{title}</DialogTitle>
+          <DialogCloseButton />
+        </DialogHeader>
         <div className="overflow-y-auto p-4 flex-1 min-h-0">
           {error && (
             <div
-              className="mb-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2"
+              className="mb-3 text-xs text-red-700 dark:text-red-300 bg-red-500/10 border border-red-500/30 rounded-md px-2.5 py-2 flex items-start gap-1.5"
               role="alert"
             >
-              {error}
+              <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
+              <span>{error}</span>
             </div>
           )}
           {children}
         </div>
-        {footer && (
-          <footer className="px-4 py-2 border-t border-[var(--border-color)] flex items-center justify-end gap-2 shrink-0">
-            {footer}
-          </footer>
-        )}
-      </div>
-    </div>
+        {footer && <DialogFooter>{footer}</DialogFooter>}
+      </DialogContent>
+    </Dialog>
   );
 }
 

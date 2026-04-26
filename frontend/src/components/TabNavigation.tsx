@@ -46,7 +46,7 @@ const DEV_ONLY_GLOBAL = new Set(['library', 'admin', 'settings']);
 const DEV_ONLY_SESSION = new Set(['sessionEnvironment']);
 
 const TAB_BASE =
-  'relative py-1.5 px-3.5 text-[0.8125rem] font-medium bg-transparent border-none rounded-[6px] cursor-pointer transition-all duration-150 whitespace-nowrap';
+  'relative py-1.5 px-3 text-[0.8125rem] font-medium bg-transparent border-none rounded-md cursor-pointer transition-colors duration-150 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))]';
 
 function TabButton({ id, label, active, onClick, accent }: { id: string; label: string; active: boolean; onClick: () => void; accent?: boolean }) {
   if (accent) {
@@ -57,14 +57,14 @@ function TabButton({ id, label, active, onClick, accent }: { id: string; label: 
           TAB_BASE,
           'mr-0.5 font-semibold',
           active
-            ? 'text-white bg-[var(--primary-color)] shadow-[0_0_8px_rgba(59,130,246,0.3)]'
-            : 'text-[var(--primary-color)] bg-[rgba(59,130,246,0.08)] hover:bg-[rgba(59,130,246,0.18)]',
+            ? 'text-[hsl(var(--primary-foreground))] bg-[hsl(var(--primary))]'
+            : 'text-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.08)] hover:bg-[hsl(var(--primary)/0.16)]',
         )}
         onClick={onClick}
       >
         {label}
         {active && (
-          <span className="absolute -bottom-[9px] left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-sm bg-[var(--primary-color)]" />
+          <span className="absolute -bottom-[9px] left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-sm bg-[hsl(var(--primary))]" />
         )}
       </button>
     );
@@ -75,14 +75,14 @@ function TabButton({ id, label, active, onClick, accent }: { id: string; label: 
       className={cn(
         TAB_BASE,
         active
-          ? 'text-[var(--text-primary)] bg-[var(--bg-tertiary)]'
-          : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]',
+          ? 'text-[hsl(var(--foreground))] bg-[hsl(var(--accent))]'
+          : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))]',
       )}
       onClick={onClick}
     >
       {label}
       {active && (
-        <span className="absolute -bottom-[9px] left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-sm bg-[var(--primary-color)]" />
+        <span className="absolute -bottom-[9px] left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-sm bg-[hsl(var(--primary))]" />
       )}
     </button>
   );
@@ -200,7 +200,7 @@ export default function TabNavigation() {
   const visibleSessionTabs = SESSION_TAB_DEFS.filter(tab => canShowDevTabs || !DEV_ONLY_SESSION.has(tab.id));
 
   return (
-    <div className="flex items-center gap-0.5 h-11 px-2 md:px-4 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] shrink-0 overflow-x-auto scrollbar-hide">
+    <div className="flex items-center gap-0.5 h-11 px-2 md:px-4 bg-[hsl(var(--card))] border-b border-[hsl(var(--border))] shrink-0 overflow-x-auto scrollbar-hide">
       {/* ── Global Tabs ── */}
       <div className="flex items-center gap-0.5 shrink-0">
         {visibleGlobalTabs.map(id => (

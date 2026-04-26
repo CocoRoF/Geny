@@ -1,36 +1,29 @@
 'use client';
 
 /**
- * ActionButton — header-row action button.
+ * ActionButton — header-row action button (shadcn-backed).
  *
- * Used in TabShell.actions slots so every tab's "Add" / "Refresh" /
- * "Save" buttons match. Three variants:
- *
- *   - primary    — filled accent (Add / Save)
- *   - secondary  — bordered (Refresh / Cancel)
- *   - danger     — bordered red (Delete / rare)
- *
- * Loading icons should be passed in via `icon` and animate via the
- * caller (`<RefreshCw className={loading ? 'animate-spin' : ''} />`).
+ * Forwards to ui/Button under the hood; keeps the original three-variant
+ * API (primary / secondary / danger) so existing call sites don't change.
+ * The `spinIcon` prop continues to animate the icon via animate-spin.
  */
 
-import { ReactNode, ButtonHTMLAttributes } from 'react';
+import { ButtonHTMLAttributes, ReactNode } from 'react';
 import { LucideIcon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { cn } from './cn';
 
 type Variant = 'primary' | 'secondary' | 'danger';
 
-const VARIANTS: Record<Variant, string> = {
-  primary: 'bg-[var(--primary-color)] text-white hover:bg-[var(--primary-hover)] border border-[var(--primary-color)]',
-  secondary: 'border border-[var(--border-color)] hover:bg-[var(--bg-tertiary)] text-[var(--text-primary)]',
-  danger: 'border border-red-300 text-red-700 hover:bg-red-50',
+const VARIANT_TO_SHADCN: Record<Variant, 'default' | 'outline' | 'destructive'> = {
+  primary: 'default',
+  secondary: 'outline',
+  danger: 'destructive',
 };
 
 export interface ActionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   icon?: LucideIcon;
-  /** When true, the icon spins (renders nothing differently — the
-   * caller can also just pass an iconClassName themselves). */
   spinIcon?: boolean;
   children?: ReactNode;
 }
@@ -41,22 +34,23 @@ export function ActionButton({
   spinIcon = false,
   children,
   className,
-  type = 'button',
   ...rest
 }: ActionButtonProps) {
+  const isDanger = variant === 'danger';
   return (
-    <button
-      type={type}
+    <Button
+      variant={VARIANT_TO_SHADCN[variant]}
+      size="sm"
       className={cn(
-        'flex items-center gap-1 text-xs rounded px-2 py-1 transition-colors disabled:opacity-50',
-        VARIANTS[variant],
+        // outline+danger needs a tint; keep the pre-shadcn red look.
+        isDanger && 'bg-transparent text-red-600 border border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-500/40 dark:hover:bg-red-500/10',
         className,
       )}
       {...rest}
     >
       {Icon && <Icon className={cn('w-3 h-3', spinIcon && 'animate-spin')} />}
       {children}
-    </button>
+    </Button>
   );
 }
 

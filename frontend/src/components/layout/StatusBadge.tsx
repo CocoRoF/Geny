@@ -1,15 +1,16 @@
 'use client';
 
 /**
- * StatusBadge — small color-coded pill.
+ * StatusBadge — small color-coded pill (shadcn-backed).
  *
- * Replaces the ad-hoc inline styles scattered across CronTab,
- * HooksTab, TasksTab, AdminPanel, etc. Use the `tone` preset for
- * common semantics; pass `className` to override when nothing fits.
+ * Same tone API as before; underlying surface is shadcn's Badge
+ * variants. The `onClick` prop still falls back to a button render so
+ * tabs that use it for click-to-toggle don't break.
  */
 
 import { ReactNode } from 'react';
 import { LucideIcon } from 'lucide-react';
+import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { cn } from './cn';
 
 export type BadgeTone =
@@ -20,20 +21,19 @@ export type BadgeTone =
   | 'neutral'
   | 'primary';
 
-const TONE: Record<BadgeTone, string> = {
-  success: 'bg-green-100 text-green-800 border-green-300',
-  danger: 'bg-red-100 text-red-800 border-red-300',
-  warning: 'bg-amber-100 text-amber-800 border-amber-300',
-  info: 'bg-blue-100 text-blue-800 border-blue-300',
-  neutral: 'bg-gray-100 text-gray-800 border-gray-300',
-  primary: 'bg-[rgba(59,130,246,0.10)] text-[var(--primary-color)] border-[rgba(59,130,246,0.25)]',
+const TONE_TO_VARIANT: Record<BadgeTone, BadgeProps['variant']> = {
+  success: 'success',
+  danger: 'danger',
+  warning: 'warning',
+  info: 'info',
+  neutral: 'secondary',
+  primary: 'default',
 };
 
 export interface StatusBadgeProps {
   tone?: BadgeTone;
   icon?: LucideIcon;
   children: ReactNode;
-  /** uppercase + monospace — handy for status labels like "live" / "down". */
   uppercase?: boolean;
   className?: string;
   title?: string;
@@ -49,23 +49,28 @@ export function StatusBadge({
   title,
   onClick,
 }: StatusBadgeProps) {
-  const Component = onClick ? 'button' : 'span';
+  const merged = cn(
+    uppercase && 'uppercase tracking-wider font-mono',
+    onClick && 'cursor-pointer hover:opacity-90 transition-opacity',
+    className,
+  );
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} title={title} className="inline-flex">
+        <Badge variant={TONE_TO_VARIANT[tone]} className={merged}>
+          {Icon && <Icon className="w-3 h-3" />}
+          {children}
+        </Badge>
+      </button>
+    );
+  }
+
   return (
-    <Component
-      type={onClick ? 'button' : undefined}
-      onClick={onClick}
-      title={title}
-      className={cn(
-        'inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[0.625rem]',
-        uppercase && 'uppercase tracking-wider font-mono',
-        TONE[tone],
-        onClick && 'hover:opacity-80 cursor-pointer',
-        className,
-      )}
-    >
+    <Badge variant={TONE_TO_VARIANT[tone]} className={merged} title={title}>
       {Icon && <Icon className="w-3 h-3" />}
       {children}
-    </Component>
+    </Badge>
   );
 }
 

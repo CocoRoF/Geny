@@ -1,17 +1,12 @@
 'use client';
 
 /**
- * TabShell — universal tab outer chrome.
+ * TabShell — universal tab outer chrome (shadcn-backed).
  *
- * Every tab (excluding Playground / Playground2D / VTuber / Command /
- * Chat which keep their bespoke layouts) wraps its body in TabShell.
- * Provides:
- *   - consistent header (icon + title + subtitle + actions slot)
- *   - shared error banner (with optional dismiss)
- *   - vertical body that fills the parent (`flex-1 min-h-0`)
- *
- * This is the *outermost* layout. Two-pane / drawer layouts go inside
- * the body via TwoPaneBody / DetailDrawer.
+ * Same prop API as the original layout primitive — all 14 tabs that
+ * adopted it get the visual upgrade for free. Internals now use the
+ * tokenised palette (hsl(var(--card)) / hsl(var(--border)) / ...) so
+ * the surface tracks the active light/dark theme.
  */
 
 import { ReactNode } from 'react';
@@ -20,24 +15,12 @@ import { cn } from './cn';
 
 export interface TabShellProps {
   title: string;
-  /** Short one-liner under the title. Optional. */
   subtitle?: ReactNode;
-  /** Lucide icon shown left of the title. */
   icon?: LucideIcon;
-  /**
-   * Right-aligned actions row. Pass any combination of buttons / badges.
-   * Convention: primary action first (e.g. "Add"), then refresh,
-   * then meta badges (live/gated, capacity, etc.).
-   */
   actions?: ReactNode;
-  /** When set, an error banner renders above the body. */
   error?: string | null;
   onDismissError?: () => void;
-  /** Shown beneath the header, above the error banner. Use for tab-wide
-   * filters / category bars that aren't part of the body layout. */
   toolbar?: ReactNode;
-  /** Add extra top-padding to the body slot — defaults to 0 because
-   * TwoPaneBody manages its own gutters. */
   bodyPadding?: 'none' | 'sm' | 'md' | 'lg';
   children: ReactNode;
 }
@@ -61,22 +44,28 @@ export function TabShell({
   children,
 }: TabShellProps) {
   return (
-    <div className="flex flex-col h-full min-h-0 bg-[var(--bg-primary)]">
+    <div className="flex flex-col h-full min-h-0 bg-[hsl(var(--background))] text-[hsl(var(--foreground))]">
       {/* ── Header ── */}
-      <header className="px-4 py-3 border-b border-[var(--border-color)] flex items-start justify-between gap-3 shrink-0">
+      <header className="px-4 py-3 border-b border-[hsl(var(--border))] flex items-start justify-between gap-3 shrink-0 bg-[hsl(var(--card))]">
         <div className="min-w-0">
-          <h2 className="text-base font-semibold flex items-center gap-1.5 truncate">
-            {Icon && <Icon size={14} className="text-[var(--primary-color)] shrink-0" />}
+          <h2 className="text-sm font-semibold tracking-tight flex items-center gap-1.5 truncate">
+            {Icon && (
+              <Icon
+                size={14}
+                strokeWidth={2.25}
+                className="text-[hsl(var(--primary))] shrink-0"
+              />
+            )}
             <span className="truncate">{title}</span>
           </h2>
           {subtitle && (
-            <div className="text-[0.75rem] text-[var(--text-muted)] mt-0.5 truncate">
+            <div className="text-[0.7rem] text-[hsl(var(--muted-foreground))] mt-1 truncate">
               {subtitle}
             </div>
           )}
         </div>
         {actions && (
-          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
             {actions}
           </div>
         )}
@@ -84,7 +73,7 @@ export function TabShell({
 
       {/* ── Optional toolbar ── */}
       {toolbar && (
-        <div className="px-4 py-2 border-b border-[var(--border-color)] shrink-0">
+        <div className="px-4 py-2 border-b border-[hsl(var(--border))] shrink-0 bg-[hsl(var(--card))]">
           {toolbar}
         </div>
       )}
@@ -92,7 +81,7 @@ export function TabShell({
       {/* ── Error banner ── */}
       {error && (
         <div
-          className="mx-3 mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2 flex items-start gap-1.5"
+          className="mx-3 mt-3 text-xs text-red-700 dark:text-red-300 bg-red-500/10 border border-red-500/30 rounded-md px-3 py-2 flex items-start gap-2"
           role="alert"
         >
           <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
@@ -101,7 +90,7 @@ export function TabShell({
             <button
               type="button"
               onClick={onDismissError}
-              className="text-red-600 hover:text-red-800"
+              className="text-red-700/70 dark:text-red-300/70 hover:text-red-700 dark:hover:text-red-300 transition-colors"
               aria-label="Dismiss"
             >
               <X className="w-3.5 h-3.5" />
