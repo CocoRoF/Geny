@@ -12,6 +12,7 @@ import HITLApprovalModal from '@/components/modals/HITLApprovalModal';
 import RestoreCheckpointModal from '@/components/modals/RestoreCheckpointModal';
 import SkillPanel from '@/components/skills/SkillPanel';
 import SlashCommandAutocomplete from '@/components/SlashCommandAutocomplete';
+import WorkspaceBadge from '@/components/command/WorkspaceBadge';
 import {
   Square,
   Loader2,
@@ -597,6 +598,8 @@ export default function CommandTab() {
             </div>
           </div>
           <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+            {/* PR-E.4.5 — workspace stack badge */}
+            {selectedSessionId && <WorkspaceBadge sessionId={selectedSessionId} />}
             {/* Elapsed timer — compact on mobile */}
             {isExecuting && elapsedMs > 0 && (
               <div className="inline-flex items-center gap-1.5 md:gap-2 px-2 md:px-2.5 py-1 rounded-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[0.625rem] md:text-[0.6875rem]">
