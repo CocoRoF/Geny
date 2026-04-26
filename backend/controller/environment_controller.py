@@ -81,6 +81,40 @@ def _detail_response(data: dict) -> EnvironmentDetailResponse:
     )
 
 
+def _affected_sessions_summary(env_id: str):
+    """D.3 (cycle 20260426_1) — count + name list of *active* sessions
+    bound to ``env_id``.
+
+    Each AgentSession holds a frozen runtime snapshot via
+    ``Pipeline.attach_runtime`` from the moment ``initialize()`` runs.
+    Mutating the manifest on disk has no effect on these — the operator
+    must restart them to pick up the new manifest. This helper exposes
+    that fact in a single response shape so the FE can surface it
+    immediately after a save without an extra round-trip.
+
+    "Active" = soft-deleted records excluded; status irrelevant
+    (running / idle / error all hold their snapshot until restart).
+    """
+    from service.environment.schemas import AffectedSessionsSummary
+
+    try:
+        from service.sessions.store import get_session_store
+
+        store = get_session_store()
+        records = store.list_active()
+    except Exception:  # noqa: BLE001
+        # Session store unavailable in some test contexts — surface zero
+        # affected so the API still returns a valid response.
+        return AffectedSessionsSummary()
+
+    matching = [r for r in records if r.get("env_id") == env_id]
+    return AffectedSessionsSummary(
+        count=len(matching),
+        session_ids=[str(r.get("session_id", "")) for r in matching],
+        session_names=[str(r.get("session_name") or r.get("session_id", "")) for r in matching],
+    )
+
+
 def _resolve_session_mutator(session_id: str):
     """Return (agent_session, PipelineMutator) for a live Geny session.
 
@@ -271,7 +305,13 @@ async def update_environment(
     updated = _env_svc(request).update(env_id, body.model_dump(exclude_none=True))
     if updated is None:
         raise HTTPException(404, "Environment not found")
-    return {"updated": True}
+    # D.3 (cycle 20260426_1) — surface the post-save side effect so the
+    # FE can warn the operator about active sessions still running on
+    # the pre-save manifest snapshot.
+    return {
+        "updated": True,
+        "affected_sessions": _affected_sessions_summary(env_id).model_dump(),
+    }
 
 
 @router.put("/{env_id}/manifest", response_model=EnvironmentDetailResponse)
@@ -292,7 +332,10 @@ async def replace_manifest(
         record = _env_svc(request).update_manifest(env_id, manifest)
     except EnvironmentNotFoundError:
         raise HTTPException(404, "Environment not found")
-    return _detail_response(record)
+    detail = _detail_response(record)
+    # D.3 — see update_environment.
+    detail.affected_sessions = _affected_sessions_summary(env_id)
+    return detail
 
 
 @router.patch("/{env_id}/stages/{order}", response_model=EnvironmentDetailResponse)
@@ -312,7 +355,9 @@ async def patch_stage(
         raise HTTPException(404, "Environment not found")
     except ValueError as exc:
         raise HTTPException(400, str(exc))
-    return _detail_response(record)
+    detail = _detail_response(record)
+    detail.affected_sessions = _affected_sessions_summary(env_id)
+    return detail
 
 
 @router.post("/{env_id}/duplicate", response_model=CreateEnvironmentResponse)

@@ -111,9 +111,18 @@ export interface EnvironmentSummary {
   base_preset?: string;
 }
 
+// D.3 (cycle 20260426_1) — populated by manifest-write endpoints to
+// surface active sessions still running on the pre-edit snapshot.
+export interface AffectedSessionsSummary {
+  count: number;
+  session_ids: string[];
+  session_names: string[];
+}
+
 export interface EnvironmentDetail extends EnvironmentSummary {
   manifest?: EnvironmentManifest | null;
   snapshot?: Record<string, unknown> | null;
+  affected_sessions?: AffectedSessionsSummary | null;
 }
 
 export interface EnvironmentDiffResult {

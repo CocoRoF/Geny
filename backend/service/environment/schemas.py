@@ -210,6 +210,21 @@ class EnvironmentSummaryResponse(BaseModel):
     base_preset: str = ""
 
 
+class AffectedSessionsSummary(BaseModel):
+    """D.3 (cycle 20260426_1) — sessions still running on the
+    pre-edit manifest snapshot.
+
+    Each ``AgentSession`` holds a frozen runtime snapshot via
+    ``Pipeline.attach_runtime`` from the moment ``initialize()`` runs.
+    Mutating the manifest on disk has no effect on these — they need
+    a restart to pick up the new manifest. Manifest-write endpoints
+    surface this so the FE can warn the operator immediately.
+    """
+    count: int = 0
+    session_ids: List[str] = []
+    session_names: List[str] = []
+
+
 class EnvironmentDetailResponse(BaseModel):
     id: str
     name: str
@@ -219,6 +234,9 @@ class EnvironmentDetailResponse(BaseModel):
     updated_at: str
     manifest: Optional[Dict[str, Any]] = None
     snapshot: Optional[Dict[str, Any]] = None
+    # D.3 — populated by mutation endpoints (replace_manifest,
+    # patch_stage). Read-only endpoints leave this ``None``.
+    affected_sessions: Optional[AffectedSessionsSummary] = None
 
 
 class EnvironmentListResponse(BaseModel):

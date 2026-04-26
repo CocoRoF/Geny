@@ -10,6 +10,7 @@
  */
 
 import { create } from 'zustand';
+import { toast } from 'sonner';
 
 import { catalogApi, environmentApi } from '@/lib/environmentApi';
 import type {
@@ -36,6 +37,35 @@ export type DrawerSessionsEntry = {
 
 function drawerKey(envId: string, includeDeleted: boolean): string {
   return `${envId}:${includeDeleted ? 'all' : 'active'}`;
+}
+
+/**
+ * D.3 (cycle 20260426_1) — surface a sonner toast after a manifest
+ * write completes if there are active sessions still running on the
+ * pre-edit snapshot.
+ *
+ * Called by ``replaceManifest`` and ``updateStage``. The backend
+ * populates ``affected_sessions`` on these endpoint responses so the
+ * UI can warn the operator without a separate round-trip.
+ *
+ * No-ops when affected_sessions is missing (older backend) or count
+ * is zero (no warning needed).
+ */
+function _warnAffectedSessions(
+  affected: { count: number; session_names: string[] } | null | undefined,
+): void {
+  if (!affected || affected.count <= 0) return;
+  const preview =
+    affected.session_names.length > 3
+      ? `${affected.session_names.slice(0, 3).join(', ')} +${affected.session_names.length - 3} more`
+      : affected.session_names.join(', ');
+  const headline = `${affected.count} active session${
+    affected.count === 1 ? '' : 's'
+  } still running on the pre-edit manifest.`;
+  const body = preview
+    ? `Restart to pick up the change: ${preview}`
+    : 'Restart them to pick up the change.';
+  toast.warning(headline, { description: body, duration: 8000 });
 }
 
 // Module-scope inflight guard for prefetch — deduplicates rapid hover
@@ -294,6 +324,7 @@ export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
           ? updated
           : s.selectedEnvironment,
     }));
+    _warnAffectedSessions(updated.affected_sessions);
   },
 
   updateStage: async (envId, order, payload) => {
@@ -304,6 +335,7 @@ export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
           ? updated
           : s.selectedEnvironment,
     }));
+    _warnAffectedSessions(updated.affected_sessions);
   },
 
   builderEnvId: null,
