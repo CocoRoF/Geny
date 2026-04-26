@@ -159,6 +159,17 @@ class UserSkillUpsertRequest(BaseModel):
     category: Optional[str] = None
     effort: Optional[str] = None
     examples: List[str] = Field(default_factory=list)
+    # K.1 (cycle 20260426_2) — fields previously omitted but supported
+    # by ``geny_executor.skills.SkillMetadata``.
+    version: Optional[str] = None
+    execution_mode: Optional[str] = Field(
+        None,
+        description='"inline" | "fork" — defaults to "inline" if absent',
+    )
+    extras: dict = Field(
+        default_factory=dict,
+        description="Free-form host-specific metadata persisted as YAML",
+    )
 
 
 class UserSkillUpsertResponse(BaseModel):
@@ -175,12 +186,30 @@ def _user_skill_path(skill_id: str) -> Path:
     return user_skills_dir() / skill_id / "SKILL.md"
 
 
+_VALID_EXECUTION_MODES = {"inline", "fork"}
+
+
 def _build_skill_md(req: UserSkillUpsertRequest) -> str:
     """Emit a SKILL.md body from the upsert request. YAML
-    frontmatter + markdown body (or empty body)."""
+    frontmatter + markdown body (or empty body).
+
+    K.1 (cycle 20260426_2): emits ``version``, ``execution_mode``, and
+    ``extras`` when supplied. Extras are written as a nested YAML
+    mapping so the executor's frontmatter parser preserves them.
+    """
+    if req.execution_mode and req.execution_mode not in _VALID_EXECUTION_MODES:
+        raise HTTPException(
+            400,
+            f"execution_mode must be one of {sorted(_VALID_EXECUTION_MODES)} or empty; "
+            f"got {req.execution_mode!r}",
+        )
     fm_lines: List[str] = ["---"]
     fm_lines.append(f"name: {req.name}")
     fm_lines.append(f"description: {req.description}")
+    if req.version:
+        fm_lines.append(f"version: {req.version}")
+    if req.execution_mode:
+        fm_lines.append(f"execution_mode: {req.execution_mode}")
     if req.model_override:
         fm_lines.append(f"model_override: {req.model_override}")
     if req.allowed_tools:
@@ -195,6 +224,20 @@ def _build_skill_md(req: UserSkillUpsertRequest) -> str:
         fm_lines.append("examples:")
         for ex in req.examples:
             fm_lines.append(f"  - {ex}")
+    if req.extras:
+        # Nested mapping; only string keys / scalar values supported in
+        # this minimal serialiser. Operators with deeper structures
+        # should still hand-edit the SKILL.md.
+        fm_lines.append("extras:")
+        for k, v in req.extras.items():
+            if not isinstance(k, str):
+                continue
+            if isinstance(v, (str, int, float, bool)):
+                fm_lines.append(f"  {k}: {v}")
+            else:
+                # Skip unsupported shapes silently — operator can edit
+                # the file by hand for nested structures.
+                continue
     fm_lines.append("---")
     body = req.body.strip()
     return "\n".join(fm_lines) + ("\n\n" + body + "\n" if body else "\n")

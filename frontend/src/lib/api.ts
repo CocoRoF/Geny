@@ -988,6 +988,10 @@ export interface SkillDetail {
   body: string;
   source: string | null;
   is_user_skill: boolean;
+  // K.1 (cycle 20260426_2) — additional executor SkillMetadata fields.
+  version?: string | null;
+  execution_mode?: string | null;
+  extras?: Record<string, unknown> | null;
 }
 
 export interface UserSkillUpsertRequest {
@@ -1000,6 +1004,10 @@ export interface UserSkillUpsertRequest {
   category?: string | null;
   effort?: string | null;
   examples?: string[];
+  // K.1 (cycle 20260426_2).
+  version?: string | null;
+  execution_mode?: string | null;
+  extras?: Record<string, string | number | boolean>;
 }
 
 // ==================== Notifications (Cycle G) ==================
