@@ -20,6 +20,7 @@ from typing import Any, Optional
 from service.settings.sections import (
     AffectConfigSection,
     ChannelsConfigSection,
+    CuratedKnowledgeSection,
     HooksConfigSection,
     MemoryConfigSection,
     ModelConfigSection,
@@ -86,6 +87,8 @@ def install_geny_settings() -> Optional[Any]:
     register_section("channels", ChannelsConfigSection)
     # J.1 (cycle 20260426_3) — persona tail-block composition.
     register_section("persona", PersonaConfigSection)
+    # N.1 (cycle 20260426_3) — curated knowledge vault root.
+    register_section("curated_knowledge", CuratedKnowledgeSection)
 
     loaded = loader.load()
     logger.info(

@@ -195,6 +195,23 @@ class ChannelsConfigSection(BaseModel):
     send_message: List[SendMessageChannelEntry] = Field(default_factory=list)
 
 
+class CuratedKnowledgeSection(BaseModel):
+    """``settings.curated_knowledge`` (N.1 / cycle 20260426_3) — knobs
+    for ``service.memory.curated_knowledge.CuratedKnowledgeManager``.
+
+    Per-user vault paths land under ``{root}/_curated_knowledge/{user}``.
+    The default root is the platform helper's ``DEFAULT_STORAGE_ROOT``.
+    """
+
+    root: Optional[str] = Field(
+        None,
+        description=(
+            "Filesystem root for curated knowledge vaults. Empty = use "
+            "``DEFAULT_STORAGE_ROOT`` from service.utils.platform."
+        ),
+    )
+
+
 class PersonaConfigSection(BaseModel):
     """``settings.persona`` (J.1 / cycle 20260426_3) — system-prompt
     tail-block composition.
@@ -343,4 +360,5 @@ __all__ = [
     "SendMessageChannelEntry",
     "VTuberSubWorkerSection",
     "PersonaConfigSection",
+    "CuratedKnowledgeSection",
 ]

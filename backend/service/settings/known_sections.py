@@ -75,6 +75,10 @@ SECTION_READERS: Dict[str, List[str]] = {
     "persona": [
         "service.persona.blocks_resolver",
     ],
+    # N.1 (cycle 20260426_3) — curated knowledge vault root.
+    "curated_knowledge": [
+        "service.memory.curated_knowledge",
+    ],
 }
 
 

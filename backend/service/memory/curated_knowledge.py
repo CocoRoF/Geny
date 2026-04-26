@@ -54,6 +54,25 @@ class CuratedKnowledgeManager:
 
     @staticmethod
     def _default_path() -> str:
+        """N.1 (cycle 20260426_3) — settings.json:curated_knowledge.root
+        wins; falls back to ``DEFAULT_STORAGE_ROOT`` from the platform
+        helper."""
+        try:
+            from geny_executor.settings import get_default_loader
+
+            section = get_default_loader().get_section("curated_knowledge")
+            if section is not None:
+                if hasattr(section, "model_dump"):
+                    section_dict = section.model_dump(exclude_none=True)
+                elif isinstance(section, dict):
+                    section_dict = section
+                else:
+                    section_dict = {}
+                root = section_dict.get("root")
+                if isinstance(root, str) and root.strip():
+                    return root.strip()
+        except Exception:  # noqa: BLE001
+            pass
         from service.utils.platform import DEFAULT_STORAGE_ROOT
         return DEFAULT_STORAGE_ROOT
 
