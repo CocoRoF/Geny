@@ -30,6 +30,28 @@ PERMISSION_MODES = ("advisory", "enforce")
 _DEFAULT_MODE = "advisory"
 _MODE_ENV_VAR = "GENY_PERMISSION_MODE"
 
+# PR-D.3.4 — executor-side PermissionMode (orthogonal to advisory|
+# enforce). Maps 1:1 to PermissionMode enum values from
+# geny_executor.permission.types after PR-B.5.1.
+EXECUTOR_PERMISSION_MODES = (
+    "default", "plan", "auto", "bypass", "acceptEdits", "dontAsk",
+)
+_DEFAULT_EXECUTOR_MODE = "default"
+_EXECUTOR_MODE_ENV_VAR = "GENY_PERMISSION_EXEC_MODE"
+
+
+def _resolve_executor_mode() -> str:
+    raw = os.environ.get(
+        _EXECUTOR_MODE_ENV_VAR, _DEFAULT_EXECUTOR_MODE,
+    ).strip()
+    if raw not in EXECUTOR_PERMISSION_MODES:
+        logger.warning(
+            "install_permission_rules: unknown %s=%r; falling back to %r",
+            _EXECUTOR_MODE_ENV_VAR, raw, _DEFAULT_EXECUTOR_MODE,
+        )
+        return _DEFAULT_EXECUTOR_MODE
+    return raw
+
 
 def permissions_yaml_path() -> Path:
     """User-scope rule file path. Used by tooling / UI to surface
@@ -131,11 +153,21 @@ def attach_kwargs() -> dict:
     Returns the ``{permission_rules, permission_mode}`` kwargs subset,
     skipping the entry entirely when no rules are loaded so older
     executor builds without the kwarg keep working.
+
+    PR-D.3.4 — also includes ``executor_permission_mode`` resolved from
+    GENY_PERMISSION_EXEC_MODE (or PermissionsConfig.executor_mode via
+    env_sync). The kwarg name matches what the executor's
+    Pipeline.attach_runtime accepts after 1.2.0; older executors that
+    don't recognise it still work because the runner accepts **kwargs.
     """
     rules, mode = install_permission_rules()
     if not rules:
         return {}
-    return {"permission_rules": rules, "permission_mode": mode}
+    out = {"permission_rules": rules, "permission_mode": mode}
+    executor_mode = _resolve_executor_mode()
+    if executor_mode != _DEFAULT_EXECUTOR_MODE:
+        out["executor_permission_mode"] = executor_mode
+    return out
 
 
 # G6.4 — Stage 4 guard chain population
