@@ -227,15 +227,15 @@ services:
       # GPU 동시 합성 슬롯 (asyncio.Semaphore). 2026-04 RTX 5070
       # (Blackwell, sm_120, 12GB, Tensor cores) 로 업그레이드하며 4 로 상향.
       # 더 작은 GPU 또는 공유 호스트에서는 1~2 로 내릴 것.
-      - OMNIVOICE_MAX_CONCURRENCY=${OMNIVOICE_MAX_CONCURRENCY:-4}
+      - OMNIVOICE_MAX_CONCURRENCY=${OMNIVOICE_MAX_CONCURRENCY:-1}
       # Diffusion outer-loop step 수. 원본 기본값 32. 16 = 품질/속도 균형
       # (5070 측정 기준 RTF 충분히 안정). 음질 우선이면 24, 속도 우선이면
       # 8~12 까지 내릴 수 있음.
-      - OMNIVOICE_DEFAULT_NUM_STEP=${OMNIVOICE_DEFAULT_NUM_STEP:-16}
+      - OMNIVOICE_DEFAULT_NUM_STEP=${OMNIVOICE_DEFAULT_NUM_STEP:-14}
       # CUDA 컨텍스트 메모리 단편화 방지. 0.85 = 12GB 5070 에서 ~10.2GB
       # 예약 (전용 GPU 호스트 기준). 공유 시 0.5~0.7 로 낮춰서 운영.
       # 0 으로 두면 비활성화.
-      - OMNIVOICE_GPU_MEMORY_FRACTION=${OMNIVOICE_GPU_MEMORY_FRACTION:-0.85}
+      - OMNIVOICE_GPU_MEMORY_FRACTION=${OMNIVOICE_GPU_MEMORY_FRACTION:-0.4}
       - OMNIVOICE_AUTO_ASR=${OMNIVOICE_AUTO_ASR:-false}
       - OMNIVOICE_LOG_LEVEL=${OMNIVOICE_LOG_LEVEL:-info}
       - HF_ENDPOINT=${HF_ENDPOINT:-https://huggingface.co}
