@@ -12,7 +12,11 @@ function cn(...classes: (string | boolean | undefined | null)[]) {
   return twMerge(classes.filter(Boolean).join(' '));
 }
 
-const GLOBAL_TAB_IDS = ['main', 'playground', 'playground2d', 'toolSets', 'toolCatalog', 'permissions', 'hooks', 'skills', 'mcpServers', 'environments', 'sharedFolder', 'admin', 'settings'] as const;
+// Playground / Playground2D are intentionally omitted — code path is
+// kept in TAB_MAP / dynamic imports so the bundle and routes still work,
+// but the operator UI doesn't surface them. Re-add when those views
+// become first-class again.
+const GLOBAL_TAB_IDS = ['main', 'toolSets', 'toolCatalog', 'permissions', 'hooks', 'skills', 'mcpServers', 'environments', 'sharedFolder', 'admin', 'settings'] as const;
 const SESSION_TAB_DEFS = [
   { id: 'command', accent: true },
   { id: 'vtuber' },
