@@ -8,10 +8,17 @@
  * Run-now + Delete.
  */
 
-import { useState, useEffect, useCallback, FormEvent, Fragment } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { cronApi, CronJobRecord, CronJobCreateRequest, CronJobHistoryEntry, CronStatusResponse } from '@/lib/api';
-import { twMerge } from 'tailwind-merge';
-import { RefreshCw, Plus, Trash2, Play, Power, ChevronDown, ChevronRight } from 'lucide-react';
+import { RefreshCw, Plus, Trash2, Play, Power, ChevronDown, ChevronRight, Clock } from 'lucide-react';
+import {
+  TabShell,
+  EditorModal,
+  EmptyState,
+  StatusBadge,
+  ActionButton,
+  cn,
+} from '@/components/layout';
 
 // PR-F.4.2 — show a friendly description of a cron expression next to
 // the raw form. cronstrue is consulted at runtime only; the indirect
@@ -159,54 +166,38 @@ export function CronTab() {
   }, [histories]);
 
   return (
-    <div className="flex flex-col h-full p-4 gap-4">
-      <header className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          Cron Jobs
+    <TabShell
+      title="Cron Jobs"
+      icon={Clock}
+      actions={
+        <>
           {status && (
-            <span
-              className={cn(
-                'text-[0.625rem] px-1.5 py-0.5 rounded border font-mono uppercase tracking-wider',
-                status.running
-                  ? 'bg-green-100 text-green-800 border-green-300'
-                  : 'bg-red-100 text-red-800 border-red-300',
-              )}
+            <StatusBadge
+              tone={status.running ? 'success' : 'danger'}
+              uppercase
               title={`cycle ${status.cycle_seconds ?? '?'}s · ${status.jobs_enabled}/${status.jobs_total} enabled`}
             >
               {status.running ? 'live' : 'down'} · {status.jobs_enabled}/{status.jobs_total}
-            </span>
+            </StatusBadge>
           )}
-        </h2>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={loading}
-            className="flex items-center gap-1 text-sm border rounded px-2 py-1 disabled:opacity-50"
-          >
-            <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
+          <ActionButton variant="primary" icon={Plus} onClick={() => setShowCreate(true)}>
+            Add Job
+          </ActionButton>
+          <ActionButton icon={RefreshCw} spinIcon={loading} onClick={refresh} disabled={loading}>
             Refresh
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-1 text-sm bg-blue-600 text-white rounded px-2 py-1"
-          >
-            <Plus className="w-4 h-4" /> Add Job
-          </button>
-        </div>
-      </header>
-
-      {error && (
-        <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2">
-          {error}
-        </div>
-      )}
-
+          </ActionButton>
+        </>
+      }
+      error={error}
+      onDismissError={() => setError(null)}
+    >
+      <div className="h-full min-h-0 overflow-y-auto p-4">
       {rows.length === 0 ? (
-        <div className="text-sm text-slate-500 p-4 border rounded text-center">
-          No cron jobs. Add one to schedule recurring tasks.
-        </div>
+        <EmptyState
+          icon={Clock}
+          title="No cron jobs"
+          description="Add one to schedule recurring tasks."
+        />
       ) : (
         <div className="overflow-auto border rounded">
           <table className="min-w-full text-sm">
@@ -328,25 +319,27 @@ export function CronTab() {
         </div>
       )}
 
-      {showCreate && (
-        <CreateModal
-          onClose={() => setShowCreate(false)}
-          onCreated={() => {
-            setShowCreate(false);
-            refresh();
-          }}
-          onError={setError}
-        />
-      )}
-    </div>
+      </div>
+      <CreateModal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreated={() => {
+          setShowCreate(false);
+          refresh();
+        }}
+        onError={setError}
+      />
+    </TabShell>
   );
 }
 
 function CreateModal({
+  open,
   onClose,
   onCreated,
   onError,
 }: {
+  open: boolean;
   onClose: () => void;
   onCreated: () => void;
   onError: (e: string) => void;
@@ -380,8 +373,7 @@ function CreateModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetKind]);
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     setSubmitting(true);
     let payload: Record<string, unknown>;
     try {
@@ -408,13 +400,26 @@ function CreateModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white rounded-lg p-6 w-full max-w-md flex flex-col gap-3"
-      >
-        <h3 className="text-lg font-semibold">Add Cron Job</h3>
-        <label className="flex flex-col text-sm">
+    <EditorModal
+      open={open}
+      onClose={onClose}
+      title="Add Cron Job"
+      saving={submitting}
+      footer={
+        <>
+          <ActionButton onClick={onClose} disabled={submitting}>Cancel</ActionButton>
+          <ActionButton
+            variant="primary"
+            onClick={handleSubmit}
+            disabled={submitting || !name.trim() || !cronExpr.trim()}
+          >
+            {submitting ? 'Creating…' : 'Create'}
+          </ActionButton>
+        </>
+      }
+    >
+      <div className="grid gap-3 text-sm">
+        <label className="flex flex-col">
           Name (alphanumeric / dash / underscore)
           <input
             value={name}
@@ -424,7 +429,7 @@ function CreateModal({
             className="border rounded px-2 py-1 mt-1"
           />
         </label>
-        <label className="flex flex-col text-sm">
+        <label className="flex flex-col">
           Cron expression (5 fields: m h dom mon dow)
           <input
             value={cronExpr}
@@ -438,7 +443,7 @@ function CreateModal({
             </span>
           )}
         </label>
-        <label className="flex flex-col text-sm">
+        <label className="flex flex-col">
           Target kind
           <select
             value={targetKind}
@@ -449,7 +454,7 @@ function CreateModal({
             <option value="local_agent">local_agent</option>
           </select>
         </label>
-        <label className="flex flex-col text-sm">
+        <label className="flex flex-col">
           Payload (JSON)
           <textarea
             value={payloadJson}
@@ -458,24 +463,8 @@ function CreateModal({
             className="border rounded px-2 py-1 mt-1 font-mono text-xs"
           />
         </label>
-        <div className="flex justify-end gap-2 mt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-sm border rounded px-3 py-1"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={submitting}
-            className="text-sm bg-blue-600 text-white rounded px-3 py-1 disabled:opacity-50"
-          >
-            {submitting ? 'Creating…' : 'Create'}
-          </button>
-        </div>
-      </form>
-    </div>
+      </div>
+    </EditorModal>
   );
 }
 

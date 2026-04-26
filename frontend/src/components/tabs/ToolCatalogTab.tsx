@@ -12,16 +12,18 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { twMerge } from 'tailwind-merge';
-import { useI18n } from '@/lib/i18n';
 import { frameworkToolApi, FrameworkToolDetail } from '@/lib/api';
 import { environmentApi } from '@/lib/environmentApi';
 import type { EnvironmentSummary, EnvironmentDetail } from '@/types/environment';
-import { RefreshCw, X, Check } from 'lucide-react';
-
-function cn(...c: (string | boolean | undefined | null)[]) {
-  return twMerge(c.filter(Boolean).join(' '));
-}
+import { RefreshCw, Check, Wrench } from 'lucide-react';
+import {
+  TabShell,
+  TwoPaneBody,
+  DetailDrawer,
+  EmptyState,
+  ActionButton,
+  cn,
+} from '@/components/layout';
 
 const ALL = '__all__';
 
@@ -35,7 +37,6 @@ const CAPABILITY_BADGES: Array<[keyof FrameworkToolDetail['capabilities'], strin
 ];
 
 export function ToolCatalogTab() {
-  const { t } = useI18n();
   const [tools, setTools] = useState<FrameworkToolDetail[]>([]);
   const [groups, setGroups] = useState<string[]>([]);
   const [activeGroup, setActiveGroup] = useState<string>(ALL);
@@ -152,100 +153,93 @@ export function ToolCatalogTab() {
     return counts;
   }, [tools]);
 
-  return (
-    <div className="flex h-full min-h-0">
-      {/* ── Sidebar ── */}
-      <aside className="w-44 shrink-0 border-r border-[var(--border-color)] overflow-y-auto p-2">
-        <div className="text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)] font-semibold px-2 py-1">
-          Groups
-        </div>
+  const sidebar = (
+    <>
+      <button
+        type="button"
+        onClick={() => setActiveGroup(ALL)}
+        className={cn(
+          'w-full text-left px-2 py-1.5 rounded text-[0.8125rem] hover:bg-[var(--bg-tertiary)]',
+          activeGroup === ALL && 'bg-[var(--bg-tertiary)] font-semibold',
+        )}
+      >
+        All <span className="text-[var(--text-muted)] text-[0.6875rem]">({tools.length})</span>
+      </button>
+      {groups.map((g) => (
         <button
+          key={g}
           type="button"
-          onClick={() => setActiveGroup(ALL)}
+          onClick={() => setActiveGroup(g)}
           className={cn(
             'w-full text-left px-2 py-1.5 rounded text-[0.8125rem] hover:bg-[var(--bg-tertiary)]',
-            activeGroup === ALL && 'bg-[var(--bg-tertiary)] font-semibold',
+            activeGroup === g && 'bg-[var(--bg-tertiary)] font-semibold',
           )}
         >
-          All <span className="text-[var(--text-muted)] text-[0.6875rem]">({tools.length})</span>
+          {g}{' '}
+          <span className="text-[var(--text-muted)] text-[0.6875rem]">
+            ({groupCounts[g] ?? 0})
+          </span>
         </button>
-        {groups.map((g) => (
-          <button
-            key={g}
-            type="button"
-            onClick={() => setActiveGroup(g)}
-            className={cn(
-              'w-full text-left px-2 py-1.5 rounded text-[0.8125rem] hover:bg-[var(--bg-tertiary)]',
-              activeGroup === g && 'bg-[var(--bg-tertiary)] font-semibold',
-            )}
-          >
-            {g}{' '}
-            <span className="text-[var(--text-muted)] text-[0.6875rem]">
-              ({groupCounts[g] ?? 0})
-            </span>
-          </button>
-        ))}
-      </aside>
+      ))}
+    </>
+  );
 
-      {/* ── Card grid ── */}
-      <main className="flex-1 min-w-0 overflow-y-auto p-4">
-        <header className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <div>
-            <h2 className="text-base font-semibold">Framework tools</h2>
-            <p className="text-[0.75rem] text-[var(--text-muted)]">
-              Built-in tools shipped with geny-executor.{' '}
-              {activeGroup !== ALL && <span>· filter: {activeGroup}</span>}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* PR-E.1.4 — Preset selector. Tag-filtered list of envs. */}
-            <select
-              value={activePresetId ?? ''}
-              onChange={(e) => setActivePresetId(e.target.value || null)}
-              disabled={loading || presetLoading}
-              className="text-xs border rounded px-2 py-1 bg-[var(--bg-primary)] disabled:opacity-50"
-              title="Edit which built-ins are enabled in a preset environment"
-            >
-              <option value="">— No preset —</option>
-              {presets.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={refresh}
-              disabled={loading}
-              className="flex items-center gap-1 text-xs border rounded px-2 py-1 disabled:opacity-50"
-            >
-              <RefreshCw className={cn('w-3 h-3', loading && 'animate-spin')} />
-              Refresh
-            </button>
-          </div>
-        </header>
-
-        {activePresetId && (
-          <div className="text-[0.75rem] text-[var(--text-muted)] mb-3">
-            Editing <span className="font-mono">{activePresetDetail?.name ?? activePresetId}</span> ·{' '}
-            <span className="text-[var(--text-secondary)]">
+  return (
+    <TabShell
+      title="Framework tools"
+      icon={Wrench}
+      subtitle={
+        <>
+          Built-in tools shipped with geny-executor.
+          {activeGroup !== ALL && <> · filter: {activeGroup}</>}
+          {activePresetId && (
+            <>
+              {' · editing '}
+              <span className="font-mono">{activePresetDetail?.name ?? activePresetId}</span>
+              {' · '}
               {enabledNames.size} / {tools.length} enabled
-            </span>
-            {presetLoading && <span> · loading…</span>}
-          </div>
-        )}
-
-        {error && (
-          <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2 mb-3">
-            {error}
-          </div>
-        )}
-
-        {visible.length === 0 ? (
-          <div className="text-sm text-[var(--text-muted)] text-center py-8">
-            {loading ? 'Loading…' : 'No tools.'}
-          </div>
-        ) : (
+              {presetLoading && ' · loading…'}
+            </>
+          )}
+        </>
+      }
+      actions={
+        <>
+          <select
+            value={activePresetId ?? ''}
+            onChange={(e) => setActivePresetId(e.target.value || null)}
+            disabled={loading || presetLoading}
+            className="text-xs border rounded px-2 py-1 bg-[var(--bg-primary)] disabled:opacity-50"
+            title="Edit which built-ins are enabled in a preset environment"
+          >
+            <option value="">— No preset —</option>
+            {presets.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <ActionButton icon={RefreshCw} spinIcon={loading} onClick={refresh} disabled={loading}>
+            Refresh
+          </ActionButton>
+        </>
+      }
+      error={error}
+      onDismissError={() => setError(null)}
+    >
+      <div className="flex h-full min-h-0">
+        <TwoPaneBody
+          sidebar={sidebar}
+          sidebarTitle="Groups"
+          sidebarWidth="narrow"
+          mainPadding="lg"
+        >
+          {visible.length === 0 ? (
+            <EmptyState
+              icon={Wrench}
+              title={loading ? 'Loading…' : 'No tools.'}
+            />
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {visible.map((tt) => {
               const isEnabled = enabledNames.has(tt.name);
@@ -320,60 +314,55 @@ export function ToolCatalogTab() {
             })}
           </div>
         )}
-      </main>
+        </TwoPaneBody>
 
-      {/* ── Detail panel ── */}
-      {selected && (
-        <aside className="w-96 shrink-0 border-l border-[var(--border-color)] overflow-y-auto p-4">
-          <header className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold font-mono">{selected.name}</h3>
-            <button
-              type="button"
-              onClick={() => setSelected(null)}
-              className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </header>
+        <DetailDrawer
+          open={!!selected}
+          onClose={() => setSelected(null)}
+          title={<span className="font-mono">{selected?.name}</span>}
+        >
+          {selected && (
+            <>
+              <div className="text-[0.6875rem] text-[var(--text-muted)] uppercase tracking-wider mb-1">
+                Group
+              </div>
+              <div className="text-[0.8125rem] mb-3">{selected.feature_group}</div>
 
-          <div className="text-[0.6875rem] text-[var(--text-muted)] uppercase tracking-wider mb-1">
-            Group
-          </div>
-          <div className="text-[0.8125rem] mb-3">{selected.feature_group}</div>
+              <div className="text-[0.6875rem] text-[var(--text-muted)] uppercase tracking-wider mb-1">
+                Description
+              </div>
+              <div className="text-[0.8125rem] mb-3 whitespace-pre-wrap">
+                {selected.description || '—'}
+              </div>
 
-          <div className="text-[0.6875rem] text-[var(--text-muted)] uppercase tracking-wider mb-1">
-            Description
-          </div>
-          <div className="text-[0.8125rem] mb-3 whitespace-pre-wrap">
-            {selected.description || '—'}
-          </div>
+              <div className="text-[0.6875rem] text-[var(--text-muted)] uppercase tracking-wider mb-1">
+                Capabilities
+              </div>
+              <div className="flex flex-wrap gap-1 mb-3">
+                {Object.entries(selected.capabilities).map(([k, v]) => (
+                  <span
+                    key={k}
+                    className="text-[0.625rem] px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] font-mono"
+                  >
+                    {k}: {String(v)}
+                  </span>
+                ))}
+                {Object.keys(selected.capabilities).length === 0 && (
+                  <span className="text-[var(--text-muted)] text-[0.75rem]">—</span>
+                )}
+              </div>
 
-          <div className="text-[0.6875rem] text-[var(--text-muted)] uppercase tracking-wider mb-1">
-            Capabilities
-          </div>
-          <div className="flex flex-wrap gap-1 mb-3">
-            {Object.entries(selected.capabilities).map(([k, v]) => (
-              <span
-                key={k}
-                className="text-[0.625rem] px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] font-mono"
-              >
-                {k}: {String(v)}
-              </span>
-            ))}
-            {Object.keys(selected.capabilities).length === 0 && (
-              <span className="text-[var(--text-muted)] text-[0.75rem]">—</span>
-            )}
-          </div>
-
-          <div className="text-[0.6875rem] text-[var(--text-muted)] uppercase tracking-wider mb-1">
-            Input schema
-          </div>
-          <pre className="text-[0.625rem] font-mono bg-[var(--bg-tertiary)] rounded p-2 overflow-x-auto">
-            {JSON.stringify(selected.input_schema, null, 2)}
-          </pre>
-        </aside>
-      )}
-    </div>
+              <div className="text-[0.6875rem] text-[var(--text-muted)] uppercase tracking-wider mb-1">
+                Input schema
+              </div>
+              <pre className="text-[0.625rem] font-mono bg-[var(--bg-tertiary)] rounded p-2 overflow-x-auto">
+                {JSON.stringify(selected.input_schema, null, 2)}
+              </pre>
+            </>
+          )}
+        </DetailDrawer>
+      </div>
+    </TabShell>
   );
 }
 

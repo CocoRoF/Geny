@@ -14,7 +14,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { customMcpApi, CustomMcpServerSummary, CustomMcpServerDetail } from '@/lib/api';
-import { Plus, RefreshCw, Save, Trash2, X, AlertCircle } from 'lucide-react';
+import { Plus, RefreshCw, Save, Trash2, Plug } from 'lucide-react';
+import {
+  TabShell,
+  TwoPaneBody,
+  EditorModal,
+  EmptyState,
+  ActionButton,
+} from '@/components/layout';
 
 const NAME_RE = /^[a-z0-9][a-z0-9_-]{1,63}$/;
 
@@ -142,95 +149,88 @@ export function McpServersTab() {
     [detail],
   );
 
-  return (
-    <div className="flex h-full min-h-0">
-      <aside className="w-60 shrink-0 border-r border-[var(--border-color)] overflow-y-auto p-2">
-        <div className="text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)] font-semibold px-2 py-1 flex items-center justify-between">
-          Custom MCP servers
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={loading}
-            className="text-[var(--text-muted)] hover:text-[var(--primary-color)]"
-            title="Refresh"
-          >
-            <RefreshCw size={10} className={loading ? 'animate-spin' : ''} />
-          </button>
+  const sidebar = (
+    <>
+      <ActionButton
+        variant="primary"
+        icon={Plus}
+        onClick={openCreate}
+        className="w-full justify-center mb-2"
+      >
+        Add server
+      </ActionButton>
+      {servers.length === 0 ? (
+        <div className="px-2 py-1 text-[0.6875rem] text-[var(--text-muted)] italic">
+          {loading ? 'Loading…' : 'None.'}
         </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="w-full flex items-center justify-center gap-1 text-xs bg-[var(--primary-color)] text-white rounded px-2 py-1 mb-2"
-        >
-          <Plus className="w-3 h-3" />
-          Add server
-        </button>
-        {servers.length === 0 ? (
-          <div className="px-2 py-1 text-[0.6875rem] text-[var(--text-muted)] italic">
-            {loading ? 'Loading…' : 'None.'}
-          </div>
-        ) : (
-          servers.map((s) => (
-            <button
-              key={s.name}
-              type="button"
-              onClick={() => setActive(s.name)}
-              className={`w-full text-left px-2 py-1.5 rounded text-[0.8125rem] hover:bg-[var(--bg-tertiary)] ${
-                active === s.name ? 'bg-[var(--bg-tertiary)] font-semibold' : ''
-              }`}
-            >
-              <span className="font-mono">{s.name}</span>
-              {s.type && (
-                <span className="text-[0.5625rem] uppercase text-[var(--text-muted)] ml-1">{s.type}</span>
-              )}
-              {s.description && (
-                <div className="text-[0.6875rem] text-[var(--text-secondary)] line-clamp-1">
-                  {s.description}
-                </div>
-              )}
-            </button>
-          ))
-        )}
-      </aside>
+      ) : (
+        servers.map((s) => (
+          <button
+            key={s.name}
+            type="button"
+            onClick={() => setActive(s.name)}
+            className={`w-full text-left px-2 py-1.5 rounded text-[0.8125rem] hover:bg-[var(--bg-tertiary)] ${
+              active === s.name ? 'bg-[var(--bg-tertiary)] font-semibold' : ''
+            }`}
+          >
+            <span className="font-mono">{s.name}</span>
+            {s.type && (
+              <span className="text-[0.5625rem] uppercase text-[var(--text-muted)] ml-1">{s.type}</span>
+            )}
+            {s.description && (
+              <div className="text-[0.6875rem] text-[var(--text-secondary)] line-clamp-1">
+                {s.description}
+              </div>
+            )}
+          </button>
+        ))
+      )}
+    </>
+  );
 
-      <main className="flex-1 min-w-0 overflow-y-auto p-4">
-        <header className="mb-3">
-          <h2 className="text-base font-semibold">MCP Servers</h2>
-          <p className="text-[0.75rem] text-[var(--text-muted)]">
-            Custom servers persist as JSON files under{' '}
-            <span className="font-mono">{customDir}</span>. Live-session OAuth and per-server
-            controls live in the per-session tools panel.
-          </p>
-        </header>
-        {error && (
-          <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2 mb-2 flex items-start gap-1.5">
-            <AlertCircle className="w-3 h-3 mt-0.5" />
-            <span>{error}</span>
-          </div>
-        )}
+  return (
+    <TabShell
+      title="MCP Servers"
+      icon={Plug}
+      subtitle={
+        <>
+          Custom servers persist as JSON files under{' '}
+          <span className="font-mono">{customDir}</span>. Live-session OAuth lives in the per-session tools panel.
+        </>
+      }
+      actions={
+        <ActionButton icon={RefreshCw} spinIcon={loading} onClick={refresh} disabled={loading}>
+          Refresh
+        </ActionButton>
+      }
+      error={error}
+      onDismissError={() => setError(null)}
+    >
+      <TwoPaneBody
+        sidebar={sidebar}
+        sidebarTitle="Custom MCP servers"
+        sidebarWidth="wide"
+        mainPadding="lg"
+      >
         {!active ? (
-          <div className="text-sm text-[var(--text-muted)] py-12 text-center">
-            Pick a server on the left, or click <span className="font-mono">Add server</span>.
-          </div>
+          <EmptyState
+            icon={Plug}
+            title="Pick a server on the left"
+            description={<>or click <span className="font-mono">Add server</span> to create one.</>}
+          />
         ) : detail ? (
           <div>
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold font-mono">{detail.name}</h3>
               <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => openEdit(detail.name)}
-                  className="text-xs border rounded px-2 py-1"
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
+                <ActionButton onClick={() => openEdit(detail.name)}>Edit</ActionButton>
+                <ActionButton
+                  variant="danger"
+                  icon={Trash2}
                   onClick={() => onDelete(detail.name)}
-                  className="text-xs border rounded px-2 py-1 text-red-600 hover:bg-red-50"
                 >
-                  <Trash2 className="w-3 h-3 inline mr-1" /> Delete
-                </button>
+                  Delete
+                </ActionButton>
               </div>
             </div>
             <p className="text-[0.6875rem] text-[var(--text-muted)] mb-2 font-mono">
@@ -243,31 +243,26 @@ export function McpServersTab() {
         ) : (
           <div className="text-sm text-[var(--text-muted)]">Loading…</div>
         )}
-      </main>
+      </TwoPaneBody>
 
-      {editorOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
-          onClick={() => !saving && setEditorOpen(false)}
-        >
-          <div
-            className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border-color)] w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <header className="px-4 py-2 border-b border-[var(--border-color)] flex items-center justify-between">
-              <h3 className="text-sm font-semibold">
-                {editingExisting ? `Edit ${form.name}` : 'New custom MCP server'}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setEditorOpen(false)}
-                disabled={saving}
-                className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-              >
-                <X size={14} />
-              </button>
-            </header>
-            <div className="overflow-y-auto p-4 grid gap-2 text-[0.75rem]">
+      <EditorModal
+        open={editorOpen}
+        onClose={() => setEditorOpen(false)}
+        title={editingExisting ? `Edit ${form.name}` : 'New custom MCP server'}
+        saving={saving}
+        width="xl"
+        footer={
+          <>
+            <ActionButton onClick={() => setEditorOpen(false)} disabled={saving}>
+              Cancel
+            </ActionButton>
+            <ActionButton variant="primary" icon={Save} onClick={submitForm} disabled={saving}>
+              {saving ? 'Saving…' : editingExisting ? 'Save' : 'Create'}
+            </ActionButton>
+          </>
+        }
+      >
+            <div className="grid gap-2 text-[0.75rem]">
               <label>
                 <div className="text-[var(--text-muted)] mb-0.5">Name *</div>
                 <input
@@ -297,29 +292,8 @@ export function McpServersTab() {
                 />
               </label>
             </div>
-            <footer className="px-4 py-2 border-t border-[var(--border-color)] flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setEditorOpen(false)}
-                disabled={saving}
-                className="text-xs border rounded px-3 py-1"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={submitForm}
-                disabled={saving}
-                className="text-xs bg-[var(--primary-color)] text-white rounded px-3 py-1 disabled:opacity-50 inline-flex items-center gap-1"
-              >
-                <Save className="w-3 h-3" />
-                {saving ? 'Saving…' : editingExisting ? 'Save' : 'Create'}
-              </button>
-            </footer>
-          </div>
-        </div>
-      )}
-    </div>
+      </EditorModal>
+    </TabShell>
   );
 }
 
