@@ -135,7 +135,10 @@ dependencies = [
     #   surfaces, and manifest v3 schema are all stable.
     # No breaking changes vs 0.46.x — this pin is a stability marker
     # that also unlocks the Sub-phase 9c APIs.
-    "geny-executor[web]>=1.0.0,<2.0.0",
+    # Bumped to 1.1.0 for new-executor-uplift Cycle A executor side
+    # (Task lifecycle / Slash commands / +20 built-in tools / Cron).
+    # cron extra pulls croniter for the scheduling daemon.
+    "geny-executor[web,cron]>=1.1.0,<1.2.0",
     # MCP (Model Context Protocol)
     "mcp>=1.0.0",
     # Auth
