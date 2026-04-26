@@ -124,6 +124,44 @@ def _serialize(job) -> Dict[str, Any]:
     }
 
 
+class CronStatusResponse(BaseModel):
+    """PR-F.6.3 — runner liveness signal for the CronTab badge."""
+    running: bool
+    cycle_seconds: Optional[float] = None
+    jobs_total: int = 0
+    jobs_enabled: int = 0
+
+
+@router.get("/status", response_model=CronStatusResponse)
+async def cron_status(
+    request: Request,
+    _auth: dict = Depends(require_auth),
+):
+    runner = getattr(request.app.state, "cron_runner", None)
+    store = getattr(request.app.state, "cron_store", None)
+    daemon = getattr(runner, "_daemon", None) if runner else None
+    running = bool(daemon is not None and not daemon.done())
+    cycle = getattr(runner, "_cycle", None) if runner else None
+    total = 0
+    enabled = 0
+    if store is not None:
+        try:
+            jobs = await store.list()
+            total = len(jobs)
+            enabled = sum(
+                1 for j in jobs
+                if getattr(j.status, "value", str(j.status)) == "enabled"
+            )
+        except Exception:
+            pass
+    return CronStatusResponse(
+        running=running,
+        cycle_seconds=cycle,
+        jobs_total=total,
+        jobs_enabled=enabled,
+    )
+
+
 @router.get("/jobs", response_model=List[CronJobResponse])
 async def list_cron_jobs(
     request: Request,
