@@ -1058,6 +1058,8 @@ const ko: Translations = {
     // C.3 (cycle 20260426_1) — env-driven semantics 안내.
     toolPreset: '도구 프리셋',
     toolPresetHelp: '환경 기반 세션에서는 도구 목록을 바인딩된 환경 매니페스트가 결정합니다. 선택한 프리셋은 주로 MCP 서버 필터링에 영향을 줍니다. 기본값은 역할에 따라 자동 선택됩니다.',
+    // Q.1 (cycle 20260426_3) — 세션별 메모리 튜닝 오버라이드.
+    memoryTuningHeader: '메모리 튜닝 (고급) — 전역 설정을 세션 단위로 덮어씁니다',
     environment: '환경',
     environmentHelp: '선택 사항인 v2 EnvironmentManifest. 설정하면 role 기반 preset 대신 manifest 의 pipeline + stage 템플릿 + 도구 스냅샷을 사용합니다.',
     environmentNone: '없음 — role preset 사용',

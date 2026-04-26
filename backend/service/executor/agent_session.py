@@ -1299,6 +1299,38 @@ class AgentSession:
                 "enable_vector_search": True,
                 "enable_reflection": True,
             }
+
+        # Q.1 (cycle 20260426_3) — per-session memory tuning override.
+        # ``self._memory_config.tuning`` (when present) wins over the
+        # global tuning loaded above. Each field is independently
+        # overridable; missing fields fall through to the global value.
+        # Type-coerced loosely — the fields are read into private slots
+        # of GenyMemoryRetriever / Strategy so a wrong type would silent-
+        # fail at use time; we surface a warning at session-build time
+        # instead so the operator can catch it before the session runs.
+        per_session_cfg = self._memory_config or {}
+        per_session_tuning = (
+            per_session_cfg.get("tuning")
+            if isinstance(per_session_cfg, dict)
+            else None
+        )
+        if isinstance(per_session_tuning, dict):
+            for key, validator in (
+                ("max_inject_chars", lambda v: isinstance(v, int) and v >= 1),
+                ("recent_turns", lambda v: isinstance(v, int) and v >= 0),
+                ("enable_vector_search", lambda v: isinstance(v, bool)),
+                ("enable_reflection", lambda v: isinstance(v, bool)),
+            ):
+                if key in per_session_tuning:
+                    candidate = per_session_tuning[key]
+                    if validator(candidate):
+                        _tuning[key] = candidate
+                    else:
+                        logger.warning(
+                            "[%s] memory_config.tuning.%s ignored — invalid "
+                            "type / value: %r",
+                            self._session_id, key, candidate,
+                        )
         max_inject_chars = _tuning["max_inject_chars"]
 
         curated_km = None

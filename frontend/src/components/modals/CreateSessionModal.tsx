@@ -69,6 +69,12 @@ export default function CreateSessionModal({ onClose }: Props) {
   const [memoryDialect, setMemoryDialect] = useState<'' | 'sqlite' | 'postgres'>('');
   const [memoryScope, setMemoryScope] = useState('');
   const [memoryTimezone, setMemoryTimezone] = useState('');
+  // Q.1 (cycle 20260426_3) — per-session memory tuning override.
+  const [memoryTuningOpen, setMemoryTuningOpen] = useState(false);
+  const [memoryTuningMaxInjectChars, setMemoryTuningMaxInjectChars] = useState('');
+  const [memoryTuningRecentTurns, setMemoryTuningRecentTurns] = useState('');
+  const [memoryTuningEnableVector, setMemoryTuningEnableVector] = useState<'' | 'true' | 'false'>('');
+  const [memoryTuningEnableReflection, setMemoryTuningEnableReflection] = useState<'' | 'true' | 'false'>('');
   const [showMemoryAdvanced, setShowMemoryAdvanced] = useState(false);
   const {
     environments,
@@ -197,17 +203,43 @@ export default function CreateSessionModal({ onClose }: Props) {
       // Phase 7-3 — per-session MemoryProvider override. Only send
       // when the user picked a provider; leaving it blank = process
       // default (MEMORY_PROVIDER env).
-      if (memoryProvider) {
-        const memCfg: Record<string, unknown> = { provider: memoryProvider };
-        if (memoryProvider === 'file') {
-          if (memoryRoot.trim()) memCfg.root = memoryRoot.trim();
+      // Build memCfg if either provider override OR tuning override is set —
+      // Q.1 (cycle 20260426_3) lets the operator tune memory per-session
+      // even without overriding the provider.
+      const tuning: Record<string, unknown> = {};
+      const mic = memoryTuningMaxInjectChars.trim();
+      if (mic) {
+        const n = Number.parseInt(mic, 10);
+        if (!Number.isNaN(n) && n >= 1) tuning.max_inject_chars = n;
+      }
+      const rt = memoryTuningRecentTurns.trim();
+      if (rt) {
+        const n = Number.parseInt(rt, 10);
+        if (!Number.isNaN(n) && n >= 0) tuning.recent_turns = n;
+      }
+      if (memoryTuningEnableVector !== '') {
+        tuning.enable_vector_search = memoryTuningEnableVector === 'true';
+      }
+      if (memoryTuningEnableReflection !== '') {
+        tuning.enable_reflection = memoryTuningEnableReflection === 'true';
+      }
+      const hasTuning = Object.keys(tuning).length > 0;
+
+      if (memoryProvider || hasTuning) {
+        const memCfg: Record<string, unknown> = {};
+        if (memoryProvider) {
+          memCfg.provider = memoryProvider;
+          if (memoryProvider === 'file') {
+            if (memoryRoot.trim()) memCfg.root = memoryRoot.trim();
+          }
+          if (memoryProvider === 'sql') {
+            if (memoryDsn.trim()) memCfg.dsn = memoryDsn.trim();
+            if (memoryDialect) memCfg.dialect = memoryDialect;
+          }
+          if (memoryScope.trim()) memCfg.scope = memoryScope.trim();
+          if (memoryTimezone.trim()) memCfg.timezone = memoryTimezone.trim();
         }
-        if (memoryProvider === 'sql') {
-          if (memoryDsn.trim()) memCfg.dsn = memoryDsn.trim();
-          if (memoryDialect) memCfg.dialect = memoryDialect;
-        }
-        if (memoryScope.trim()) memCfg.scope = memoryScope.trim();
-        if (memoryTimezone.trim()) memCfg.timezone = memoryTimezone.trim();
+        if (hasTuning) memCfg.tuning = tuning;
         payload.memory_config = memCfg;
       }
       // Sub-Worker env override — only meaningful for VTuber role,
@@ -530,6 +562,77 @@ export default function CreateSessionModal({ onClose }: Props) {
                     </div>
                   </div>
                 )}
+
+                {/* Q.1 (cycle 20260426_3) — per-session tuning override.
+                    Always available (independent of provider override) so
+                    operators tuning recall behavior without changing the
+                    storage backend can still use it. */}
+                <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
+                  <button
+                    type="button"
+                    onClick={() => setMemoryTuningOpen(o => !o)}
+                    className="text-[0.75rem] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center gap-1.5"
+                  >
+                    <span>{memoryTuningOpen ? '▾' : '▸'}</span>
+                    {t('createSession.memoryTuningHeader')}
+                  </button>
+                  {memoryTuningOpen && (
+                    <div className="mt-2 grid grid-cols-2 gap-2.5">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[0.6875rem] font-medium text-[var(--text-secondary)]">
+                          max_inject_chars
+                        </label>
+                        <input
+                          className="w-full py-1.5 px-2.5 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded text-[0.75rem] font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--primary-color)]"
+                          placeholder="(global)"
+                          inputMode="numeric"
+                          value={memoryTuningMaxInjectChars}
+                          onChange={e => setMemoryTuningMaxInjectChars(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[0.6875rem] font-medium text-[var(--text-secondary)]">
+                          recent_turns
+                        </label>
+                        <input
+                          className="w-full py-1.5 px-2.5 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded text-[0.75rem] font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--primary-color)]"
+                          placeholder="(global)"
+                          inputMode="numeric"
+                          value={memoryTuningRecentTurns}
+                          onChange={e => setMemoryTuningRecentTurns(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[0.6875rem] font-medium text-[var(--text-secondary)]">
+                          enable_vector_search
+                        </label>
+                        <select
+                          className="w-full py-1.5 px-2.5 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded text-[0.75rem] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]"
+                          value={memoryTuningEnableVector}
+                          onChange={e => setMemoryTuningEnableVector(e.target.value as typeof memoryTuningEnableVector)}
+                        >
+                          <option value="">(global)</option>
+                          <option value="true">true</option>
+                          <option value="false">false</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[0.6875rem] font-medium text-[var(--text-secondary)]">
+                          enable_reflection
+                        </label>
+                        <select
+                          className="w-full py-1.5 px-2.5 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded text-[0.75rem] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary-color)]"
+                          value={memoryTuningEnableReflection}
+                          onChange={e => setMemoryTuningEnableReflection(e.target.value as typeof memoryTuningEnableReflection)}
+                        >
+                          <option value="">(global)</option>
+                          <option value="true">true</option>
+                          <option value="false">false</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
