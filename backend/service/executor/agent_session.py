@@ -1141,12 +1141,37 @@ class AgentSession:
                     MemoryContextBlock(),
                 ]
             )
+        # PR-D.5.1 — seed the executor 1.3.0 WorkspaceStack into
+        # ToolContext.extras at session-build time. EnterWorktreeTool /
+        # ExitWorktreeTool will push/pop on it; LSPTool reads
+        # workspace.cwd through it. Tools that don't know about
+        # workspace see no behaviour change because they keep using
+        # working_dir directly.
+        #
+        # Falls back to None when executor 1.3.0 isn't available
+        # (older pin); the seed becomes a no-op and tools default to
+        # working_dir as they did pre-1.3.0.
+        _workspace_stack = None
+        try:
+            from geny_executor.workspace import Workspace, WorkspaceStack
+            from pathlib import Path as _Path
+            _workspace_stack = WorkspaceStack(
+                initial=Workspace(cwd=_Path(working_dir or ".")),
+            )
+        except ImportError:
+            pass
+
+        _tool_extras: Dict[str, Any] = {}
+        if _workspace_stack is not None:
+            _tool_extras["workspace_stack"] = _workspace_stack
+
         attach_kwargs: Dict[str, Any] = {
             "system_builder": system_builder,
             "tool_context": ToolContext(
                 session_id=self._session_id,
                 working_dir=working_dir,
                 storage_path=self.storage_path,
+                extras=_tool_extras,
             ),
             "llm_client": llm_client,
         }
