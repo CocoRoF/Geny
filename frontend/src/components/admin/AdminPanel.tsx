@@ -14,6 +14,7 @@ import {
   agentApi,
   adminTelemetryApi,
   subagentTypeApi,
+  notificationsApi,
   RecentToolEvent,
   RecentPermissionDecision,
   SubagentTypeRow,
@@ -21,8 +22,10 @@ import {
   ToolUsageRow,
   InProcessHookHandlerRow,
   SettingsMigrationStatusResponse,
+  NotificationEndpointRow,
+  SendMessageChannelRow,
 } from '@/lib/api';
-import { Shield, Plug, Sparkles, AlertCircle, RefreshCw, FileText, Activity, Lock, Users, Server, BarChart3, Cog, GitMerge } from 'lucide-react';
+import { Shield, Plug, Sparkles, AlertCircle, RefreshCw, FileText, Activity, Lock, Users, Server, BarChart3, Cog, GitMerge, Bell, MessageSquare } from 'lucide-react';
 
 interface PermissionRow {
   tool_name: string;
@@ -113,6 +116,9 @@ export default function AdminPanel() {
   const [toolUsage, setToolUsage] = useState<ToolUsageRow[]>([]);
   const [inProcHandlers, setInProcHandlers] = useState<InProcessHookHandlerRow[]>([]);
   const [migration, setMigration] = useState<SettingsMigrationStatusResponse | null>(null);
+  // Cycle G — notifications.
+  const [endpoints, setEndpoints] = useState<NotificationEndpointRow[]>([]);
+  const [channels, setChannels] = useState<SendMessageChannelRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const loadAll = () => {
@@ -147,6 +153,12 @@ export default function AdminPanel() {
     adminTelemetryApi.settingsMigrationStatus()
       .then(setMigration)
       .catch((e) => setError((p) => p ?? `migration status: ${e.message}`));
+    notificationsApi.listEndpoints()
+      .then((r) => setEndpoints(r.endpoints))
+      .catch((e) => setError((p) => p ?? `notification endpoints: ${e.message}`));
+    notificationsApi.listChannels()
+      .then((r) => setChannels(r.channels))
+      .catch((e) => setError((p) => p ?? `send-message channels: ${e.message}`));
   };
 
   useEffect(() => {
@@ -447,6 +459,50 @@ export default function AdminPanel() {
                   {t.description && (
                     <div className="text-[var(--text-secondary)] mt-0.5">{t.description}</div>
                   )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </Section>
+
+      {/* ── Notification endpoints (Cycle G) ── */}
+      <Section title="Notification endpoints" Icon={Bell} count={endpoints.length} onReload={loadAll}>
+        <div className="px-3 text-[0.6875rem]">
+          {endpoints.length === 0 ? (
+            <div className="text-[var(--text-muted)] italic py-2">
+              None registered. Drop entries in <span className="font-mono">~/.geny/notifications.json</span> or set <span className="font-mono">NOTIFICATION_ENDPOINTS</span>.
+            </div>
+          ) : (
+            <ul className="space-y-1">
+              {endpoints.map((e) => (
+                <li key={e.name} className="px-2 py-1.5 rounded border border-[var(--border-color)] bg-[var(--bg-secondary)]">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono">{e.name}</span>
+                    {e.type && <span className="text-[var(--text-muted)] text-[0.5625rem] uppercase">{e.type}</span>}
+                    {!e.enabled && <span className="text-[var(--warning-color)]">disabled</span>}
+                  </div>
+                  {e.target && <div className="text-[var(--text-secondary)] truncate">{e.target}</div>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </Section>
+
+      {/* ── SendMessage channels (Cycle G) ── */}
+      <Section title="SendMessage channels" Icon={MessageSquare} count={channels.length} onReload={loadAll}>
+        <div className="px-3 text-[0.6875rem]">
+          {channels.length === 0 ? (
+            <div className="text-[var(--text-muted)] italic py-2">
+              None registered.
+            </div>
+          ) : (
+            <ul className="space-y-0.5">
+              {channels.map((c) => (
+                <li key={c.name} className="flex items-center justify-between">
+                  <span className="font-mono">{c.name}</span>
+                  <span className="text-[var(--text-muted)] text-[0.6875rem]">{c.impl ?? '?'}</span>
                 </li>
               ))}
             </ul>

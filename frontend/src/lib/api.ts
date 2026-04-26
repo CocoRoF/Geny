@@ -894,6 +894,28 @@ export interface UserSkillUpsertRequest {
   examples?: string[];
 }
 
+// ==================== Notifications (Cycle G) ==================
+
+export interface NotificationEndpointRow {
+  name: string;
+  type: string | null;
+  target: string | null;
+  enabled: boolean;
+  extra: Record<string, unknown>;
+}
+
+export interface SendMessageChannelRow {
+  name: string;
+  impl: string | null;
+}
+
+export const notificationsApi = {
+  listEndpoints: () =>
+    apiCall<{ endpoints: NotificationEndpointRow[] }>('/api/notifications/endpoints'),
+  listChannels: () =>
+    apiCall<{ channels: SendMessageChannelRow[] }>('/api/notifications/channels'),
+};
+
 // ==================== Custom MCP Servers (Cycle G) ==============
 
 export interface CustomMcpServerSummary {
