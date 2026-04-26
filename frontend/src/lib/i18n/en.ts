@@ -73,6 +73,7 @@ const en = {
     tools: 'Tools',
     toolSets: 'Tool Sets',
     toolCatalog: 'Tool Catalog',
+    permissions: 'Permissions',
     environments: 'Environments',
     builder: 'Builder',
     settings: 'Settings',

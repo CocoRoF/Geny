@@ -26,6 +26,7 @@ const Playground2DTab = dynamic(() => import('@/components/tabs/Playground2DTab'
 const TasksTab = dynamic(() => import('@/components/tabs/TasksTab').then(m => m.TasksTab));
 const CronTab = dynamic(() => import('@/components/tabs/CronTab').then(m => m.CronTab));
 const ToolCatalogTab = dynamic(() => import('@/components/tabs/ToolCatalogTab').then(m => m.ToolCatalogTab));
+const PermissionsTab = dynamic(() => import('@/components/tabs/PermissionsTab').then(m => m.PermissionsTab));
 
 const TAB_MAP: Record<string, React.ComponentType> = {
   main: MainTab,
@@ -57,6 +58,8 @@ const TAB_MAP: Record<string, React.ComponentType> = {
   cron: CronTab,
   // PR-E.1.2 — Framework tool catalog viewer (executor's BUILT_IN_TOOL_CLASSES).
   toolCatalog: ToolCatalogTab,
+  // PR-E.2.2 — Permission rules viewer + editor.
+  permissions: PermissionsTab,
 };
 
 // Tabs that should stay mounted once activated (KeepAlive)
