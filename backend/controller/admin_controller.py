@@ -471,3 +471,177 @@ async def system_status(request: Request, _auth: dict = Depends(require_auth)):
         cron=cron_block,
         task_runner=tr_block,
     )
+
+
+# ── Tool usage counts (PR-G — Tool 사용량 / 호출 카운터) ─────────────
+
+
+class ToolUsageRow(BaseModel):
+    tool_name: str
+    calls: int
+    completes: int
+    errors: int
+    total_duration_ms: int
+    last_at: float
+
+
+class ToolUsageResponse(BaseModel):
+    counts: List[ToolUsageRow] = Field(default_factory=list)
+    window_size: int = 0  # number of events in the underlying ring
+
+
+@router.get(
+    "/admin/tool-usage",
+    response_model=ToolUsageResponse,
+    summary="Per-tool aggregate counts from the live event ring",
+)
+async def tool_usage(_auth: dict = Depends(require_auth)):
+    """Aggregate tool start/complete/error counters from the
+    process-wide ring buffer (PR-E.4.1). Window is the ring's last
+    200 events, not lifetime — for lifetime stats wire a Prometheus
+    exporter (out of scope today)."""
+    from service.telemetry.tool_event_ring import snapshot, usage_counts
+
+    rows = usage_counts()
+    return ToolUsageResponse(
+        counts=[ToolUsageRow(**r) for r in rows],
+        window_size=len(snapshot(limit=10_000)),
+    )
+
+
+# ── In-process hook handlers (PR-G — In-process hook handler list) ──
+
+
+class InProcessHookHandlerRow(BaseModel):
+    event: str
+    handler_count: int
+
+
+class InProcessHandlersResponse(BaseModel):
+    enabled: bool
+    handlers: List[InProcessHookHandlerRow] = Field(default_factory=list)
+    total: int = 0
+
+
+@router.get(
+    "/admin/hook-in-process-handlers",
+    response_model=InProcessHandlersResponse,
+    summary="Counts of in-process HookRunner handlers per event",
+)
+async def hook_in_process_handlers(_auth: dict = Depends(require_auth)):
+    """Surface :py:meth:`HookRunner.list_in_process_handlers` for the
+    HooksTab "in-process handlers" panel.
+
+    Empty (enabled=False) when no HookRunner is bound today (no
+    sessions or executor < 1.2.0)."""
+    handlers: Dict[str, int] = {}
+    enabled = False
+    try:
+        # The runner is per-session; AgentSessionManager caches the
+        # current default. Walk every live session and merge counts.
+        from controller.agent_controller import agent_manager
+
+        for sess in agent_manager.list_agents():
+            sid = sess.get("session_id") if isinstance(sess, dict) else getattr(sess, "session_id", None)
+            if not sid:
+                continue
+            agent = agent_manager.get_agent(sid)
+            if agent is None:
+                continue
+            pipeline = getattr(agent, "_pipeline", None)
+            if pipeline is None:
+                continue
+            tool_stage = pipeline.get_stage(10) if hasattr(pipeline, "get_stage") else None
+            ctx = getattr(tool_stage, "_context", None) if tool_stage else None
+            runner = getattr(ctx, "hook_runner", None) if ctx else None
+            if runner is None:
+                continue
+            enabled = bool(getattr(runner, "enabled", False))
+            list_fn = getattr(runner, "list_in_process_handlers", None)
+            if not callable(list_fn):
+                continue
+            for ev, count in list_fn().items():
+                ev_name = getattr(ev, "value", str(ev))
+                handlers[ev_name] = handlers.get(ev_name, 0) + int(count)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("hook_in_process_handlers: %s", exc)
+
+    rows = [InProcessHookHandlerRow(event=ev, handler_count=cnt) for ev, cnt in sorted(handlers.items())]
+    return InProcessHandlersResponse(
+        enabled=enabled,
+        handlers=rows,
+        total=sum(r.handler_count for r in rows),
+    )
+
+
+# ── Settings migration status viewer (PR-G) ────────────────────────
+
+
+class SettingsMigrationStatusResponse(BaseModel):
+    legacy_files_present: List[str] = Field(default_factory=list)
+    settings_json_path: Optional[str] = None
+    settings_json_exists: bool = False
+    settings_json_sections: List[str] = Field(default_factory=list)
+    notes: List[str] = Field(default_factory=list)
+
+
+@router.get(
+    "/admin/settings-migration-status",
+    response_model=SettingsMigrationStatusResponse,
+    summary="Visibility into the legacy-yaml → settings.json migration",
+)
+async def settings_migration_status(_auth: dict = Depends(require_auth)):
+    """Helps operators understand whether they still have legacy YAML
+    files lying around after the dual-read migration (PR-D.2.x)."""
+    notes: List[str] = []
+    legacy: List[str] = []
+
+    # Permission yaml
+    try:
+        from service.permission.install import _candidate_paths
+
+        for p, _src in _candidate_paths():
+            if p.exists():
+                legacy.append(str(p))
+    except Exception:
+        pass
+
+    # Hook yaml
+    try:
+        from service.hooks.install import hooks_yaml_path
+
+        h = hooks_yaml_path()
+        if h.exists():
+            legacy.append(str(h))
+    except Exception:
+        pass
+
+    # Settings.json snapshot
+    settings_path = Path.home() / ".geny" / "settings.json"
+    sections: List[str] = []
+    if settings_path.exists():
+        try:
+            data = json.loads(settings_path.read_text(encoding="utf-8")) or {}
+            if isinstance(data, dict):
+                sections = sorted(data.keys())
+        except Exception as exc:  # noqa: BLE001
+            notes.append(f"settings.json parse failed: {exc}")
+
+    if legacy and sections:
+        notes.append(
+            "Legacy YAML files still present alongside settings.json — "
+            "delete them after verifying the migration to keep one source of truth.",
+        )
+    elif not settings_path.exists() and not legacy:
+        notes.append(
+            "No settings.json and no legacy yaml — installation is using "
+            "defaults across the board.",
+        )
+
+    return SettingsMigrationStatusResponse(
+        legacy_files_present=legacy,
+        settings_json_path=str(settings_path),
+        settings_json_exists=settings_path.exists(),
+        settings_json_sections=sections,
+        notes=notes,
+    )

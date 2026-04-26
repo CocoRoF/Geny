@@ -737,6 +737,39 @@ export interface RecentPermissionsResponse {
   returned: number;
 }
 
+export interface ToolUsageRow {
+  tool_name: string;
+  calls: number;
+  completes: number;
+  errors: number;
+  total_duration_ms: number;
+  last_at: number;
+}
+
+export interface ToolUsageResponse {
+  counts: ToolUsageRow[];
+  window_size: number;
+}
+
+export interface InProcessHookHandlerRow {
+  event: string;
+  handler_count: number;
+}
+
+export interface InProcessHandlersResponse {
+  enabled: boolean;
+  handlers: InProcessHookHandlerRow[];
+  total: number;
+}
+
+export interface SettingsMigrationStatusResponse {
+  legacy_files_present: string[];
+  settings_json_path: string | null;
+  settings_json_exists: boolean;
+  settings_json_sections: string[];
+  notes: string[];
+}
+
 export const adminTelemetryApi = {
   recentToolEvents: (limit = 50) =>
     apiCall<RecentToolEventsResponse>(`/api/admin/recent-tool-events?limit=${limit}`),
@@ -744,6 +777,10 @@ export const adminTelemetryApi = {
     apiCall<RecentPermissionsResponse>(`/api/admin/recent-permissions?limit=${limit}`),
   // PR-F.6.1/2/5
   systemStatus: () => apiCall<SystemStatusResponse>('/api/admin/system-status'),
+  // Cycle G — usage / handlers / migration
+  toolUsage: () => apiCall<ToolUsageResponse>('/api/admin/tool-usage'),
+  hookInProcessHandlers: () => apiCall<InProcessHandlersResponse>('/api/admin/hook-in-process-handlers'),
+  settingsMigrationStatus: () => apiCall<SettingsMigrationStatusResponse>('/api/admin/settings-migration-status'),
 };
 
 export interface SubsystemStatusRow {

@@ -18,8 +18,11 @@ import {
   RecentPermissionDecision,
   SubagentTypeRow,
   SystemStatusResponse,
+  ToolUsageRow,
+  InProcessHookHandlerRow,
+  SettingsMigrationStatusResponse,
 } from '@/lib/api';
-import { Shield, Plug, Sparkles, AlertCircle, RefreshCw, FileText, Activity, Lock, Users, Server } from 'lucide-react';
+import { Shield, Plug, Sparkles, AlertCircle, RefreshCw, FileText, Activity, Lock, Users, Server, BarChart3, Cog, GitMerge } from 'lucide-react';
 
 interface PermissionRow {
   tool_name: string;
@@ -106,6 +109,10 @@ export default function AdminPanel() {
   const [subagentTypes, setSubagentTypes] = useState<SubagentTypeRow[]>([]);
   // PR-F.6.2 — System status snapshot.
   const [systemStatus, setSystemStatus] = useState<SystemStatusResponse | null>(null);
+  // Cycle G — usage / handlers / migration.
+  const [toolUsage, setToolUsage] = useState<ToolUsageRow[]>([]);
+  const [inProcHandlers, setInProcHandlers] = useState<InProcessHookHandlerRow[]>([]);
+  const [migration, setMigration] = useState<SettingsMigrationStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadAll = () => {
@@ -131,6 +138,15 @@ export default function AdminPanel() {
     adminTelemetryApi.systemStatus()
       .then(setSystemStatus)
       .catch((e) => setError((p) => p ?? `system status: ${e.message}`));
+    adminTelemetryApi.toolUsage()
+      .then((r) => setToolUsage(r.counts))
+      .catch((e) => setError((p) => p ?? `tool usage: ${e.message}`));
+    adminTelemetryApi.hookInProcessHandlers()
+      .then((r) => setInProcHandlers(r.handlers))
+      .catch((e) => setError((p) => p ?? `in-process handlers: ${e.message}`));
+    adminTelemetryApi.settingsMigrationStatus()
+      .then(setMigration)
+      .catch((e) => setError((p) => p ?? `migration status: ${e.message}`));
   };
 
   useEffect(() => {
@@ -200,6 +216,111 @@ export default function AdminPanel() {
                   )}
                 </div>
               )}
+            </>
+          )}
+        </div>
+      </Section>
+
+      {/* ── Tool usage counts (Cycle G) ── */}
+      <Section
+        title="Tool usage"
+        Icon={BarChart3}
+        count={toolUsage.length}
+        onReload={loadAll}
+      >
+        <div className="px-3">
+          {toolUsage.length === 0 ? (
+            <div className="text-[0.6875rem] text-[var(--text-muted)] italic py-2">
+              No tool calls in the recent ring.
+            </div>
+          ) : (
+            <table className="w-full text-[0.6875rem]">
+              <thead>
+                <tr className="text-[var(--text-muted)] border-b border-[var(--border-color)]">
+                  <th className="text-left py-1">Tool</th>
+                  <th className="text-right py-1 px-2">Calls</th>
+                  <th className="text-right py-1 px-2">Errors</th>
+                  <th className="text-right py-1 px-2">Total ms</th>
+                </tr>
+              </thead>
+              <tbody>
+                {toolUsage.map((row) => (
+                  <tr key={row.tool_name} className="border-b border-[var(--border-color)]">
+                    <td className="py-1 font-mono">{row.tool_name}</td>
+                    <td className="py-1 px-2 text-right font-mono">{row.calls}</td>
+                    <td className="py-1 px-2 text-right font-mono">{row.errors}</td>
+                    <td className="py-1 px-2 text-right font-mono">{row.total_duration_ms}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </Section>
+
+      {/* ── In-process hook handlers (Cycle G) ── */}
+      <Section
+        title="In-process hook handlers"
+        Icon={Cog}
+        count={inProcHandlers.length}
+        onReload={loadAll}
+      >
+        <div className="px-3 text-[0.6875rem]">
+          {inProcHandlers.length === 0 ? (
+            <div className="text-[var(--text-muted)] italic py-2">
+              No in-process handlers registered.
+            </div>
+          ) : (
+            <ul className="space-y-0.5">
+              {inProcHandlers.map((h) => (
+                <li key={h.event} className="flex items-center justify-between">
+                  <span className="font-mono">{h.event}</span>
+                  <span className="text-[var(--text-muted)]">{h.handler_count}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </Section>
+
+      {/* ── Settings migration status (Cycle G) ── */}
+      <Section
+        title="Settings migration"
+        Icon={GitMerge}
+        count={(migration?.legacy_files_present.length ?? 0)}
+        onReload={loadAll}
+      >
+        <div className="px-3 text-[0.6875rem] space-y-1">
+          {!migration ? (
+            <div className="text-[var(--text-muted)]">Loading…</div>
+          ) : (
+            <>
+              <div>
+                settings.json:{' '}
+                <span className="font-mono">{migration.settings_json_path}</span>{' '}
+                {migration.settings_json_exists ? (
+                  <span className="text-[var(--success-color)]">exists</span>
+                ) : (
+                  <span className="text-[var(--text-muted)]">missing</span>
+                )}
+              </div>
+              {migration.settings_json_sections.length > 0 && (
+                <div>
+                  sections:{' '}
+                  <span className="font-mono">{migration.settings_json_sections.join(', ')}</span>
+                </div>
+              )}
+              {migration.legacy_files_present.length > 0 && (
+                <div className="text-[var(--warning-color)]">
+                  Legacy YAML still present:
+                  <ul className="ml-3 mt-0.5 list-disc font-mono">
+                    {migration.legacy_files_present.map((p) => <li key={p}>{p}</li>)}
+                  </ul>
+                </div>
+              )}
+              {migration.notes.map((n, i) => (
+                <div key={i} className="italic text-[var(--text-muted)]">{n}</div>
+              ))}
             </>
           )}
         </div>

@@ -59,6 +59,39 @@ def snapshot(limit: int = 50) -> List[Dict[str, Any]]:
     return items
 
 
+def usage_counts() -> List[Dict[str, Any]]:
+    """PR-G — aggregate per-tool counters from the live ring.
+
+    Returned rows:
+        {tool_name, calls, completes, errors, total_duration_ms,
+         last_at}
+
+    Cheap O(n) scan over the bounded ring (200 rows).
+    """
+    with _lock:
+        items = list(_buffer)
+    agg: Dict[str, Dict[str, Any]] = {}
+    for ev in items:
+        name = str(ev.get("tool_name") or "?")
+        slot = agg.setdefault(name, {
+            "tool_name": name,
+            "calls": 0,
+            "completes": 0,
+            "errors": 0,
+            "total_duration_ms": 0,
+            "last_at": 0.0,
+        })
+        if ev.get("kind") == "start":
+            slot["calls"] += 1
+        elif ev.get("kind") == "complete":
+            slot["completes"] += 1
+            if ev.get("is_error"):
+                slot["errors"] += 1
+            slot["total_duration_ms"] += int(ev.get("duration_ms") or 0)
+        slot["last_at"] = max(slot["last_at"], float(ev.get("ts") or 0.0))
+    return sorted(agg.values(), key=lambda r: r["calls"], reverse=True)
+
+
 def clear() -> None:
     """For tests."""
     with _lock:
