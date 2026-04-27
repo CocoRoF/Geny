@@ -34,12 +34,14 @@ import { useAppStore } from '@/store/useAppStore';
 import { useEnvironmentDraftStore } from '@/store/useEnvironmentDraftStore';
 import { ModelConfigEditor } from '@/components/builder/ModelConfigEditor';
 import { PipelineConfigEditor } from '@/components/builder/PipelineConfigEditor';
+import ToolCheckboxGrid from './ToolCheckboxGrid';
 
 export default function GlobalSection() {
   const { t } = useI18n();
   const draft = useEnvironmentDraftStore((s) => s.draft);
   const patchModel = useEnvironmentDraftStore((s) => s.patchModel);
   const patchPipeline = useEnvironmentDraftStore((s) => s.patchPipeline);
+  const patchTools = useEnvironmentDraftStore((s) => s.patchTools);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const setEnvSubTab = useAppStore((s) => s.setEnvSubTab);
 
@@ -150,9 +152,12 @@ export default function GlobalSection() {
                     count={adhocCount}
                   />
                 </div>
-                <div className="text-[0.7rem] text-[hsl(var(--muted-foreground))] italic">
-                  {t('libraryNewTab.global.toolsComingSoon')}
-                </div>
+                <ToolCheckboxGrid
+                  value={(draft.tools?.built_in ?? []) as string[]}
+                  onChange={(names) => patchTools({ built_in: names })}
+                  mode="allowlist"
+                  hint={t('libraryNewTab.global.toolsPickerHint')}
+                />
               </div>
             )}
 

@@ -18,6 +18,7 @@ import { getStageMetaByOrder, getCategoryColor } from '@/components/session-env/
 import { useEnvironmentDraftStore } from '@/store/useEnvironmentDraftStore';
 import StageGenericEditor from './StageGenericEditor';
 import Stage06ApiEditor from './stages/Stage06ApiEditor';
+import Stage10ToolsEditor from './stages/Stage10ToolsEditor';
 import Stage18MemoryEditor from './stages/Stage18MemoryEditor';
 
 // Routing table — order → curated editor component. Anything not in
@@ -27,6 +28,7 @@ const CURATED_EDITORS: Record<
   React.ComponentType<{ order: number; entry: import('@/types/environment').StageManifestEntry }>
 > = {
   6: Stage06ApiEditor,
+  10: Stage10ToolsEditor,
   18: Stage18MemoryEditor,
 };
 
