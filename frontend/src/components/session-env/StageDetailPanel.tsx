@@ -385,43 +385,74 @@ export default function StageDetailPanel({
                 />
               )}
 
-              {entry.tool_binding && entry.tool_binding.patterns.length > 0 && (
-                <div
-                  className="rounded-lg p-3"
-                  style={{
-                    background: 'var(--pipe-bg-tertiary)',
-                    border: '1px solid var(--pipe-border)',
-                  }}
-                >
+              {(() => {
+                // Cycle 20260427_1 — StageToolBinding shape switched
+                // from {mode, patterns} (placeholder) to the executor's
+                // canonical {allowed, blocked, extra_context}. Render
+                // both the mode (derived from which list is non-empty)
+                // and the entries.
+                const tb = entry.tool_binding;
+                if (!tb) return null;
+                const allowed = tb.allowed ?? [];
+                const blocked = tb.blocked ?? [];
+                const items: Array<{ key: string; tone: 'allow' | 'deny' }> = [
+                  ...allowed.map((p) => ({ key: p, tone: 'allow' as const })),
+                  ...blocked.map((p) => ({ key: p, tone: 'deny' as const })),
+                ];
+                if (items.length === 0) return null;
+                const mode =
+                  allowed.length > 0 && blocked.length === 0
+                    ? 'allowlist'
+                    : allowed.length === 0 && blocked.length > 0
+                      ? 'blocklist'
+                      : 'mixed';
+                return (
                   <div
-                    className="text-[10px] uppercase tracking-widest mb-2"
-                    style={{ color: 'var(--pipe-text-muted)' }}
+                    className="rounded-lg p-3"
+                    style={{
+                      background: 'var(--pipe-bg-tertiary)',
+                      border: '1px solid var(--pipe-border)',
+                    }}
                   >
-                    {t('sessionEnvironmentTab.toolBinding')}
-                    <span
-                      className="pipe-mono ml-2 normal-case"
-                      style={{ color: 'var(--pipe-text-secondary)' }}
+                    <div
+                      className="text-[10px] uppercase tracking-widest mb-2"
+                      style={{ color: 'var(--pipe-text-muted)' }}
                     >
-                      ({entry.tool_binding.mode})
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {entry.tool_binding.patterns.map((p) => (
+                      {t('sessionEnvironmentTab.toolBinding')}
                       <span
-                        key={p}
-                        className="pipe-mono text-[10px] px-1.5 py-0.5 rounded border"
-                        style={{
-                          background: 'var(--pipe-bg-primary)',
-                          color: 'var(--pipe-text-secondary)',
-                          borderColor: 'var(--pipe-border)',
-                        }}
+                        className="pipe-mono ml-2 normal-case"
+                        style={{ color: 'var(--pipe-text-secondary)' }}
                       >
-                        {p}
+                        ({mode})
                       </span>
-                    ))}
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {items.map((it) => (
+                        <span
+                          key={`${it.tone}_${it.key}`}
+                          className="pipe-mono text-[10px] px-1.5 py-0.5 rounded border"
+                          style={{
+                            background:
+                              it.tone === 'deny'
+                                ? 'rgba(239, 68, 68, 0.08)'
+                                : 'var(--pipe-bg-primary)',
+                            color:
+                              it.tone === 'deny'
+                                ? 'rgb(220, 38, 38)'
+                                : 'var(--pipe-text-secondary)',
+                            borderColor:
+                              it.tone === 'deny'
+                                ? 'rgba(239, 68, 68, 0.3)'
+                                : 'var(--pipe-border)',
+                          }}
+                        >
+                          {it.tone === 'deny' ? '−' : '+'} {it.key}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {entry.model_override &&
                 Object.keys(entry.model_override).length > 0 && (
@@ -491,7 +522,11 @@ function hasLiveConfig(entry: StageManifestEntry): boolean {
   const strat = Object.keys(entry.strategies ?? {}).length;
   const stratCfg = Object.keys(entry.strategy_configs ?? {}).length;
   const cfg = Object.keys(entry.config ?? {}).length;
-  const tb = entry.tool_binding && entry.tool_binding.patterns.length > 0;
+  // Cycle 20260427_1 — tool_binding shape: {allowed, blocked} (canonical).
+  const tbBinding = entry.tool_binding;
+  const tb =
+    !!tbBinding &&
+    ((tbBinding.allowed?.length ?? 0) > 0 || (tbBinding.blocked?.length ?? 0) > 0);
   const mo = entry.model_override && Object.keys(entry.model_override).length > 0;
   return strat + stratCfg + cfg > 0 || !!tb || !!mo;
 }

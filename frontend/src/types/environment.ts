@@ -22,9 +22,21 @@ export interface EnvironmentMetadata {
   base_preset?: string;
 }
 
+/**
+ * StageToolBinding — mirrors geny-executor's
+ * ``geny_executor.tools.stage_binding.StageToolBinding.to_dict()``
+ * shape (allowed/blocked sets + extra_context dict). Both lists are
+ * optional; ``null`` means "inherit everything for that axis".
+ *
+ * Earlier shape ({mode, patterns}) was a placeholder that never
+ * matched the executor's serialization — fixed in cycle 20260427_1
+ * (Library NEW Stage 10 editor needs the real shape to write into).
+ */
 export interface StageToolBinding {
-  mode: 'inherit' | 'allowlist' | 'blocklist';
-  patterns: string[];
+  stage_order?: number;
+  allowed?: string[] | null;
+  blocked?: string[] | null;
+  extra_context?: Record<string, unknown>;
 }
 
 export interface StageModelOverride {

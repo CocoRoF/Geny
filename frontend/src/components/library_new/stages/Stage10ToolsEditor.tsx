@@ -32,16 +32,13 @@ import {
 import { useI18n } from '@/lib/i18n';
 import { useAppStore } from '@/store/useAppStore';
 import { useEnvironmentDraftStore } from '@/store/useEnvironmentDraftStore';
-import type { StageManifestEntry } from '@/types/environment';
+import type {
+  StageManifestEntry,
+  StageToolBinding,
+} from '@/types/environment';
 import { Switch } from '@/components/ui/switch';
 import ToolCheckboxGrid from '../ToolCheckboxGrid';
 import StageGenericEditor from '../StageGenericEditor';
-
-interface ToolBinding {
-  allowed?: string[] | null;
-  blocked?: string[] | null;
-  extra_context?: Record<string, unknown>;
-}
 
 interface Props {
   order: number;
@@ -64,7 +61,7 @@ export default function Stage10ToolsEditor({ order, entry }: Props) {
     Record<string, unknown>
   >;
 
-  const binding = (entry.tool_binding ?? {}) as ToolBinding;
+  const binding = (entry.tool_binding ?? {}) as StageToolBinding;
   const filterMode: 'inherit' | 'allowlist' | 'blocklist' = (() => {
     if (binding.allowed && binding.allowed.length > 0) return 'allowlist';
     if (binding.blocked && binding.blocked.length > 0) return 'blocklist';
@@ -76,21 +73,31 @@ export default function Stage10ToolsEditor({ order, entry }: Props) {
       patchStage(order, { tool_binding: null });
       return;
     }
-    const seed: ToolBinding =
+    const seed: StageToolBinding =
       next === 'allowlist'
-        ? { allowed: [], blocked: null }
-        : { allowed: null, blocked: [] };
+        ? { stage_order: order, allowed: [], blocked: null }
+        : { stage_order: order, allowed: null, blocked: [] };
     patchStage(order, { tool_binding: seed });
   };
 
   const setAllowed = (names: string[]) => {
     patchStage(order, {
-      tool_binding: { ...binding, allowed: names, blocked: null },
+      tool_binding: {
+        ...binding,
+        stage_order: binding.stage_order ?? order,
+        allowed: names,
+        blocked: null,
+      },
     });
   };
   const setBlocked = (names: string[]) => {
     patchStage(order, {
-      tool_binding: { ...binding, blocked: names, allowed: null },
+      tool_binding: {
+        ...binding,
+        stage_order: binding.stage_order ?? order,
+        blocked: names,
+        allowed: null,
+      },
     });
   };
 
@@ -242,7 +249,7 @@ export default function Stage10ToolsEditor({ order, entry }: Props) {
 
             {filterMode === 'allowlist' && (
               <ToolCheckboxGrid
-                value={(binding.allowed as string[]) ?? []}
+                value={binding.allowed ?? []}
                 onChange={setAllowed}
                 mode="allowlist"
                 hint={t('libraryNewTab.stage10.allowedHint')}
@@ -251,7 +258,7 @@ export default function Stage10ToolsEditor({ order, entry }: Props) {
             )}
             {filterMode === 'blocklist' && (
               <ToolCheckboxGrid
-                value={(binding.blocked as string[]) ?? []}
+                value={binding.blocked ?? []}
                 onChange={setBlocked}
                 mode="blocklist"
                 hint={t('libraryNewTab.stage10.blockedHint')}
