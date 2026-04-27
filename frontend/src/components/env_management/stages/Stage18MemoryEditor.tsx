@@ -41,25 +41,21 @@ import StageGenericEditor from '../StageGenericEditor';
 const STRATEGY_OPTIONS = [
   {
     id: 'append_only',
-    icon: '📝',
     titleKey: 'envManagement.stage18.strategy.append_only.title',
     descKey: 'envManagement.stage18.strategy.append_only.desc',
   },
   {
     id: 'no_memory',
-    icon: '🚫',
     titleKey: 'envManagement.stage18.strategy.no_memory.title',
     descKey: 'envManagement.stage18.strategy.no_memory.desc',
   },
   {
     id: 'reflective',
-    icon: '💭',
     titleKey: 'envManagement.stage18.strategy.reflective.title',
     descKey: 'envManagement.stage18.strategy.reflective.desc',
   },
   {
     id: 'structured_reflective',
-    icon: '🧠',
     titleKey: 'envManagement.stage18.strategy.structured_reflective.title',
     descKey: 'envManagement.stage18.strategy.structured_reflective.desc',
   },
@@ -68,19 +64,16 @@ const STRATEGY_OPTIONS = [
 const PERSISTENCE_OPTIONS = [
   {
     id: 'null',
-    icon: '🌬️',
     titleKey: 'envManagement.stage18.persist.null.title',
     descKey: 'envManagement.stage18.persist.null.desc',
   },
   {
     id: 'in_memory',
-    icon: '⚡',
     titleKey: 'envManagement.stage18.persist.in_memory.title',
     descKey: 'envManagement.stage18.persist.in_memory.desc',
   },
   {
     id: 'file',
-    icon: '💾',
     titleKey: 'envManagement.stage18.persist.file.title',
     descKey: 'envManagement.stage18.persist.file.desc',
   },
@@ -226,7 +219,6 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
                 }`}
                 title={!available ? t('envManagement.stage18.unavailable') : undefined}
               >
-                <span className="text-base shrink-0">{opt.icon}</span>
                 <div className="min-w-0">
                   <div className="text-[0.8125rem] font-medium text-[hsl(var(--foreground))]">
                     {t(opt.titleKey)}
@@ -270,7 +262,6 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
                 }`}
                 title={!available ? t('envManagement.stage18.unavailable') : undefined}
               >
-                <span className="text-base shrink-0">{opt.icon}</span>
                 <div className="min-w-0">
                   <div className="text-[0.8125rem] font-medium text-[hsl(var(--foreground))]">
                     {t(opt.titleKey)}

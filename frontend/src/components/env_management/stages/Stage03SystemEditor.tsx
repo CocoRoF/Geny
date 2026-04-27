@@ -41,13 +41,11 @@ const STARTER_CHIPS = [
 const BUILDER_OPTIONS = [
   {
     id: 'StaticPromptBuilder',
-    icon: '📌',
     titleKey: 'envManagement.stage03.builder.static.title',
     descKey: 'envManagement.stage03.builder.static.desc',
   },
   {
     id: 'ComposablePromptBuilder',
-    icon: '🧩',
     titleKey: 'envManagement.stage03.builder.composable.title',
     descKey: 'envManagement.stage03.builder.composable.desc',
   },
@@ -159,7 +157,6 @@ export default function Stage03SystemEditor({ order, entry }: Props) {
                 } ${!available ? 'opacity-40 cursor-not-allowed' : ''}`}
                 title={!available ? t('envManagement.stage03.unavailable') : undefined}
               >
-                <span className="text-base shrink-0">{opt.icon}</span>
                 <div className="min-w-0">
                   <div className="text-[0.8125rem] font-medium text-[hsl(var(--foreground))]">
                     {t(opt.titleKey)}

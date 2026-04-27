@@ -36,19 +36,16 @@ import StageGenericEditor from '../StageGenericEditor';
 const REQUESTER_OPTIONS = [
   {
     id: 'null',
-    icon: '✅',
     titleKey: 'envManagement.stage15.requester.null.title',
     descKey: 'envManagement.stage15.requester.null.desc',
   },
   {
     id: 'callback',
-    icon: '📞',
     titleKey: 'envManagement.stage15.requester.callback.title',
     descKey: 'envManagement.stage15.requester.callback.desc',
   },
   {
     id: 'pipeline_resume',
-    icon: '⏸️',
     titleKey: 'envManagement.stage15.requester.pipeline_resume.title',
     descKey: 'envManagement.stage15.requester.pipeline_resume.desc',
   },
@@ -57,19 +54,16 @@ const REQUESTER_OPTIONS = [
 const TIMEOUT_OPTIONS = [
   {
     id: 'indefinite',
-    icon: '∞',
     titleKey: 'envManagement.stage15.timeout.indefinite.title',
     descKey: 'envManagement.stage15.timeout.indefinite.desc',
   },
   {
     id: 'auto_approve',
-    icon: '✅',
     titleKey: 'envManagement.stage15.timeout.auto_approve.title',
     descKey: 'envManagement.stage15.timeout.auto_approve.desc',
   },
   {
     id: 'auto_reject',
-    icon: '🚫',
     titleKey: 'envManagement.stage15.timeout.auto_reject.title',
     descKey: 'envManagement.stage15.timeout.auto_reject.desc',
   },
@@ -194,7 +188,6 @@ export default function Stage15HitlEditor({ order, entry }: Props) {
                 }`}
                 title={!available ? t('envManagement.stage15.unavailable') : undefined}
               >
-                <span className="text-base shrink-0">{opt.icon}</span>
                 <div className="min-w-0">
                   <div className="text-[0.8125rem] font-medium text-[hsl(var(--foreground))]">
                     {t(opt.titleKey)}
@@ -238,7 +231,6 @@ export default function Stage15HitlEditor({ order, entry }: Props) {
                 }`}
                 title={!available ? t('envManagement.stage15.unavailable') : undefined}
               >
-                <span className="text-base shrink-0">{opt.icon}</span>
                 <div className="min-w-0">
                   <div className="text-[0.8125rem] font-medium text-[hsl(var(--foreground))]">
                     {t(opt.titleKey)}

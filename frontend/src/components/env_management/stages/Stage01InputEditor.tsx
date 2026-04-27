@@ -24,7 +24,6 @@ import {
   ChevronDown,
   ChevronRight,
   ImagePlus,
-  ListChecks,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { catalogApi } from '@/lib/environmentApi';
@@ -43,25 +42,21 @@ import StageGenericEditor from '../StageGenericEditor';
 const VALIDATOR_OPTIONS = [
   {
     id: 'DefaultValidator',
-    icon: '✅',
     titleKey: 'envManagement.stage01.validator.default.title',
     descKey: 'envManagement.stage01.validator.default.desc',
   },
   {
     id: 'PassthroughValidator',
-    icon: '⏭️',
     titleKey: 'envManagement.stage01.validator.passthrough.title',
     descKey: 'envManagement.stage01.validator.passthrough.desc',
   },
   {
     id: 'StrictValidator',
-    icon: '🔒',
     titleKey: 'envManagement.stage01.validator.strict.title',
     descKey: 'envManagement.stage01.validator.strict.desc',
   },
   {
     id: 'SchemaValidator',
-    icon: '📐',
     titleKey: 'envManagement.stage01.validator.schema.title',
     descKey: 'envManagement.stage01.validator.schema.desc',
   },
@@ -70,13 +65,11 @@ const VALIDATOR_OPTIONS = [
 const NORMALIZER_OPTIONS = [
   {
     id: 'DefaultNormalizer',
-    icon: '📝',
     titleKey: 'envManagement.stage01.normalizer.default.title',
     descKey: 'envManagement.stage01.normalizer.default.desc',
   },
   {
     id: 'MultimodalNormalizer',
-    icon: '🎨',
     titleKey: 'envManagement.stage01.normalizer.multimodal.title',
     descKey: 'envManagement.stage01.normalizer.multimodal.desc',
   },
@@ -183,7 +176,6 @@ export default function Stage01InputEditor({ order, entry }: Props) {
                 } ${!available ? 'opacity-40 cursor-not-allowed' : ''}`}
                 title={!available ? t('envManagement.stage01.unavailable') : undefined}
               >
-                <span className="text-base shrink-0">{opt.icon}</span>
                 <div className="min-w-0">
                   <div className="text-[0.8125rem] font-medium text-[hsl(var(--foreground))]">
                     {t(opt.titleKey)}
@@ -226,7 +218,6 @@ export default function Stage01InputEditor({ order, entry }: Props) {
                 } ${!available ? 'opacity-40 cursor-not-allowed' : ''}`}
                 title={!available ? t('envManagement.stage01.unavailable') : undefined}
               >
-                <span className="text-base shrink-0">{opt.icon}</span>
                 <div className="min-w-0">
                   <div className="text-[0.8125rem] font-medium text-[hsl(var(--foreground))]">
                     {t(opt.titleKey)}
@@ -238,19 +229,6 @@ export default function Stage01InputEditor({ order, entry }: Props) {
               </button>
             );
           })}
-        </div>
-      </section>
-
-      {/* ── Where's the system prompt? — pointer to Stage 3 ── */}
-      <section className="flex items-start gap-2 p-3 rounded-md border border-blue-500/30 bg-blue-500/[0.06]">
-        <ListChecks className="w-4 h-4 mt-0.5 text-blue-600 dark:text-blue-400 shrink-0" />
-        <div className="min-w-0 text-[0.75rem] leading-relaxed">
-          <div className="font-semibold text-[hsl(var(--foreground))] mb-0.5">
-            {t('envManagement.stage01.systemPromptHere.title')}
-          </div>
-          <p className="text-[hsl(var(--muted-foreground))]">
-            {t('envManagement.stage01.systemPromptHere.body')}
-          </p>
         </div>
       </section>
 
