@@ -677,6 +677,65 @@ const en = {
     toolBindingHint: 'This stage supports tool binding. Curated picker arrives in PR-C.',
     aboutThisStage: 'About this stage',
     stageMissing: 'This stage entry is missing from the draft. Try "New draft" to reseed.',
+    stage06: {
+      activeTitle: 'Run this stage',
+      activeDesc: 'Stage 6 calls the LLM. Turning it off skips the model call entirely (rare; only useful for headless preview pipelines).',
+      modelTitle: 'Model for this stage',
+      overrideOnDesc: 'This stage uses its own model — overrides the global Pipeline model.',
+      overrideOffDesc: 'Using the global model: {model}',
+      overrideToggleOn: 'Custom',
+      overrideToggleOff: 'Default',
+      useDefaultHint: 'Edit the global model in the "Global settings" panel above. Toggle on to override only for this stage.',
+      advancedTitle: 'Advanced',
+      advancedHint: 'artifact / strategies / chains / raw config',
+    },
+    stage18: {
+      activeTitle: 'Run this stage',
+      activeDesc: 'Stage 18 captures memory between turns. Turning it off makes the agent stateless.',
+      strategyTitle: 'Memory strategy',
+      persistTitle: 'Persistence',
+      modelTitle: 'Memory model',
+      modelOnDesc: 'This stage\'s reflective summarizer uses its own model.',
+      modelOffDesc: 'Reflective summarizer uses the global model: {model}',
+      modelDisabledDesc: 'Only used by reflective strategies. Pick a reflective strategy above to enable.',
+      fileBaseDirLabel: 'File base directory',
+      fileBaseDirHint: 'Memory snapshots are written under this path. Default: .geny/memory',
+      unavailable: 'Not available in this build',
+      advancedTitle: 'Advanced',
+      advancedHint: 'raw strategies / configs / overrides',
+      strategy: {
+        append_only: {
+          title: 'Append-only',
+          desc: 'Save every message verbatim. Simple, predictable, can grow large.',
+        },
+        no_memory: {
+          title: 'No memory',
+          desc: 'Discard everything between turns. Stateless agent.',
+        },
+        reflective: {
+          title: 'Reflective (LLM)',
+          desc: 'LLM extracts insights from each turn. Costs an extra LLM call per turn.',
+        },
+        structured_reflective: {
+          title: 'Structured reflective',
+          desc: 'Reflective + typed insights (entities, projects, decisions). Best for long-lived agents.',
+        },
+      },
+      persist: {
+        null: {
+          title: 'None',
+          desc: 'Memory exists only for the current run. Lost on restart.',
+        },
+        in_memory: {
+          title: 'In-memory',
+          desc: 'Survive within the process. Lost on restart.',
+        },
+        file: {
+          title: 'File',
+          desc: 'Persist to JSON files on disk. Survives restarts.',
+        },
+      },
+    },
   },
 
   // ─── Environments Tab ───

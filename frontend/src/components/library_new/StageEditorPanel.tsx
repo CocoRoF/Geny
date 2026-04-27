@@ -17,6 +17,18 @@ import { useI18n } from '@/lib/i18n';
 import { getStageMetaByOrder, getCategoryColor } from '@/components/session-env/stageMetadata';
 import { useEnvironmentDraftStore } from '@/store/useEnvironmentDraftStore';
 import StageGenericEditor from './StageGenericEditor';
+import Stage06ApiEditor from './stages/Stage06ApiEditor';
+import Stage18MemoryEditor from './stages/Stage18MemoryEditor';
+
+// Routing table — order → curated editor component. Anything not in
+// this map falls back to StageGenericEditor.
+const CURATED_EDITORS: Record<
+  number,
+  React.ComponentType<{ order: number; entry: import('@/types/environment').StageManifestEntry }>
+> = {
+  6: Stage06ApiEditor,
+  18: Stage18MemoryEditor,
+};
 
 interface Props {
   order: number | null;
@@ -108,10 +120,11 @@ export default function StageEditorPanel({ order, onClose }: Props) {
       </header>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4">
-        {/* PR-A: every stage uses the generic editor. PR-B/C/D/E
-            replace specific stage orders with curated editors via a
-            routing table here. */}
-        <StageGenericEditor order={order} entry={entry} />
+        {(() => {
+          const Curated = CURATED_EDITORS[order];
+          if (Curated) return <Curated order={order} entry={entry} />;
+          return <StageGenericEditor order={order} entry={entry} />;
+        })()}
 
         {meta?.detailedDescription && (
           <details className="mt-6 text-[0.75rem] text-[hsl(var(--muted-foreground))]">
