@@ -283,70 +283,33 @@ export default function StageProgressBar({
                         className="group relative outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] rounded-full"
                         title={label}
                       >
-                        {/* Glow halo (selected) */}
-                        {isSelected && (
-                          <span
-                            aria-hidden
-                            className="absolute pointer-events-none rounded-full"
-                            style={{
-                              top: -14,
-                              left: -14,
-                              right: -14,
-                              bottom: -14,
-                              background:
-                                'radial-gradient(closest-side, hsl(var(--primary)) 0%, transparent 70%)',
-                              opacity: 0.32,
-                              filter: 'blur(6px)',
-                            }}
-                          />
-                        )}
-
-                        {/* Active glow (gold pulse) for non-selected active stages */}
-                        {!isSelected && isStageActive && (
-                          <span
-                            aria-hidden
-                            className="absolute pointer-events-none rounded-full"
-                            style={{
-                              top: -8,
-                              left: -8,
-                              right: -8,
-                              bottom: -8,
-                              background:
-                                'radial-gradient(closest-side, rgb(245 158 11) 0%, transparent 70%)',
-                              opacity: 0.22,
-                              filter: 'blur(4px)',
-                            }}
-                          />
-                        )}
-
-                        {/* The circle itself */}
+                        {/* The circle — uniform 48px for all states so the
+                            ring/halo never clips against the row bounds.
+                            The visual difference is colour + ring, not size. */}
                         <span
-                          className={`relative flex items-center justify-center rounded-full font-bold tabular-nums transition-all duration-200 ${
-                            isSelected
-                              ? 'w-[58px] h-[58px] text-[1.0625rem]'
-                              : 'w-[48px] h-[48px] text-[0.9375rem] group-hover:scale-105'
-                          }`}
+                          className="relative flex items-center justify-center rounded-full font-semibold tabular-nums transition-all duration-200 w-[48px] h-[48px] text-[0.9375rem] group-hover:scale-105"
                           style={
                             isSelected
                               ? {
-                                  // Strong primary-blue gradient — same in both
-                                  // light and dark themes for max distinctness.
-                                  background:
-                                    'linear-gradient(135deg, hsl(217 91% 60%) 0%, hsl(217 91% 45%) 100%)',
-                                  color: '#ffffff',
-                                  border: '2px solid hsl(217 91% 35%)',
+                                  // Subtle blue (은은한 파란빛). Light fill +
+                                  // crisp blue border + thin outer ring frames
+                                  // the selection without overpowering it.
+                                  background: 'rgb(219 234 254)', // blue-100
+                                  color: 'rgb(29 78 216)', // blue-700
+                                  border: '2px solid rgb(59 130 246)', // blue-500
                                   boxShadow:
-                                    '0 0 0 4px hsl(var(--card)), 0 0 0 5.5px hsl(217 91% 50%), 0 10px 24px -10px hsl(217 91% 50%)',
+                                    '0 0 0 3px hsl(var(--card)), 0 0 0 4.5px rgb(59 130 246 / 0.55), 0 3px 10px -3px rgb(59 130 246 / 0.3)',
                                 }
                               : isStageActive
                                 ? {
-                                    // GOLD/AMBER — clearly says "this stage is on".
-                                    background:
-                                      'linear-gradient(135deg, rgb(254 243 199) 0%, rgb(252 211 77) 100%)',
-                                    color: 'rgb(120 53 15)',
-                                    border: '2px solid rgb(217 119 6)',
+                                    // Subtle green (은은한 초록빛) — clear
+                                    // "this stage is on" signal, calmer than
+                                    // the previous amber/gold treatment.
+                                    background: 'rgb(220 252 231)', // emerald-100
+                                    color: 'rgb(4 120 87)', // emerald-700
+                                    border: '2px solid rgb(16 185 129)', // emerald-500
                                     boxShadow:
-                                      '0 2px 8px -2px rgb(245 158 11 / 0.35)',
+                                      '0 1px 4px -1px rgb(16 185 129 / 0.25)',
                                   }
                                 : {
                                     background: 'hsl(var(--background))',
@@ -382,9 +345,9 @@ export default function StageProgressBar({
                       }`}
                       style={{
                         color: isSelected
-                          ? 'hsl(217 91% 50%)'
+                          ? 'rgb(29 78 216)' // blue-700 — matches circle text
                           : isStageActive
-                            ? 'rgb(180 83 9)' // amber-700
+                            ? 'rgb(4 120 87)' // emerald-700
                             : 'hsl(var(--muted-foreground))',
                       }}
                     >
@@ -406,9 +369,9 @@ export default function StageProgressBar({
                           width: 22,
                           background:
                             isStageActive && nextActive
-                              ? 'linear-gradient(to right, rgb(245 158 11), rgb(245 158 11))'
+                              ? 'rgb(16 185 129)' // emerald-500
                               : 'hsl(var(--border))',
-                          opacity: isStageActive && nextActive ? 0.55 : 0.5,
+                          opacity: isStageActive && nextActive ? 0.5 : 0.5,
                         }}
                       />
                     </div>
