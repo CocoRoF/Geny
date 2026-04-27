@@ -1,9 +1,13 @@
 'use client';
 
 /**
- * LibraryNewTab — Library (NEW): visual 21-stage environment builder.
+ * EnvManagementShell — visual 21-stage environment builder body.
  *
- * Cycle 20260427_1 PR-A scaffold. Composes:
+ * Hosted by /app/environments/page.tsx (cycle 20260427_2). The page
+ * wrapper owns the route-level chrome (back link, page header, save
+ * navigation); this shell owns the editor body itself.
+ *
+ * Cycle 20260427_1 PR-A scaffold (composition unchanged in 20260427_2):
  *
  *   ┌─ TabShell ─────────────────────────────────────────┐
  *   │ TopBar (name/desc/tags/Save/Discard)               │
@@ -19,31 +23,35 @@
  * user navigates away (with confirm if dirty). Save posts the full
  * manifest in one call via mode=blank + manifest_override (cycle
  * 20260427_1 backend patch).
+ *
+ * UX redesign (canvas-first layout) lands in cycle 20260427_2 PR-2.
  */
 
 import { useEffect, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { TabShell } from '@/components/layout';
 import { useI18n } from '@/lib/i18n';
-import { useAppStore } from '@/store/useAppStore';
 import { useEnvironmentDraftStore } from '@/store/useEnvironmentDraftStore';
-import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import PipelineCanvas from '@/components/session-env/PipelineCanvas';
 import TopBar from './TopBar';
 import GlobalSection from './GlobalSection';
 import StageEditorPanel from './StageEditorPanel';
 
-export default function LibraryNewTab() {
+export interface EnvManagementShellProps {
+  /** Called after a successful Save with the new env id. The page
+   *  wrapper decides where to send the user (back to /, into a
+   *  detail drawer, etc.). */
+  onSaved?: (newEnvId: string) => void;
+}
+
+export default function EnvManagementShell({
+  onSaved,
+}: EnvManagementShellProps = {}) {
   const { t } = useI18n();
   const draft = useEnvironmentDraftStore((s) => s.draft);
   const stageDirty = useEnvironmentDraftStore((s) => s.stageDirty);
   const isDirty = useEnvironmentDraftStore((s) => s.isDirty);
   const resetDraft = useEnvironmentDraftStore((s) => s.resetDraft);
-
-  const setActiveTab = useAppStore((s) => s.setActiveTab);
-  const requestOpenEnvDrawer = useEnvironmentStore(
-    (s) => s.requestOpenEnvDrawer,
-  );
 
   const [selectedOrder, setSelectedOrder] = useState<number | null>(null);
 
@@ -85,18 +93,14 @@ export default function LibraryNewTab() {
 
   const handleSaved = (newEnvId: string) => {
     setSelectedOrder(null);
-    // Hand off to the existing Library catalog so the user can see
-    // their new env in context (and the detail drawer opens
-    // automatically via requestOpenEnvDrawer).
-    requestOpenEnvDrawer(newEnvId);
-    setActiveTab('library');
     resetDraft();
+    onSaved?.(newEnvId);
   };
 
   return (
     <TabShell
-      title={t('libraryNewTab.title')}
-      subtitle={t('libraryNewTab.subtitle')}
+      title={t('envManagement.title')}
+      subtitle={t('envManagement.subtitle')}
       icon={Sparkles}
       bodyPadding="none"
       bodyScroll="none"
@@ -114,10 +118,10 @@ export default function LibraryNewTab() {
                 <div className="text-center max-w-[420px] p-8">
                   <Sparkles className="w-10 h-10 mx-auto mb-3 opacity-40 text-[hsl(var(--primary))]" />
                   <p className="font-medium mb-2 text-[hsl(var(--foreground))]">
-                    {t('libraryNewTab.canvasPlaceholderTitle')}
+                    {t('envManagement.canvasPlaceholderTitle')}
                   </p>
                   <p className="text-[0.8125rem] leading-relaxed">
-                    {t('libraryNewTab.canvasPlaceholderHint')}
+                    {t('envManagement.canvasPlaceholderHint')}
                   </p>
                 </div>
               </div>

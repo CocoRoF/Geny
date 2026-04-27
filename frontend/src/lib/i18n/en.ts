@@ -24,6 +24,7 @@ const en = {
     wiki: 'Wiki',
     ttsStudio: 'TTS Studio',
     ttsVoice: 'TTS Voice',
+    envManagement: 'Environments',
     login: 'Login',
     logout: 'Logout',
     memory: 'Memory',
@@ -79,7 +80,6 @@ const en = {
     environments: 'Environments',
     sessionEnvironment: 'Environment',
     library: 'Library',
-    library_new: 'Library (NEW)',
     builder: 'Builder',
     settings: 'Settings',
     info: 'Info',
@@ -627,9 +627,12 @@ const en = {
     },
   },
 
-  // ─── Library (NEW) — visual 21-stage builder (cycle 20260427_1) ───
-  libraryNewTab: {
-    title: 'Library (NEW)',
+  // ─── Environment Management — /environments page (cycle 20260427_2) ───
+  envManagement: {
+    pageTitle: 'Environment Management',
+    pageSubtitle: 'Build environments visually — click any of the 21 pipeline stages to configure it.',
+    backToHome: 'Back',
+    title: 'Environment Management',
     subtitle: 'Build an environment by clicking a stage in the 21-stage pipeline and editing it. Save once at the end.',
     welcomeTitle: 'Build a new environment',
     welcomeDescription: 'Click "New draft" to start with a blank 21-stage manifest. Each stage is editable; only the ones you touch get marked as edited. Save once when you\'re done — the env appears in the regular Library catalog.',

@@ -118,10 +118,10 @@ export default function Stage10ToolsEditor({ order, entry }: Props) {
       <section className="flex items-center justify-between gap-3 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <div>
           <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('libraryNewTab.stage10.activeTitle')}
+            {t('envManagement.stage10.activeTitle')}
           </div>
           <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.stage10.activeDesc')}
+            {t('envManagement.stage10.activeDesc')}
           </div>
         </div>
         <Switch
@@ -135,14 +135,14 @@ export default function Stage10ToolsEditor({ order, entry }: Props) {
         <header className="flex items-center gap-2">
           <Wrench className="w-4 h-4 text-[hsl(var(--primary))]" />
           <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('libraryNewTab.stage10.builtInTitle')}
+            {t('envManagement.stage10.builtInTitle')}
           </h4>
         </header>
         <ToolCheckboxGrid
           value={builtInList}
           onChange={(names) => patchTools({ built_in: names })}
           mode="allowlist"
-          hint={t('libraryNewTab.stage10.builtInHint')}
+          hint={t('envManagement.stage10.builtInHint')}
         />
       </section>
 
@@ -152,7 +152,7 @@ export default function Stage10ToolsEditor({ order, entry }: Props) {
           <div className="flex items-center gap-2">
             <Server className="w-4 h-4 text-[hsl(var(--primary))]" />
             <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-              {t('libraryNewTab.stage10.mcpTitle')}
+              {t('envManagement.stage10.mcpTitle')}
             </h4>
             <span className="text-[0.6875rem] text-[hsl(var(--muted-foreground))] tabular-nums">
               ({mcpServers.length})
@@ -166,13 +166,13 @@ export default function Stage10ToolsEditor({ order, entry }: Props) {
             }}
             className="inline-flex items-center gap-1 text-[0.7rem] text-[hsl(var(--primary))] hover:underline"
           >
-            {t('libraryNewTab.stage10.mcpManage')}
+            {t('envManagement.stage10.mcpManage')}
             <ExternalLink className="w-3 h-3" />
           </button>
         </header>
         {mcpServers.length === 0 ? (
           <p className="text-[0.75rem] text-[hsl(var(--muted-foreground))] italic py-2">
-            {t('libraryNewTab.stage10.mcpEmpty')}
+            {t('envManagement.stage10.mcpEmpty')}
           </p>
         ) : (
           <ul className="flex flex-col gap-0.5 max-h-[160px] overflow-y-auto">
@@ -203,7 +203,7 @@ export default function Stage10ToolsEditor({ order, entry }: Props) {
           </ul>
         )}
         <p className="text-[0.6875rem] text-[hsl(var(--muted-foreground))] italic">
-          {t('libraryNewTab.stage10.mcpHint')}
+          {t('envManagement.stage10.mcpHint')}
         </p>
       </section>
 
@@ -220,15 +220,15 @@ export default function Stage10ToolsEditor({ order, entry }: Props) {
             <ChevronRight className="w-3.5 h-3.5" />
           )}
           <Filter className="w-3.5 h-3.5 text-[hsl(var(--primary))]" />
-          {t('libraryNewTab.stage10.bindingTitle')}
+          {t('envManagement.stage10.bindingTitle')}
           <span className="text-[0.6875rem] font-normal text-[hsl(var(--muted-foreground))]">
-            {t(`libraryNewTab.stage10.bindingMode.${filterMode}`)}
+            {t(`envManagement.stage10.bindingMode.${filterMode}`)}
           </span>
         </button>
         {bindingOpen && (
           <div className="px-3 pb-3 border-t border-[hsl(var(--border))] pt-3 flex flex-col gap-3">
             <p className="text-[0.7rem] text-[hsl(var(--muted-foreground))] leading-relaxed">
-              {t('libraryNewTab.stage10.bindingHint')}
+              {t('envManagement.stage10.bindingHint')}
             </p>
             <div className="flex items-center gap-2 flex-wrap">
               {(['inherit', 'allowlist', 'blocklist'] as const).map((m) => (
@@ -242,7 +242,7 @@ export default function Stage10ToolsEditor({ order, entry }: Props) {
                       : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))]'
                   }`}
                 >
-                  {t(`libraryNewTab.stage10.bindingMode.${m}`)}
+                  {t(`envManagement.stage10.bindingMode.${m}`)}
                 </button>
               ))}
             </div>
@@ -252,7 +252,7 @@ export default function Stage10ToolsEditor({ order, entry }: Props) {
                 value={binding.allowed ?? []}
                 onChange={setAllowed}
                 mode="allowlist"
-                hint={t('libraryNewTab.stage10.allowedHint')}
+                hint={t('envManagement.stage10.allowedHint')}
                 hideBulkControls
               />
             )}
@@ -261,13 +261,13 @@ export default function Stage10ToolsEditor({ order, entry }: Props) {
                 value={binding.blocked ?? []}
                 onChange={setBlocked}
                 mode="blocklist"
-                hint={t('libraryNewTab.stage10.blockedHint')}
+                hint={t('envManagement.stage10.blockedHint')}
                 hideBulkControls
               />
             )}
             {filterMode === 'inherit' && (
               <p className="text-[0.7rem] text-[hsl(var(--muted-foreground))] italic">
-                {t('libraryNewTab.stage10.inheritHint')}
+                {t('envManagement.stage10.inheritHint')}
               </p>
             )}
           </div>
@@ -286,9 +286,9 @@ export default function Stage10ToolsEditor({ order, entry }: Props) {
           ) : (
             <ChevronRight className="w-3.5 h-3.5" />
           )}
-          {t('libraryNewTab.stage10.advancedTitle')}
+          {t('envManagement.stage10.advancedTitle')}
           <span className="text-[0.6875rem] font-normal text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.stage10.advancedHint')}
+            {t('envManagement.stage10.advancedHint')}
           </span>
         </button>
         {advancedOpen && (

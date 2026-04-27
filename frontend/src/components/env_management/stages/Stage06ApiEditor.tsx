@@ -59,10 +59,10 @@ export default function Stage06ApiEditor({ order, entry }: Props) {
       <section className="flex items-center justify-between gap-3 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <div>
           <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('libraryNewTab.stage06.activeTitle')}
+            {t('envManagement.stage06.activeTitle')}
           </div>
           <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.stage06.activeDesc')}
+            {t('envManagement.stage06.activeDesc')}
           </div>
         </div>
         <Switch
@@ -78,12 +78,12 @@ export default function Stage06ApiEditor({ order, entry }: Props) {
             <Cpu className="w-4 h-4 text-[hsl(var(--primary))]" />
             <div>
               <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-                {t('libraryNewTab.stage06.modelTitle')}
+                {t('envManagement.stage06.modelTitle')}
               </div>
               <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
                 {overrideOn
-                  ? t('libraryNewTab.stage06.overrideOnDesc')
-                  : t('libraryNewTab.stage06.overrideOffDesc', {
+                  ? t('envManagement.stage06.overrideOnDesc')
+                  : t('envManagement.stage06.overrideOffDesc', {
                       model:
                         (pipelineModel.model as string | undefined) ??
                         '(default)',
@@ -94,8 +94,8 @@ export default function Stage06ApiEditor({ order, entry }: Props) {
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
               {overrideOn
-                ? t('libraryNewTab.stage06.overrideToggleOn')
-                : t('libraryNewTab.stage06.overrideToggleOff')}
+                ? t('envManagement.stage06.overrideToggleOn')
+                : t('envManagement.stage06.overrideToggleOff')}
             </span>
             <Switch checked={overrideOn} onCheckedChange={toggleOverride} />
           </div>
@@ -130,7 +130,7 @@ export default function Stage06ApiEditor({ order, entry }: Props) {
         {!overrideOn && (
           <div className="border-t border-[hsl(var(--border))] pt-3 flex items-start gap-2 text-[0.7rem] text-[hsl(var(--muted-foreground))]">
             <Sparkles className="w-3.5 h-3.5 mt-0.5 text-[hsl(var(--primary))] shrink-0" />
-            <span>{t('libraryNewTab.stage06.useDefaultHint')}</span>
+            <span>{t('envManagement.stage06.useDefaultHint')}</span>
           </div>
         )}
       </section>
@@ -147,9 +147,9 @@ export default function Stage06ApiEditor({ order, entry }: Props) {
           ) : (
             <ChevronRight className="w-3.5 h-3.5" />
           )}
-          {t('libraryNewTab.stage06.advancedTitle')}
+          {t('envManagement.stage06.advancedTitle')}
           <span className="text-[0.6875rem] font-normal text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.stage06.advancedHint')}
+            {t('envManagement.stage06.advancedHint')}
           </span>
         </button>
         {advancedOpen && (

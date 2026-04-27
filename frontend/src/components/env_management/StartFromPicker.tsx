@@ -85,10 +85,10 @@ export default function StartFromPicker() {
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('libraryNewTab.startFrom.blankTitle')}
+            {t('envManagement.startFrom.blankTitle')}
           </div>
           <div className="text-[0.7rem] text-[hsl(var(--muted-foreground))] mt-0.5">
-            {t('libraryNewTab.startFrom.blankDesc')}
+            {t('envManagement.startFrom.blankDesc')}
           </div>
         </div>
         <ActionButton
@@ -98,7 +98,7 @@ export default function StartFromPicker() {
           disabled={seeding}
           spinIcon={seeding}
         >
-          {seeding ? t('libraryNewTab.seeding') : t('libraryNewTab.newDraft')}
+          {seeding ? t('envManagement.seeding') : t('envManagement.newDraft')}
         </ActionButton>
       </div>
 
@@ -107,7 +107,7 @@ export default function StartFromPicker() {
         <div>
           <div className="flex items-center gap-1 text-[0.7rem] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))] mb-2">
             <Star className="w-3 h-3" />
-            {t('libraryNewTab.startFrom.presetsTitle')}
+            {t('envManagement.startFrom.presetsTitle')}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {presetEnvs.map((env) => (
@@ -129,7 +129,7 @@ export default function StartFromPicker() {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-1 text-[0.7rem] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
               <Boxes className="w-3 h-3" />
-              {t('libraryNewTab.startFrom.existingTitle', {
+              {t('envManagement.startFrom.existingTitle', {
                 n: String(nonPresetEnvs.length),
               })}
             </div>
@@ -140,8 +140,8 @@ export default function StartFromPicker() {
                 className="text-[0.7rem] text-[hsl(var(--primary))] hover:underline"
               >
                 {showAll
-                  ? t('libraryNewTab.startFrom.collapse')
-                  : t('libraryNewTab.startFrom.showAll', {
+                  ? t('envManagement.startFrom.collapse')
+                  : t('envManagement.startFrom.showAll', {
                       n: String(nonPresetEnvs.length),
                     })}
               </button>
@@ -163,7 +163,7 @@ export default function StartFromPicker() {
 
       {!loading && envs.length === 0 && (
         <p className="text-[0.7rem] text-[hsl(var(--muted-foreground))] italic">
-          {t('libraryNewTab.startFrom.empty')}
+          {t('envManagement.startFrom.empty')}
         </p>
       )}
     </div>
@@ -204,7 +204,7 @@ function PresetCard({
         </span>
       </div>
       <p className="text-[0.7rem] text-[hsl(var(--muted-foreground))] line-clamp-2 leading-relaxed">
-        {env.description || t('libraryNewTab.startFrom.noDescription')}
+        {env.description || t('envManagement.startFrom.noDescription')}
       </p>
       {env.tags && env.tags.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-1">
@@ -219,7 +219,7 @@ function PresetCard({
         </div>
       )}
       <div className="text-[0.625rem] text-[hsl(var(--primary))] mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        {t('libraryNewTab.startFrom.useThis')} →
+        {t('envManagement.startFrom.useThis')} →
       </div>
     </button>
   );

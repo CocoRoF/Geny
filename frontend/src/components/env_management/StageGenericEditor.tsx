@@ -103,10 +103,10 @@ export default function StageGenericEditor({ order, entry }: Props) {
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-              {t('libraryNewTab.stageActive')}
+              {t('envManagement.stageActive')}
             </div>
             <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-              {t('libraryNewTab.stageActiveDesc')}
+              {t('envManagement.stageActiveDesc')}
             </div>
           </div>
           <Switch
@@ -117,7 +117,7 @@ export default function StageGenericEditor({ order, entry }: Props) {
 
         <div className="flex items-center gap-3">
           <label className="text-[0.75rem] font-medium text-[hsl(var(--foreground))] min-w-[64px]">
-            {t('libraryNewTab.stageArtifact')}
+            {t('envManagement.stageArtifact')}
           </label>
           <Select
             value={entry.artifact || 'default'}
@@ -140,7 +140,7 @@ export default function StageGenericEditor({ order, entry }: Props) {
       {loading && (
         <div className="flex items-center gap-2 text-[0.75rem] text-[hsl(var(--muted-foreground))] p-3">
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          {t('libraryNewTab.loadingSchema')}
+          {t('envManagement.loadingSchema')}
         </div>
       )}
 
@@ -154,7 +154,7 @@ export default function StageGenericEditor({ order, entry }: Props) {
       {intro && Object.keys(intro.strategy_slots).length > 0 && (
         <section className="flex flex-col gap-2">
           <h4 className="text-[0.75rem] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.stageStrategies')}
+            {t('envManagement.stageStrategies')}
           </h4>
           <StrategiesEditor
             slots={intro.strategy_slots}
@@ -172,7 +172,7 @@ export default function StageGenericEditor({ order, entry }: Props) {
       {intro && Object.keys(intro.strategy_chains).length > 0 && (
         <section className="flex flex-col gap-2">
           <h4 className="text-[0.75rem] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.stageChains')}
+            {t('envManagement.stageChains')}
           </h4>
           <ChainsEditor
             chains={intro.strategy_chains}
@@ -188,7 +188,7 @@ export default function StageGenericEditor({ order, entry }: Props) {
       {intro && configSchema && (
         <section className="flex flex-col gap-2 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
           <h4 className="text-[0.75rem] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.stageConfig')}
+            {t('envManagement.stageConfig')}
           </h4>
           <JsonSchemaForm
             schema={configSchema}
@@ -201,12 +201,12 @@ export default function StageGenericEditor({ order, entry }: Props) {
       {/* ── model_override / tool_binding hints (hidden until PR-B/PR-C) ── */}
       {intro?.model_override_supported && !entry.model_override && (
         <div className="px-3 py-2 rounded-md bg-[hsl(var(--accent))] text-[0.7rem] text-[hsl(var(--muted-foreground))]">
-          {t('libraryNewTab.modelOverrideHint')}
+          {t('envManagement.modelOverrideHint')}
         </div>
       )}
       {intro?.tool_binding_supported && !entry.tool_binding && (
         <div className="px-3 py-2 rounded-md bg-[hsl(var(--accent))] text-[0.7rem] text-[hsl(var(--muted-foreground))]">
-          {t('libraryNewTab.toolBindingHint')}
+          {t('envManagement.toolBindingHint')}
         </div>
       )}
     </div>

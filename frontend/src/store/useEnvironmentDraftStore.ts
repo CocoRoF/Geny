@@ -38,7 +38,7 @@ import type {
 
 // ─── Helpers ──────────────────────────────────────────────
 
-const TEMP_DRAFT_NAME = '__library_new_draft_seed__';
+const TEMP_DRAFT_NAME = '__env_management_draft_seed__';
 
 /** Deep-clone a JSON-serialisable manifest so callers cannot mutate
  *  the store's internal reference. */
