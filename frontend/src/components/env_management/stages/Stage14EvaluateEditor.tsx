@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { catalogApi } from '@/lib/environmentApi';
+import { localizeIntrospection } from '../stage_locale';
 import { useEnvironmentDraftStore } from '@/store/useEnvironmentDraftStore';
 import type {
   StageIntrospection,
@@ -45,6 +46,7 @@ interface Props {
 
 export default function Stage14EvaluateEditor({ order, entry }: Props) {
   const { t } = useI18n();
+  const locale = useI18n((s) => s.locale);
   const draft = useEnvironmentDraftStore((s) => s.draft);
   const patchStage = useEnvironmentDraftStore((s) => s.patchStage);
   const patchPipeline = useEnvironmentDraftStore((s) => s.patchPipeline);
@@ -57,13 +59,13 @@ export default function Stage14EvaluateEditor({ order, entry }: Props) {
     catalogApi
       .stage(order)
       .then((res) => {
-        if (!cancelled) setIntro(res);
+        if (!cancelled) setIntro(localizeIntrospection(res, locale));
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [order]);
+  }, [order, locale]);
 
   const pipeline = (draft?.pipeline ?? {}) as Record<string, unknown>;
 

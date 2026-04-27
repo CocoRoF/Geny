@@ -24,6 +24,7 @@ import type {
   StageManifestEntry,
 } from '@/types/environment';
 import { useEnvironmentDraftStore } from '@/store/useEnvironmentDraftStore';
+import { localizeIntrospection } from './stage_locale';
 import {
   StrategiesEditor,
   ChainsEditor,
@@ -47,6 +48,7 @@ interface Props {
 
 export default function StageGenericEditor({ order, entry }: Props) {
   const { t } = useI18n();
+  const locale = useI18n((s) => s.locale);
   const patchStage = useEnvironmentDraftStore((s) => s.patchStage);
 
   const [intro, setIntro] = useState<StageIntrospection | null>(null);
@@ -55,7 +57,9 @@ export default function StageGenericEditor({ order, entry }: Props) {
 
   // Fetch introspection for the chosen artifact (or default artifact if
   // none is set yet). Re-fetch when the artifact changes so schemas
-  // match the new artifact's ConfigSchema.
+  // match the new artifact's ConfigSchema. Run the response through
+  // the locale layer so KO users see translated slot/impl/config
+  // descriptions without touching the executor.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -67,7 +71,7 @@ export default function StageGenericEditor({ order, entry }: Props) {
     fetcher
       .then((res) => {
         if (cancelled) return;
-        setIntro(res);
+        setIntro(localizeIntrospection(res, locale));
       })
       .catch((e) => {
         if (cancelled) return;
@@ -79,7 +83,7 @@ export default function StageGenericEditor({ order, entry }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [order, entry.artifact]);
+  }, [order, entry.artifact, locale]);
 
   const artifactOptions = useMemo(() => {
     // We don't have the per-stage artifact list pre-loaded; fall back to

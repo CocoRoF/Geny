@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { catalogApi } from '@/lib/environmentApi';
+import { localizeIntrospection } from '../stage_locale';
 import { useEnvironmentDraftStore } from '@/store/useEnvironmentDraftStore';
 import type {
   StageIntrospection,
@@ -40,25 +41,21 @@ import StageGenericEditor from '../StageGenericEditor';
 const STRATEGY_OPTIONS = [
   {
     id: 'append_only',
-    icon: '📝',
     titleKey: 'envManagement.stage18.strategy.append_only.title',
     descKey: 'envManagement.stage18.strategy.append_only.desc',
   },
   {
     id: 'no_memory',
-    icon: '🚫',
     titleKey: 'envManagement.stage18.strategy.no_memory.title',
     descKey: 'envManagement.stage18.strategy.no_memory.desc',
   },
   {
     id: 'reflective',
-    icon: '💭',
     titleKey: 'envManagement.stage18.strategy.reflective.title',
     descKey: 'envManagement.stage18.strategy.reflective.desc',
   },
   {
     id: 'structured_reflective',
-    icon: '🧠',
     titleKey: 'envManagement.stage18.strategy.structured_reflective.title',
     descKey: 'envManagement.stage18.strategy.structured_reflective.desc',
   },
@@ -67,19 +64,16 @@ const STRATEGY_OPTIONS = [
 const PERSISTENCE_OPTIONS = [
   {
     id: 'null',
-    icon: '🌬️',
     titleKey: 'envManagement.stage18.persist.null.title',
     descKey: 'envManagement.stage18.persist.null.desc',
   },
   {
     id: 'in_memory',
-    icon: '⚡',
     titleKey: 'envManagement.stage18.persist.in_memory.title',
     descKey: 'envManagement.stage18.persist.in_memory.desc',
   },
   {
     id: 'file',
-    icon: '💾',
     titleKey: 'envManagement.stage18.persist.file.title',
     descKey: 'envManagement.stage18.persist.file.desc',
   },
@@ -94,6 +88,7 @@ interface Props {
 
 export default function Stage18MemoryEditor({ order, entry }: Props) {
   const { t } = useI18n();
+  const locale = useI18n((s) => s.locale);
   const draft = useEnvironmentDraftStore((s) => s.draft);
   const patchStage = useEnvironmentDraftStore((s) => s.patchStage);
 
@@ -105,7 +100,7 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
     catalogApi
       .stage(order)
       .then((res) => {
-        if (!cancelled) setIntro(res);
+        if (!cancelled) setIntro(localizeIntrospection(res, locale));
       })
       .catch(() => {
         /* generic editor falls back gracefully */
@@ -113,7 +108,7 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [order]);
+  }, [order, locale]);
 
   // Available strategy/persistence names from the catalog (so we can
   // disable curated tiles that the executor build doesn't actually
@@ -224,7 +219,6 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
                 }`}
                 title={!available ? t('envManagement.stage18.unavailable') : undefined}
               >
-                <span className="text-base shrink-0">{opt.icon}</span>
                 <div className="min-w-0">
                   <div className="text-[0.8125rem] font-medium text-[hsl(var(--foreground))]">
                     {t(opt.titleKey)}
@@ -268,7 +262,6 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
                 }`}
                 title={!available ? t('envManagement.stage18.unavailable') : undefined}
               >
-                <span className="text-base shrink-0">{opt.icon}</span>
                 <div className="min-w-0">
                   <div className="text-[0.8125rem] font-medium text-[hsl(var(--foreground))]">
                     {t(opt.titleKey)}

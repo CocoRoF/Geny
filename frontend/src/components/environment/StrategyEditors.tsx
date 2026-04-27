@@ -71,7 +71,7 @@ export function StrategiesEditor({
                 </span>
                 {slot.required && (
                   <span className="text-[0.625rem] font-semibold text-[var(--danger-color)]">
-                    required
+                    {t('common.required')}
                   </span>
                 )}
               </div>

@@ -144,6 +144,8 @@ const en = {
     unknownTab: 'Unknown tab',
     selectOption: '-- Select --',
     noOutput: 'No output yet',
+    required: 'required',
+    add: 'Add',
   },
 
   // ─── Main Tab ───
@@ -757,10 +759,6 @@ const en = {
           title: 'Multimodal',
           desc: 'Accepts images, audio, and mixed-media content blocks alongside text.',
         },
-      },
-      systemPromptHere: {
-        title: 'Looking for the system prompt?',
-        body: 'The system prompt lives in Stage 3 (System) — that\'s where you set the agent\'s persona and rules. Stage 1 is only about validating and shaping the user\'s input.',
       },
       advancedTitle: 'Advanced',
       advancedHint: 'artifact / raw config keys',

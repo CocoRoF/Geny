@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { catalogApi } from '@/lib/environmentApi';
+import { localizeIntrospection } from '../stage_locale';
 import { useEnvironmentDraftStore } from '@/store/useEnvironmentDraftStore';
 import type {
   StageIntrospection,
@@ -40,13 +41,11 @@ const STARTER_CHIPS = [
 const BUILDER_OPTIONS = [
   {
     id: 'StaticPromptBuilder',
-    icon: '📌',
     titleKey: 'envManagement.stage03.builder.static.title',
     descKey: 'envManagement.stage03.builder.static.desc',
   },
   {
     id: 'ComposablePromptBuilder',
-    icon: '🧩',
     titleKey: 'envManagement.stage03.builder.composable.title',
     descKey: 'envManagement.stage03.builder.composable.desc',
   },
@@ -59,6 +58,7 @@ interface Props {
 
 export default function Stage03SystemEditor({ order, entry }: Props) {
   const { t } = useI18n();
+  const locale = useI18n((s) => s.locale);
   const patchStage = useEnvironmentDraftStore((s) => s.patchStage);
 
   const [intro, setIntro] = useState<StageIntrospection | null>(null);
@@ -69,13 +69,13 @@ export default function Stage03SystemEditor({ order, entry }: Props) {
     catalogApi
       .stage(order)
       .then((res) => {
-        if (!cancelled) setIntro(res);
+        if (!cancelled) setIntro(localizeIntrospection(res, locale));
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [order]);
+  }, [order, locale]);
 
   const availableBuilder = new Set(
     intro?.strategy_slots?.['builder']?.available_impls ??
@@ -157,7 +157,6 @@ export default function Stage03SystemEditor({ order, entry }: Props) {
                 } ${!available ? 'opacity-40 cursor-not-allowed' : ''}`}
                 title={!available ? t('envManagement.stage03.unavailable') : undefined}
               >
-                <span className="text-base shrink-0">{opt.icon}</span>
                 <div className="min-w-0">
                   <div className="text-[0.8125rem] font-medium text-[hsl(var(--foreground))]">
                     {t(opt.titleKey)}

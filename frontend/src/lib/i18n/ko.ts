@@ -144,6 +144,8 @@ const ko: Translations = {
     unknownTab: '알 수 없는 탭',
     selectOption: '-- 선택 --',
     noOutput: '아직 출력이 없습니다',
+    required: '필수',
+    add: '추가',
   },
 
   // ─── Main Tab ───
@@ -757,10 +759,6 @@ const ko: Translations = {
           title: '멀티모달',
           desc: '텍스트와 함께 이미지, 오디오, 혼합 미디어 콘텐츠 블록 수용.',
         },
-      },
-      systemPromptHere: {
-        title: '시스템 프롬프트는 어디에?',
-        body: '시스템 프롬프트는 3단계 (System) 에 있습니다 — 거기서 에이전트의 페르소나와 규칙을 설정합니다. 1단계는 사용자 입력의 검증과 정형화만 담당합니다.',
       },
       advancedTitle: '고급',
       advancedHint: 'artifact / 원시 config 키',
