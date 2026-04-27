@@ -20,7 +20,7 @@ import { useState } from 'react';
 import { Cpu, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { useEnvironmentDraftStore } from '@/store/useEnvironmentDraftStore';
-import type { StageManifestEntry } from '@/types/environment';
+import type { StageManifestEntry, StageModelOverride } from '@/types/environment';
 import { ModelConfigEditor } from '@/components/builder/ModelConfigEditor';
 import { Switch } from '@/components/ui/switch';
 import StageGenericEditor from '../StageGenericEditor';
@@ -45,7 +45,9 @@ export default function Stage06ApiEditor({ order, entry }: Props) {
       // Seed with the pipeline defaults so the user starts from
       // something that works rather than an empty form. They can
       // override any subset.
-      patchStage(order, { model_override: { ...pipelineModel } });
+      patchStage(order, {
+        model_override: { ...pipelineModel } as unknown as StageModelOverride,
+      });
     } else {
       patchStage(order, { model_override: null });
     }
@@ -110,7 +112,15 @@ export default function Stage06ApiEditor({ order, entry }: Props) {
                   ...((entry.model_override as Record<string, unknown>) ?? {}),
                   ...changes,
                 };
-                patchStage(order, { model_override: next });
+                // StageModelOverride has explicit fields (model: string?,
+                // ...) plus a [key: string]: unknown index signature.
+                // Record<string, unknown> only provides the index-sig view
+                // of properties so TS can't prove e.g. `model` is a string.
+                // Cast through unknown — the runtime shape matches the
+                // executor's Dict[str, Any] contract.
+                patchStage(order, {
+                  model_override: next as unknown as StageModelOverride,
+                });
               }}
               onClearError={() => {}}
             />

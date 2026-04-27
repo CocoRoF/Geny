@@ -30,6 +30,7 @@ import { useEnvironmentDraftStore } from '@/store/useEnvironmentDraftStore';
 import type {
   StageIntrospection,
   StageManifestEntry,
+  StageModelOverride,
 } from '@/types/environment';
 import { ModelConfigEditor } from '@/components/builder/ModelConfigEditor';
 import { Input } from '@/components/ui/input';
@@ -166,7 +167,9 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
 
   const toggleOverride = (next: boolean) => {
     if (next) {
-      patchStage(order, { model_override: { ...pipelineModel } });
+      patchStage(order, {
+        model_override: { ...pipelineModel } as unknown as StageModelOverride,
+      });
     } else {
       patchStage(order, { model_override: null });
     }
@@ -344,7 +347,9 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
                   ...((entry.model_override as Record<string, unknown>) ?? {}),
                   ...changes,
                 };
-                patchStage(order, { model_override: next });
+                patchStage(order, {
+                  model_override: next as unknown as StageModelOverride,
+                });
               }}
               onClearError={() => {}}
             />
