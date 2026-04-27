@@ -33,6 +33,8 @@ const McpServersTab = dynamic(() => import('@/components/tabs/McpServersTab').th
 // permissions / hooks / skills / mcp are all components of it).
 const EnvironmentTab = dynamic(() => import('@/components/tabs/EnvironmentTab'));
 const SessionEnvironmentRootTab = dynamic(() => import('@/components/tabs/SessionEnvironmentRootTab'));
+// Cycle 20260427_1 — Library (NEW) visual 21-stage builder.
+const LibraryNewTab = dynamic(() => import('@/components/library_new/LibraryNewTab'));
 
 const TAB_MAP: Record<string, React.ComponentType> = {
   main: MainTab,
@@ -46,6 +48,8 @@ const TAB_MAP: Record<string, React.ComponentType> = {
   // Old activeTab values for the now-sub-tabs are handled by
   // useAppStore.setActiveTab redirects.
   library: EnvironmentTab,
+  // Cycle 20260427_1 — visual 21-stage env builder (parallel to library).
+  library_new: LibraryNewTab,
   sessionEnvironment: SessionEnvironmentRootTab,
   // Legacy aliases — kept so direct mounts still work even if a code
   // path bypasses setActiveTab. They render the same components the

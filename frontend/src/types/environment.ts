@@ -82,6 +82,11 @@ export interface CreateEnvironmentPayload {
   tags?: string[];
   session_id?: string;
   preset_name?: string;
+  // Cycle 20260427_1 — Library (NEW) tab posts a fully-assembled draft
+  // manifest in one shot. Only honoured when mode='blank'; the backend
+  // forces caller-supplied name/description/tags onto the manifest's
+  // metadata so the env list view stays consistent with the create form.
+  manifest_override?: EnvironmentManifest;
 }
 
 export interface UpdateEnvironmentPayload {

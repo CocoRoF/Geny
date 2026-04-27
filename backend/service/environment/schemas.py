@@ -38,6 +38,13 @@ class CreateEnvironmentRequest(BaseModel):
     *mode* is optional: when omitted, it is inferred from the payload
     (``session_id`` → from_session, ``preset_name`` → from_preset,
     otherwise → blank).
+
+    *manifest_override* (cycle 20260427_1): when supplied alongside
+    mode='blank', the entire EnvironmentManifest payload is taken from the
+    caller instead of the framework's blank_manifest() default. The new
+    Library (NEW) tab uses this to commit a draft manifest assembled
+    client-side with one POST instead of a create-then-replace round-trip.
+    Ignored for from_session / from_preset modes.
     """
 
     mode: Optional[Literal["blank", "from_session", "from_preset"]] = None
@@ -50,6 +57,9 @@ class CreateEnvironmentRequest(BaseModel):
 
     # from_preset / blank-with-base mode
     preset_name: Optional[str] = None
+
+    # blank mode + manifest_override (Library NEW)
+    manifest_override: Optional[Dict[str, Any]] = None
 
     @model_validator(mode="after")
     def _resolve_and_validate_mode(self) -> "CreateEnvironmentRequest":
@@ -64,6 +74,10 @@ class CreateEnvironmentRequest(BaseModel):
             raise ValueError("session_id is required when mode='from_session'")
         if self.mode == "from_preset" and not self.preset_name:
             raise ValueError("preset_name is required when mode='from_preset'")
+        if self.manifest_override is not None and self.mode != "blank":
+            raise ValueError(
+                "manifest_override is only valid when mode='blank'"
+            )
         return self
 
 

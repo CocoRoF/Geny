@@ -213,7 +213,11 @@ async def create_environment(
     # mode == "blank"
     try:
         env_id = svc.create_blank(
-            body.name, body.description, body.tags, base_preset=body.preset_name
+            body.name,
+            body.description,
+            body.tags,
+            base_preset=body.preset_name,
+            manifest_override=body.manifest_override,
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc))
