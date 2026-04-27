@@ -23,6 +23,7 @@ import { useEnvironmentDraftStore } from '@/store/useEnvironmentDraftStore';
 import StageGenericEditor from './StageGenericEditor';
 import StageInfoModal from './stage_info/StageInfoModal';
 import Stage01InputEditor from './stages/Stage01InputEditor';
+import Stage03SystemEditor from './stages/Stage03SystemEditor';
 import Stage06ApiEditor from './stages/Stage06ApiEditor';
 import Stage10ToolsEditor from './stages/Stage10ToolsEditor';
 import Stage11ToolReviewEditor from './stages/Stage11ToolReviewEditor';
@@ -55,6 +56,7 @@ const CURATED_EDITORS: Record<
   React.ComponentType<{ order: number; entry: import('@/types/environment').StageManifestEntry }>
 > = {
   1: Stage01InputEditor,
+  3: Stage03SystemEditor,
   6: Stage06ApiEditor,
   10: Stage10ToolsEditor,
   11: Stage11ToolReviewEditor,
