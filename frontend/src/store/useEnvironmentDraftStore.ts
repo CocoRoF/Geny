@@ -46,11 +46,16 @@ function cloneManifest(m: EnvironmentManifest): EnvironmentManifest {
   return JSON.parse(JSON.stringify(m)) as EnvironmentManifest;
 }
 
-function shallowMerge<T extends Record<string, unknown>>(
-  base: T,
-  patch: Partial<T>,
-): T {
-  return { ...base, ...patch } as T;
+/** Default ToolsSnapshot with required fields populated. Used when
+ *  draft.tools is undefined and the user hits a patchTools(). */
+function emptyTools(): ToolsSnapshot {
+  return {
+    built_in: [],
+    adhoc: [],
+    mcp_servers: [],
+    external: [],
+    scope: {},
+  };
 }
 
 /** Run all draft-wide invariants and return the new validationErrors
@@ -334,10 +339,7 @@ export const useEnvironmentDraftStore = create<EnvironmentDraftState>(
       const { draft } = get();
       if (!draft) return;
       const next = cloneManifest(draft);
-      next.metadata = shallowMerge(
-        next.metadata as unknown as Record<string, unknown>,
-        patch as Record<string, unknown>,
-      ) as EnvironmentMetadata;
+      next.metadata = { ...next.metadata, ...patch };
       set({
         draft: next,
         metadataDirty: true,
@@ -349,7 +351,7 @@ export const useEnvironmentDraftStore = create<EnvironmentDraftState>(
       const { draft } = get();
       if (!draft) return;
       const next = cloneManifest(draft);
-      next.model = shallowMerge(next.model ?? {}, patch);
+      next.model = { ...(next.model ?? {}), ...patch };
       set({
         draft: next,
         modelDirty: true,
@@ -361,7 +363,7 @@ export const useEnvironmentDraftStore = create<EnvironmentDraftState>(
       const { draft } = get();
       if (!draft) return;
       const next = cloneManifest(draft);
-      next.pipeline = shallowMerge(next.pipeline ?? {}, patch);
+      next.pipeline = { ...(next.pipeline ?? {}), ...patch };
       set({
         draft: next,
         pipelineDirty: true,
@@ -373,16 +375,7 @@ export const useEnvironmentDraftStore = create<EnvironmentDraftState>(
       const { draft } = get();
       if (!draft) return;
       const next = cloneManifest(draft);
-      next.tools = shallowMerge(
-        next.tools ?? {
-          built_in: [],
-          adhoc: [],
-          mcp_servers: [],
-          external: [],
-          scope: {},
-        },
-        patch,
-      );
+      next.tools = { ...(next.tools ?? emptyTools()), ...patch };
       set({
         draft: next,
         toolsDirty: true,
