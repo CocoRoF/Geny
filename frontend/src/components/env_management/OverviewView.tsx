@@ -65,6 +65,7 @@ export default function OverviewView({ onSelectStage }: OverviewViewProps) {
           if (order != null) onSelectStage(order);
         }}
         dirtyOrders={stageDirty}
+        interactive={false}
       />
       {/* Bottom hint pill — gentle nudge that stages are clickable */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[hsl(var(--card))]/95 backdrop-blur border border-[hsl(var(--border))] shadow-md text-[0.7rem] text-[hsl(var(--muted-foreground))] pointer-events-none">

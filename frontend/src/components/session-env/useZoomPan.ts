@@ -12,8 +12,13 @@ interface Transform {
  * Zoom & pan hook using a callback-ref pattern so the wheel listener
  * is reliably attached even when the container mounts after the
  * initial render. Ported from geny-executor-web's `useZoomPan`.
+ *
+ * `interactive=false` (cycle 20260427_2) — disables wheel zoom and
+ * pointer drag entirely. `fitToView` still works, so the canvas can
+ * be used as a fixed-display surface that just auto-fits to its
+ * container. Returned pointer handlers become no-ops.
  */
-export function useZoomPan(minScale = 0.3, maxScale = 3) {
+export function useZoomPan(minScale = 0.3, maxScale = 3, interactive = true) {
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const containerRef = useCallback((node: HTMLDivElement | null) => {
     setContainer(node);
@@ -24,7 +29,7 @@ export function useZoomPan(minScale = 0.3, maxScale = 3) {
   const lastPos = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
-    if (!container) return;
+    if (!container || !interactive) return;
 
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -51,22 +56,28 @@ export function useZoomPan(minScale = 0.3, maxScale = 3) {
 
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
-  }, [container, minScale, maxScale]);
+  }, [container, minScale, maxScale, interactive]);
 
-  const onPointerDown = useCallback((e: React.PointerEvent) => {
-    if (e.button !== 0) return;
-    isPanning.current = true;
-    lastPos.current = { x: e.clientX, y: e.clientY };
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  }, []);
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (!interactive || e.button !== 0) return;
+      isPanning.current = true;
+      lastPos.current = { x: e.clientX, y: e.clientY };
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    },
+    [interactive],
+  );
 
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!isPanning.current) return;
-    const dx = e.clientX - lastPos.current.x;
-    const dy = e.clientY - lastPos.current.y;
-    lastPos.current = { x: e.clientX, y: e.clientY };
-    setTransform((t) => ({ ...t, x: t.x + dx, y: t.y + dy }));
-  }, []);
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!interactive || !isPanning.current) return;
+      const dx = e.clientX - lastPos.current.x;
+      const dy = e.clientY - lastPos.current.y;
+      lastPos.current = { x: e.clientX, y: e.clientY };
+      setTransform((t) => ({ ...t, x: t.x + dx, y: t.y + dy }));
+    },
+    [interactive],
+  );
 
   const onPointerUp = useCallback(() => {
     isPanning.current = false;
@@ -95,6 +106,8 @@ export function useZoomPan(minScale = 0.3, maxScale = 3) {
 
   return {
     containerRef,
+    /** Live container element — useful for parent ResizeObserver setup. */
+    containerEl: container,
     transform,
     onPointerDown,
     onPointerMove,

@@ -317,6 +317,12 @@ interface PipelineCanvasProps {
    *  in this set get an accent badge to signal "edited but not saved".
    *  Read-only callers (SessionEnvironmentTab) omit it. */
   dirtyOrders?: ReadonlySet<number>;
+  /** Cycle 20260427_2 — when false, the canvas becomes a fixed-display
+   *  surface: no wheel zoom, no drag pan, just auto-fits and recentres
+   *  on container resize via ResizeObserver. Stage circles stay
+   *  clickable. Defaults to true so existing call sites
+   *  (SessionEnvironmentTab) keep their pan/zoom behaviour. */
+  interactive?: boolean;
 }
 
 export default function PipelineCanvas({
@@ -325,30 +331,40 @@ export default function PipelineCanvas({
   onSelectStage,
   onResetView,
   dirtyOrders,
+  interactive = true,
 }: PipelineCanvasProps) {
   const {
     containerRef,
+    containerEl,
     transform,
     onPointerDown,
     onPointerMove,
     onPointerUp,
     resetView,
     fitToView,
-  } = useZoomPan(0.4, 3);
+  } = useZoomPan(0.4, 3, interactive);
 
   const hasFit = useRef(false);
   const stageByOrder = new Map<number, StageManifestEntry>();
   for (const s of stages) stageByOrder.set(s.order, s);
 
-  // Auto-fit content on first mount
+  // Auto-fit content on first mount + on every container resize.
+  // ResizeObserver handles both — the first observation fires
+  // immediately when the element is observed, replacing the old
+  // setTimeout-based init path.
   useEffect(() => {
-    if (hasFit.current) return;
-    const t = setTimeout(() => {
+    if (!containerEl) return;
+    const refit = () => {
       fitToView(CANVAS_W, CANVAS_H, 30);
       hasFit.current = true;
-    }, 60);
-    return () => clearTimeout(t);
-  }, [fitToView]);
+    };
+    const ro = new ResizeObserver(refit);
+    ro.observe(containerEl);
+    // One synchronous call too, in case ResizeObserver delays the
+    // first emission past the user's first paint.
+    refit();
+    return () => ro.disconnect();
+  }, [containerEl, fitToView]);
 
   // Expose reset to parent (used by the "Reset" header button)
   useEffect(() => {
@@ -372,12 +388,14 @@ export default function PipelineCanvas({
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-hidden cursor-grab active:cursor-grabbing select-none relative"
+      className={`flex-1 overflow-hidden select-none relative ${
+        interactive ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
+      }`}
       style={{ background: 'var(--pipe-bg-primary)' }}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerLeave={onPointerUp}
+      onPointerDown={interactive ? onPointerDown : undefined}
+      onPointerMove={interactive ? onPointerMove : undefined}
+      onPointerUp={interactive ? onPointerUp : undefined}
+      onPointerLeave={interactive ? onPointerUp : undefined}
     >
       <div
         style={{
