@@ -722,6 +722,57 @@ const ko: Translations = {
       wildcardBlockHint: '와일드카드 활성 — 모든 프레임워크 도구가 차단됩니다.',
       noMatch: '검색에 맞는 도구가 없습니다.',
     },
+    stage11: {
+      activeTitle: '이 단계 실행',
+      activeDesc: '11단계는 모든 도구 호출을 실행 전 검토합니다. 신뢰된 환경의 사전 검증된 도구만 사용할 때만 끄세요.',
+      chainTitle: '리뷰어 체인',
+      chainHint: '모든 도구 호출이 체인 안의 리뷰어를 순서대로 통과합니다. 리뷰어는 호출에 플래그를 붙일 수 있고 (14단계가 처리), 순서가 중요합니다 — 앞쪽 리뷰어가 hard flag로 단락(short-circuit) 가능.',
+      noChain: '이 아티팩트에는 리뷰어 체인이 없습니다. 고급에서 아티팩트를 변경하세요.',
+      emptyChainWarning: '체인에 리뷰어가 없어 모든 도구 호출이 검사 없이 통과합니다. 아래에서 최소 1개 리뷰어를 추가하세요.',
+      configure: '설정',
+      addReviewer: '리뷰어 추가',
+      advancedTitle: '고급',
+      advancedHint: 'artifact / strategies / 원시 chain JSON',
+    },
+    stage15: {
+      activeTitle: '이 단계 실행',
+      activeDesc: '15단계는 사람 승인을 기다립니다. 완전 자동화 워크플로우에서만 끄세요.',
+      requesterTitle: '사람에게 묻는 방식',
+      timeoutTitle: '타임아웃 시 동작',
+      timeoutSecondsLabel: '타임아웃 (초)',
+      timeoutSecondsHint: '타임아웃 전략으로 빠지기 전에 대기할 시간. 비워두면 전략 기본값.',
+      unavailable: '현재 빌드에서 사용할 수 없음',
+      advancedTitle: '고급',
+      advancedHint: '원시 strategies / configs',
+      requester: {
+        null: {
+          title: '자동 승인',
+          desc: '사람을 거치지 않음 — 모든 요청이 승인된 것으로 처리. 헤드리스/자동 실행에 적합.',
+        },
+        callback: {
+          title: '호스트 콜백',
+          desc: '호스트가 제공한 함수를 호출. 호스트가 동기적으로 결정.',
+        },
+        pipeline_resume: {
+          title: '일시정지 + 외부 결정',
+          desc: '파이프라인을 일시정지하고 외부 API가 결정을 POST하면 재개. UI 기반 승인 플로우에 최적.',
+        },
+      },
+      timeout: {
+        indefinite: {
+          title: '무한 대기',
+          desc: '사람이 응답할 때까지 차단. 자동 동작 없음.',
+        },
+        auto_approve: {
+          title: '타임아웃 후 자동 승인',
+          desc: 'timeout_seconds 안에 응답이 없으면 승인으로 처리.',
+        },
+        auto_reject: {
+          title: '타임아웃 후 자동 거부',
+          desc: 'timeout_seconds 안에 응답이 없으면 거부로 처리 (가장 안전).',
+        },
+      },
+    },
     stage18: {
       activeTitle: '이 단계 실행',
       activeDesc: '18단계는 턴 사이의 메모리를 보관합니다. 끄면 에이전트가 stateless가 됩니다.',
