@@ -19,6 +19,8 @@ import { useEnvironmentDraftStore } from '@/store/useEnvironmentDraftStore';
 import StageGenericEditor from './StageGenericEditor';
 import Stage06ApiEditor from './stages/Stage06ApiEditor';
 import Stage10ToolsEditor from './stages/Stage10ToolsEditor';
+import Stage11ToolReviewEditor from './stages/Stage11ToolReviewEditor';
+import Stage15HitlEditor from './stages/Stage15HitlEditor';
 import Stage18MemoryEditor from './stages/Stage18MemoryEditor';
 
 // Routing table — order → curated editor component. Anything not in
@@ -29,6 +31,8 @@ const CURATED_EDITORS: Record<
 > = {
   6: Stage06ApiEditor,
   10: Stage10ToolsEditor,
+  11: Stage11ToolReviewEditor,
+  15: Stage15HitlEditor,
   18: Stage18MemoryEditor,
 };
 

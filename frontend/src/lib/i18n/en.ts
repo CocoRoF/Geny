@@ -722,6 +722,57 @@ const en = {
       wildcardBlockHint: 'Wildcard active — every framework tool is blocked.',
       noMatch: 'No tools match the search.',
     },
+    stage11: {
+      activeTitle: 'Run this stage',
+      activeDesc: 'Stage 11 reviews each tool call before it executes. Disable only when running pre-vetted tools in trusted contexts.',
+      chainTitle: 'Reviewer chain',
+      chainHint: 'Each tool call passes through every reviewer in order. Reviewers can flag the call (which Stage 14 acts on). Order matters — earlier reviewers can short-circuit on a hard flag.',
+      noChain: 'This artifact does not expose a reviewer chain. Switch artifact in Advanced.',
+      emptyChainWarning: 'No reviewers in the chain — every tool call passes through unchecked. Add at least one reviewer below.',
+      configure: 'Configure',
+      addReviewer: 'Add reviewer',
+      advancedTitle: 'Advanced',
+      advancedHint: 'artifact / strategies / raw chain JSON',
+    },
+    stage15: {
+      activeTitle: 'Run this stage',
+      activeDesc: 'Stage 15 pauses for human approval. Turn off only for fully autonomous workflows.',
+      requesterTitle: 'How to ask the human',
+      timeoutTitle: 'On timeout',
+      timeoutSecondsLabel: 'Timeout (seconds)',
+      timeoutSecondsHint: 'How long to wait before falling back to the timeout strategy. Leave blank for the strategy default.',
+      unavailable: 'Not available in this build',
+      advancedTitle: 'Advanced',
+      advancedHint: 'raw strategies / configs',
+      requester: {
+        null: {
+          title: 'Auto-approve',
+          desc: 'Skip the human entirely — every request is approved as if a human OK\'d it. Good for headless / automated runs.',
+        },
+        callback: {
+          title: 'Host callback',
+          desc: 'Call a host-supplied function. The host decides synchronously.',
+        },
+        pipeline_resume: {
+          title: 'Pause + external decision',
+          desc: 'Pause the pipeline; resume when an external API posts the decision. Best for UI-driven approval flows.',
+        },
+      },
+      timeout: {
+        indefinite: {
+          title: 'Wait forever',
+          desc: 'Block until the human responds. No automatic action.',
+        },
+        auto_approve: {
+          title: 'Auto-approve after timeout',
+          desc: 'If no response within timeout_seconds, treat as approval.',
+        },
+        auto_reject: {
+          title: 'Auto-reject after timeout',
+          desc: 'If no response within timeout_seconds, treat as rejection (safest).',
+        },
+      },
+    },
     stage18: {
       activeTitle: 'Run this stage',
       activeDesc: 'Stage 18 captures memory between turns. Turning it off makes the agent stateless.',
