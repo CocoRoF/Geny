@@ -773,3 +773,12 @@ html.light .pipeline-scope {
 .pipeline-scope ::-webkit-scrollbar-thumb:hover {
 	background: var(--pipe-border-hover);
 }
+
+/* ── TabShell loading strip (indeterminate) ──────────── */
+@keyframes tab-loading-strip {
+	0% { transform: translateX(-100%); }
+	100% { transform: translateX(400%); }
+}
+.animate-loading-strip {
+	animation: tab-loading-strip 1.2s ease-in-out infinite;
+}
