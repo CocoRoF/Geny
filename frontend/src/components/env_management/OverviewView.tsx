@@ -52,8 +52,12 @@ export default function OverviewView({ onSelectStage }: OverviewViewProps) {
   }
 
   // ── Draft active — big canvas
+  // The .stage-circle class + --pipe-* CSS variables are scoped under
+  // .pipeline-scope in globals.css; without that wrapper the stage
+  // nodes render as bare numbers + labels (no circles, no colour, no
+  // grid). Mirror the wrapper used by SessionEnvironmentTab.
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[hsl(var(--background))] relative">
+    <div className="pipeline-scope flex-1 min-h-0 flex flex-col bg-[hsl(var(--background))] relative">
       <PipelineCanvas
         stages={draft.stages}
         selectedOrder={null}
