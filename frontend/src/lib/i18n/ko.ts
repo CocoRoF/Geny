@@ -724,10 +724,66 @@ const ko: Translations = {
     },
     stage01: {
       activeTitle: '이 단계 실행',
-      activeDesc: '1단계는 사용자 입력을 받아 대화를 준비합니다. 모든 파이프라인이 필수 — 끄면 사실상 에이전트가 동작하지 않습니다.',
+      activeDesc: '1단계는 사용자 입력을 받아 검증하고 정규화합니다. 끄면 에이전트가 반응할 입력 자체가 없습니다.',
+      validatorTitle: '검증기 (Validator)',
+      validatorHint: '들어오는 입력이 파이프라인에 진입할 자격이 있는지 판단합니다. LLM 호출 전에 실행됩니다.',
+      normalizerTitle: '정규화기 (Normalizer)',
+      normalizerHint: 'raw 입력을 이후 단계가 기대하는 표준 형식으로 변환합니다.',
+      unavailable: '현재 빌드에서 사용할 수 없음',
+      validator: {
+        default: {
+          title: '기본',
+          desc: '가벼운 타입 체크. 대부분의 일반 텍스트 입력 수용. 채팅 에이전트 권장.',
+        },
+        passthrough: {
+          title: 'Passthrough',
+          desc: '검증 없음. 모든 입력 통과. 신뢰된 내부 파이프라인 또는 테스트용.',
+        },
+        strict: {
+          title: 'Strict',
+          desc: '잘 형성된 요청처럼 보이지 않으면 거부. 거짓 양성률 높음.',
+        },
+        schema: {
+          title: 'Schema',
+          desc: '단계 config 에 제공한 JSON 스키마로 검증. API 스타일 구조화 입력에 사용.',
+        },
+      },
+      normalizer: {
+        default: {
+          title: '텍스트 전용',
+          desc: '문자열만. 채팅 에이전트의 가장 일반적 선택.',
+        },
+        multimodal: {
+          title: '멀티모달',
+          desc: '텍스트와 함께 이미지, 오디오, 혼합 미디어 콘텐츠 블록 수용.',
+        },
+      },
+      systemPromptHere: {
+        title: '시스템 프롬프트는 어디에?',
+        body: '시스템 프롬프트는 3단계 (System) 에 있습니다 — 거기서 에이전트의 페르소나와 규칙을 설정합니다. 1단계는 사용자 입력의 검증과 정형화만 담당합니다.',
+      },
+      advancedTitle: '고급',
+      advancedHint: 'artifact / 원시 config 키',
+    },
+    stage03: {
+      activeTitle: '이 단계 실행',
+      activeDesc: '3단계가 LLM 이 보는 시스템 프롬프트를 만듭니다. 끄면 LLM 이 페르소나 없이 대화에 들어가 — 자기 역할에 대한 맥락 없이 무미건조하게 답합니다.',
+      builderTitle: '프롬프트 구성 방식',
+      builderHint: 'Static 이 가장 단순합니다 — 아래 텍스트를 그대로 보냅니다. Composable 은 재사용 가능한 페르소나 블록을 조합합니다.',
+      builder: {
+        static: {
+          title: 'Static',
+          desc: '아래 textarea 를 그대로 사용. 단일 목적 에이전트에 최적.',
+        },
+        composable: {
+          title: 'Composable',
+          desc: '재사용 가능한 페르소나/역할/제약 블록 조합. 한 에이전트가 여러 역할을 할 때 최적.',
+        },
+      },
+      composableHint: 'Composable 모드는 settings 의 persona 섹션에서 블록을 읽습니다 — 여기보다 전역에서 설정하세요.',
       systemPromptTitle: '시스템 프롬프트',
       systemPromptPlaceholder: '당신은 도움이 되는 어시스턴트입니다. 적절할 때 사용 가능한 도구를 사용하세요. 사용자가 자세히 요청하지 않는 한 간결하게 답하세요.',
-      systemPromptHint: '이 텍스트는 모든 대화의 시스템 메시지로 앞에 붙습니다. 길게 쓰면 컨텍스트 창을 잡아먹으므로 핵심만.',
+      systemPromptHint: '이 텍스트는 모든 LLM 호출에서 system 메시지로 전달됩니다. 길게 쓰면 컨텍스트 창을 잡아먹으므로 핵심만.',
       charCount: '{n}자',
       startersTitle: '빠른 추가',
       starters: {
@@ -737,8 +793,9 @@ const ko: Translations = {
         plan: '여러 단계 작업의 경우 실행 전 간단한 계획을 제시합니다.',
         safety: '공유 인프라를 손상하거나 비밀을 노출할 요청은 거부합니다.',
       },
+      unavailable: '현재 빌드에서 사용할 수 없음',
       advancedTitle: '고급',
-      advancedHint: 'artifact / strategies / 원시 config 키',
+      advancedHint: 'artifact / 원시 config 키 / 템플릿 변수',
     },
     stage06: {
       activeTitle: '이 단계 실행',

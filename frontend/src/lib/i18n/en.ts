@@ -724,10 +724,66 @@ const en = {
     },
     stage01: {
       activeTitle: 'Run this stage',
-      activeDesc: 'Stage 1 ingests user input and primes the conversation. Required by every pipeline — turning it off effectively disables the agent.',
+      activeDesc: 'Stage 1 receives the user\'s input, validates it, and normalizes it for downstream stages. Disabling it leaves the agent with nothing to react to.',
+      validatorTitle: 'Validator',
+      validatorHint: 'Decides whether incoming input is even allowed to enter the pipeline. The check runs BEFORE the LLM is called.',
+      normalizerTitle: 'Normalizer',
+      normalizerHint: 'Rewrites the raw input into the standardized form the rest of the pipeline expects.',
+      unavailable: 'Not available in this build',
+      validator: {
+        default: {
+          title: 'Default',
+          desc: 'Light type checks. Accepts most plain-text inputs. Recommended for chat agents.',
+        },
+        passthrough: {
+          title: 'Passthrough',
+          desc: 'No validation. Anything goes. Useful for trusted internal pipelines or testing.',
+        },
+        strict: {
+          title: 'Strict',
+          desc: 'Rejects anything that doesn\'t look like a well-formed request. Higher false-positive rate.',
+        },
+        schema: {
+          title: 'Schema',
+          desc: 'Validate against a JSON schema you provide in stage config. Use for API-style structured input.',
+        },
+      },
+      normalizer: {
+        default: {
+          title: 'Text only',
+          desc: 'Strings only. The most common choice for chat agents.',
+        },
+        multimodal: {
+          title: 'Multimodal',
+          desc: 'Accepts images, audio, and mixed-media content blocks alongside text.',
+        },
+      },
+      systemPromptHere: {
+        title: 'Looking for the system prompt?',
+        body: 'The system prompt lives in Stage 3 (System) — that\'s where you set the agent\'s persona and rules. Stage 1 is only about validating and shaping the user\'s input.',
+      },
+      advancedTitle: 'Advanced',
+      advancedHint: 'artifact / raw config keys',
+    },
+    stage03: {
+      activeTitle: 'Run this stage',
+      activeDesc: 'Stage 3 builds the system prompt the LLM sees. Disabling it sends the LLM into the conversation with no persona — the agent answers blandly without context about its role.',
+      builderTitle: 'How the prompt is built',
+      builderHint: 'The Static option is the simplest — type your prompt below and that text is sent as-is. Composable lets you stitch reusable persona blocks together.',
+      builder: {
+        static: {
+          title: 'Static',
+          desc: 'Use the textarea below verbatim. Best for single-purpose agents.',
+        },
+        composable: {
+          title: 'Composable',
+          desc: 'Stitch reusable persona / role / constraint blocks. Best when one agent plays multiple roles.',
+        },
+      },
+      composableHint: 'Composable mode reads its blocks from your settings under persona — configure them globally rather than here.',
       systemPromptTitle: 'System prompt',
       systemPromptPlaceholder: 'You are a helpful assistant. Use the available tools when relevant. Be concise unless the user asks for detail.',
-      systemPromptHint: 'This text is prepended to every conversation as the system message. Keep it focused — long prompts eat context window.',
+      systemPromptHint: 'This text is sent as the system message on every LLM call. Keep it focused — long prompts eat the context window.',
       charCount: '{n} chars',
       startersTitle: 'Quick inserts',
       starters: {
@@ -737,8 +793,9 @@ const en = {
         plan: 'For multi-step tasks, briefly outline a plan before executing.',
         safety: 'Refuse requests that would damage shared infrastructure or expose secrets.',
       },
+      unavailable: 'Not available in this build',
       advancedTitle: 'Advanced',
-      advancedHint: 'artifact / strategies / raw config keys',
+      advancedHint: 'artifact / raw config keys / template variables',
     },
     stage06: {
       activeTitle: 'Run this stage',
