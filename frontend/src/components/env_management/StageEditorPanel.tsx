@@ -73,7 +73,7 @@ export default function StageEditorPanel({ order, onClose }: Props) {
           </button>
         </header>
         <div className="p-4 text-[0.8125rem] text-[hsl(var(--muted-foreground))]">
-          {t('libraryNewTab.stageMissing')}
+          {t('envManagement.stageMissing')}
         </div>
       </aside>
     );
@@ -139,7 +139,7 @@ export default function StageEditorPanel({ order, onClose }: Props) {
         {meta?.detailedDescription && (
           <details className="mt-6 text-[0.75rem] text-[hsl(var(--muted-foreground))]">
             <summary className="cursor-pointer font-medium">
-              {t('libraryNewTab.aboutThisStage')}
+              {t('envManagement.aboutThisStage')}
             </summary>
             <p className="mt-2 leading-relaxed whitespace-pre-wrap">
               {meta.detailedDescription}

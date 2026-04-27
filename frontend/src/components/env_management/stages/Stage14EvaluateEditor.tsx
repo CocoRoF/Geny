@@ -122,10 +122,10 @@ export default function Stage14EvaluateEditor({ order, entry }: Props) {
       <section className="flex items-center justify-between gap-3 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <div>
           <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('libraryNewTab.stage14.activeTitle')}
+            {t('envManagement.stage14.activeTitle')}
           </div>
           <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.stage14.activeDesc')}
+            {t('envManagement.stage14.activeDesc')}
           </div>
         </div>
         <Switch
@@ -139,14 +139,14 @@ export default function Stage14EvaluateEditor({ order, entry }: Props) {
         <header className="flex items-center gap-2">
           <AlertOctagon className="w-4 h-4 text-[hsl(var(--primary))]" />
           <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('libraryNewTab.stage14.budgetsTitle')}
+            {t('envManagement.stage14.budgetsTitle')}
           </h4>
           <span className="text-[0.625rem] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300">
-            {t('libraryNewTab.stage14.pipelineLevelBadge')}
+            {t('envManagement.stage14.pipelineLevelBadge')}
           </span>
         </header>
         <p className="text-[0.7rem] text-[hsl(var(--muted-foreground))] leading-relaxed">
-          {t('libraryNewTab.stage14.budgetsHint')}
+          {t('envManagement.stage14.budgetsHint')}
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -154,7 +154,7 @@ export default function Stage14EvaluateEditor({ order, entry }: Props) {
           <div className="flex flex-col gap-1">
             <label className="flex items-center gap-1 text-[0.75rem] font-medium text-[hsl(var(--foreground))]">
               <Hash className="w-3 h-3" />
-              {t('libraryNewTab.stage14.maxIterationsLabel')}
+              {t('envManagement.stage14.maxIterationsLabel')}
             </label>
             <Input
               type="number"
@@ -165,7 +165,7 @@ export default function Stage14EvaluateEditor({ order, entry }: Props) {
               className="h-7 font-mono text-[0.75rem]"
             />
             <p className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-              {t('libraryNewTab.stage14.maxIterationsHint')}
+              {t('envManagement.stage14.maxIterationsHint')}
             </p>
           </div>
 
@@ -173,7 +173,7 @@ export default function Stage14EvaluateEditor({ order, entry }: Props) {
           <div className="flex flex-col gap-1">
             <label className="flex items-center gap-1 text-[0.75rem] font-medium text-[hsl(var(--foreground))]">
               <Coins className="w-3 h-3" />
-              {t('libraryNewTab.stage14.costBudgetLabel')}
+              {t('envManagement.stage14.costBudgetLabel')}
             </label>
             <Input
               type="number"
@@ -181,11 +181,11 @@ export default function Stage14EvaluateEditor({ order, entry }: Props) {
               step={0.01}
               value={costBudget === '' ? '' : String(costBudget)}
               onChange={(e) => setCostBudget(e.target.value)}
-              placeholder={t('libraryNewTab.stage14.costBudgetPlaceholder')}
+              placeholder={t('envManagement.stage14.costBudgetPlaceholder')}
               className="h-7 font-mono text-[0.75rem]"
             />
             <p className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-              {t('libraryNewTab.stage14.costBudgetHint')}
+              {t('envManagement.stage14.costBudgetHint')}
             </p>
           </div>
 
@@ -193,7 +193,7 @@ export default function Stage14EvaluateEditor({ order, entry }: Props) {
           <div className="flex flex-col gap-1">
             <label className="flex items-center gap-1 text-[0.75rem] font-medium text-[hsl(var(--foreground))]">
               <Layers className="w-3 h-3" />
-              {t('libraryNewTab.stage14.ctxWindowLabel')}
+              {t('envManagement.stage14.ctxWindowLabel')}
             </label>
             <Input
               type="number"
@@ -204,7 +204,7 @@ export default function Stage14EvaluateEditor({ order, entry }: Props) {
               className="h-7 font-mono text-[0.75rem]"
             />
             <p className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-              {t('libraryNewTab.stage14.ctxWindowHint')}
+              {t('envManagement.stage14.ctxWindowHint')}
             </p>
           </div>
         </div>
@@ -214,10 +214,10 @@ export default function Stage14EvaluateEditor({ order, entry }: Props) {
       {intro && Object.keys(intro.strategy_slots).length > 0 && (
         <section className="flex flex-col gap-2 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
           <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('libraryNewTab.stage14.strategiesTitle')}
+            {t('envManagement.stage14.strategiesTitle')}
           </h4>
           <p className="text-[0.7rem] text-[hsl(var(--muted-foreground))] leading-relaxed">
-            {t('libraryNewTab.stage14.strategiesHint')}
+            {t('envManagement.stage14.strategiesHint')}
           </p>
           <StrategiesEditor
             slots={intro.strategy_slots}
@@ -243,9 +243,9 @@ export default function Stage14EvaluateEditor({ order, entry }: Props) {
           ) : (
             <ChevronRight className="w-3.5 h-3.5" />
           )}
-          {t('libraryNewTab.stage14.advancedTitle')}
+          {t('envManagement.stage14.advancedTitle')}
           <span className="text-[0.6875rem] font-normal text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.stage14.advancedHint')}
+            {t('envManagement.stage14.advancedHint')}
           </span>
         </button>
         {advancedOpen && (

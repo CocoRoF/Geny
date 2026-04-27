@@ -74,9 +74,9 @@ export default function GlobalSection() {
           <ChevronRight className="w-3.5 h-3.5" />
         )}
         <Layers className="w-3.5 h-3.5 text-[hsl(var(--primary))]" />
-        {t('libraryNewTab.globalSectionTitle')}
+        {t('envManagement.globalSectionTitle')}
         <span className="text-[0.6875rem] font-normal text-[hsl(var(--muted-foreground))]">
-          {t('libraryNewTab.globalSectionHint')}
+          {t('envManagement.globalSectionHint')}
         </span>
       </button>
 
@@ -86,26 +86,26 @@ export default function GlobalSection() {
           <nav className="flex md:flex-col gap-0.5 p-2 md:w-48 shrink-0 md:border-r md:border-[hsl(var(--border))] bg-[hsl(var(--background))]">
             <SubTabButton
               icon={Cpu}
-              label={t('libraryNewTab.global.model')}
+              label={t('envManagement.global.model')}
               active={activePanel === 'model'}
               onClick={() => setActivePanel('model')}
             />
             <SubTabButton
               icon={Layers}
-              label={t('libraryNewTab.global.pipeline')}
+              label={t('envManagement.global.pipeline')}
               active={activePanel === 'pipeline'}
               onClick={() => setActivePanel('pipeline')}
             />
             <SubTabButton
               icon={Wrench}
-              label={t('libraryNewTab.global.tools')}
+              label={t('envManagement.global.tools')}
               active={activePanel === 'tools'}
               onClick={() => setActivePanel('tools')}
               badge={`${builtInCount + mcpCount + adhocCount}`}
             />
             <SubTabButton
               icon={ExternalLink}
-              label={t('libraryNewTab.global.externals')}
+              label={t('envManagement.global.externals')}
               active={activePanel === 'externals'}
               onClick={() => setActivePanel('externals')}
             />
@@ -136,19 +136,19 @@ export default function GlobalSection() {
             {activePanel === 'tools' && (
               <div className="flex flex-col gap-3">
                 <p className="text-[0.8125rem] text-[hsl(var(--muted-foreground))]">
-                  {t('libraryNewTab.global.toolsHint')}
+                  {t('envManagement.global.toolsHint')}
                 </p>
                 <div className="grid grid-cols-3 gap-2">
                   <ToolStatCard
-                    label={t('libraryNewTab.global.builtInTools')}
+                    label={t('envManagement.global.builtInTools')}
                     count={builtInCount}
                   />
                   <ToolStatCard
-                    label={t('libraryNewTab.global.mcpServers')}
+                    label={t('envManagement.global.mcpServers')}
                     count={mcpCount}
                   />
                   <ToolStatCard
-                    label={t('libraryNewTab.global.customTools')}
+                    label={t('envManagement.global.customTools')}
                     count={adhocCount}
                   />
                 </div>
@@ -156,7 +156,7 @@ export default function GlobalSection() {
                   value={(draft.tools?.built_in ?? []) as string[]}
                   onChange={(names) => patchTools({ built_in: names })}
                   mode="allowlist"
-                  hint={t('libraryNewTab.global.toolsPickerHint')}
+                  hint={t('envManagement.global.toolsPickerHint')}
                 />
               </div>
             )}
@@ -164,25 +164,25 @@ export default function GlobalSection() {
             {activePanel === 'externals' && (
               <div className="flex flex-col gap-3">
                 <p className="text-[0.8125rem] text-[hsl(var(--muted-foreground))]">
-                  {t('libraryNewTab.global.externalsHint')}
+                  {t('envManagement.global.externalsHint')}
                 </p>
                 <div className="flex flex-col gap-2">
                   <ExternalLinkRow
                     icon={Plug}
                     label={t('tabs.hooks') ?? 'Hooks'}
-                    description={t('libraryNewTab.global.hooksDesc')}
+                    description={t('envManagement.global.hooksDesc')}
                     onClick={() => goToLibrary('hooks')}
                   />
                   <ExternalLinkRow
                     icon={Shield}
                     label={t('tabs.permissions') ?? 'Permissions'}
-                    description={t('libraryNewTab.global.permissionsDesc')}
+                    description={t('envManagement.global.permissionsDesc')}
                     onClick={() => goToLibrary('permissions')}
                   />
                   <ExternalLinkRow
                     icon={Sparkles}
                     label={t('tabs.skills') ?? 'Skills'}
-                    description={t('libraryNewTab.global.skillsDesc')}
+                    description={t('envManagement.global.skillsDesc')}
                     onClick={() => goToLibrary('skills')}
                   />
                 </div>

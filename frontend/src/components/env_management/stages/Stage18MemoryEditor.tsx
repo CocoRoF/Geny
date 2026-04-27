@@ -41,26 +41,26 @@ const STRATEGY_OPTIONS = [
   {
     id: 'append_only',
     icon: '📝',
-    titleKey: 'libraryNewTab.stage18.strategy.append_only.title',
-    descKey: 'libraryNewTab.stage18.strategy.append_only.desc',
+    titleKey: 'envManagement.stage18.strategy.append_only.title',
+    descKey: 'envManagement.stage18.strategy.append_only.desc',
   },
   {
     id: 'no_memory',
     icon: '🚫',
-    titleKey: 'libraryNewTab.stage18.strategy.no_memory.title',
-    descKey: 'libraryNewTab.stage18.strategy.no_memory.desc',
+    titleKey: 'envManagement.stage18.strategy.no_memory.title',
+    descKey: 'envManagement.stage18.strategy.no_memory.desc',
   },
   {
     id: 'reflective',
     icon: '💭',
-    titleKey: 'libraryNewTab.stage18.strategy.reflective.title',
-    descKey: 'libraryNewTab.stage18.strategy.reflective.desc',
+    titleKey: 'envManagement.stage18.strategy.reflective.title',
+    descKey: 'envManagement.stage18.strategy.reflective.desc',
   },
   {
     id: 'structured_reflective',
     icon: '🧠',
-    titleKey: 'libraryNewTab.stage18.strategy.structured_reflective.title',
-    descKey: 'libraryNewTab.stage18.strategy.structured_reflective.desc',
+    titleKey: 'envManagement.stage18.strategy.structured_reflective.title',
+    descKey: 'envManagement.stage18.strategy.structured_reflective.desc',
   },
 ];
 
@@ -68,20 +68,20 @@ const PERSISTENCE_OPTIONS = [
   {
     id: 'null',
     icon: '🌬️',
-    titleKey: 'libraryNewTab.stage18.persist.null.title',
-    descKey: 'libraryNewTab.stage18.persist.null.desc',
+    titleKey: 'envManagement.stage18.persist.null.title',
+    descKey: 'envManagement.stage18.persist.null.desc',
   },
   {
     id: 'in_memory',
     icon: '⚡',
-    titleKey: 'libraryNewTab.stage18.persist.in_memory.title',
-    descKey: 'libraryNewTab.stage18.persist.in_memory.desc',
+    titleKey: 'envManagement.stage18.persist.in_memory.title',
+    descKey: 'envManagement.stage18.persist.in_memory.desc',
   },
   {
     id: 'file',
     icon: '💾',
-    titleKey: 'libraryNewTab.stage18.persist.file.title',
-    descKey: 'libraryNewTab.stage18.persist.file.desc',
+    titleKey: 'envManagement.stage18.persist.file.title',
+    descKey: 'envManagement.stage18.persist.file.desc',
   },
 ];
 
@@ -183,10 +183,10 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
       <section className="flex items-center justify-between gap-3 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <div>
           <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('libraryNewTab.stage18.activeTitle')}
+            {t('envManagement.stage18.activeTitle')}
           </div>
           <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.stage18.activeDesc')}
+            {t('envManagement.stage18.activeDesc')}
           </div>
         </div>
         <Switch
@@ -200,7 +200,7 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
         <header className="flex items-center gap-2">
           <Brain className="w-4 h-4 text-[hsl(var(--primary))]" />
           <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('libraryNewTab.stage18.strategyTitle')}
+            {t('envManagement.stage18.strategyTitle')}
           </h4>
         </header>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -222,7 +222,7 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
                     ? 'opacity-40 cursor-not-allowed'
                     : ''
                 }`}
-                title={!available ? t('libraryNewTab.stage18.unavailable') : undefined}
+                title={!available ? t('envManagement.stage18.unavailable') : undefined}
               >
                 <span className="text-base shrink-0">{opt.icon}</span>
                 <div className="min-w-0">
@@ -244,7 +244,7 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
         <header className="flex items-center gap-2">
           <Database className="w-4 h-4 text-[hsl(var(--primary))]" />
           <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('libraryNewTab.stage18.persistTitle')}
+            {t('envManagement.stage18.persistTitle')}
           </h4>
         </header>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -266,7 +266,7 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
                     ? 'opacity-40 cursor-not-allowed'
                     : ''
                 }`}
-                title={!available ? t('libraryNewTab.stage18.unavailable') : undefined}
+                title={!available ? t('envManagement.stage18.unavailable') : undefined}
               >
                 <span className="text-base shrink-0">{opt.icon}</span>
                 <div className="min-w-0">
@@ -286,7 +286,7 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
           <div className="flex flex-col gap-1 pt-2 border-t border-[hsl(var(--border))]">
             <label className="flex items-center gap-1.5 text-[0.75rem] font-medium text-[hsl(var(--foreground))]">
               <HardDrive className="w-3 h-3" />
-              {t('libraryNewTab.stage18.fileBaseDirLabel')}
+              {t('envManagement.stage18.fileBaseDirLabel')}
             </label>
             <Input
               value={fileBaseDir}
@@ -295,7 +295,7 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
               className="h-7 font-mono text-[0.75rem]"
             />
             <p className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-              {t('libraryNewTab.stage18.fileBaseDirHint')}
+              {t('envManagement.stage18.fileBaseDirHint')}
             </p>
           </div>
         )}
@@ -314,18 +314,18 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
             <Cpu className="w-4 h-4 text-[hsl(var(--primary))]" />
             <div>
               <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-                {t('libraryNewTab.stage18.modelTitle')}
+                {t('envManagement.stage18.modelTitle')}
               </div>
               <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
                 {reflectiveActive
                   ? overrideOn
-                    ? t('libraryNewTab.stage18.modelOnDesc')
-                    : t('libraryNewTab.stage18.modelOffDesc', {
+                    ? t('envManagement.stage18.modelOnDesc')
+                    : t('envManagement.stage18.modelOffDesc', {
                         model:
                           (pipelineModel.model as string | undefined) ??
                           '(default)',
                       })
-                  : t('libraryNewTab.stage18.modelDisabledDesc')}
+                  : t('envManagement.stage18.modelDisabledDesc')}
               </div>
             </div>
           </div>
@@ -369,9 +369,9 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
           ) : (
             <ChevronRight className="w-3.5 h-3.5" />
           )}
-          {t('libraryNewTab.stage18.advancedTitle')}
+          {t('envManagement.stage18.advancedTitle')}
           <span className="text-[0.6875rem] font-normal text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.stage18.advancedHint')}
+            {t('envManagement.stage18.advancedHint')}
           </span>
         </button>
         {advancedOpen && (

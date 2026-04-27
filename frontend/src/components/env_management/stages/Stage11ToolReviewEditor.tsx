@@ -119,10 +119,10 @@ export default function Stage11ToolReviewEditor({ order, entry }: Props) {
       <section className="flex items-center justify-between gap-3 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <div>
           <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('libraryNewTab.stage11.activeTitle')}
+            {t('envManagement.stage11.activeTitle')}
           </div>
           <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.stage11.activeDesc')}
+            {t('envManagement.stage11.activeDesc')}
           </div>
         </div>
         <Switch
@@ -136,7 +136,7 @@ export default function Stage11ToolReviewEditor({ order, entry }: Props) {
         <header className="flex items-center gap-2">
           <ShieldAlert className="w-4 h-4 text-[hsl(var(--primary))]" />
           <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('libraryNewTab.stage11.chainTitle')}
+            {t('envManagement.stage11.chainTitle')}
           </h4>
           {chainName && (
             <code className="text-[0.625rem] font-mono text-[hsl(var(--muted-foreground))]">
@@ -145,18 +145,18 @@ export default function Stage11ToolReviewEditor({ order, entry }: Props) {
           )}
         </header>
         <p className="text-[0.7rem] text-[hsl(var(--muted-foreground))] leading-relaxed">
-          {t('libraryNewTab.stage11.chainHint')}
+          {t('envManagement.stage11.chainHint')}
         </p>
 
         {!chain && (
           <p className="text-[0.75rem] text-[hsl(var(--muted-foreground))] italic">
-            {t('libraryNewTab.stage11.noChain')}
+            {t('envManagement.stage11.noChain')}
           </p>
         )}
 
         {chain && currentChain.length === 0 && (
           <div className="px-3 py-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-[0.75rem] text-amber-700 dark:text-amber-300">
-            {t('libraryNewTab.stage11.emptyChainWarning')}
+            {t('envManagement.stage11.emptyChainWarning')}
           </div>
         )}
 
@@ -231,7 +231,7 @@ export default function Stage11ToolReviewEditor({ order, entry }: Props) {
                         ) : (
                           <ChevronRight className="w-3 h-3" />
                         )}
-                        {t('libraryNewTab.stage11.configure')}
+                        {t('envManagement.stage11.configure')}
                       </button>
                       {cfgOpen && (
                         <div className="mt-1.5 p-2 rounded border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
@@ -254,7 +254,7 @@ export default function Stage11ToolReviewEditor({ order, entry }: Props) {
         {chain && remaining.length > 0 && (
           <div className="mt-2 pt-2 border-t border-[hsl(var(--border))]">
             <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))] mb-1.5">
-              {t('libraryNewTab.stage11.addReviewer')}
+              {t('envManagement.stage11.addReviewer')}
             </div>
             <div className="flex flex-wrap gap-1">
               {remaining.map((name) => (
@@ -285,9 +285,9 @@ export default function Stage11ToolReviewEditor({ order, entry }: Props) {
           ) : (
             <ChevronRight className="w-3.5 h-3.5" />
           )}
-          {t('libraryNewTab.stage11.advancedTitle')}
+          {t('envManagement.stage11.advancedTitle')}
           <span className="text-[0.6875rem] font-normal text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.stage11.advancedHint')}
+            {t('envManagement.stage11.advancedHint')}
           </span>
         </button>
         {advancedOpen && (

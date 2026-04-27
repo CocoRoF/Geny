@@ -27,10 +27,9 @@ function cn(...classes: (string | boolean | undefined | null)[]) {
 //
 // Playground / Playground2D are intentionally omitted — code path
 // kept; UI surface hidden until they become first-class again.
-// Cycle 20260427_1 — `library_new` is the visual 21-stage builder, sits
-// next to `library` (legacy) and shares the dev-only gate. It will
-// eventually replace `library` once feature parity lands.
-const GLOBAL_TAB_IDS = ['main', 'library', 'library_new', 'sharedFolder', 'admin', 'settings'] as const;
+// Cycle 20260427_2 — visual 21-stage env builder relocated to its own
+// /environments page (header nav button), no longer a tab here.
+const GLOBAL_TAB_IDS = ['main', 'library', 'sharedFolder', 'admin', 'settings'] as const;
 const SESSION_TAB_DEFS = [
   { id: 'command', accent: true },
   { id: 'vtuber' },
@@ -44,7 +43,7 @@ const SESSION_TAB_DEFS = [
 ] as const;
 
 // Tabs hidden in Normal mode
-const DEV_ONLY_GLOBAL = new Set(['library', 'library_new', 'admin', 'settings']);
+const DEV_ONLY_GLOBAL = new Set(['library', 'admin', 'settings']);
 // 'logs' is intentionally NOT in this set — it must be visible in User mode too (e.g. mobile)
 const DEV_ONLY_SESSION = new Set(['sessionEnvironment']);
 

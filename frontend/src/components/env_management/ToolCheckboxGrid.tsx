@@ -192,17 +192,17 @@ export default function ToolCheckboxGrid({
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={t('libraryNewTab.toolGrid.search')}
+            placeholder={t('envManagement.toolGrid.search')}
             className="pl-7 h-7 text-[0.75rem]"
           />
         </div>
         <span className="text-[0.6875rem] text-[hsl(var(--muted-foreground))] tabular-nums">
           {mode === 'allowlist'
-            ? t('libraryNewTab.toolGrid.allowedCount', {
+            ? t('envManagement.toolGrid.allowedCount', {
                 n: String(effectiveCount),
                 total: String(totalCount),
               })
-            : t('libraryNewTab.toolGrid.blockedCount', {
+            : t('envManagement.toolGrid.blockedCount', {
                 n: String(effectiveCount),
                 total: String(totalCount),
               })}
@@ -218,7 +218,7 @@ export default function ToolCheckboxGrid({
                   : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))]'
               }`}
             >
-              {t('libraryNewTab.toolGrid.selectAll')}
+              {t('envManagement.toolGrid.selectAll')}
             </button>
             <button
               type="button"
@@ -226,7 +226,7 @@ export default function ToolCheckboxGrid({
               disabled={!isWildcard && value.length === 0}
               className="px-2 py-0.5 rounded text-[0.6875rem] font-medium border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {t('libraryNewTab.toolGrid.clearAll')}
+              {t('envManagement.toolGrid.clearAll')}
             </button>
           </div>
         )}
@@ -236,8 +236,8 @@ export default function ToolCheckboxGrid({
       {isWildcard && (
         <div className="px-3 py-2 rounded-md bg-[hsl(var(--primary)/0.06)] border border-[hsl(var(--primary)/0.2)] text-[0.7rem] text-[hsl(var(--foreground))]">
           {mode === 'allowlist'
-            ? t('libraryNewTab.toolGrid.wildcardAllowHint')
-            : t('libraryNewTab.toolGrid.wildcardBlockHint')}
+            ? t('envManagement.toolGrid.wildcardAllowHint')
+            : t('envManagement.toolGrid.wildcardBlockHint')}
         </div>
       )}
 
@@ -329,7 +329,7 @@ export default function ToolCheckboxGrid({
         })}
         {filteredGroups.size === 0 && (
           <p className="text-[0.75rem] text-[hsl(var(--muted-foreground))] italic py-2 text-center">
-            {t('libraryNewTab.toolGrid.noMatch')}
+            {t('envManagement.toolGrid.noMatch')}
           </p>
         )}
       </div>

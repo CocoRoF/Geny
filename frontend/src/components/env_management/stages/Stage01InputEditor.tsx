@@ -32,11 +32,11 @@ import { Switch } from '@/components/ui/switch';
 import StageGenericEditor from '../StageGenericEditor';
 
 const STARTER_CHIPS = [
-  { id: 'concise', textKey: 'libraryNewTab.stage01.starters.concise' },
-  { id: 'tools', textKey: 'libraryNewTab.stage01.starters.tools' },
-  { id: 'cite', textKey: 'libraryNewTab.stage01.starters.cite' },
-  { id: 'plan', textKey: 'libraryNewTab.stage01.starters.plan' },
-  { id: 'safety', textKey: 'libraryNewTab.stage01.starters.safety' },
+  { id: 'concise', textKey: 'envManagement.stage01.starters.concise' },
+  { id: 'tools', textKey: 'envManagement.stage01.starters.tools' },
+  { id: 'cite', textKey: 'envManagement.stage01.starters.cite' },
+  { id: 'plan', textKey: 'envManagement.stage01.starters.plan' },
+  { id: 'safety', textKey: 'envManagement.stage01.starters.safety' },
 ];
 
 interface Props {
@@ -75,10 +75,10 @@ export default function Stage01InputEditor({ order, entry }: Props) {
       <section className="flex items-center justify-between gap-3 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <div>
           <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('libraryNewTab.stage01.activeTitle')}
+            {t('envManagement.stage01.activeTitle')}
           </div>
           <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.stage01.activeDesc')}
+            {t('envManagement.stage01.activeDesc')}
           </div>
         </div>
         <Switch
@@ -93,29 +93,29 @@ export default function Stage01InputEditor({ order, entry }: Props) {
           <div className="flex items-center gap-2">
             <MessageSquare className="w-4 h-4 text-[hsl(var(--primary))]" />
             <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-              {t('libraryNewTab.stage01.systemPromptTitle')}
+              {t('envManagement.stage01.systemPromptTitle')}
             </h4>
           </div>
           <span className="text-[0.6875rem] text-[hsl(var(--muted-foreground))] tabular-nums">
-            {t('libraryNewTab.stage01.charCount', { n: String(charCount) })}
+            {t('envManagement.stage01.charCount', { n: String(charCount) })}
           </span>
         </header>
         <Textarea
           value={systemPrompt}
           onChange={(e) => setSystemPrompt(e.target.value)}
-          placeholder={t('libraryNewTab.stage01.systemPromptPlaceholder')}
+          placeholder={t('envManagement.stage01.systemPromptPlaceholder')}
           rows={10}
           className="font-mono text-[0.8125rem] leading-relaxed resize-y"
         />
         <p className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-          {t('libraryNewTab.stage01.systemPromptHint')}
+          {t('envManagement.stage01.systemPromptHint')}
         </p>
 
         {/* Starter chips */}
         <div className="flex flex-col gap-1.5 pt-2 border-t border-[hsl(var(--border))]">
           <div className="flex items-center gap-1 text-[0.6875rem] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
             <Sparkles className="w-3 h-3" />
-            {t('libraryNewTab.stage01.startersTitle')}
+            {t('envManagement.stage01.startersTitle')}
           </div>
           <div className="flex flex-wrap gap-1">
             {STARTER_CHIPS.map((chip) => {
@@ -148,9 +148,9 @@ export default function Stage01InputEditor({ order, entry }: Props) {
           ) : (
             <ChevronRight className="w-3.5 h-3.5" />
           )}
-          {t('libraryNewTab.stage01.advancedTitle')}
+          {t('envManagement.stage01.advancedTitle')}
           <span className="text-[0.6875rem] font-normal text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.stage01.advancedHint')}
+            {t('envManagement.stage01.advancedHint')}
           </span>
         </button>
         {advancedOpen && (

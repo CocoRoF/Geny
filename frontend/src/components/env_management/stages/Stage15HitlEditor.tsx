@@ -36,20 +36,20 @@ const REQUESTER_OPTIONS = [
   {
     id: 'null',
     icon: '✅',
-    titleKey: 'libraryNewTab.stage15.requester.null.title',
-    descKey: 'libraryNewTab.stage15.requester.null.desc',
+    titleKey: 'envManagement.stage15.requester.null.title',
+    descKey: 'envManagement.stage15.requester.null.desc',
   },
   {
     id: 'callback',
     icon: '📞',
-    titleKey: 'libraryNewTab.stage15.requester.callback.title',
-    descKey: 'libraryNewTab.stage15.requester.callback.desc',
+    titleKey: 'envManagement.stage15.requester.callback.title',
+    descKey: 'envManagement.stage15.requester.callback.desc',
   },
   {
     id: 'pipeline_resume',
     icon: '⏸️',
-    titleKey: 'libraryNewTab.stage15.requester.pipeline_resume.title',
-    descKey: 'libraryNewTab.stage15.requester.pipeline_resume.desc',
+    titleKey: 'envManagement.stage15.requester.pipeline_resume.title',
+    descKey: 'envManagement.stage15.requester.pipeline_resume.desc',
   },
 ];
 
@@ -57,20 +57,20 @@ const TIMEOUT_OPTIONS = [
   {
     id: 'indefinite',
     icon: '∞',
-    titleKey: 'libraryNewTab.stage15.timeout.indefinite.title',
-    descKey: 'libraryNewTab.stage15.timeout.indefinite.desc',
+    titleKey: 'envManagement.stage15.timeout.indefinite.title',
+    descKey: 'envManagement.stage15.timeout.indefinite.desc',
   },
   {
     id: 'auto_approve',
     icon: '✅',
-    titleKey: 'libraryNewTab.stage15.timeout.auto_approve.title',
-    descKey: 'libraryNewTab.stage15.timeout.auto_approve.desc',
+    titleKey: 'envManagement.stage15.timeout.auto_approve.title',
+    descKey: 'envManagement.stage15.timeout.auto_approve.desc',
   },
   {
     id: 'auto_reject',
     icon: '🚫',
-    titleKey: 'libraryNewTab.stage15.timeout.auto_reject.title',
-    descKey: 'libraryNewTab.stage15.timeout.auto_reject.desc',
+    titleKey: 'envManagement.stage15.timeout.auto_reject.title',
+    descKey: 'envManagement.stage15.timeout.auto_reject.desc',
   },
 ];
 
@@ -151,10 +151,10 @@ export default function Stage15HitlEditor({ order, entry }: Props) {
       <section className="flex items-center justify-between gap-3 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <div>
           <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('libraryNewTab.stage15.activeTitle')}
+            {t('envManagement.stage15.activeTitle')}
           </div>
           <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.stage15.activeDesc')}
+            {t('envManagement.stage15.activeDesc')}
           </div>
         </div>
         <Switch
@@ -168,7 +168,7 @@ export default function Stage15HitlEditor({ order, entry }: Props) {
         <header className="flex items-center gap-2">
           <Hand className="w-4 h-4 text-[hsl(var(--primary))]" />
           <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('libraryNewTab.stage15.requesterTitle')}
+            {t('envManagement.stage15.requesterTitle')}
           </h4>
         </header>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -190,7 +190,7 @@ export default function Stage15HitlEditor({ order, entry }: Props) {
                     ? 'opacity-40 cursor-not-allowed'
                     : ''
                 }`}
-                title={!available ? t('libraryNewTab.stage15.unavailable') : undefined}
+                title={!available ? t('envManagement.stage15.unavailable') : undefined}
               >
                 <span className="text-base shrink-0">{opt.icon}</span>
                 <div className="min-w-0">
@@ -212,7 +212,7 @@ export default function Stage15HitlEditor({ order, entry }: Props) {
         <header className="flex items-center gap-2">
           <Hourglass className="w-4 h-4 text-[hsl(var(--primary))]" />
           <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('libraryNewTab.stage15.timeoutTitle')}
+            {t('envManagement.stage15.timeoutTitle')}
           </h4>
         </header>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -234,7 +234,7 @@ export default function Stage15HitlEditor({ order, entry }: Props) {
                     ? 'opacity-40 cursor-not-allowed'
                     : ''
                 }`}
-                title={!available ? t('libraryNewTab.stage15.unavailable') : undefined}
+                title={!available ? t('envManagement.stage15.unavailable') : undefined}
               >
                 <span className="text-base shrink-0">{opt.icon}</span>
                 <div className="min-w-0">
@@ -254,7 +254,7 @@ export default function Stage15HitlEditor({ order, entry }: Props) {
           <div className="flex flex-col gap-1 pt-2 border-t border-[hsl(var(--border))]">
             <label className="flex items-center gap-1.5 text-[0.75rem] font-medium text-[hsl(var(--foreground))]">
               <Timer className="w-3 h-3" />
-              {t('libraryNewTab.stage15.timeoutSecondsLabel')}
+              {t('envManagement.stage15.timeoutSecondsLabel')}
             </label>
             <Input
               type="number"
@@ -265,7 +265,7 @@ export default function Stage15HitlEditor({ order, entry }: Props) {
               className="h-7 w-32 font-mono text-[0.75rem]"
             />
             <p className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-              {t('libraryNewTab.stage15.timeoutSecondsHint')}
+              {t('envManagement.stage15.timeoutSecondsHint')}
             </p>
           </div>
         )}
@@ -283,9 +283,9 @@ export default function Stage15HitlEditor({ order, entry }: Props) {
           ) : (
             <ChevronRight className="w-3.5 h-3.5" />
           )}
-          {t('libraryNewTab.stage15.advancedTitle')}
+          {t('envManagement.stage15.advancedTitle')}
           <span className="text-[0.6875rem] font-normal text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.stage15.advancedHint')}
+            {t('envManagement.stage15.advancedHint')}
           </span>
         </button>
         {advancedOpen && (

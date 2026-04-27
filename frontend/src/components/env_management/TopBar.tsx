@@ -44,7 +44,7 @@ export default function TopBar({ onSaved }: TopBarProps) {
   const [tagInput, setTagInput] = useState('');
 
   const handleDiscard = () => {
-    if (isDirty() && !confirm(t('libraryNewTab.confirmDiscard'))) return;
+    if (isDirty() && !confirm(t('envManagement.confirmDiscard'))) return;
     resetDraft();
   };
 
@@ -86,10 +86,10 @@ export default function TopBar({ onSaved }: TopBarProps) {
       <div className="flex flex-col gap-4 px-5 py-4 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <div>
           <h2 className="text-base font-semibold text-[hsl(var(--foreground))]">
-            {t('libraryNewTab.welcomeTitle')}
+            {t('envManagement.welcomeTitle')}
           </h2>
           <p className="text-[0.8125rem] text-[hsl(var(--muted-foreground))] mt-0.5 max-w-[720px]">
-            {t('libraryNewTab.welcomeDescription')}
+            {t('envManagement.welcomeDescription')}
           </p>
         </div>
         <StartFromPicker />
@@ -116,13 +116,13 @@ export default function TopBar({ onSaved }: TopBarProps) {
         {/* ── Name ── */}
         <div className="flex flex-col gap-1 min-w-[260px] flex-1">
           <label className="text-[0.6875rem] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.nameLabel')}
+            {t('envManagement.nameLabel')}
             <span className="ml-1 text-red-500">*</span>
           </label>
           <Input
             value={draft.metadata.name}
             onChange={(e) => patchMetadata({ name: e.target.value })}
-            placeholder={t('libraryNewTab.namePlaceholder')}
+            placeholder={t('envManagement.namePlaceholder')}
             className="h-8 text-[0.875rem] font-medium"
           />
         </div>
@@ -130,12 +130,12 @@ export default function TopBar({ onSaved }: TopBarProps) {
         {/* ── Description ── */}
         <div className="flex flex-col gap-1 min-w-[260px] flex-[2]">
           <label className="text-[0.6875rem] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
-            {t('libraryNewTab.descriptionLabel')}
+            {t('envManagement.descriptionLabel')}
           </label>
           <Textarea
             value={draft.metadata.description}
             onChange={(e) => patchMetadata({ description: e.target.value })}
-            placeholder={t('libraryNewTab.descriptionPlaceholder')}
+            placeholder={t('envManagement.descriptionPlaceholder')}
             rows={1}
             className="text-[0.8125rem] resize-none min-h-[32px] py-1.5"
           />
@@ -148,7 +148,7 @@ export default function TopBar({ onSaved }: TopBarProps) {
             onClick={handleDiscard}
             disabled={saving}
           >
-            {t('libraryNewTab.discard')}
+            {t('envManagement.discard')}
           </ActionButton>
           <ActionButton
             variant="primary"
@@ -157,7 +157,7 @@ export default function TopBar({ onSaved }: TopBarProps) {
             disabled={saveDisabled}
             spinIcon={saving}
           >
-            {saving ? t('libraryNewTab.saving') : t('libraryNewTab.save')}
+            {saving ? t('envManagement.saving') : t('envManagement.save')}
           </ActionButton>
         </div>
       </div>
@@ -165,7 +165,7 @@ export default function TopBar({ onSaved }: TopBarProps) {
       {/* ── Tags row ── */}
       <div className="flex items-center gap-2 flex-wrap">
         <label className="text-[0.6875rem] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
-          {t('libraryNewTab.tagsLabel')}
+          {t('envManagement.tagsLabel')}
         </label>
         <div className="flex items-center gap-1 flex-wrap">
           {(draft.metadata.tags || []).map((tag) => (
@@ -195,7 +195,7 @@ export default function TopBar({ onSaved }: TopBarProps) {
                 addTag();
               }
             }}
-            placeholder={t('libraryNewTab.addTag')}
+            placeholder={t('envManagement.addTag')}
             className="h-7 w-[140px] text-[0.75rem]"
           />
           <ActionButton onClick={addTag} disabled={!tagInput.trim()}>
@@ -207,18 +207,18 @@ export default function TopBar({ onSaved }: TopBarProps) {
       {/* ── Status row ── */}
       <div className="flex items-center gap-3 text-[0.7rem] text-[hsl(var(--muted-foreground))]">
         <span>
-          {t('libraryNewTab.editedStages', { n: String(stageDirty.size) })}
+          {t('envManagement.editedStages', { n: String(stageDirty.size) })}
         </span>
         {errorCount > 0 && (
           <span className="inline-flex items-center gap-1 text-red-600 dark:text-red-400">
             <AlertTriangle className="w-3 h-3" />
-            {t('libraryNewTab.validationErrorsRed', { n: String(errorCount) })}
+            {t('envManagement.validationErrorsRed', { n: String(errorCount) })}
           </span>
         )}
         {warningCount > 0 && (
           <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
             <AlertTriangle className="w-3 h-3" />
-            {t('libraryNewTab.validationWarnings', { n: String(warningCount) })}
+            {t('envManagement.validationWarnings', { n: String(warningCount) })}
           </span>
         )}
       </div>
@@ -227,7 +227,7 @@ export default function TopBar({ onSaved }: TopBarProps) {
       {validationErrors.length > 0 && (
         <details className="text-[0.7rem]">
           <summary className="cursor-pointer text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
-            {t('libraryNewTab.viewValidationDetails')}
+            {t('envManagement.viewValidationDetails')}
           </summary>
           <ul className="mt-1.5 flex flex-col gap-1">
             {validationErrors.map((v, i) => (
