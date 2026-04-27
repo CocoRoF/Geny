@@ -14,11 +14,14 @@
  * stage is selected.
  */
 
+import { useState } from 'react';
+import { Info } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { useTheme } from '@/lib/theme';
 import { getStageMetaByOrder } from '@/components/session-env/stageMetadata';
 import { useEnvironmentDraftStore } from '@/store/useEnvironmentDraftStore';
 import StageGenericEditor from './StageGenericEditor';
+import StageInfoModal from './stage_info/StageInfoModal';
 import Stage01InputEditor from './stages/Stage01InputEditor';
 import Stage06ApiEditor from './stages/Stage06ApiEditor';
 import Stage10ToolsEditor from './stages/Stage10ToolsEditor';
@@ -70,6 +73,7 @@ export default function StageDetailView({ order }: StageDetailViewProps) {
   const { theme } = useTheme();
   const palette = HEADER_PALETTE[theme === 'dark' ? 'dark' : 'light'];
   const draft = useEnvironmentDraftStore((s) => s.draft);
+  const [infoOpen, setInfoOpen] = useState(false);
 
   if (!draft) return null;
 
@@ -143,30 +147,32 @@ export default function StageDetailView({ order }: StageDetailViewProps) {
               </p>
             )}
           </div>
+
+          {/* Detail button — opens the rich info modal. */}
+          <button
+            type="button"
+            onClick={() => setInfoOpen(true)}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[0.75rem] font-medium text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--primary))] hover:border-[hsl(var(--primary)/0.4)] hover:bg-[hsl(var(--accent))] transition-colors shrink-0 self-start"
+            title={t('envManagement.info.openTip')}
+          >
+            <Info className="w-3.5 h-3.5" />
+            {t('envManagement.info.openLabel')}
+          </button>
         </header>
 
         {/* ── Editor body ── */}
         <Editor order={order} entry={entry} />
 
-        {/* ── About this stage (collapsed) ── */}
-        {meta?.detailedDescription && (
-          <details className="text-[0.8125rem] text-[hsl(var(--muted-foreground))] border border-[hsl(var(--border))] rounded-lg p-3 bg-[hsl(var(--card))]">
-            <summary className="cursor-pointer font-medium text-[hsl(var(--foreground))]">
-              {t('envManagement.aboutThisStage')}
-            </summary>
-            <p className="mt-2 leading-relaxed whitespace-pre-wrap">
-              {meta.detailedDescription}
-            </p>
-            {meta.technicalBehavior && meta.technicalBehavior.length > 0 && (
-              <ul className="mt-3 ml-4 list-disc space-y-1">
-                {meta.technicalBehavior.map((tb, i) => (
-                  <li key={i}>{tb}</li>
-                ))}
-              </ul>
-            )}
-          </details>
-        )}
+        {/* The old inline "About this stage" <details> was moved into
+            the StageInfoModal which the Detail button (header right)
+            opens. Keeps the editor body focused on configuration. */}
       </div>
+
+      <StageInfoModal
+        open={infoOpen}
+        onClose={() => setInfoOpen(false)}
+        order={order}
+      />
     </div>
   );
 }
