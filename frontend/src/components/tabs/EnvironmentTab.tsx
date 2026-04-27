@@ -15,12 +15,12 @@
  *
  * Sub-tabs (all system-wide):
  *   library      → environment manifest CRUD (was: EnvironmentsTab)
- *   toolSets     → custom tool / MCP presets (was: ToolSetsTab)
- *   toolCatalog  → framework BUILT_IN_TOOL_CLASSES (was: ToolCatalogTab)
- *   permissions  → permission matrix (was: PermissionsTab)
- *   hooks        → hook entries + recent fires (was: HooksTab)
- *   skills       → bundled + user skills (was: SkillsTab)
- *   mcpServers   → custom MCP server JSON CRUD (was: McpServersTab)
+ *   toolSets     → preset CRUD + framework tool catalog browser (PR-Merge:
+ *                  collapsed Tool Sets + Tool Catalog into one surface)
+ *   permissions  → permission matrix
+ *   hooks        → hook entries + recent fires
+ *   skills       → bundled + user skills
+ *   mcpServers   → custom MCP server JSON CRUD
  */
 
 import dynamic from 'next/dynamic';
@@ -30,7 +30,6 @@ import { ReloadRuntimeButton } from '@/components/admin/ReloadRuntimeButton';
 import {
   Library,
   FolderTree,
-  Wrench,
   Package,
   Shield,
   Plug,
@@ -40,9 +39,6 @@ import {
 
 const EnvironmentsTab = dynamic(() => import('@/components/tabs/EnvironmentsTab'));
 const ToolSetsTab = dynamic(() => import('@/components/tabs/ToolSetsTab'));
-const ToolCatalogTab = dynamic(() =>
-  import('@/components/tabs/ToolCatalogTab').then((m) => m.ToolCatalogTab),
-);
 const PermissionsTab = dynamic(() =>
   import('@/components/tabs/PermissionsTab').then((m) => m.PermissionsTab),
 );
@@ -58,8 +54,7 @@ const McpServersTab = dynamic(() =>
 
 const SUB_TABS: SubTabDef[] = [
   { id: 'library', label: 'Environments', icon: FolderTree },
-  { id: 'toolSets', label: 'Tool Sets', icon: Wrench },
-  { id: 'toolCatalog', label: 'Tool Catalog', icon: Package },
+  { id: 'toolSets', label: 'Tool Sets', icon: Package },
   { id: 'permissions', label: 'Permissions', icon: Shield },
   { id: 'hooks', label: 'Hooks', icon: Plug },
   { id: 'skills', label: 'Skills', icon: Sparkles },
@@ -69,17 +64,24 @@ const SUB_TABS: SubTabDef[] = [
 const SUB_TAB_COMPONENT: Record<string, React.ComponentType> = {
   library: EnvironmentsTab,
   toolSets: ToolSetsTab,
-  toolCatalog: ToolCatalogTab,
   permissions: PermissionsTab,
   hooks: HooksTab,
   skills: SkillsTab,
   mcpServers: McpServersTab,
 };
 
+// PR-Merge — old persisted envSubTab='toolCatalog' (now removed) routes
+// to the unified Tool Sets surface where the catalog browser lives as a
+// sidebar entry.
+const LEGACY_ENV_SUB_TAB: Record<string, string> = {
+  toolCatalog: 'toolSets',
+};
+
 export default function EnvironmentTab() {
   const subTab = useAppStore((s) => s.envSubTab);
   const setSubTab = useAppStore((s) => s.setEnvSubTab);
-  const Active = SUB_TAB_COMPONENT[subTab] ?? EnvironmentsTab;
+  const normalized = LEGACY_ENV_SUB_TAB[subTab] ?? subTab;
+  const Active = SUB_TAB_COMPONENT[normalized] ?? EnvironmentsTab;
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -98,7 +100,7 @@ export default function EnvironmentTab() {
         <ReloadRuntimeButton />
       </div>
       <NextSessionBanner variant="library" />
-      <SubTabNav tabs={SUB_TABS} active={subTab} onSelect={setSubTab} />
+      <SubTabNav tabs={SUB_TABS} active={normalized} onSelect={setSubTab} />
       <div className="flex-1 min-h-0 overflow-hidden">
         <Active />
       </div>

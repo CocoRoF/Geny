@@ -220,7 +220,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     // when clicking Library.
     const LIBRARY_SUB_REDIRECT: Record<string, string> = {
       toolSets: 'toolSets',
-      toolCatalog: 'toolCatalog',
+      // PR-Merge — toolCatalog collapsed into the unified Tool Sets tab.
+      toolCatalog: 'toolSets',
       permissions: 'permissions',
       hooks: 'hooks',
       skills: 'skills',

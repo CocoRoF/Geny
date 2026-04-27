@@ -25,7 +25,6 @@ const VTuberTab = dynamic(() => import('@/components/tabs/VTuberTab'), { ssr: fa
 const Playground2DTab = dynamic(() => import('@/components/tabs/Playground2DTab'), { ssr: false });
 const TasksTab = dynamic(() => import('@/components/tabs/TasksTab').then(m => m.TasksTab));
 const CronTab = dynamic(() => import('@/components/tabs/CronTab').then(m => m.CronTab));
-const ToolCatalogTab = dynamic(() => import('@/components/tabs/ToolCatalogTab').then(m => m.ToolCatalogTab));
 const PermissionsTab = dynamic(() => import('@/components/tabs/PermissionsTab').then(m => m.PermissionsTab));
 const HooksTab = dynamic(() => import('@/components/tabs/HooksTab').then(m => m.HooksTab));
 const SkillsTab = dynamic(() => import('@/components/tabs/SkillsTab').then(m => m.SkillsTab));
@@ -66,7 +65,10 @@ const TAB_MAP: Record<string, React.ComponentType> = {
   builder: EnvironmentsTab,
   tasks: TasksTab,
   cron: CronTab,
-  toolCatalog: ToolCatalogTab,
+  // PR-Merge — toolCatalog removed; the catalog browser is now a
+  // sidebar entry inside the unified Tool Sets tab. Direct mounts via
+  // legacy activeTab='toolCatalog' get redirected by setActiveTab.
+  toolCatalog: ToolSetsTab,
   permissions: PermissionsTab,
   hooks: HooksTab,
   skills: SkillsTab,

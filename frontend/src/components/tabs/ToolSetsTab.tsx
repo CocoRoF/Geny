@@ -1,144 +1,338 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useToolPresetStore } from '@/store/useToolPresetStore';
-import { useI18n } from '@/lib/i18n';
+/**
+ * ToolSetsTab — unified preset manager (Tool Sets + Tool Catalog merged).
+ *
+ * Single screen, two panes:
+ *   left  — preset list (templates + user presets) + "📖 카탈로그" entry
+ *   right — selected preset's editor, or read-only catalog browser
+ *
+ * The framework tool catalog is no longer a separate tab; it's a sidebar
+ * entry on the left (read-only browse) AND an info drawer reachable from
+ * any tool checkbox in the editor (so creators see exactly what each
+ * tool does while choosing).
+ */
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
 import {
-  X, ArrowLeft, Check, Search,
-  ChevronDown, ChevronRight, Wrench, Server, Package,
+  BookOpen,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Info,
+  Package,
+  Plus,
+  RefreshCw,
+  Server,
+  Trash2,
+  Wrench,
+  X,
 } from 'lucide-react';
+import { useToolPresetStore } from '@/store/useToolPresetStore';
+import { useI18n } from '@/lib/i18n';
+import {
+  TabShell,
+  TwoPaneBody,
+  EditorModal,
+  EmptyState,
+  ActionButton,
+  StatusBadge,
+  SearchInput,
+  DetailDrawer,
+} from '@/components/layout';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { frameworkToolApi, type FrameworkToolDetail } from '@/lib/api';
 import type { ToolPresetDefinition, ToolInfo } from '@/types';
-import { frameworkToolApi, FrameworkToolDetail } from '@/lib/api';
 
 function cn(...classes: (string | boolean | undefined | null)[]) {
   return twMerge(classes.filter(Boolean).join(' '));
 }
 
-// ==================== Preset Card ====================
+const CATALOG_VIEW_ID = '__catalog__';
 
-function PresetCard({
-  preset,
-  isSelected,
+const CAPABILITY_BADGES: Array<[keyof FrameworkToolDetail['capabilities'], string, string]> = [
+  ['read_only', 'read-only', 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'],
+  ['destructive', 'destructive', 'bg-red-500/15 text-red-700 dark:text-red-300'],
+  ['concurrency_safe', 'parallel', 'bg-blue-500/15 text-blue-700 dark:text-blue-300'],
+  ['idempotent', 'idempotent', 'bg-violet-500/15 text-violet-700 dark:text-violet-300'],
+  ['network_egress', 'network', 'bg-amber-500/15 text-amber-700 dark:text-amber-300'],
+];
+
+// ──────────────────────────────────────────────────────────────────
+// Sidebar
+// ──────────────────────────────────────────────────────────────────
+
+interface PresetSidebarProps {
+  templates: ToolPresetDefinition[];
+  userPresets: ToolPresetDefinition[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  search: string;
+  onSearch: (q: string) => void;
+}
+
+function PresetSidebar({
+  templates,
+  userPresets,
+  selectedId,
   onSelect,
-  onView,
-  onEdit,
-  onClone,
-  onDelete,
-}: {
-  preset: ToolPresetDefinition;
-  isSelected: boolean;
-  onSelect: () => void;
-  onView?: () => void;
-  onEdit?: () => void;
-  onClone?: () => void;
-  onDelete?: () => void;
-}) {
+  search,
+  onSearch,
+}: PresetSidebarProps) {
   const { t } = useI18n();
-  const isTemplate = preset.is_template;
+  const q = search.trim().toLowerCase();
+  const matches = (p: ToolPresetDefinition) =>
+    !q || p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q);
 
-  const customLabel = preset.custom_tools.includes('*')
-    ? t('toolSetsTab.allCustomTools')
-    : t('toolSetsTab.customToolCount', { count: preset.custom_tools.length });
-
-  const mcpLabel = preset.mcp_servers.includes('*')
-    ? t('toolSetsTab.allMcpServers')
-    : t('toolSetsTab.mcpServerCount', { count: preset.mcp_servers.length });
+  const visTemplates = templates.filter(matches);
+  const visUser = userPresets.filter(matches);
 
   return (
-    <div
-      className={cn(
-        'group relative flex flex-col gap-2 p-4 rounded-lg border cursor-pointer transition-all duration-150',
-        isSelected
-          ? 'border-[var(--primary-color)] bg-[rgba(59,130,246,0.08)] shadow-[0_0_0_1px_var(--primary-color)]'
-          : 'border-[var(--border-color)] bg-[var(--bg-secondary)] hover:border-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]',
+    <div className="flex flex-col gap-3 p-1">
+      <SearchInput
+        value={search}
+        onChange={onSearch}
+        placeholder={t('toolSetsTab.searchPresets')}
+      />
+
+      {/* Read-only catalog entry — sits above the preset groups */}
+      <button
+        type="button"
+        onClick={() => onSelect(CATALOG_VIEW_ID)}
+        className={cn(
+          'flex items-center gap-2 px-2 py-1.5 rounded-md text-[0.8125rem] text-left transition-colors',
+          selectedId === CATALOG_VIEW_ID
+            ? 'bg-[hsl(var(--accent))] text-[hsl(var(--foreground))] font-semibold'
+            : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--foreground))]',
+        )}
+      >
+        <BookOpen className="w-3.5 h-3.5 shrink-0" />
+        <span className="truncate">{t('toolSetsTab.catalogEntry')}</span>
+      </button>
+
+      {visTemplates.length > 0 && (
+        <SidebarSection
+          title={t('toolSetsTab.officialTemplates')}
+          accent="bg-violet-400"
+          presets={visTemplates}
+          selectedId={selectedId}
+          onSelect={onSelect}
+        />
       )}
-      onClick={onSelect}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-[#f59e0b] to-[#f97316] flex items-center justify-center shrink-0">
-            <Package size={12} className="text-white" />
-          </div>
-          <h4 className="text-[0.875rem] font-semibold text-[var(--text-primary)] truncate">{preset.name}</h4>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {isTemplate && (
-            <span className="text-[10px] font-semibold py-0.5 px-1.5 rounded-md bg-[rgba(168,85,247,0.12)] text-[#c084fc] border border-[rgba(168,85,247,0.2)] uppercase tracking-wide">
-              {t('toolSetsTab.template')}
+
+      <SidebarSection
+        title={t('toolSetsTab.customPresets')}
+        accent="bg-[hsl(var(--primary))]"
+        presets={visUser}
+        selectedId={selectedId}
+        onSelect={onSelect}
+        emptyHint={t('toolSetsTab.noCustom')}
+      />
+    </div>
+  );
+}
+
+interface SidebarSectionProps {
+  title: string;
+  accent: string;
+  presets: ToolPresetDefinition[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  emptyHint?: string;
+}
+
+function SidebarSection({
+  title,
+  accent,
+  presets,
+  selectedId,
+  onSelect,
+  emptyHint,
+}: SidebarSectionProps) {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1.5 px-1 text-[0.625rem] uppercase tracking-wider text-[hsl(var(--muted-foreground))] font-semibold">
+        <span className={cn('w-1.5 h-1.5 rounded-full', accent)} />
+        {title}
+        <span className="opacity-70">({presets.length})</span>
+      </div>
+      {presets.map(p => (
+        <button
+          key={p.id}
+          type="button"
+          onClick={() => onSelect(p.id)}
+          className={cn(
+            'flex items-center gap-2 px-2 py-1.5 rounded-md text-[0.8125rem] text-left transition-colors',
+            selectedId === p.id
+              ? 'bg-[hsl(var(--accent))] text-[hsl(var(--foreground))] font-semibold'
+              : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--foreground))]',
+          )}
+        >
+          <span className="truncate flex-1">{p.name}</span>
+          {p.is_template && (
+            <span className="text-[0.6rem] uppercase tracking-wider text-violet-500 dark:text-violet-300 shrink-0">
+              {/* template marker */}T
             </span>
           )}
+        </button>
+      ))}
+      {presets.length === 0 && emptyHint && (
+        <div className="px-2 py-1 text-[0.6875rem] text-[hsl(var(--muted-foreground))] italic">
+          {emptyHint}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Catalog view (read-only browse)
+// ──────────────────────────────────────────────────────────────────
+
+function CatalogView({
+  tools,
+  groups,
+  loading,
+  onPickTool,
+}: {
+  tools: FrameworkToolDetail[];
+  groups: string[];
+  loading: boolean;
+  onPickTool: (t: FrameworkToolDetail) => void;
+}) {
+  const { t } = useI18n();
+  const [search, setSearch] = useState('');
+  const [activeGroup, setActiveGroup] = useState<string>('__all__');
+
+  const groupCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const tool of tools) counts[tool.feature_group] = (counts[tool.feature_group] || 0) + 1;
+    return counts;
+  }, [tools]);
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return tools.filter(tt => {
+      if (activeGroup !== '__all__' && tt.feature_group !== activeGroup) return false;
+      if (q && !(tt.name.toLowerCase().includes(q) || tt.description.toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }, [tools, search, activeGroup]);
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      <div className="flex items-center gap-3 p-4 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] shrink-0">
+        <BookOpen className="w-4 h-4 text-[hsl(var(--primary))]" />
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-[hsl(var(--foreground))]">
+            {t('toolSetsTab.catalogTitle')}
+          </div>
+          <div className="text-[0.7rem] text-[hsl(var(--muted-foreground))]">
+            {t('toolSetsTab.catalogSubtitle', { n: String(tools.length) })}
+          </div>
+        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder={t('toolSetsTab.searchTools')}
+          className="max-w-[260px]"
+        />
       </div>
 
-      <p className="text-[0.75rem] text-[var(--text-muted)] line-clamp-2 leading-[1.5]">
-        {preset.description || t('toolSetsTab.noDescription')}
-      </p>
-
-      <div className="flex items-center gap-3 text-[0.6875rem] text-[var(--text-muted)]">
-        <span className="flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-color)]" />
-          {customLabel}
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-[var(--success-color)]" />
-          {mcpLabel}
-        </span>
+      <div className="flex items-center gap-1.5 px-4 py-2 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] shrink-0 overflow-x-auto">
+        {(['__all__', ...groups] as const).map(g => {
+          const isActive = activeGroup === g;
+          const label = g === '__all__' ? t('toolSetsTab.allGroups') : g;
+          const count = g === '__all__' ? tools.length : (groupCounts[g] ?? 0);
+          return (
+            <button
+              key={g}
+              type="button"
+              onClick={() => setActiveGroup(g)}
+              className={cn(
+                'inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[0.7rem] font-medium whitespace-nowrap transition-colors',
+                isActive
+                  ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] border-[hsl(var(--primary))]'
+                  : 'border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--foreground))]',
+              )}
+            >
+              {label}
+              <span className="opacity-70 tabular-nums">({count})</span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Action Buttons */}
-      <div className="absolute bottom-2 right-2 flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-        {onView && (
-          <button
-            className="h-7 px-2 flex items-center justify-center rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.6875rem] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
-            title={t('common.view')}
-            onClick={e => { e.stopPropagation(); onView(); }}
-          >
-            {t('common.view')}
-          </button>
-        )}
-        {onEdit && (
-          <button
-            className="h-7 px-2 flex items-center justify-center rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.6875rem] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
-            title={t('common.edit')}
-            onClick={e => { e.stopPropagation(); onEdit(); }}
-          >
-            {t('common.edit')}
-          </button>
-        )}
-        {onClone && (
-          <button
-            className="h-7 px-2 flex items-center justify-center rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-[0.6875rem] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
-            title={t('common.clone')}
-            onClick={e => { e.stopPropagation(); onClone(); }}
-          >
-            {t('common.clone')}
-          </button>
-        )}
-        {onDelete && !isTemplate && (
-          <button
-            className="w-7 h-7 flex items-center justify-center rounded-md bg-[var(--bg-primary)] border border-[rgba(239,68,68,0.2)] text-[var(--text-muted)] hover:text-[var(--danger-color)] hover:bg-[rgba(239,68,68,0.08)] text-sm font-medium transition-colors"
-            title={t('common.delete')}
-            onClick={e => { e.stopPropagation(); onDelete(); }}
-          >
-            <X size={14} />
-          </button>
+      <div className="flex-1 min-h-0 overflow-y-auto p-4">
+        {visible.length === 0 ? (
+          <EmptyState
+            icon={Wrench}
+            title={loading ? t('common.loading') : t('toolSetsTab.noToolsFound')}
+          />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {visible.map(tool => (
+              <button
+                key={tool.name}
+                type="button"
+                onClick={() => onPickTool(tool)}
+                className="text-left border border-[hsl(var(--border))] rounded-md p-3 hover:border-[hsl(var(--primary))] hover:shadow-sm transition-all bg-[hsl(var(--card))]"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono font-semibold text-[0.875rem] truncate text-[hsl(var(--foreground))]">
+                    {tool.name}
+                  </span>
+                  <span className="text-[0.625rem] uppercase tracking-wider text-[hsl(var(--muted-foreground))] shrink-0">
+                    {tool.feature_group}
+                  </span>
+                </div>
+                <div className="text-[0.75rem] text-[hsl(var(--muted-foreground))] mt-1 line-clamp-2">
+                  {tool.description || '—'}
+                </div>
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {CAPABILITY_BADGES.map(([key, label, klass]) =>
+                    tool.capabilities[key] ? (
+                      <span
+                        key={String(key)}
+                        className={cn('inline-block text-[0.5625rem] px-1.5 py-0.5 rounded', klass)}
+                      >
+                        {label}
+                      </span>
+                    ) : null,
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-// ==================== Tool Set Editor ====================
+// ──────────────────────────────────────────────────────────────────
+// Preset editor
+// ──────────────────────────────────────────────────────────────────
 
-function ToolSetEditor({
+function PresetEditor({
   preset,
-  onBack,
-  readOnly = false,
+  frameworkTools,
+  readOnly,
+  onSaved,
+  onClone,
+  onDelete,
+  onPickTool,
 }: {
   preset: ToolPresetDefinition;
-  onBack: () => void;
-  readOnly?: boolean;
+  frameworkTools: FrameworkToolDetail[];
+  readOnly: boolean;
+  onSaved: () => void;
+  onClone: () => void;
+  onDelete: (() => void) | null;
+  onPickTool: (t: FrameworkToolDetail) => void;
 }) {
   const { catalog, loadCatalog, updatePreset } = useToolPresetStore();
   const { t } = useI18n();
@@ -151,7 +345,6 @@ function ToolSetEditor({
   const [selectedMcpServers, setSelectedMcpServers] = useState<Set<string>>(
     () => new Set(preset.mcp_servers.includes('*') ? ['*'] : preset.mcp_servers),
   );
-  // PR-F.5.3 — per-preset framework built-ins.
   const [builtInMode, setBuiltInMode] = useState<'inherit' | 'allowlist' | 'blocklist'>(
     (preset.built_in_mode as 'inherit' | 'allowlist' | 'blocklist') ?? 'inherit',
   );
@@ -163,23 +356,30 @@ function ToolSetEditor({
   );
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+    framework_builtin: true,
+    custom_root: true,
+    mcp_root: true,
+  });
 
-  useEffect(() => { if (!catalog) loadCatalog(); }, [catalog, loadCatalog]);
-
-  // PR-F.5.3 — load the executor's framework tool catalog so the
-  // built-in selector knows what names exist.
-  const [frameworkTools, setFrameworkTools] = useState<FrameworkToolDetail[]>([]);
+  // Reset local state when switching presets.
   useEffect(() => {
-    let cancelled = false;
-    frameworkToolApi.list()
-      .then((r) => { if (!cancelled) setFrameworkTools(r.tools); })
-      .catch(() => {/* keep empty — section just shows "no tools" */});
-    return () => { cancelled = true; };
-  }, []);
+    setName(preset.name);
+    setDescription(preset.description);
+    setSelectedCustomTools(new Set(preset.custom_tools.includes('*') ? ['*'] : preset.custom_tools));
+    setSelectedMcpServers(new Set(preset.mcp_servers.includes('*') ? ['*'] : preset.mcp_servers));
+    setBuiltInMode((preset.built_in_mode as 'inherit' | 'allowlist' | 'blocklist') ?? 'inherit');
+    setBuiltInTools(new Set(preset.built_in_tools ?? []));
+    setBuiltInDeny(new Set(preset.built_in_deny ?? []));
+    setSearchTerm('');
+  }, [preset.id, preset.name, preset.description, preset.custom_tools, preset.mcp_servers, preset.built_in_mode, preset.built_in_tools, preset.built_in_deny]);
+
+  useEffect(() => {
+    if (!catalog) loadCatalog();
+  }, [catalog, loadCatalog]);
 
   const allCustomToolNames = useMemo(
-    () => catalog?.custom.map(t => t.name) ?? [],
+    () => catalog?.custom.map(tool => tool.name) ?? [],
     [catalog],
   );
   const allMcpServerNames = useMemo(
@@ -195,7 +395,8 @@ function ToolSetEditor({
     setSelectedCustomTools(prev => {
       const next = new Set(prev);
       if (toolName === '*') {
-        if (next.has('*')) { next.clear(); } else { next.clear(); next.add('*'); }
+        if (next.has('*')) next.clear();
+        else { next.clear(); next.add('*'); }
       } else {
         next.delete('*');
         if (next.has(toolName)) next.delete(toolName);
@@ -210,7 +411,8 @@ function ToolSetEditor({
     setSelectedMcpServers(prev => {
       const next = new Set(prev);
       if (serverName === '*') {
-        if (next.has('*')) { next.clear(); } else { next.clear(); next.add('*'); }
+        if (next.has('*')) next.clear();
+        else { next.clear(); next.add('*'); }
       } else {
         next.delete('*');
         if (next.has(serverName)) next.delete(serverName);
@@ -220,45 +422,42 @@ function ToolSetEditor({
     });
   };
 
-  const toggleGroup = (group: string) => {
+  const toggleGroup = (group: string) =>
     setExpandedGroups(prev => ({ ...prev, [group]: !prev[group] }));
-  };
 
-  // Group custom tools by source file
-  const groupedCustomTools: Record<string, ToolInfo[]> = useMemo(() => {
+  const groupedCustomTools = useMemo<Record<string, ToolInfo[]>>(() => {
     if (!catalog) return {};
     const groups: Record<string, ToolInfo[]> = {};
     for (const tool of catalog.custom) {
-      const group = tool.group || 'other';
-      if (!groups[group]) groups[group] = [];
-      groups[group].push(tool);
+      const g = tool.group || 'other';
+      (groups[g] ??= []).push(tool);
     }
     return groups;
   }, [catalog]);
 
-  const filteredBuiltIn = useMemo(() => {
-    if (!catalog) return [];
-    if (!searchTerm) return catalog.built_in;
-    const q = searchTerm.toLowerCase();
-    return catalog.built_in.filter(t => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q));
-  }, [catalog, searchTerm]);
+  const matches = (s: string) => !searchTerm || s.toLowerCase().includes(searchTerm.toLowerCase());
 
-  const filteredCustomGroups = useMemo(() => {
+  const filteredFrameworkTools = useMemo(
+    () =>
+      frameworkTools.filter(tool =>
+        matches(tool.name) || matches(tool.description) || matches(tool.feature_group),
+      ),
+    [frameworkTools, searchTerm],
+  );
+
+  const filteredCustomGroups = useMemo<Record<string, ToolInfo[]>>(() => {
     if (!searchTerm) return groupedCustomTools;
-    const q = searchTerm.toLowerCase();
     const result: Record<string, ToolInfo[]> = {};
     for (const [group, tools] of Object.entries(groupedCustomTools)) {
-      const filtered = tools.filter(t => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q));
-      if (filtered.length > 0) result[group] = filtered;
+      const hits = tools.filter(t => matches(t.name) || matches(t.description));
+      if (hits.length > 0) result[group] = hits;
     }
     return result;
   }, [groupedCustomTools, searchTerm]);
 
   const filteredMcpServers = useMemo(() => {
     if (!catalog) return [];
-    if (!searchTerm) return catalog.mcp_servers;
-    const q = searchTerm.toLowerCase();
-    return catalog.mcp_servers.filter(s => s.name.toLowerCase().includes(q));
+    return catalog.mcp_servers.filter(s => matches(s.name));
   }, [catalog, searchTerm]);
 
   const handleSave = async () => {
@@ -269,14 +468,13 @@ function ToolSetEditor({
         description: description.trim(),
         custom_tools: Array.from(selectedCustomTools),
         mcp_servers: Array.from(selectedMcpServers),
-        // PR-F.5.3 — persist built-in selection alongside existing fields.
         built_in_mode: builtInMode,
         built_in_tools: Array.from(builtInTools),
         built_in_deny: Array.from(builtInDeny),
       });
-      onBack();
+      onSaved();
     } catch {
-      // error handled by store
+      // store surfaces error
     } finally {
       setSaving(false);
     }
@@ -285,61 +483,67 @@ function ToolSetEditor({
   const effectiveCustomCount = isAllCustom ? allCustomToolNames.length : selectedCustomTools.size;
   const builtInMcpCount = catalog?.mcp_servers.filter(s => s.is_built_in).length ?? 0;
   const effectiveMcpCount = isAllMcp ? allMcpServerNames.length : selectedMcpServers.size + builtInMcpCount;
+  const frameworkPickerActive = builtInMode !== 'inherit';
+  const frameworkPickerSet = builtInMode === 'allowlist' ? builtInTools : builtInDeny;
+  const frameworkPickerSetter = builtInMode === 'allowlist' ? setBuiltInTools : setBuiltInDeny;
+  const dirty =
+    name !== preset.name ||
+    description !== preset.description ||
+    JSON.stringify(Array.from(selectedCustomTools).sort()) !== JSON.stringify([...preset.custom_tools].sort()) ||
+    JSON.stringify(Array.from(selectedMcpServers).sort()) !== JSON.stringify([...preset.mcp_servers].sort()) ||
+    builtInMode !== ((preset.built_in_mode as string) ?? 'inherit') ||
+    JSON.stringify(Array.from(builtInTools).sort()) !== JSON.stringify([...(preset.built_in_tools ?? [])].sort()) ||
+    JSON.stringify(Array.from(builtInDeny).sort()) !== JSON.stringify([...(preset.built_in_deny ?? [])].sort());
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-3 h-10 px-4 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] shrink-0">
-        <button
-          className="flex items-center gap-1.5 h-7 px-3 text-[11px] font-medium rounded-md border border-[var(--border-color)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)] transition-colors"
-          onClick={onBack}
-        >
-          <ArrowLeft size={12} />
-          {t('toolSetsTab.backToList')}
-        </button>
-        <div className="w-6 h-6 rounded-md bg-gradient-to-br from-[#f59e0b] to-[#f97316] flex items-center justify-center shrink-0">
-          <Package size={11} className="text-white" />
-        </div>
-        <span className="text-[0.8125rem] font-semibold text-[var(--text-primary)]">
+    <div className="flex flex-col h-full min-h-0">
+      {/* Inline header (preset name + save/clone/delete) */}
+      <div className="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))]">
+        <Package className="w-4 h-4 text-amber-500 shrink-0" />
+        <span className="text-[0.875rem] font-semibold text-[hsl(var(--foreground))] truncate">
           {preset.name}
         </span>
+        {preset.is_template && (
+          <StatusBadge tone="primary" uppercase>{t('toolSetsTab.template')}</StatusBadge>
+        )}
         {readOnly && (
-          <span className="text-[10px] font-semibold py-0.5 px-1.5 rounded-md bg-[rgba(107,114,128,0.12)] text-[var(--text-muted)] border border-[rgba(107,114,128,0.2)] uppercase tracking-wide">
-            {t('toolSetsTab.readOnly')}
-          </span>
+          <StatusBadge tone="neutral" uppercase>{t('toolSetsTab.readOnly')}</StatusBadge>
         )}
         <div className="flex-1" />
+        <ActionButton icon={Plus} onClick={onClone}>{t('common.clone')}</ActionButton>
+        {onDelete && (
+          <ActionButton icon={Trash2} variant="danger" onClick={onDelete}>
+            {t('common.delete')}
+          </ActionButton>
+        )}
         {!readOnly && (
-          <button
-            className="flex items-center gap-1.5 h-7 px-3 text-[11px] font-medium rounded-md border border-[rgba(59,130,246,0.3)] bg-[rgba(59,130,246,0.1)] text-[var(--primary-color)] hover:bg-[rgba(59,130,246,0.18)] transition-colors disabled:opacity-50"
+          <ActionButton
+            variant="primary"
+            icon={Check}
             onClick={handleSave}
-            disabled={saving || !name.trim()}
+            disabled={saving || !name.trim() || !dirty}
           >
             {saving ? t('common.loading') : t('common.save')}
-          </button>
+          </ActionButton>
         )}
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-6">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6">
         <div className="max-w-[900px] mx-auto flex flex-col gap-6">
-          {/* Meta Section */}
-          <section className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg p-4 flex flex-col gap-3">
-            <h3 className="text-[0.8125rem] font-semibold text-[var(--text-primary)] flex items-center gap-2">
+          <section className="bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-lg p-4 flex flex-col gap-3">
+            <h3 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
               {t('toolSetsTab.presetInfo')}
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-x-4 gap-y-2 items-center">
-              <label className="text-[0.75rem] font-medium text-[var(--text-secondary)]">{t('toolSetsTab.nameLabel')}</label>
-              <input
-                className="w-full py-1.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--primary-color)] disabled:opacity-60"
+              <Label className="text-[0.75rem]">{t('toolSetsTab.nameLabel')}</Label>
+              <Input
                 value={name}
                 onChange={e => setName(e.target.value)}
                 disabled={readOnly}
                 placeholder={t('toolSetsTab.namePlaceholder')}
               />
-              <label className="text-[0.75rem] font-medium text-[var(--text-secondary)]">{t('toolSetsTab.descriptionLabel')}</label>
-              <input
-                className="w-full py-1.5 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--primary-color)] disabled:opacity-60"
+              <Label className="text-[0.75rem]">{t('toolSetsTab.descriptionLabel')}</Label>
+              <Input
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 disabled={readOnly}
@@ -348,295 +552,256 @@ function ToolSetEditor({
             </div>
           </section>
 
-          {/* Stats Banner */}
-          <div className="flex items-center gap-4 px-4 py-2.5 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg text-[0.75rem] flex-wrap">
-            <span className="text-[var(--text-muted)]">
+          <div className="flex items-center gap-4 px-4 py-2.5 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-lg text-[0.75rem] flex-wrap">
+            <span className="text-[hsl(var(--muted-foreground))]">
               {t('toolSetsTab.builtInAlways', { count: catalog?.built_in.length ?? 0 })}
             </span>
-            <span className="w-px h-4 bg-[var(--border-color)] hidden sm:block" />
-            <span className="text-[var(--accent-color)] font-medium">
+            <span className="w-px h-4 bg-[hsl(var(--border))] hidden sm:block" />
+            <span className="text-amber-600 dark:text-amber-400 font-medium">
               {t('toolSetsTab.customSelected', { count: effectiveCustomCount })}
             </span>
-            <span className="w-px h-4 bg-[var(--border-color)] hidden sm:block" />
-            <span className="text-[var(--success-color)] font-medium">
+            <span className="w-px h-4 bg-[hsl(var(--border))] hidden sm:block" />
+            <span className="text-emerald-600 dark:text-emerald-400 font-medium">
               {t('toolSetsTab.mcpSelected', { count: effectiveMcpCount })}
             </span>
           </div>
 
-          {/* Search */}
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-            <input
-              className="w-full pl-9 pr-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--primary-color)] transition-all"
-              placeholder={t('toolSetsTab.searchTools')}
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-            />
-          </div>
+          <SearchInput
+            value={searchTerm}
+            onChange={setSearchTerm}
+            placeholder={t('toolSetsTab.searchTools')}
+          />
 
-          {/* PR-F.5.3 — Framework built-in tools per-preset */}
-          <section className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg overflow-hidden">
-            <button
-              className="w-full flex items-center gap-2 px-4 py-3 text-[0.8125rem] font-semibold text-[var(--text-primary)] bg-transparent border-none cursor-pointer hover:bg-[var(--bg-hover)] transition-colors text-left"
-              onClick={() => toggleGroup('framework_builtin')}
-            >
-              {expandedGroups.framework_builtin ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              <Wrench size={14} className="text-[var(--primary-color)]" />
-              Framework built-ins
-              <span className="text-[0.6875rem] font-normal text-[var(--text-muted)]">
-                (executor BUILT_IN_TOOL_CLASSES) — mode: {builtInMode}
-              </span>
-            </button>
-            {expandedGroups.framework_builtin && (
-              <div className="px-4 pb-3">
-                <div className="flex items-center gap-3 text-[0.75rem] mb-2">
-                  <label className="flex items-center gap-1">
-                    <input
-                      type="radio"
-                      name={`bim-${preset.id}`}
-                      checked={builtInMode === 'inherit'}
-                      onChange={() => !readOnly && setBuiltInMode('inherit')}
-                      disabled={readOnly}
-                    />
-                    inherit (all enabled)
-                  </label>
-                  <label className="flex items-center gap-1">
-                    <input
-                      type="radio"
-                      name={`bim-${preset.id}`}
-                      checked={builtInMode === 'allowlist'}
-                      onChange={() => !readOnly && setBuiltInMode('allowlist')}
-                      disabled={readOnly}
-                    />
-                    allowlist
-                  </label>
-                  <label className="flex items-center gap-1">
-                    <input
-                      type="radio"
-                      name={`bim-${preset.id}`}
-                      checked={builtInMode === 'blocklist'}
-                      onChange={() => !readOnly && setBuiltInMode('blocklist')}
-                      disabled={readOnly}
-                    />
-                    blocklist
-                  </label>
-                </div>
-                {builtInMode === 'inherit' ? (
-                  <p className="text-[0.6875rem] text-[var(--text-muted)]">
-                    All {frameworkTools.length} framework built-ins are exposed.
-                  </p>
-                ) : (
-                  <ul className="grid grid-cols-2 gap-1 max-h-72 overflow-y-auto">
-                    {frameworkTools.map((tool) => {
-                      const set = builtInMode === 'allowlist' ? builtInTools : builtInDeny;
-                      const setter = builtInMode === 'allowlist' ? setBuiltInTools : setBuiltInDeny;
-                      const isOn = set.has(tool.name);
-                      return (
-                        <li key={tool.name} className="text-[0.75rem]">
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={isOn}
-                              onChange={() => {
-                                if (readOnly) return;
-                                setter((prev) => {
-                                  const next = new Set(prev);
-                                  if (next.has(tool.name)) next.delete(tool.name);
-                                  else next.add(tool.name);
-                                  return next;
-                                });
-                              }}
-                              disabled={readOnly}
-                            />
-                            <code className="text-[var(--primary-color)] text-[0.6875rem] bg-[var(--bg-hover)] px-1 rounded">{tool.name}</code>
-                            <span className="text-[var(--text-muted)] text-[0.6875rem]">
-                              {tool.feature_group}
-                            </span>
-                          </label>
-                        </li>
-                      );
-                    })}
-                    {frameworkTools.length === 0 && (
-                      <li className="text-[var(--text-muted)] italic col-span-2">
-                        Framework tool catalog unavailable.
-                      </li>
-                    )}
-                  </ul>
+          {/* ── Framework built-ins ── */}
+          <Section
+            title={t('toolSetsTab.frameworkBuiltins')}
+            icon={Wrench}
+            iconClassName="text-[hsl(var(--primary))]"
+            count={`${frameworkPickerActive ? frameworkPickerSet.size : frameworkTools.length} / ${frameworkTools.length}`}
+            note={builtInMode}
+            expanded={!!expandedGroups.framework_builtin}
+            onToggle={() => toggleGroup('framework_builtin')}
+          >
+            <div className="flex items-center gap-3 text-[0.75rem] mb-2">
+              {(['inherit', 'allowlist', 'blocklist'] as const).map(m => (
+                <label key={m} className="flex items-center gap-1">
+                  <input
+                    type="radio"
+                    name={`bim-${preset.id}`}
+                    checked={builtInMode === m}
+                    onChange={() => !readOnly && setBuiltInMode(m)}
+                    disabled={readOnly}
+                  />
+                  {m === 'inherit' ? t('toolSetsTab.builtInInherit') : m}
+                </label>
+              ))}
+            </div>
+            {builtInMode === 'inherit' ? (
+              <p className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
+                {t('toolSetsTab.builtInInheritDesc', { n: String(frameworkTools.length) })}
+              </p>
+            ) : (
+              <ul className="grid grid-cols-1 md:grid-cols-2 gap-1 max-h-72 overflow-y-auto">
+                {filteredFrameworkTools.map(tool => {
+                  const isOn = frameworkPickerSet.has(tool.name);
+                  return (
+                    <li key={tool.name} className="text-[0.75rem] flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={isOn}
+                        onChange={() => {
+                          if (readOnly) return;
+                          frameworkPickerSetter(prev => {
+                            const next = new Set(prev);
+                            if (next.has(tool.name)) next.delete(tool.name);
+                            else next.add(tool.name);
+                            return next;
+                          });
+                        }}
+                        disabled={readOnly}
+                      />
+                      <code className="text-[hsl(var(--primary))] text-[0.6875rem] bg-[hsl(var(--accent))] px-1 rounded">
+                        {tool.name}
+                      </code>
+                      <span className="text-[hsl(var(--muted-foreground))] text-[0.6875rem] truncate flex-1">
+                        {tool.feature_group}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onPickTool(tool)}
+                        title={t('toolSetsTab.viewToolInfo')}
+                        className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] shrink-0"
+                      >
+                        <Info className="w-3 h-3" />
+                      </button>
+                    </li>
+                  );
+                })}
+                {filteredFrameworkTools.length === 0 && (
+                  <li className="text-[hsl(var(--muted-foreground))] italic col-span-2 text-[0.75rem]">
+                    {t('toolSetsTab.noToolsFound')}
+                  </li>
                 )}
-              </div>
+              </ul>
             )}
-          </section>
+          </Section>
 
-          {/* Built-in Tools (always included, read-only) */}
-          <section className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg overflow-hidden">
-            <button
-              className="w-full flex items-center gap-2 px-4 py-3 text-[0.8125rem] font-semibold text-[var(--text-primary)] bg-transparent border-none cursor-pointer hover:bg-[var(--bg-hover)] transition-colors text-left"
-              onClick={() => toggleGroup('built_in')}
-            >
-              {expandedGroups.built_in ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              <Wrench size={14} className="text-[var(--primary-color)]" />
-              {t('toolSetsTab.builtInTools')}
-              <span className="text-[0.6875rem] font-normal text-[var(--text-muted)]">
-                ({filteredBuiltIn.length}) — {t('toolSetsTab.alwaysEnabled')}
-              </span>
-            </button>
-            {expandedGroups.built_in && (
-              <div className="px-4 pb-3 flex flex-col gap-0.5">
-                {filteredBuiltIn.map(tool => (
-                  <div key={tool.name} className="flex items-center gap-2 py-1.5 px-2 rounded-md text-[0.8125rem]">
-                    <Check size={12} className="text-[var(--success-color)] shrink-0" />
-                    <code className="text-[var(--primary-color)] text-[0.75rem] bg-[var(--bg-hover)] px-1.5 py-0.5 rounded shrink-0">{tool.name}</code>
-                    <span className="text-[var(--text-muted)] text-[0.75rem] truncate">{tool.description}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
+          {/* ── Custom tools (always-included viewer + selectable below) ── */}
+          <Section
+            title={t('toolSetsTab.builtInTools')}
+            icon={Wrench}
+            iconClassName="text-[hsl(var(--primary))]"
+            count={String(catalog?.built_in.length ?? 0)}
+            note={t('toolSetsTab.alwaysEnabled')}
+            expanded={!!expandedGroups.built_in}
+            onToggle={() => toggleGroup('built_in')}
+          >
+            <div className="flex flex-col gap-0.5">
+              {(catalog?.built_in ?? []).filter(tool => matches(tool.name) || matches(tool.description)).map(tool => (
+                <div key={tool.name} className="flex items-center gap-2 py-1.5 px-2 rounded-md text-[0.8125rem]">
+                  <Check className="w-3 h-3 text-emerald-500 shrink-0" />
+                  <code className="text-[hsl(var(--primary))] text-[0.75rem] bg-[hsl(var(--accent))] px-1.5 py-0.5 rounded shrink-0">{tool.name}</code>
+                  <span className="text-[hsl(var(--muted-foreground))] text-[0.75rem] truncate">{tool.description}</span>
+                </div>
+              ))}
+            </div>
+          </Section>
 
-          {/* Custom Tools (selectable) */}
-          <section className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3">
-              <button
-                className="flex items-center gap-2 text-[0.8125rem] font-semibold text-[var(--text-primary)] bg-transparent border-none cursor-pointer"
-                onClick={() => toggleGroup('custom_root')}
-              >
-                {expandedGroups.custom_root ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                <Wrench size={14} className="text-[var(--accent-color)]" />
-                {t('toolSetsTab.customTools')}
-                <span className="text-[0.6875rem] font-normal text-[var(--text-muted)]">
-                  ({catalog?.custom.length ?? 0})
-                </span>
-              </button>
-              {!readOnly && (
+          <Section
+            title={t('toolSetsTab.customTools')}
+            icon={Wrench}
+            iconClassName="text-amber-500"
+            count={String(catalog?.custom.length ?? 0)}
+            extra={
+              !readOnly && (
                 <button
+                  type="button"
+                  onClick={() => toggleCustomTool('*')}
                   className={cn(
                     'h-6 px-2 text-[0.6875rem] font-medium rounded-md border transition-colors cursor-pointer',
                     isAllCustom
-                      ? 'border-[var(--accent-color)] bg-[rgba(245,158,11,0.12)] text-[var(--accent-color)]'
-                      : 'border-[var(--border-color)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]',
+                      ? 'border-amber-500 bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                      : 'border-[hsl(var(--border))] bg-transparent text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--foreground))]',
                   )}
-                  onClick={() => toggleCustomTool('*')}
                 >
                   {isAllCustom ? t('toolSetsTab.allSelected') : t('toolSetsTab.selectAll')}
                 </button>
+              )
+            }
+            expanded={!!expandedGroups.custom_root}
+            onToggle={() => toggleGroup('custom_root')}
+          >
+            <div className="flex flex-col gap-2">
+              {Object.entries(filteredCustomGroups).map(([group, tools]) => (
+                <div key={group}>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 text-[0.75rem] font-medium text-[hsl(var(--muted-foreground))] bg-transparent border-none cursor-pointer p-0 mb-1"
+                    onClick={() => toggleGroup(`custom_${group}`)}
+                  >
+                    {expandedGroups[`custom_${group}`] ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                    {group.replace(/_/g, ' ')} ({tools.length})
+                  </button>
+                  {expandedGroups[`custom_${group}`] && (
+                    <div className="ml-4 flex flex-col gap-0.5">
+                      {tools.map(tool => {
+                        const checked = isAllCustom || selectedCustomTools.has(tool.name);
+                        return (
+                          <label
+                            key={tool.name}
+                            className={cn(
+                              'flex items-center gap-2 py-1.5 px-2 rounded-md text-[0.8125rem] transition-colors',
+                              readOnly ? 'cursor-default' : 'cursor-pointer hover:bg-[hsl(var(--accent))]',
+                              checked && 'bg-amber-500/5',
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              className="accent-amber-500 w-3.5 h-3.5"
+                              checked={checked}
+                              onChange={() => toggleCustomTool(tool.name)}
+                              disabled={readOnly || isAllCustom}
+                            />
+                            <code className="text-amber-600 dark:text-amber-400 text-[0.75rem] bg-[hsl(var(--accent))] px-1.5 py-0.5 rounded shrink-0">{tool.name}</code>
+                            <span className="text-[hsl(var(--muted-foreground))] text-[0.75rem] truncate">{tool.description}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {Object.keys(filteredCustomGroups).length === 0 && (
+                <p className="text-[0.75rem] text-[hsl(var(--muted-foreground))] py-2 px-2">
+                  {t('toolSetsTab.noToolsFound')}
+                </p>
               )}
             </div>
-            {expandedGroups.custom_root && (
-              <div className="px-4 pb-3 flex flex-col gap-2">
-                {Object.entries(filteredCustomGroups).map(([group, tools]) => (
-                  <div key={group}>
-                    <button
-                      className="flex items-center gap-1.5 text-[0.75rem] font-medium text-[var(--text-secondary)] bg-transparent border-none cursor-pointer p-0 mb-1"
-                      onClick={() => toggleGroup(`custom_${group}`)}
-                    >
-                      {expandedGroups[`custom_${group}`] ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                      {group.replace(/_/g, ' ')} ({tools.length})
-                    </button>
-                    {expandedGroups[`custom_${group}`] && (
-                      <div className="ml-4 flex flex-col gap-0.5">
-                        {tools.map(tool => {
-                          const checked = isAllCustom || selectedCustomTools.has(tool.name);
-                          return (
-                            <label
-                              key={tool.name}
-                              className={cn(
-                                'flex items-center gap-2 py-1.5 px-2 rounded-md text-[0.8125rem] transition-colors',
-                                readOnly ? 'cursor-default' : 'cursor-pointer hover:bg-[var(--bg-hover)]',
-                                checked && 'bg-[rgba(245,158,11,0.05)]',
-                              )}
-                            >
-                              <input
-                                type="checkbox"
-                                className="accent-[var(--accent-color)] w-3.5 h-3.5"
-                                checked={checked}
-                                onChange={() => toggleCustomTool(tool.name)}
-                                disabled={readOnly || isAllCustom}
-                              />
-                              <code className="text-[var(--accent-color)] text-[0.75rem] bg-[var(--bg-hover)] px-1.5 py-0.5 rounded shrink-0">{tool.name}</code>
-                              <span className="text-[var(--text-muted)] text-[0.75rem] truncate">{tool.description}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {Object.keys(filteredCustomGroups).length === 0 && (
-                  <p className="text-[0.75rem] text-[var(--text-muted)] py-2 px-2">{t('toolSetsTab.noToolsFound')}</p>
-                )}
-              </div>
-            )}
-          </section>
+          </Section>
 
-          {/* MCP Servers (selectable) */}
           {(catalog?.mcp_servers.length ?? 0) > 0 && (
-            <section className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3">
-                <button
-                  className="flex items-center gap-2 text-[0.8125rem] font-semibold text-[var(--text-primary)] bg-transparent border-none cursor-pointer"
-                  onClick={() => toggleGroup('mcp_root')}
-                >
-                  {expandedGroups.mcp_root ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  <Server size={14} className="text-[var(--success-color)]" />
-                  {t('toolSetsTab.mcpServers')}
-                  <span className="text-[0.6875rem] font-normal text-[var(--text-muted)]">
-                    ({catalog?.mcp_servers.length ?? 0})
-                  </span>
-                </button>
-                {!readOnly && (
+            <Section
+              title={t('toolSetsTab.mcpServers')}
+              icon={Server}
+              iconClassName="text-emerald-500"
+              count={String(catalog?.mcp_servers.length ?? 0)}
+              extra={
+                !readOnly && (
                   <button
+                    type="button"
+                    onClick={() => toggleMcpServer('*')}
                     className={cn(
                       'h-6 px-2 text-[0.6875rem] font-medium rounded-md border transition-colors cursor-pointer',
                       isAllMcp
-                        ? 'border-[var(--success-color)] bg-[rgba(34,197,94,0.12)] text-[var(--success-color)]'
-                        : 'border-[var(--border-color)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]',
+                        ? 'border-emerald-500 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                        : 'border-[hsl(var(--border))] bg-transparent text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--foreground))]',
                     )}
-                    onClick={() => toggleMcpServer('*')}
                   >
                     {isAllMcp ? t('toolSetsTab.allSelected') : t('toolSetsTab.selectAll')}
                   </button>
+                )
+              }
+              expanded={!!expandedGroups.mcp_root}
+              onToggle={() => toggleGroup('mcp_root')}
+            >
+              <div className="flex flex-col gap-0.5">
+                {filteredMcpServers.map(server => {
+                  const isBuiltIn = server.is_built_in ?? false;
+                  const checked = isBuiltIn || isAllMcp || selectedMcpServers.has(server.name);
+                  return (
+                    <label
+                      key={server.name}
+                      className={cn(
+                        'flex items-center gap-2 py-1.5 px-2 rounded-md text-[0.8125rem] transition-colors',
+                        readOnly || isBuiltIn ? 'cursor-default' : 'cursor-pointer hover:bg-[hsl(var(--accent))]',
+                        checked && 'bg-emerald-500/5',
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        className="accent-emerald-500 w-3.5 h-3.5"
+                        checked={checked}
+                        onChange={() => toggleMcpServer(server.name)}
+                        disabled={readOnly || isAllMcp || isBuiltIn}
+                      />
+                      <code className="text-emerald-600 dark:text-emerald-400 text-[0.75rem] bg-[hsl(var(--accent))] px-1.5 py-0.5 rounded">{server.name}</code>
+                      <span className="text-[0.6875rem] px-1.5 py-0.5 rounded-full bg-[hsl(var(--accent))] text-[hsl(var(--muted-foreground))]">{server.type}</span>
+                      {isBuiltIn && (
+                        <StatusBadge tone="success" uppercase>{t('toolSetsTab.builtInMcp')}</StatusBadge>
+                      )}
+                      {server.description && (
+                        <span className="text-[hsl(var(--muted-foreground))] text-[0.6875rem] truncate">{server.description}</span>
+                      )}
+                    </label>
+                  );
+                })}
+                {filteredMcpServers.length === 0 && (
+                  <p className="text-[0.75rem] text-[hsl(var(--muted-foreground))] py-2 px-2">
+                    {t('toolSetsTab.noToolsFound')}
+                  </p>
                 )}
               </div>
-              {expandedGroups.mcp_root && (
-                <div className="px-4 pb-3 flex flex-col gap-0.5">
-                  {filteredMcpServers.map(server => {
-                    const isBuiltIn = server.is_built_in ?? false;
-                    const checked = isBuiltIn || isAllMcp || selectedMcpServers.has(server.name);
-                    return (
-                      <label
-                        key={server.name}
-                        className={cn(
-                          'flex items-center gap-2 py-1.5 px-2 rounded-md text-[0.8125rem] transition-colors',
-                          readOnly || isBuiltIn ? 'cursor-default' : 'cursor-pointer hover:bg-[var(--bg-hover)]',
-                          checked && 'bg-[rgba(34,197,94,0.05)]',
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          className="accent-[var(--success-color)] w-3.5 h-3.5"
-                          checked={checked}
-                          onChange={() => toggleMcpServer(server.name)}
-                          disabled={readOnly || isAllMcp || isBuiltIn}
-                        />
-                        <code className="text-[var(--success-color)] text-[0.75rem] bg-[var(--bg-hover)] px-1.5 py-0.5 rounded">{server.name}</code>
-                        <span className="text-[0.6875rem] px-1.5 py-0.5 rounded-full bg-[var(--bg-hover)] text-[var(--text-muted)]">{server.type}</span>
-                        {server.is_built_in && (
-                          <span className="text-[10px] font-semibold py-[1px] px-1.5 rounded-md bg-[rgba(34,197,94,0.12)] text-[var(--success-color)] border border-[rgba(34,197,94,0.2)] uppercase tracking-wide shrink-0">
-                            {t('toolSetsTab.builtInMcp')}
-                          </span>
-                        )}
-                        {server.description && (
-                          <span className="text-[var(--text-muted)] text-[0.6875rem] truncate">{server.description}</span>
-                        )}
-                      </label>
-                    );
-                  })}
-                  {filteredMcpServers.length === 0 && (
-                    <p className="text-[0.75rem] text-[var(--text-muted)] py-2 px-2">{t('toolSetsTab.noToolsFound')}</p>
-                  )}
-                </div>
-              )}
-            </section>
+            </Section>
           )}
         </div>
       </div>
@@ -644,30 +809,124 @@ function ToolSetEditor({
   );
 }
 
-// ==================== Main Component ====================
+function Section({
+  title,
+  icon: Icon,
+  iconClassName,
+  count,
+  note,
+  extra,
+  expanded,
+  onToggle,
+  children,
+}: {
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  iconClassName?: string;
+  count?: string;
+  note?: string;
+  extra?: React.ReactNode;
+  expanded: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex items-center gap-2 text-[0.8125rem] font-semibold text-[hsl(var(--foreground))] bg-transparent border-none cursor-pointer text-left"
+        >
+          {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+          <Icon className={cn('w-3.5 h-3.5', iconClassName)} />
+          {title}
+          {count && (
+            <span className="text-[0.6875rem] font-normal text-[hsl(var(--muted-foreground))]">
+              ({count})
+            </span>
+          )}
+          {note && (
+            <span className="text-[0.6875rem] font-normal text-[hsl(var(--muted-foreground))]">
+              — {note}
+            </span>
+          )}
+        </button>
+        {extra}
+      </div>
+      {expanded && <div className="px-4 pb-3">{children}</div>}
+    </section>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Main tab
+// ──────────────────────────────────────────────────────────────────
 
 export default function ToolSetsTab() {
   const { presets, isLoading, error, loadPresets, loadCatalog, deletePreset, clonePreset, createPreset } = useToolPresetStore();
   const { t } = useI18n();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [mode, setMode] = useState<'list' | 'editor' | 'viewer'>('list');
-  const [editingPreset, setEditingPreset] = useState<ToolPresetDefinition | null>(null);
+  const [search, setSearch] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [pickedTool, setPickedTool] = useState<FrameworkToolDetail | null>(null);
+
+  // Framework tool catalog (used both by the read-only catalog view and
+  // the per-preset "framework built-ins" picker).
+  const [frameworkTools, setFrameworkTools] = useState<FrameworkToolDetail[]>([]);
+  const [frameworkGroups, setFrameworkGroups] = useState<string[]>([]);
+  const [frameworkLoading, setFrameworkLoading] = useState(false);
+
+  const fetchFramework = useCallback(async () => {
+    setFrameworkLoading(true);
+    try {
+      const r = await frameworkToolApi.list();
+      setFrameworkTools(r.tools);
+      setFrameworkGroups(r.groups);
+    } catch {
+      // Surface via store error if the user clicks Refresh
+    } finally {
+      setFrameworkLoading(false);
+    }
+  }, []);
 
   const fetchAll = useCallback(async () => {
-    await Promise.all([loadPresets(), loadCatalog()]);
-  }, [loadPresets, loadCatalog]);
+    await Promise.all([loadPresets(), loadCatalog(), fetchFramework()]);
+  }, [loadPresets, loadCatalog, fetchFramework]);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
 
-  const templates = presets.filter(p => p.is_template && p.id === 'template-all-tools');
-  const userPresets = presets.filter(p => !p.is_template);
+  const templates = useMemo(
+    () => presets.filter(p => p.is_template && p.id === 'template-all-tools'),
+    [presets],
+  );
+  const userPresets = useMemo(() => presets.filter(p => !p.is_template), [presets]);
 
-  const handleCreate = useCallback(async () => {
+  // Auto-select first user preset if nothing is selected (so the editor
+  // is never blank on a populated install).
+  useEffect(() => {
+    if (selectedId !== null) return;
+    if (userPresets.length > 0) {
+      setSelectedId(userPresets[0].id);
+    } else if (templates.length > 0) {
+      setSelectedId(templates[0].id);
+    }
+  }, [selectedId, userPresets, templates]);
+
+  const selectedPreset = useMemo(() => {
+    if (!selectedId || selectedId === CATALOG_VIEW_ID) return null;
+    return presets.find(p => p.id === selectedId) ?? null;
+  }, [selectedId, presets]);
+
+  const handleCreate = async () => {
     if (!newName.trim()) return;
+    setCreating(true);
     try {
       const created = await createPreset({
         name: newName.trim(),
@@ -678,210 +937,234 @@ export default function ToolSetsTab() {
       setNewName('');
       setNewDesc('');
       setShowCreateDialog(false);
-      // Go directly to editor
-      setEditingPreset(created);
-      setMode('editor');
+      setSelectedId(created.id);
     } catch {
-      // error handled by store
+      // store handles
+    } finally {
+      setCreating(false);
     }
-  }, [newName, newDesc, createPreset]);
+  };
 
-  const handleClone = useCallback(async (id: string) => {
-    const preset = presets.find(p => p.id === id);
-    const name = `${preset?.name || 'Preset'} (Copy)`;
+  const handleClone = async (preset: ToolPresetDefinition) => {
     try {
-      await clonePreset(id, name);
+      const cloned = await clonePreset(preset.id, `${preset.name} (Copy)`);
+      setSelectedId(cloned.id);
     } catch {
-      // error handled by store
+      // store handles
     }
-  }, [presets, clonePreset]);
+  };
 
-  const handleDelete = useCallback(async (id: string, name: string) => {
-    if (!confirm(t('toolSetsTab.deleteConfirm', { name }))) return;
+  const handleDelete = async (preset: ToolPresetDefinition) => {
+    if (!confirm(t('toolSetsTab.deleteConfirm', { name: preset.name }))) return;
     try {
-      await deletePreset(id);
-      if (selectedId === id) setSelectedId(null);
+      await deletePreset(preset.id);
+      if (selectedId === preset.id) setSelectedId(null);
     } catch {
-      // error handled by store
+      // store handles
     }
-  }, [deletePreset, selectedId, t]);
+  };
 
-  const handleEdit = useCallback(async (preset: ToolPresetDefinition) => {
-    setEditingPreset(preset);
-    setMode('editor');
-  }, []);
+  const headerActions = (
+    <>
+      <ActionButton
+        icon={RefreshCw}
+        spinIcon={isLoading || frameworkLoading}
+        disabled={isLoading || frameworkLoading}
+        onClick={fetchAll}
+      >
+        {t('common.refresh')}
+      </ActionButton>
+      <ActionButton icon={Plus} variant="primary" onClick={() => setShowCreateDialog(true)}>
+        {t('toolSetsTab.newPreset')}
+      </ActionButton>
+    </>
+  );
 
-  const handleView = useCallback(async (preset: ToolPresetDefinition) => {
-    setEditingPreset(preset);
-    setMode('viewer');
-  }, []);
+  const showCatalog = selectedId === CATALOG_VIEW_ID;
+  const subtitle = showCatalog
+    ? t('toolSetsTab.subtitleCatalog')
+    : selectedPreset
+      ? t('toolSetsTab.subtitleEditing', { name: selectedPreset.name })
+      : t('toolSetsTab.subtitleEmpty');
 
-  const handleBackToList = useCallback(() => {
-    setMode('list');
-    setEditingPreset(null);
-    fetchAll();
-  }, [fetchAll]);
+  const main = showCatalog ? (
+    <CatalogView
+      tools={frameworkTools}
+      groups={frameworkGroups}
+      loading={frameworkLoading}
+      onPickTool={setPickedTool}
+    />
+  ) : selectedPreset ? (
+    <PresetEditor
+      key={selectedPreset.id}
+      preset={selectedPreset}
+      frameworkTools={frameworkTools}
+      readOnly={selectedPreset.is_template}
+      onSaved={() => loadPresets()}
+      onClone={() => handleClone(selectedPreset)}
+      onDelete={selectedPreset.is_template ? null : () => handleDelete(selectedPreset)}
+      onPickTool={setPickedTool}
+    />
+  ) : (
+    <EmptyState
+      icon={Package}
+      title={t('toolSetsTab.empty')}
+      description={t('toolSetsTab.emptyHint')}
+      action={
+        <div className="flex items-center gap-2">
+          <ActionButton icon={Plus} variant="primary" onClick={() => setShowCreateDialog(true)}>
+            {t('toolSetsTab.newPreset')}
+          </ActionButton>
+          <ActionButton icon={BookOpen} onClick={() => setSelectedId(CATALOG_VIEW_ID)}>
+            {t('toolSetsTab.openCatalog')}
+          </ActionButton>
+        </div>
+      }
+    />
+  );
 
-  // Editor/Viewer mode
-  if ((mode === 'editor' || mode === 'viewer') && editingPreset) {
-    return (
-      <ToolSetEditor
-        preset={editingPreset}
-        onBack={handleBackToList}
-        readOnly={mode === 'viewer'}
-      />
-    );
-  }
-
-  // List mode
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden bg-[var(--bg-primary)]">
-      {/* Header */}
-      <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#f59e0b] to-[#f97316] flex items-center justify-center shadow-sm shrink-0">
-            <Package size={13} className="text-white" />
-          </div>
-          <h3 className="text-[0.8125rem] font-semibold text-[var(--text-primary)]">{t('toolSetsTab.title')}</h3>
-        </div>
-        <button
-          className="h-7 px-2.5 text-[0.6875rem] font-medium rounded-md border border-[rgba(59,130,246,0.3)] bg-[rgba(59,130,246,0.1)] text-[var(--primary-color)] hover:bg-[rgba(59,130,246,0.18)] transition-colors"
-          onClick={() => setShowCreateDialog(true)}
+    <>
+      <TabShell
+        title={t('toolSetsTab.title')}
+        subtitle={subtitle}
+        icon={Package}
+        actions={headerActions}
+        loading={isLoading || frameworkLoading}
+        error={error}
+      >
+        <TwoPaneBody
+          sidebar={
+            <PresetSidebar
+              templates={templates}
+              userPresets={userPresets}
+              selectedId={selectedId}
+              onSelect={(id) => {
+                setSelectedId(id);
+                setPickedTool(null);
+              }}
+              search={search}
+              onSearch={setSearch}
+            />
+          }
+          sidebarTitle={t('toolSetsTab.sidebarTitle')}
+          sidebarWidth="medium"
+          mainPadding="none"
         >
-          {t('toolSetsTab.newPreset')}
-        </button>
-      </div>
+          {main}
+        </TwoPaneBody>
+      </TabShell>
 
-      {/* C.3 (cycle 20260426_1) — env-driven semantics note. */}
-      <div className="shrink-0 px-4 py-2 border-b border-[var(--border-color)] bg-[hsl(var(--muted))] text-[0.75rem] text-[var(--text-secondary)]">
-        <span className="font-medium text-[var(--text-primary)] mr-1">
-          {t('toolSetsTab.envDrivenNote.title')}
-        </span>
-        {t('toolSetsTab.envDrivenNote.body')}
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div className="mx-6 mt-3 p-2.5 rounded-md bg-[rgba(239,68,68,0.1)] text-[0.8125rem] text-[var(--danger-color)]">
-          {error}
+      <EditorModal
+        open={showCreateDialog}
+        onClose={() => setShowCreateDialog(false)}
+        title={t('toolSetsTab.newPresetTitle')}
+        saving={creating}
+        footer={
+          <>
+            <ActionButton onClick={() => setShowCreateDialog(false)} disabled={creating}>
+              {t('common.cancel')}
+            </ActionButton>
+            <ActionButton
+              variant="primary"
+              icon={Plus}
+              onClick={handleCreate}
+              disabled={creating || !newName.trim()}
+            >
+              {creating ? t('common.loading') : t('common.create')}
+            </ActionButton>
+          </>
+        }
+      >
+        <div className="grid gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="preset-name">{t('toolSetsTab.nameLabel')}</Label>
+            <Input
+              id="preset-name"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              placeholder={t('toolSetsTab.namePlaceholder')}
+              onKeyDown={e => e.key === 'Enter' && handleCreate()}
+              autoFocus
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="preset-desc">{t('toolSetsTab.descriptionLabel')}</Label>
+            <Textarea
+              id="preset-desc"
+              value={newDesc}
+              onChange={e => setNewDesc(e.target.value)}
+              placeholder={t('toolSetsTab.descriptionPlaceholder')}
+              rows={3}
+            />
+          </div>
         </div>
-      )}
+      </EditorModal>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12 text-[var(--text-muted)] text-[0.875rem]">{t('toolSetsTab.loading')}</div>
-        ) : (
-          <div className="space-y-6">
-            {/* Official Templates */}
-            {templates.length > 0 && (
-              <section>
-                <h3 className="text-[0.8125rem] font-semibold text-[var(--text-secondary)] mb-3 flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#c084fc]" />
-                  {t('toolSetsTab.officialTemplates')}
-                  <span className="text-[0.6875rem] text-[var(--text-muted)] font-normal">({templates.length})</span>
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {templates.map(preset => (
-                    <PresetCard
-                      key={preset.id}
-                      preset={preset}
-                      isSelected={selectedId === preset.id}
-                      onSelect={() => setSelectedId(preset.id)}
-                      onView={() => handleView(preset)}
-                      onClone={() => handleClone(preset.id)}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* User Presets */}
-            <section>
-              <h3 className="text-[0.8125rem] font-semibold text-[var(--text-secondary)] mb-3 flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary-color)]" />
-                {t('toolSetsTab.customPresets')}
-                <span className="text-[0.6875rem] text-[var(--text-muted)] font-normal">({userPresets.length})</span>
-              </h3>
-              {userPresets.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 px-4 rounded-lg border border-dashed border-[var(--border-color)] bg-[var(--bg-primary)]">
-                  <p className="text-[0.8125rem] text-[var(--text-muted)] mb-3">{t('toolSetsTab.noCustom')}</p>
-                  <button
-                    className="h-8 px-3 text-[0.75rem] font-medium rounded-md border border-[rgba(59,130,246,0.3)] bg-[rgba(59,130,246,0.1)] text-[var(--primary-color)] hover:bg-[rgba(59,130,246,0.18)] transition-colors"
-                    onClick={() => setShowCreateDialog(true)}
+      <DetailDrawer
+        open={!!pickedTool}
+        onClose={() => setPickedTool(null)}
+        title={<span className="font-mono">{pickedTool?.name}</span>}
+      >
+        {pickedTool && (
+          <div className="flex flex-col gap-3">
+            <Field label={t('toolSetsTab.tool.group')} value={pickedTool.feature_group} />
+            <Field
+              label={t('toolSetsTab.tool.description')}
+              value={
+                <span className="whitespace-pre-wrap">{pickedTool.description || '—'}</span>
+              }
+            />
+            <div>
+              <FieldLabel>{t('toolSetsTab.tool.capabilities')}</FieldLabel>
+              <div className="flex flex-wrap gap-1">
+                {Object.entries(pickedTool.capabilities).map(([k, v]) => (
+                  <span
+                    key={k}
+                    className="text-[0.6rem] px-1.5 py-0.5 rounded bg-[hsl(var(--accent))] font-mono"
                   >
-                    {t('toolSetsTab.createFirst')}
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {userPresets.map(preset => (
-                    <PresetCard
-                      key={preset.id}
-                      preset={preset}
-                      isSelected={selectedId === preset.id}
-                      onSelect={() => setSelectedId(preset.id)}
-                      onEdit={() => handleEdit(preset)}
-                      onClone={() => handleClone(preset.id)}
-                      onDelete={() => handleDelete(preset.id, preset.name)}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
+                    {k}: {String(v)}
+                  </span>
+                ))}
+                {Object.keys(pickedTool.capabilities).length === 0 && (
+                  <span className="text-[hsl(var(--muted-foreground))] text-[0.75rem]">—</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <FieldLabel>{t('toolSetsTab.tool.inputSchema')}</FieldLabel>
+              <pre className="text-[0.625rem] font-mono bg-[hsl(var(--accent))] rounded p-2 overflow-x-auto">
+                {JSON.stringify(pickedTool.input_schema, null, 2)}
+              </pre>
+            </div>
+            <div className="pt-2 border-t border-[hsl(var(--border))]">
+              <ActionButton
+                icon={X}
+                onClick={() => setPickedTool(null)}
+              >
+                {t('common.close')}
+              </ActionButton>
+            </div>
           </div>
         )}
-      </div>
+      </DetailDrawer>
+    </>
+  );
+}
 
-      {/* Create Dialog */}
-      {showCreateDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowCreateDialog(false)}>
-          <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg w-full max-w-[400px] shadow-[var(--shadow-lg)]" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center py-3 px-5 border-b border-[var(--border-color)]">
-              <h3 className="text-[0.9375rem] font-semibold text-[var(--text-primary)]">{t('toolSetsTab.newPresetTitle')}</h3>
-              <button className="flex items-center justify-center w-7 h-7 rounded bg-transparent border-none text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] cursor-pointer" onClick={() => setShowCreateDialog(false)}><X size={14} /></button>
-            </div>
-            <div className="p-5 flex flex-col gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-[0.75rem] font-medium text-[var(--text-secondary)]">{t('toolSetsTab.nameLabel')}</label>
-                <input
-                  className="w-full py-2 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)]"
-                  placeholder={t('toolSetsTab.namePlaceholder')}
-                  value={newName}
-                  onChange={e => setNewName(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleCreate()}
-                  autoFocus
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[0.75rem] font-medium text-[var(--text-secondary)]">{t('toolSetsTab.descriptionLabel')}</label>
-                <textarea
-                  className="w-full py-2 px-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-[var(--border-radius)] text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--primary-color)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] resize-none"
-                  rows={3}
-                  placeholder={t('toolSetsTab.descriptionPlaceholder')}
-                  value={newDesc}
-                  onChange={e => setNewDesc(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 py-3 px-5 border-t border-[var(--border-color)]">
-              <button
-                className="h-8 px-3 text-[0.75rem] font-medium rounded-md border border-[var(--border-color)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)] transition-colors"
-                onClick={() => setShowCreateDialog(false)}
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                className="h-8 px-4 text-[0.75rem] font-medium rounded-md border-none bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white transition-colors disabled:opacity-50"
-                disabled={!newName.trim()}
-                onClick={handleCreate}
-              >
-                {t('common.create')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+function Field({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      <div className="text-[0.8125rem]">{value}</div>
+    </div>
+  );
+}
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-1">
+      {children}
     </div>
   );
 }
