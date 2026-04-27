@@ -60,15 +60,15 @@ export default function StageArtifactPicker({ order, entry }: Props) {
   })();
 
   return (
-    <div className="flex items-center gap-1.5 shrink-0">
-      <span className="text-[0.6875rem] font-medium text-[hsl(var(--muted-foreground))] uppercase tracking-wider">
+    <div className="flex items-center gap-1.5 shrink-0 self-start">
+      <span className="text-[0.6875rem] font-medium text-[hsl(var(--muted-foreground))] uppercase tracking-wider whitespace-nowrap">
         {t('envManagement.stageArtifact')}
       </span>
       <Select
         value={current}
         onValueChange={(v) => patchStage(order, { artifact: v })}
       >
-        <SelectTrigger className="h-8 min-w-[140px] text-[0.75rem]">
+        <SelectTrigger className="h-8 min-w-[160px] text-[0.75rem]">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

@@ -98,7 +98,7 @@ export default function StageDetailView({ order }: StageDetailViewProps) {
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-[hsl(var(--background))]">
-      <div className="max-w-[840px] mx-auto p-6 flex flex-col gap-6">
+      <div className="max-w-[1300px] mx-auto p-6 flex flex-col gap-6">
         {/* ── Stage header ── */}
         <header className="flex items-center gap-3">
           {/* Stage number circle — outlined, matches StageProgressBar
