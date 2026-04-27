@@ -300,19 +300,9 @@ function Decorations() {
         opacity={0.18}
       />
 
-      {/* Loop label */}
-      <text
-        x={LM - 55 - 5}
-        y={midY_B + 4}
-        fill="var(--pipe-accent)"
-        fontSize={8}
-        fontWeight={500}
-        fontFamily="var(--font-inter, 'Inter'), sans-serif"
-        opacity={0.35}
-        textAnchor="middle"
-      >
-        {isKo ? '루프' : 'loop'}
-      </text>
+      {/* (Loop label removed — was overlapping with the section B
+          "에이전트 루프" label rendered above. The looping arrow itself
+          already communicates the loop-back semantics.) */}
     </g>
   );
 }
