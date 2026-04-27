@@ -2,28 +2,28 @@
 
 /**
  * StageProgressBar — premium horizontal stage navigator (cycle
- * 20260427_2 PR-3 redesign).
+ * 20260427_2 PR-3 → polished in PR-4).
  *
- * Drum-feel: drag-to-scroll with momentum decay, edge fade masks so the
- * stages appear to rotate around an invisible cylinder, larger nodes
- * with category-colored gradients + glow on the active stage. Wheel
- * scroll converts vertical → horizontal so a desktop trackpad still
- * works.
+ * Layout fix: circle row + label row are split so the connecting rail
+ * passes exactly through the circle centres (was hitting the label
+ * gap before).
  *
- * Click/drag disambiguation: if the pointer travelled > 4px between
- * down/up we treat the gesture as a drag and suppress the underlying
- * button click. Pure clicks select the stage.
+ * Active state: stages active in the manifest get a clearly distinct
+ * GOLD/AMBER look, regardless of category. Selected (currently being
+ * edited) gets a strong PRIMARY-blue gradient + ring + glow that's
+ * visible in both light and dark themes.
  *
- * Active stage auto-scrolls to the centre.
+ * Drag fix: previous version used setPointerCapture inside
+ * pointerdown, which on some browsers pre-empts the child button's
+ * click event. Switched to window-level pointermove/pointerup listeners
+ * attached on pointerdown and removed on pointerup — child clicks
+ * fire normally.
  */
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
-import {
-  getStageMetaByOrder,
-  getCategoryColor,
-} from '@/components/session-env/stageMetadata';
+import { getStageMetaByOrder } from '@/components/session-env/stageMetadata';
 
 export interface StageProgressBarProps {
   selectedOrder: number;
@@ -35,9 +35,11 @@ export interface StageProgressBarProps {
 
 const ALL_ORDERS = Array.from({ length: 21 }, (_, i) => i + 1);
 
-const DRAG_THRESHOLD_PX = 4;
+const DRAG_THRESHOLD_PX = 5;
 const FRICTION = 0.92;
-const MIN_VELOCITY = 0.4;
+const MIN_VELOCITY = 0.4; // px/frame at ~60fps
+const ROW_HEIGHT = 64; // circle row height (so circles align with rail)
+const RAIL_TOP = ROW_HEIGHT / 2; // 32 — circle vertical centre
 
 export default function StageProgressBar({
   selectedOrder,
@@ -48,12 +50,13 @@ export default function StageProgressBar({
 }: StageProgressBarProps) {
   const { t } = useI18n();
   const locale = useI18n((s) => s.locale);
+
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
   const rafRef = useRef<number | null>(null);
   const wasDraggingRef = useRef(false);
 
-  // Auto-centre selected stage when it changes.
+  // Auto-centre selected stage on change.
   useEffect(() => {
     const el = itemRefs.current.get(selectedOrder);
     if (el && scrollRef.current) {
@@ -65,38 +68,30 @@ export default function StageProgressBar({
     }
   }, [selectedOrder]);
 
-  // Cancel momentum on unmount
+  // Cancel any in-flight momentum on unmount.
   useEffect(() => {
     return () => {
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
     };
   }, []);
 
-  // Wheel: vertical → horizontal
-  const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    if (!scrollRef.current) return;
-    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-      scrollRef.current.scrollLeft += e.deltaY;
-    }
-  };
-
-  // Pointer drag with momentum
-  const dragState = useRef<{
-    active: boolean;
+  // ─── Drag state (window-level, no setPointerCapture) ─────────────
+  const dragRef = useRef<{
+    tracking: boolean;
+    dragging: boolean;
     startX: number;
     startScroll: number;
     lastX: number;
     lastT: number;
-    velocity: number; // px / ms (positive = content scrolling right→left)
-    moved: boolean;
+    velocity: number; // px/ms; positive = scrolling content right→left
   }>({
-    active: false,
+    tracking: false,
+    dragging: false,
     startX: 0,
     startScroll: 0,
     lastX: 0,
     lastT: 0,
     velocity: 0,
-    moved: false,
   });
 
   const stopMomentum = () => {
@@ -106,59 +101,43 @@ export default function StageProgressBar({
     }
   };
 
-  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!scrollRef.current) return;
-    if ((e.target as HTMLElement).closest('button[data-stage-button]')) {
-      // Let the click fire normally — but cancel any in-flight momentum
-      // so the page feels responsive.
-      stopMomentum();
-      // Still capture so a slow drag started from a button gets the
-      // momentum behaviour. We just don't pre-flag wasDragging.
-    }
-    stopMomentum();
-    dragState.current = {
-      active: true,
-      startX: e.clientX,
-      startScroll: scrollRef.current.scrollLeft,
-      lastX: e.clientX,
-      lastT: e.timeStamp,
-      velocity: 0,
-      moved: false,
-    };
-    scrollRef.current.setPointerCapture(e.pointerId);
-  };
+  // Defined as refs so handleWindowPointerUp can remove them.
+  const handleWindowPointerMoveRef = useRef<((e: PointerEvent) => void) | null>(null);
+  const handleWindowPointerUpRef = useRef<((e: PointerEvent) => void) | null>(null);
 
-  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const s = dragState.current;
-    if (!s.active || !scrollRef.current) return;
+  const handleWindowPointerMove = useCallback((e: PointerEvent) => {
+    const s = dragRef.current;
+    if (!s.tracking || !scrollRef.current) return;
     const dx = e.clientX - s.startX;
-    if (Math.abs(dx) > DRAG_THRESHOLD_PX) {
-      s.moved = true;
+    if (!s.dragging && Math.abs(dx) > DRAG_THRESHOLD_PX) {
+      s.dragging = true;
       wasDraggingRef.current = true;
     }
-    scrollRef.current.scrollLeft = s.startScroll - dx;
-    const dt = e.timeStamp - s.lastT;
-    if (dt > 0) {
-      s.velocity = -(e.clientX - s.lastX) / dt;
-      s.lastX = e.clientX;
-      s.lastT = e.timeStamp;
+    if (s.dragging) {
+      scrollRef.current.scrollLeft = s.startScroll - dx;
+      const dt = e.timeStamp - s.lastT;
+      if (dt > 0) {
+        s.velocity = -(e.clientX - s.lastX) / dt;
+        s.lastX = e.clientX;
+        s.lastT = e.timeStamp;
+      }
     }
-  };
+  }, []);
 
-  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    const s = dragState.current;
-    if (!s.active || !scrollRef.current) return;
-    s.active = false;
-    try {
-      scrollRef.current.releasePointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
+  const handleWindowPointerUp = useCallback(() => {
+    const s = dragRef.current;
+    if (!s.tracking) return;
+    s.tracking = false;
+    if (handleWindowPointerMoveRef.current) {
+      window.removeEventListener('pointermove', handleWindowPointerMoveRef.current);
+    }
+    if (handleWindowPointerUpRef.current) {
+      window.removeEventListener('pointerup', handleWindowPointerUpRef.current);
+      window.removeEventListener('pointercancel', handleWindowPointerUpRef.current);
     }
 
-    // Spawn a momentum-decay loop. velocity is in px/ms; scale to
-    // per-frame at ~60fps (16.67ms) for the initial step then decay.
-    if (s.moved && Math.abs(s.velocity) > MIN_VELOCITY / 16) {
-      let v = s.velocity * 16; // px per frame
+    if (s.dragging && Math.abs(s.velocity) > MIN_VELOCITY / 16) {
+      let v = s.velocity * 16;
       const tick = () => {
         if (!scrollRef.current) return;
         scrollRef.current.scrollLeft += v;
@@ -172,14 +151,49 @@ export default function StageProgressBar({
       rafRef.current = requestAnimationFrame(tick);
     }
 
-    // Click-after-drag suppression: keep the flag true for one tick
-    // so the button onClick can read it and bail.
-    if (s.moved) {
+    if (s.dragging) {
+      // Suppress the next click for one tick so the drag-end doesn't
+      // fall through onto whatever button the pointer happened to land on.
       setTimeout(() => {
         wasDraggingRef.current = false;
       }, 0);
-    } else {
-      wasDraggingRef.current = false;
+    }
+    s.dragging = false;
+  }, []);
+
+  // Stash refs so the cleanup paths can find the same function instance.
+  useEffect(() => {
+    handleWindowPointerMoveRef.current = handleWindowPointerMove;
+    handleWindowPointerUpRef.current = handleWindowPointerUp;
+  }, [handleWindowPointerMove, handleWindowPointerUp]);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!scrollRef.current) return;
+    if (e.button !== 0) return; // primary button only
+    stopMomentum();
+    dragRef.current = {
+      tracking: true,
+      dragging: false,
+      startX: e.clientX,
+      startScroll: scrollRef.current.scrollLeft,
+      lastX: e.clientX,
+      lastT: e.timeStamp,
+      velocity: 0,
+    };
+    if (handleWindowPointerMoveRef.current) {
+      window.addEventListener('pointermove', handleWindowPointerMoveRef.current);
+    }
+    if (handleWindowPointerUpRef.current) {
+      window.addEventListener('pointerup', handleWindowPointerUpRef.current);
+      window.addEventListener('pointercancel', handleWindowPointerUpRef.current);
+    }
+  };
+
+  // Wheel: vertical → horizontal
+  const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (!scrollRef.current) return;
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      scrollRef.current.scrollLeft += e.deltaY;
     }
   };
 
@@ -189,17 +203,17 @@ export default function StageProgressBar({
   };
 
   return (
-    <div className="relative flex items-center gap-3 h-[104px] pl-3 pr-3 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] shrink-0 overflow-hidden">
-      {/* Background subtle gradient texture */}
+    <div className="relative flex items-center gap-3 h-[112px] pl-3 pr-3 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] shrink-0 overflow-hidden">
+      {/* Backdrop accent */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.4]"
+        className="pointer-events-none absolute inset-0 opacity-40"
         style={{
           background:
             'radial-gradient(ellipse 60% 100% at 50% 50%, hsl(var(--primary) / 0.06) 0%, transparent 70%)',
         }}
       />
 
-      {/* Back button — always-visible, sticky on the left */}
+      {/* Back button */}
       <button
         type="button"
         onClick={onBack}
@@ -210,20 +224,14 @@ export default function StageProgressBar({
         {t('envManagement.progress.back')}
       </button>
 
-      {/* Vertical separator */}
       <div className="relative z-10 w-px h-12 bg-gradient-to-b from-transparent via-[hsl(var(--border))] to-transparent shrink-0" />
 
-      {/* Scroll container — masked at the left/right edges so stages
-          appear to "rotate around" an invisible cylinder. */}
+      {/* Scroll container with edge fade for the cylinder feel */}
       <div
         ref={scrollRef}
         onWheel={onWheel}
         onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerLeave={onPointerUp}
-        onPointerCancel={onPointerUp}
-        className="relative z-10 flex items-center flex-1 min-w-0 overflow-x-auto overflow-y-hidden scrollbar-hide cursor-grab active:cursor-grabbing select-none"
+        className="relative z-10 flex flex-col flex-1 min-w-0 overflow-x-auto overflow-y-hidden scrollbar-hide cursor-grab active:cursor-grabbing select-none"
         style={{
           maskImage:
             'linear-gradient(to right, transparent 0px, black 36px, black calc(100% - 36px), transparent 100%)',
@@ -232,154 +240,183 @@ export default function StageProgressBar({
           touchAction: 'pan-x',
         }}
       >
-        {/* Centre line — connecting "rail" behind the stage circles */}
-        <div
-          aria-hidden
-          className="absolute left-0 right-0 top-1/2 h-px -translate-y-px"
-          style={{
-            background:
-              'linear-gradient(to right, transparent 0%, hsl(var(--border)) 8%, hsl(var(--border)) 92%, transparent 100%)',
-          }}
-        />
+        <div className="relative flex items-start px-4 min-h-[96px]">
+          {/* Rail — passes through circle vertical centres */}
+          <div
+            aria-hidden
+            className="absolute left-0 right-0 pointer-events-none"
+            style={{
+              top: RAIL_TOP,
+              height: 1,
+              background:
+                'linear-gradient(to right, transparent 0%, hsl(var(--border)) 6%, hsl(var(--border)) 94%, transparent 100%)',
+            }}
+          />
 
-        <div className="flex items-center px-4">
-          {ALL_ORDERS.map((order, idx) => {
-            const meta = getStageMetaByOrder(order, locale);
-            const color = meta ? getCategoryColor(meta.category) : null;
-            const isSelected = order === selectedOrder;
-            const isStageActive = activeOrders.has(order);
-            const isDirty = dirtyOrders.has(order);
-            const label = meta?.displayName ?? `Stage ${order}`;
-            const isLast = idx === ALL_ORDERS.length - 1;
-            const nextActive = activeOrders.has(order + 1);
+          {/* Items + connectors share a flex row aligned to the circle level */}
+          <div className="relative flex items-start">
+            {ALL_ORDERS.map((order, idx) => {
+              const meta = getStageMetaByOrder(order, locale);
+              const isSelected = order === selectedOrder;
+              const isStageActive = activeOrders.has(order);
+              const isDirty = dirtyOrders.has(order);
+              const label = meta?.displayName ?? `Stage ${order}`;
+              const isLast = idx === ALL_ORDERS.length - 1;
+              const nextActive = activeOrders.has(order + 1);
 
-            return (
-              <div key={order} className="flex items-center shrink-0">
-                <button
-                  ref={(el) => {
-                    if (el) itemRefs.current.set(order, el);
-                    else itemRefs.current.delete(order);
-                  }}
-                  data-stage-button
-                  type="button"
-                  onClick={() => handleStageClick(order)}
-                  className="group relative flex flex-col items-center gap-1 px-1.5 py-1 min-w-[80px] transition-transform"
-                  title={label}
-                >
-                  {/* Glow halo (selected only) */}
-                  {isSelected && (
-                    <span
-                      aria-hidden
-                      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-                      style={{
-                        width: 86,
-                        height: 86,
-                        marginTop: -22,
-                        borderRadius: '50%',
-                        background: `radial-gradient(closest-side, ${
-                          color?.accent ?? 'hsl(var(--primary))'
-                        }, transparent 70%)`,
-                        opacity: 0.35,
-                        filter: 'blur(6px)',
-                      }}
-                    />
-                  )}
-
-                  {/* Stage circle */}
-                  <div
-                    className={`relative flex items-center justify-center rounded-full font-bold tabular-nums transition-all duration-200 ${
-                      isSelected
-                        ? 'w-[58px] h-[58px] text-[1.0625rem] shadow-lg'
-                        : 'w-[48px] h-[48px] text-[0.9375rem] group-hover:scale-105 group-hover:shadow-md'
-                    }`}
-                    style={{
-                      background: isSelected
-                        ? `linear-gradient(135deg, ${
-                            color?.bg ?? 'hsl(var(--primary)/0.15)'
-                          } 0%, ${color?.accent ?? 'hsl(var(--primary))'} 130%)`
-                        : isStageActive
-                          ? color?.bg ?? 'hsl(var(--accent))'
-                          : 'hsl(var(--background))',
-                      color: isSelected
-                        ? '#ffffff'
-                        : isStageActive
-                          ? color?.accent ?? 'hsl(var(--primary))'
-                          : 'hsl(var(--muted-foreground))',
-                      border: `2px solid ${
-                        isSelected
-                          ? color?.accent ?? 'hsl(var(--primary))'
-                          : isStageActive
-                            ? color?.border ?? 'hsl(var(--border))'
-                            : 'hsl(var(--border))'
-                      }`,
-                      boxShadow: isSelected
-                        ? `0 8px 22px -8px ${
-                            color?.accent ?? 'hsl(var(--primary))'
-                          }, 0 0 0 4px hsl(var(--card)), 0 0 0 5.5px ${
-                            color?.accent ?? 'hsl(var(--primary))'
-                          }`
-                        : undefined,
-                    }}
-                  >
-                    {order}
-                    {/* Dirty marker */}
-                    {isDirty && (
-                      <span
-                        aria-label="edited"
-                        className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full"
-                        style={{
-                          background: 'hsl(var(--primary))',
-                          boxShadow: '0 0 0 2.5px hsl(var(--card))',
+              return (
+                <div key={order} className="flex items-start">
+                  <div className="flex flex-col items-center min-w-[84px]">
+                    {/* Circle row — fixed height so circles align with rail */}
+                    <div
+                      style={{ height: ROW_HEIGHT }}
+                      className="flex items-center justify-center"
+                    >
+                      <button
+                        ref={(el) => {
+                          if (el) itemRefs.current.set(order, el);
+                          else itemRefs.current.delete(order);
                         }}
-                      />
-                    )}
+                        data-stage-button
+                        type="button"
+                        onClick={() => handleStageClick(order)}
+                        className="group relative outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] rounded-full"
+                        title={label}
+                      >
+                        {/* Glow halo (selected) */}
+                        {isSelected && (
+                          <span
+                            aria-hidden
+                            className="absolute pointer-events-none rounded-full"
+                            style={{
+                              top: -14,
+                              left: -14,
+                              right: -14,
+                              bottom: -14,
+                              background:
+                                'radial-gradient(closest-side, hsl(var(--primary)) 0%, transparent 70%)',
+                              opacity: 0.32,
+                              filter: 'blur(6px)',
+                            }}
+                          />
+                        )}
+
+                        {/* Active glow (gold pulse) for non-selected active stages */}
+                        {!isSelected && isStageActive && (
+                          <span
+                            aria-hidden
+                            className="absolute pointer-events-none rounded-full"
+                            style={{
+                              top: -8,
+                              left: -8,
+                              right: -8,
+                              bottom: -8,
+                              background:
+                                'radial-gradient(closest-side, rgb(245 158 11) 0%, transparent 70%)',
+                              opacity: 0.22,
+                              filter: 'blur(4px)',
+                            }}
+                          />
+                        )}
+
+                        {/* The circle itself */}
+                        <span
+                          className={`relative flex items-center justify-center rounded-full font-bold tabular-nums transition-all duration-200 ${
+                            isSelected
+                              ? 'w-[58px] h-[58px] text-[1.0625rem]'
+                              : 'w-[48px] h-[48px] text-[0.9375rem] group-hover:scale-105'
+                          }`}
+                          style={
+                            isSelected
+                              ? {
+                                  // Strong primary-blue gradient — same in both
+                                  // light and dark themes for max distinctness.
+                                  background:
+                                    'linear-gradient(135deg, hsl(217 91% 60%) 0%, hsl(217 91% 45%) 100%)',
+                                  color: '#ffffff',
+                                  border: '2px solid hsl(217 91% 35%)',
+                                  boxShadow:
+                                    '0 0 0 4px hsl(var(--card)), 0 0 0 5.5px hsl(217 91% 50%), 0 10px 24px -10px hsl(217 91% 50%)',
+                                }
+                              : isStageActive
+                                ? {
+                                    // GOLD/AMBER — clearly says "this stage is on".
+                                    background:
+                                      'linear-gradient(135deg, rgb(254 243 199) 0%, rgb(252 211 77) 100%)',
+                                    color: 'rgb(120 53 15)',
+                                    border: '2px solid rgb(217 119 6)',
+                                    boxShadow:
+                                      '0 2px 8px -2px rgb(245 158 11 / 0.35)',
+                                  }
+                                : {
+                                    background: 'hsl(var(--background))',
+                                    color: 'hsl(var(--muted-foreground))',
+                                    border: '2px solid hsl(var(--border))',
+                                  }
+                          }
+                        >
+                          {order}
+                          {/* Dirty marker */}
+                          {isDirty && (
+                            <span
+                              aria-label="edited"
+                              className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full"
+                              style={{
+                                background: 'hsl(var(--primary))',
+                                boxShadow: '0 0 0 2.5px hsl(var(--card))',
+                              }}
+                            />
+                          )}
+                        </span>
+                      </button>
+                    </div>
+
+                    {/* Label below the circle */}
+                    <span
+                      className={`mt-1.5 text-[0.75rem] tracking-tight truncate max-w-[88px] leading-tight transition-colors ${
+                        isSelected
+                          ? 'font-semibold'
+                          : isStageActive
+                            ? 'font-medium'
+                            : ''
+                      }`}
+                      style={{
+                        color: isSelected
+                          ? 'hsl(217 91% 50%)'
+                          : isStageActive
+                            ? 'rgb(180 83 9)' // amber-700
+                            : 'hsl(var(--muted-foreground))',
+                      }}
+                    >
+                      {label}
+                    </span>
                   </div>
 
-                  {/* Label */}
-                  <span
-                    className={`text-[0.75rem] tracking-tight truncate max-w-[88px] leading-tight transition-colors ${
-                      isSelected
-                        ? 'text-[hsl(var(--foreground))] font-semibold'
-                        : isStageActive
-                          ? 'text-[hsl(var(--foreground))] font-medium'
-                          : 'text-[hsl(var(--muted-foreground))] group-hover:text-[hsl(var(--foreground))]'
-                    }`}
-                    style={{
-                      color:
-                        isSelected && color
-                          ? color.accent
-                          : undefined,
-                    }}
-                  >
-                    {label}
-                  </span>
-                </button>
-
-                {/* Connector between adjacent stages */}
-                {!isLast && (
-                  <span
-                    aria-hidden
-                    className="block h-[3px] mx-0.5 rounded-full shrink-0 transition-all"
-                    style={{
-                      width: 18,
-                      background:
-                        isStageActive && nextActive
-                          ? `linear-gradient(to right, ${
-                              color?.accent ?? 'hsl(var(--primary))'
-                            }/60, ${
-                              getCategoryColor(
-                                getStageMetaByOrder(order + 1, locale)
-                                  ?.category ?? 'ingress',
-                              ).accent
-                            }/60)`
-                          : 'hsl(var(--border))',
-                      opacity: isStageActive && nextActive ? 0.55 : 0.4,
-                    }}
-                  />
-                )}
-              </div>
-            );
-          })}
+                  {/* Connector — sits at the same vertical level as the
+                      circle row so it visually bridges the rail. */}
+                  {!isLast && (
+                    <div
+                      style={{ height: ROW_HEIGHT }}
+                      className="flex items-center"
+                    >
+                      <span
+                        aria-hidden
+                        className="block h-[3px] rounded-full"
+                        style={{
+                          width: 22,
+                          background:
+                            isStageActive && nextActive
+                              ? 'linear-gradient(to right, rgb(245 158 11), rgb(245 158 11))'
+                              : 'hsl(var(--border))',
+                          opacity: isStageActive && nextActive ? 0.55 : 0.5,
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
