@@ -14,13 +14,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import {
-  ChevronDown,
-  ChevronRight,
-  Hand,
-  Hourglass,
-  Timer,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight, Timer } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { catalogApi } from '@/lib/environmentApi';
 import { localizeIntrospection } from '../stage_locale';
@@ -30,7 +24,6 @@ import type {
   StageManifestEntry,
 } from '@/types/environment';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
 import StageGenericEditor from '../StageGenericEditor';
 
 const REQUESTER_OPTIONS = [
@@ -143,26 +136,9 @@ export default function Stage15HitlEditor({ order, entry }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── Active ── */}
-      <section className="flex items-center justify-between gap-3 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
-        <div>
-          <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('envManagement.stage15.activeTitle')}
-          </div>
-          <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-            {t('envManagement.stage15.activeDesc')}
-          </div>
-        </div>
-        <Switch
-          checked={!!entry.active}
-          onCheckedChange={(checked) => patchStage(order, { active: checked })}
-        />
-      </section>
-
       {/* ── Requester ── */}
       <section className="flex flex-col gap-2 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <header className="flex items-center gap-2">
-          <Hand className="w-4 h-4 text-[hsl(var(--primary))]" />
           <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
             {t('envManagement.stage15.requesterTitle')}
           </h4>
@@ -205,7 +181,6 @@ export default function Stage15HitlEditor({ order, entry }: Props) {
       {/* ── Timeout ── */}
       <section className="flex flex-col gap-2 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <header className="flex items-center gap-2">
-          <Hourglass className="w-4 h-4 text-[hsl(var(--primary))]" />
           <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
             {t('envManagement.stage15.timeoutTitle')}
           </h4>

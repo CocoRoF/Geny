@@ -699,6 +699,7 @@ const ko: Translations = {
     },
     stageActive: '단계 활성',
     stageActiveDesc: '꺼두면 실행기는 이 단계를 완전히 건너뜁니다.',
+    runThisStage: '이 단계 실행',
     stageArtifact: '아티팩트',
     stageStrategies: '전략',
     stageChains: '체인',

@@ -17,7 +17,6 @@
 
 import { useEffect, useState } from 'react';
 import {
-  AlertOctagon,
   ChevronDown,
   ChevronRight,
   Coins,
@@ -33,7 +32,6 @@ import type {
   StageManifestEntry,
 } from '@/types/environment';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
 import {
   StrategiesEditor,
 } from '@/components/environment/StrategyEditors';
@@ -120,26 +118,9 @@ export default function Stage14EvaluateEditor({ order, entry }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── Active ── */}
-      <section className="flex items-center justify-between gap-3 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
-        <div>
-          <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('envManagement.stage14.activeTitle')}
-          </div>
-          <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-            {t('envManagement.stage14.activeDesc')}
-          </div>
-        </div>
-        <Switch
-          checked={!!entry.active}
-          onCheckedChange={(checked) => patchStage(order, { active: checked })}
-        />
-      </section>
-
       {/* ── Pipeline-level ceilings ── */}
       <section className="flex flex-col gap-3 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <header className="flex items-center gap-2">
-          <AlertOctagon className="w-4 h-4 text-[hsl(var(--primary))]" />
           <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
             {t('envManagement.stage14.budgetsTitle')}
           </h4>

@@ -12,12 +12,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import {
-  ChevronDown,
-  ChevronRight,
-  MessageSquare,
-  Sparkles,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { catalogApi } from '@/lib/environmentApi';
 import { localizeIntrospection } from '../stage_locale';
@@ -26,7 +21,6 @@ import type {
   StageIntrospection,
   StageManifestEntry,
 } from '@/types/environment';
-import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import StageGenericEditor from '../StageGenericEditor';
 
@@ -113,26 +107,9 @@ export default function Stage03SystemEditor({ order, entry }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── Active ── */}
-      <section className="flex items-center justify-between gap-3 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
-        <div>
-          <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('envManagement.stage03.activeTitle')}
-          </div>
-          <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-            {t('envManagement.stage03.activeDesc')}
-          </div>
-        </div>
-        <Switch
-          checked={!!entry.active}
-          onCheckedChange={(checked) => patchStage(order, { active: checked })}
-        />
-      </section>
-
       {/* ── Builder picker ── */}
       <section className="flex flex-col gap-2 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <header className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-[hsl(var(--primary))]" />
           <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
             {t('envManagement.stage03.builderTitle')}
           </h4>
@@ -175,12 +152,9 @@ export default function Stage03SystemEditor({ order, entry }: Props) {
       {isStatic && (
         <section className="flex flex-col gap-2 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
           <header className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-[hsl(var(--primary))]" />
-              <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-                {t('envManagement.stage03.systemPromptTitle')}
-              </h4>
-            </div>
+            <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
+              {t('envManagement.stage03.systemPromptTitle')}
+            </h4>
             <span className="text-[0.6875rem] text-[hsl(var(--muted-foreground))] tabular-nums">
               {t('envManagement.stage03.charCount', { n: String(charCount) })}
             </span>
@@ -197,8 +171,7 @@ export default function Stage03SystemEditor({ order, entry }: Props) {
           </p>
 
           <div className="flex flex-col gap-1.5 pt-2 border-t border-[hsl(var(--border))]">
-            <div className="flex items-center gap-1 text-[0.6875rem] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
-              <Sparkles className="w-3 h-3" />
+            <div className="text-[0.6875rem] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
               {t('envManagement.stage03.startersTitle')}
             </div>
             <div className="flex flex-wrap gap-1">

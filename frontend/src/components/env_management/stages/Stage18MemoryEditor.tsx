@@ -16,14 +16,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import {
-  Brain,
-  Database,
-  ChevronDown,
-  ChevronRight,
-  HardDrive,
-  Cpu,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight, HardDrive } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { catalogApi } from '@/lib/environmentApi';
 import { localizeIntrospection } from '../stage_locale';
@@ -174,26 +167,9 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── Active ── */}
-      <section className="flex items-center justify-between gap-3 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
-        <div>
-          <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('envManagement.stage18.activeTitle')}
-          </div>
-          <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-            {t('envManagement.stage18.activeDesc')}
-          </div>
-        </div>
-        <Switch
-          checked={!!entry.active}
-          onCheckedChange={(checked) => patchStage(order, { active: checked })}
-        />
-      </section>
-
       {/* ── Strategy ── */}
       <section className="flex flex-col gap-2 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <header className="flex items-center gap-2">
-          <Brain className="w-4 h-4 text-[hsl(var(--primary))]" />
           <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
             {t('envManagement.stage18.strategyTitle')}
           </h4>
@@ -236,7 +212,6 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
       {/* ── Persistence ── */}
       <section className="flex flex-col gap-2 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <header className="flex items-center gap-2">
-          <Database className="w-4 h-4 text-[hsl(var(--primary))]" />
           <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
             {t('envManagement.stage18.persistTitle')}
           </h4>
@@ -303,23 +278,20 @@ export default function Stage18MemoryEditor({ order, entry }: Props) {
         }`}
       >
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Cpu className="w-4 h-4 text-[hsl(var(--primary))]" />
-            <div>
-              <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-                {t('envManagement.stage18.modelTitle')}
-              </div>
-              <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-                {reflectiveActive
-                  ? overrideOn
-                    ? t('envManagement.stage18.modelOnDesc')
-                    : t('envManagement.stage18.modelOffDesc', {
-                        model:
-                          (pipelineModel.model as string | undefined) ??
-                          '(default)',
-                      })
-                  : t('envManagement.stage18.modelDisabledDesc')}
-              </div>
+          <div>
+            <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
+              {t('envManagement.stage18.modelTitle')}
+            </div>
+            <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
+              {reflectiveActive
+                ? overrideOn
+                  ? t('envManagement.stage18.modelOnDesc')
+                  : t('envManagement.stage18.modelOffDesc', {
+                      model:
+                        (pipelineModel.model as string | undefined) ??
+                        '(default)',
+                    })
+                : t('envManagement.stage18.modelDisabledDesc')}
             </div>
           </div>
           <Switch

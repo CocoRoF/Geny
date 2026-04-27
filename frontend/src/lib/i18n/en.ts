@@ -699,6 +699,7 @@ const en = {
     },
     stageActive: 'Stage active',
     stageActiveDesc: 'When off, the executor skips this stage entirely.',
+    runThisStage: 'Run this stage',
     stageArtifact: 'Artifact',
     stageStrategies: 'Strategies',
     stageChains: 'Chains',

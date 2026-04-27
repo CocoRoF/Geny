@@ -25,8 +25,6 @@ import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
-  Server,
-  Wrench,
   Filter,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
@@ -36,7 +34,6 @@ import type {
   StageManifestEntry,
   StageToolBinding,
 } from '@/types/environment';
-import { Switch } from '@/components/ui/switch';
 import ToolCheckboxGrid from '../ToolCheckboxGrid';
 import StageGenericEditor from '../StageGenericEditor';
 
@@ -114,26 +111,9 @@ export default function Stage10ToolsEditor({ order, entry }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── Active ── */}
-      <section className="flex items-center justify-between gap-3 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
-        <div>
-          <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('envManagement.stage10.activeTitle')}
-          </div>
-          <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-            {t('envManagement.stage10.activeDesc')}
-          </div>
-        </div>
-        <Switch
-          checked={!!entry.active}
-          onCheckedChange={(checked) => patchStage(order, { active: checked })}
-        />
-      </section>
-
       {/* ── Tools registry (manifest.tools.built_in) ── */}
       <section className="flex flex-col gap-2 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <header className="flex items-center gap-2">
-          <Wrench className="w-4 h-4 text-[hsl(var(--primary))]" />
           <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
             {t('envManagement.stage10.builtInTitle')}
           </h4>
@@ -150,7 +130,6 @@ export default function Stage10ToolsEditor({ order, entry }: Props) {
       <section className="flex flex-col gap-2 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <header className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Server className="w-4 h-4 text-[hsl(var(--primary))]" />
             <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
               {t('envManagement.stage10.mcpTitle')}
             </h4>

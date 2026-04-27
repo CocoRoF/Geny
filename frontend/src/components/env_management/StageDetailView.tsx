@@ -20,6 +20,8 @@ import { useI18n } from '@/lib/i18n';
 import { useTheme } from '@/lib/theme';
 import { getStageMetaByOrder } from '@/components/session-env/stageMetadata';
 import { useEnvironmentDraftStore } from '@/store/useEnvironmentDraftStore';
+import StageActiveCard from './StageActiveCard';
+import StageArtifactPicker from './StageArtifactPicker';
 import StageGenericEditor from './StageGenericEditor';
 import StageInfoModal from './stage_info/StageInfoModal';
 import Stage01InputEditor from './stages/Stage01InputEditor';
@@ -150,6 +152,11 @@ export default function StageDetailView({ order }: StageDetailViewProps) {
             )}
           </div>
 
+          {/* Artifact picker — universal across every stage, sits to
+              the left of the Detail button so it reads as part of the
+              header chrome rather than a per-stage form field. */}
+          <StageArtifactPicker order={order} entry={entry} />
+
           {/* Detail button — opens the rich info modal. */}
           <button
             type="button"
@@ -161,6 +168,10 @@ export default function StageDetailView({ order }: StageDetailViewProps) {
             {t('envManagement.info.openLabel')}
           </button>
         </header>
+
+        {/* ── Stage active toggle — always the first card under the
+            header, identical shape on every stage. ── */}
+        <StageActiveCard order={order} entry={entry} />
 
         {/* ── Editor body ── */}
         <Editor order={order} entry={entry} />

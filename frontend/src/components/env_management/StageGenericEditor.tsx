@@ -4,18 +4,16 @@
  * StageGenericEditor — schema-driven fallback for any stage that
  * doesn't (yet) have a curated editor.
  *
- * Pulls the per-stage introspection from /api/catalog/stages/{order}
- * and composes the existing reusable editors:
- *   - artifact picker (dropdown of available artifacts)
- *   - active toggle
+ * The Active toggle and the Artifact picker are rendered by
+ * StageDetailView (header chrome + first card under the header) so
+ * they're consistent across every stage, curated or generic. This
+ * editor only owns the body sections:
  *   - StrategiesEditor (per-slot strategy + per-strategy config)
+ *   - ChainsEditor (where the stage exposes chains)
  *   - JsonSchemaForm (artifact's own ConfigSchema → stage.config)
- *
- * model_override + tool_binding + chain_order surface only when the
- * introspection says the stage supports them; otherwise hidden.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { catalogApi } from '@/lib/environmentApi';
 import { useI18n } from '@/lib/i18n';
@@ -32,14 +30,6 @@ import {
 import JsonSchemaForm, {
   type JsonSchema,
 } from '@/components/environment/JsonSchemaForm';
-import { Switch } from '@/components/ui/switch';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 
 interface Props {
   order: number;
@@ -85,16 +75,6 @@ export default function StageGenericEditor({ order, entry }: Props) {
     };
   }, [order, entry.artifact, locale]);
 
-  const artifactOptions = useMemo(() => {
-    // We don't have the per-stage artifact list pre-loaded; fall back to
-    // showing only the current + the introspected default. PR-F will
-    // hydrate the full list via catalogApi.listArtifacts(order).
-    const current = entry.artifact || intro?.artifact || 'default';
-    const set = new Set<string>([current]);
-    if (intro?.artifact) set.add(intro.artifact);
-    return Array.from(set);
-  }, [entry.artifact, intro]);
-
   const configSchema: JsonSchema | null = (intro?.config_schema as
     | JsonSchema
     | null
@@ -102,45 +82,6 @@ export default function StageGenericEditor({ order, entry }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── Active + artifact ── */}
-      <section className="flex flex-col gap-3 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-              {t('envManagement.stageActive')}
-            </div>
-            <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-              {t('envManagement.stageActiveDesc')}
-            </div>
-          </div>
-          <Switch
-            checked={!!entry.active}
-            onCheckedChange={(checked) => patchStage(order, { active: checked })}
-          />
-        </div>
-
-        <div className="flex items-center gap-3">
-          <label className="text-[0.75rem] font-medium text-[hsl(var(--foreground))] min-w-[64px]">
-            {t('envManagement.stageArtifact')}
-          </label>
-          <Select
-            value={entry.artifact || 'default'}
-            onValueChange={(v) => patchStage(order, { artifact: v })}
-          >
-            <SelectTrigger className="h-8 flex-1 text-[0.75rem]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {artifactOptions.map((a) => (
-                <SelectItem key={a} value={a} className="text-[0.75rem]">
-                  {a}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </section>
-
       {loading && (
         <div className="flex items-center gap-2 text-[0.75rem] text-[hsl(var(--muted-foreground))] p-3">
           <Loader2 className="w-3.5 h-3.5 animate-spin" />

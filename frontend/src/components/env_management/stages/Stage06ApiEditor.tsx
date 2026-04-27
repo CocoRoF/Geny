@@ -17,7 +17,7 @@
  */
 
 import { useState } from 'react';
-import { Cpu, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { useEnvironmentDraftStore } from '@/store/useEnvironmentDraftStore';
 import type { StageManifestEntry, StageModelOverride } from '@/types/environment';
@@ -55,40 +55,21 @@ export default function Stage06ApiEditor({ order, entry }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── Active ── */}
-      <section className="flex items-center justify-between gap-3 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
-        <div>
-          <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('envManagement.stage06.activeTitle')}
-          </div>
-          <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-            {t('envManagement.stage06.activeDesc')}
-          </div>
-        </div>
-        <Switch
-          checked={!!entry.active}
-          onCheckedChange={(checked) => patchStage(order, { active: checked })}
-        />
-      </section>
-
       {/* ── Model override ── */}
       <section className="flex flex-col gap-3 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Cpu className="w-4 h-4 text-[hsl(var(--primary))]" />
-            <div>
-              <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-                {t('envManagement.stage06.modelTitle')}
-              </div>
-              <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-                {overrideOn
-                  ? t('envManagement.stage06.overrideOnDesc')
-                  : t('envManagement.stage06.overrideOffDesc', {
-                      model:
-                        (pipelineModel.model as string | undefined) ??
-                        '(default)',
-                    })}
-              </div>
+          <div>
+            <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
+              {t('envManagement.stage06.modelTitle')}
+            </div>
+            <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
+              {overrideOn
+                ? t('envManagement.stage06.overrideOnDesc')
+                : t('envManagement.stage06.overrideOffDesc', {
+                    model:
+                      (pipelineModel.model as string | undefined) ??
+                      '(default)',
+                  })}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -128,9 +109,8 @@ export default function Stage06ApiEditor({ order, entry }: Props) {
         )}
 
         {!overrideOn && (
-          <div className="border-t border-[hsl(var(--border))] pt-3 flex items-start gap-2 text-[0.7rem] text-[hsl(var(--muted-foreground))]">
-            <Sparkles className="w-3.5 h-3.5 mt-0.5 text-[hsl(var(--primary))] shrink-0" />
-            <span>{t('envManagement.stage06.useDefaultHint')}</span>
+          <div className="border-t border-[hsl(var(--border))] pt-3 text-[0.7rem] text-[hsl(var(--muted-foreground))]">
+            {t('envManagement.stage06.useDefaultHint')}
           </div>
         )}
       </section>

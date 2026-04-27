@@ -19,12 +19,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import {
-  CheckCircle,
-  ChevronDown,
-  ChevronRight,
-  ImagePlus,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { catalogApi } from '@/lib/environmentApi';
 import { localizeIntrospection } from '../stage_locale';
@@ -33,7 +28,6 @@ import type {
   StageIntrospection,
   StageManifestEntry,
 } from '@/types/environment';
-import { Switch } from '@/components/ui/switch';
 import StageGenericEditor from '../StageGenericEditor';
 
 // Friendly choice tiles for the two main slot picks. The catalog is
@@ -132,26 +126,9 @@ export default function Stage01InputEditor({ order, entry }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── Active ── */}
-      <section className="flex items-center justify-between gap-3 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
-        <div>
-          <div className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
-            {t('envManagement.stage01.activeTitle')}
-          </div>
-          <div className="text-[0.6875rem] text-[hsl(var(--muted-foreground))]">
-            {t('envManagement.stage01.activeDesc')}
-          </div>
-        </div>
-        <Switch
-          checked={!!entry.active}
-          onCheckedChange={(checked) => patchStage(order, { active: checked })}
-        />
-      </section>
-
       {/* ── Validator ── */}
       <section className="flex flex-col gap-2 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <header className="flex items-center gap-2">
-          <CheckCircle className="w-4 h-4 text-[hsl(var(--primary))]" />
           <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
             {t('envManagement.stage01.validatorTitle')}
           </h4>
@@ -193,7 +170,6 @@ export default function Stage01InputEditor({ order, entry }: Props) {
       {/* ── Normalizer ── */}
       <section className="flex flex-col gap-2 p-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <header className="flex items-center gap-2">
-          <ImagePlus className="w-4 h-4 text-[hsl(var(--primary))]" />
           <h4 className="text-[0.8125rem] font-semibold text-[hsl(var(--foreground))]">
             {t('envManagement.stage01.normalizerTitle')}
           </h4>
