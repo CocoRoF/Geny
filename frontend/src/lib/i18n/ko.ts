@@ -666,6 +666,17 @@ const ko: Translations = {
     },
     canvasPlaceholderTitle: '드래프트 없음',
     canvasPlaceholderHint: '위의 "새 드래프트"를 눌러 시작하세요. 드래프트가 생성되면 여기에 21단계 캔버스가 나타납니다.',
+    canvasHint: '단계를 클릭하여 설정',
+    compactBar: {
+      noDraft: '아래에서 시작점을 골라 환경 설계를 시작하세요.',
+      descriptionTip: '설명',
+      globalsLabel: '전역',
+      globalsTip: '전역 설정 열기 (모델 / 파이프라인 / 도구 / 연결)',
+    },
+    progress: {
+      back: '전체 보기',
+      backTip: '21단계 캔버스로 돌아가기',
+    },
     globalSectionTitle: '전역 설정',
     globalSectionHint: '단계별 override가 없을 때 모든 단계에 적용되는 기본값.',
     global: {
