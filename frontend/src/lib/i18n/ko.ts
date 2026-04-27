@@ -677,6 +677,65 @@ const ko: Translations = {
     toolBindingHint: '이 단계는 도구 바인딩을 지원합니다. 전용 선택기는 PR-C에서 제공됩니다.',
     aboutThisStage: '이 단계 자세히',
     stageMissing: '드래프트에서 이 단계를 찾을 수 없습니다. "새 드래프트"로 다시 시드하세요.',
+    stage06: {
+      activeTitle: '이 단계 실행',
+      activeDesc: '6단계는 LLM을 호출합니다. 끄면 모델 호출을 완전히 건너뜁니다 (헤드리스 프리뷰 파이프라인 외엔 거의 사용하지 않음).',
+      modelTitle: '이 단계의 모델',
+      overrideOnDesc: '이 단계는 자체 모델을 사용합니다 — 전역 파이프라인 모델보다 우선합니다.',
+      overrideOffDesc: '전역 모델 사용: {model}',
+      overrideToggleOn: '커스텀',
+      overrideToggleOff: '기본값',
+      useDefaultHint: '전역 모델은 위의 "전역 설정" 패널에서 편집하세요. 이 단계만 다르게 쓰고 싶을 때 토글을 켜세요.',
+      advancedTitle: '고급',
+      advancedHint: 'artifact / strategies / chains / 원시 config',
+    },
+    stage18: {
+      activeTitle: '이 단계 실행',
+      activeDesc: '18단계는 턴 사이의 메모리를 보관합니다. 끄면 에이전트가 stateless가 됩니다.',
+      strategyTitle: '메모리 전략',
+      persistTitle: '저장 방식',
+      modelTitle: '메모리 모델',
+      modelOnDesc: '이 단계의 reflective 요약기는 자체 모델을 사용합니다.',
+      modelOffDesc: 'reflective 요약기는 전역 모델 사용: {model}',
+      modelDisabledDesc: 'reflective 전략에서만 사용됩니다. 위에서 reflective 전략을 선택하면 활성화됩니다.',
+      fileBaseDirLabel: '파일 기본 경로',
+      fileBaseDirHint: '메모리 스냅샷이 이 경로 아래에 저장됩니다. 기본값: .geny/memory',
+      unavailable: '현재 빌드에서 사용할 수 없습니다',
+      advancedTitle: '고급',
+      advancedHint: '원시 strategies / configs / overrides',
+      strategy: {
+        append_only: {
+          title: '전부 저장 (Append-only)',
+          desc: '모든 메시지를 그대로 저장합니다. 단순·예측 가능하지만 커질 수 있음.',
+        },
+        no_memory: {
+          title: '기억하지 않음',
+          desc: '턴 사이 모든 것을 버립니다. Stateless 에이전트.',
+        },
+        reflective: {
+          title: 'Reflective (LLM)',
+          desc: 'LLM이 매 턴 인사이트를 추출합니다. 턴당 추가 LLM 호출 1회.',
+        },
+        structured_reflective: {
+          title: 'Structured reflective',
+          desc: 'Reflective + 타입드 인사이트 (엔티티·프로젝트·결정). 장기 에이전트에 최적.',
+        },
+      },
+      persist: {
+        null: {
+          title: '없음',
+          desc: '현재 실행 동안만 유지. 재시작 시 사라짐.',
+        },
+        in_memory: {
+          title: '인메모리',
+          desc: '프로세스가 살아있는 동안 유지. 재시작 시 사라짐.',
+        },
+        file: {
+          title: '파일',
+          desc: '디스크의 JSON 파일로 영속화. 재시작 후에도 유지.',
+        },
+      },
+    },
   },
 
   // ─── Environments Tab ───
