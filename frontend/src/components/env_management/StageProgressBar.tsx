@@ -23,7 +23,40 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
+import { useTheme } from '@/lib/theme';
 import { getStageMetaByOrder } from '@/components/session-env/stageMetadata';
+
+// Theme-aware palettes for the three stage states. Light values are
+// the gentle pastels we landed on in PR #471; dark values flip to
+// translucent deep tints with brighter foregrounds so the green/blue
+// signal still reads cleanly against the dark card background.
+const PALETTE = {
+  light: {
+    activeBg: 'rgb(220 252 231)', // emerald-100
+    activeFg: 'rgb(4 120 87)', // emerald-700
+    activeBorder: 'rgb(16 185 129)', // emerald-500
+    activeShadow: '0 1px 4px -1px rgb(16 185 129 / 0.25)',
+    selectedBg: 'rgb(219 234 254)', // blue-100
+    selectedFg: 'rgb(29 78 216)', // blue-700
+    selectedBorder: 'rgb(59 130 246)', // blue-500
+    selectedRing:
+      '0 0 0 3px hsl(var(--card)), 0 0 0 4.5px rgb(59 130 246 / 0.55), 0 3px 10px -3px rgb(59 130 246 / 0.3)',
+    connectorActive: 'rgb(16 185 129)',
+  },
+  dark: {
+    activeBg: 'rgb(6 78 59 / 0.45)', // emerald-900 @ 45%
+    activeFg: 'rgb(110 231 183)', // emerald-300
+    activeBorder: 'rgb(52 211 153)', // emerald-400
+    activeShadow:
+      '0 0 0 1px rgb(16 185 129 / 0.15), 0 1px 6px -1px rgb(16 185 129 / 0.3)',
+    selectedBg: 'rgb(30 58 138 / 0.5)', // blue-900 @ 50%
+    selectedFg: 'rgb(147 197 253)', // blue-300
+    selectedBorder: 'rgb(96 165 250)', // blue-400
+    selectedRing:
+      '0 0 0 3px hsl(var(--card)), 0 0 0 4.5px rgb(96 165 250 / 0.55), 0 3px 12px -2px rgb(96 165 250 / 0.4)',
+    connectorActive: 'rgb(52 211 153)',
+  },
+} as const;
 
 export interface StageProgressBarProps {
   selectedOrder: number;
@@ -50,6 +83,8 @@ export default function StageProgressBar({
 }: StageProgressBarProps) {
   const { t } = useI18n();
   const locale = useI18n((s) => s.locale);
+  const { theme } = useTheme();
+  const palette = PALETTE[theme === 'dark' ? 'dark' : 'light'];
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
@@ -291,25 +326,22 @@ export default function StageProgressBar({
                           style={
                             isSelected
                               ? {
-                                  // Subtle blue (은은한 파란빛). Light fill +
-                                  // crisp blue border + thin outer ring frames
-                                  // the selection without overpowering it.
-                                  background: 'rgb(219 234 254)', // blue-100
-                                  color: 'rgb(29 78 216)', // blue-700
-                                  border: '2px solid rgb(59 130 246)', // blue-500
-                                  boxShadow:
-                                    '0 0 0 3px hsl(var(--card)), 0 0 0 4.5px rgb(59 130 246 / 0.55), 0 3px 10px -3px rgb(59 130 246 / 0.3)',
+                                  // Subtle blue (은은한 파란빛). Light/dark
+                                  // tints from PALETTE so the contrast stays
+                                  // legible against either card background.
+                                  background: palette.selectedBg,
+                                  color: palette.selectedFg,
+                                  border: `2px solid ${palette.selectedBorder}`,
+                                  boxShadow: palette.selectedRing,
                                 }
                               : isStageActive
                                 ? {
                                     // Subtle green (은은한 초록빛) — clear
-                                    // "this stage is on" signal, calmer than
-                                    // the previous amber/gold treatment.
-                                    background: 'rgb(220 252 231)', // emerald-100
-                                    color: 'rgb(4 120 87)', // emerald-700
-                                    border: '2px solid rgb(16 185 129)', // emerald-500
-                                    boxShadow:
-                                      '0 1px 4px -1px rgb(16 185 129 / 0.25)',
+                                    // "this stage is on" signal, theme-aware.
+                                    background: palette.activeBg,
+                                    color: palette.activeFg,
+                                    border: `2px solid ${palette.activeBorder}`,
+                                    boxShadow: palette.activeShadow,
                                   }
                                 : {
                                     background: 'hsl(var(--background))',
@@ -345,9 +377,9 @@ export default function StageProgressBar({
                       }`}
                       style={{
                         color: isSelected
-                          ? 'rgb(29 78 216)' // blue-700 — matches circle text
+                          ? palette.selectedFg
                           : isStageActive
-                            ? 'rgb(4 120 87)' // emerald-700
+                            ? palette.activeFg
                             : 'hsl(var(--muted-foreground))',
                       }}
                     >
@@ -369,9 +401,9 @@ export default function StageProgressBar({
                           width: 22,
                           background:
                             isStageActive && nextActive
-                              ? 'rgb(16 185 129)' // emerald-500
+                              ? palette.connectorActive
                               : 'hsl(var(--border))',
-                          opacity: isStageActive && nextActive ? 0.5 : 0.5,
+                          opacity: isStageActive && nextActive ? 0.6 : 0.5,
                         }}
                       />
                     </div>
