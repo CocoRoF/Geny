@@ -53,11 +53,94 @@ function shallowMerge<T extends Record<string, unknown>>(
   return { ...base, ...patch } as T;
 }
 
+/** Run all draft-wide invariants and return the new validationErrors
+ *  list. PR-F: lightweight checks — required fields + obvious
+ *  configuration mistakes. PR-G+ can wire in artifact ConfigSchema
+ *  required-field checks via catalogApi. */
+function runValidation(draft: EnvironmentManifest): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const stages = draft.stages ?? [];
+
+  // ── Hard errors (block save) ──
+
+  // Pipeline ceilings sanity.
+  const maxIter = (draft.pipeline as Record<string, unknown> | undefined)
+    ?.max_iterations;
+  if (typeof maxIter === 'number' && maxIter < 1) {
+    errors.push({
+      path: 'pipeline.max_iterations',
+      message: 'Pipeline max_iterations must be at least 1.',
+      severity: 'error',
+    });
+  }
+
+  // ── Soft warnings (surfaced but non-blocking) ──
+
+  // Stage 6 (api) inactive — LLM never called. Not strictly invalid
+  // (a headless preview pipeline might want this) but worth a heads-up.
+  const stage6 = stages.find((s) => s.order === 6);
+  if (stage6 && !stage6.active) {
+    errors.push({
+      path: 'stages.6.active',
+      message: 'Stage 6 (api) is inactive — the LLM will never be called.',
+      severity: 'warning',
+    });
+  }
+
+  // Stage 1 (input) inactive.
+  const stage1 = stages.find((s) => s.order === 1);
+  if (stage1 && !stage1.active) {
+    errors.push({
+      path: 'stages.1.active',
+      message: 'Stage 1 (input) is inactive — required by every pipeline.',
+      severity: 'warning',
+    });
+  }
+
+  // Stage 11 (tool_review) active with empty chain.
+  const stage11 = stages.find((s) => s.order === 11);
+  if (stage11?.active) {
+    const chains = stage11.chain_order ?? {};
+    const chainKeys = Object.keys(chains);
+    if (chainKeys.length > 0) {
+      const allEmpty = chainKeys.every(
+        (k) => !Array.isArray(chains[k]) || (chains[k] as string[]).length === 0,
+      );
+      if (allEmpty) {
+        errors.push({
+          path: 'stages.11.chain_order',
+          message:
+            'Stage 11 (tool_review) is active but has no reviewers — every tool call will pass through unchecked.',
+          severity: 'warning',
+        });
+      }
+    }
+  }
+
+  // No tools registered AND stage 10 active.
+  const stage10 = stages.find((s) => s.order === 10);
+  const builtInTools =
+    ((draft.tools as Record<string, unknown> | undefined)?.built_in as string[] | undefined) ?? [];
+  if (stage10?.active && builtInTools.length === 0) {
+    errors.push({
+      path: 'tools.built_in',
+      message:
+        'No framework tools are registered — the agent will only be able to chat. Add tools in Global > Tools or Stage 10.',
+      severity: 'warning',
+    });
+  }
+
+  return errors;
+}
+
 // ─── Store shape ──────────────────────────────────────────
 
 export interface ValidationError {
   path: string;
   message: string;
+  /** 'error' blocks Save; 'warning' is surfaced in the UI but the
+   *  user can still save. */
+  severity?: 'error' | 'warning';
 }
 
 export interface EnvironmentDraftState {
@@ -83,6 +166,12 @@ export interface EnvironmentDraftState {
 
   // ── Actions ──
   newDraft: () => Promise<void>;
+  /** Cycle 20260427_1 PR-F — seed a draft from an existing env's
+   *  manifest (clone-style start). Used by "Start from preset". The
+   *  draft loses the original env's id + name + description + tags
+   *  so the user has to type fresh metadata before saving (and the
+   *  saved env will be a separate record from the source). */
+  newDraftFromExisting: (envId: string) => Promise<void>;
   resetDraft: () => void;
 
   patchMetadata: (patch: Partial<EnvironmentMetadata>) => void;
@@ -170,7 +259,7 @@ export const useEnvironmentDraftStore = create<EnvironmentDraftState>(
           modelDirty: false,
           pipelineDirty: false,
           toolsDirty: false,
-          validationErrors: [],
+          validationErrors: runValidation(fresh),
           error: null,
           seeding: false,
         });
@@ -179,6 +268,46 @@ export const useEnvironmentDraftStore = create<EnvironmentDraftState>(
         if (seedId) {
           environmentApi.delete(seedId).catch(() => {});
         }
+        set({
+          seeding: false,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        throw e;
+      }
+    },
+
+    newDraftFromExisting: async (envId) => {
+      set({ seeding: true, error: null });
+      try {
+        const detail = await environmentApi.get(envId);
+        if (!detail.manifest) {
+          throw new Error('Source environment has no manifest');
+        }
+        const fresh = cloneManifest(detail.manifest);
+        // Wipe identity / metadata so the user types fresh values and
+        // the saved env is a separate record. base_preset records the
+        // source so audit trails stay traceable.
+        const sourceName = fresh.metadata.name || '';
+        fresh.metadata = {
+          ...fresh.metadata,
+          id: '',
+          name: '',
+          description: '',
+          tags: [],
+          base_preset: sourceName,
+        };
+        set({
+          draft: fresh,
+          stageDirty: new Set<number>(),
+          metadataDirty: false,
+          modelDirty: false,
+          pipelineDirty: false,
+          toolsDirty: false,
+          validationErrors: runValidation(fresh),
+          error: null,
+          seeding: false,
+        });
+      } catch (e) {
         set({
           seeding: false,
           error: e instanceof Error ? e.message : String(e),
@@ -209,7 +338,11 @@ export const useEnvironmentDraftStore = create<EnvironmentDraftState>(
         next.metadata as unknown as Record<string, unknown>,
         patch as Record<string, unknown>,
       ) as EnvironmentMetadata;
-      set({ draft: next, metadataDirty: true });
+      set({
+        draft: next,
+        metadataDirty: true,
+        validationErrors: runValidation(next),
+      });
     },
 
     patchModel: (patch) => {
@@ -217,7 +350,11 @@ export const useEnvironmentDraftStore = create<EnvironmentDraftState>(
       if (!draft) return;
       const next = cloneManifest(draft);
       next.model = shallowMerge(next.model ?? {}, patch);
-      set({ draft: next, modelDirty: true });
+      set({
+        draft: next,
+        modelDirty: true,
+        validationErrors: runValidation(next),
+      });
     },
 
     patchPipeline: (patch) => {
@@ -225,7 +362,11 @@ export const useEnvironmentDraftStore = create<EnvironmentDraftState>(
       if (!draft) return;
       const next = cloneManifest(draft);
       next.pipeline = shallowMerge(next.pipeline ?? {}, patch);
-      set({ draft: next, pipelineDirty: true });
+      set({
+        draft: next,
+        pipelineDirty: true,
+        validationErrors: runValidation(next),
+      });
     },
 
     patchTools: (patch) => {
@@ -242,7 +383,11 @@ export const useEnvironmentDraftStore = create<EnvironmentDraftState>(
         },
         patch,
       );
-      set({ draft: next, toolsDirty: true });
+      set({
+        draft: next,
+        toolsDirty: true,
+        validationErrors: runValidation(next),
+      });
     },
 
     patchStage: (order, patch) => {
@@ -272,7 +417,11 @@ export const useEnvironmentDraftStore = create<EnvironmentDraftState>(
       }
       const nextDirty = new Set(stageDirty);
       nextDirty.add(order);
-      set({ draft: next, stageDirty: nextDirty });
+      set({
+        draft: next,
+        stageDirty: nextDirty,
+        validationErrors: runValidation(next),
+      });
     },
 
     setValidationError: (path, message) => {
@@ -297,7 +446,8 @@ export const useEnvironmentDraftStore = create<EnvironmentDraftState>(
       );
     },
 
-    hasBlockingErrors: () => get().validationErrors.length > 0,
+    hasBlockingErrors: () =>
+      get().validationErrors.some((e) => e.severity === 'error'),
 
     saveDraft: async ({ name, description = '', tags = [] }) => {
       const { draft, hasBlockingErrors } = get();

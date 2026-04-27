@@ -17,12 +17,13 @@
  */
 
 import { useState } from 'react';
-import { Save, Trash2, Plus, AlertTriangle } from 'lucide-react';
+import { Save, Trash2, AlertTriangle } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ActionButton } from '@/components/layout';
 import { useEnvironmentDraftStore } from '@/store/useEnvironmentDraftStore';
+import StartFromPicker from './StartFromPicker';
 
 interface TopBarProps {
   onSaved: (newEnvId: string) => void;
@@ -31,11 +32,9 @@ interface TopBarProps {
 export default function TopBar({ onSaved }: TopBarProps) {
   const { t } = useI18n();
   const draft = useEnvironmentDraftStore((s) => s.draft);
-  const seeding = useEnvironmentDraftStore((s) => s.seeding);
   const saving = useEnvironmentDraftStore((s) => s.saving);
   const errorBanner = useEnvironmentDraftStore((s) => s.error);
   const validationErrors = useEnvironmentDraftStore((s) => s.validationErrors);
-  const newDraft = useEnvironmentDraftStore((s) => s.newDraft);
   const resetDraft = useEnvironmentDraftStore((s) => s.resetDraft);
   const patchMetadata = useEnvironmentDraftStore((s) => s.patchMetadata);
   const saveDraft = useEnvironmentDraftStore((s) => s.saveDraft);
@@ -43,17 +42,6 @@ export default function TopBar({ onSaved }: TopBarProps) {
   const stageDirty = useEnvironmentDraftStore((s) => s.stageDirty);
 
   const [tagInput, setTagInput] = useState('');
-
-  const handleStartNew = async () => {
-    if (draft && isDirty()) {
-      if (!confirm(t('libraryNewTab.confirmDiscard'))) return;
-    }
-    try {
-      await newDraft();
-    } catch {
-      /* error surfaces via store.error */
-    }
-  };
 
   const handleDiscard = () => {
     if (isDirty() && !confirm(t('libraryNewTab.confirmDiscard'))) return;
@@ -95,26 +83,16 @@ export default function TopBar({ onSaved }: TopBarProps) {
   // ── Empty state — no draft yet
   if (!draft) {
     return (
-      <div className="flex flex-col gap-3 px-5 py-4 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))]">
-        <div className="flex items-start gap-4 flex-wrap">
-          <div className="flex-1 min-w-0">
-            <h2 className="text-base font-semibold text-[hsl(var(--foreground))]">
-              {t('libraryNewTab.welcomeTitle')}
-            </h2>
-            <p className="text-[0.8125rem] text-[hsl(var(--muted-foreground))] mt-0.5 max-w-[640px]">
-              {t('libraryNewTab.welcomeDescription')}
-            </p>
-          </div>
-          <ActionButton
-            variant="primary"
-            icon={Plus}
-            onClick={handleStartNew}
-            disabled={seeding}
-            spinIcon={seeding}
-          >
-            {seeding ? t('libraryNewTab.seeding') : t('libraryNewTab.newDraft')}
-          </ActionButton>
+      <div className="flex flex-col gap-4 px-5 py-4 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))]">
+        <div>
+          <h2 className="text-base font-semibold text-[hsl(var(--foreground))]">
+            {t('libraryNewTab.welcomeTitle')}
+          </h2>
+          <p className="text-[0.8125rem] text-[hsl(var(--muted-foreground))] mt-0.5 max-w-[720px]">
+            {t('libraryNewTab.welcomeDescription')}
+          </p>
         </div>
+        <StartFromPicker />
         {errorBanner && (
           <div className="px-3 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-[0.75rem] text-red-700 dark:text-red-300 flex items-start gap-2">
             <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
@@ -127,7 +105,9 @@ export default function TopBar({ onSaved }: TopBarProps) {
 
   // ── Draft active — show metadata form + Save/Discard
   const nameValid = draft.metadata.name.trim().length > 0;
-  const blockedByValidation = validationErrors.length > 0;
+  const errorCount = validationErrors.filter((e) => e.severity === 'error').length;
+  const warningCount = validationErrors.filter((e) => e.severity !== 'error').length;
+  const blockedByValidation = errorCount > 0;
   const saveDisabled = !nameValid || blockedByValidation || saving;
 
   return (
@@ -229,15 +209,48 @@ export default function TopBar({ onSaved }: TopBarProps) {
         <span>
           {t('libraryNewTab.editedStages', { n: String(stageDirty.size) })}
         </span>
-        {validationErrors.length > 0 && (
+        {errorCount > 0 && (
+          <span className="inline-flex items-center gap-1 text-red-600 dark:text-red-400">
+            <AlertTriangle className="w-3 h-3" />
+            {t('libraryNewTab.validationErrorsRed', { n: String(errorCount) })}
+          </span>
+        )}
+        {warningCount > 0 && (
           <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
             <AlertTriangle className="w-3 h-3" />
-            {t('libraryNewTab.validationErrors', {
-              n: String(validationErrors.length),
-            })}
+            {t('libraryNewTab.validationWarnings', { n: String(warningCount) })}
           </span>
         )}
       </div>
+
+      {/* ── Validation detail (warnings + errors) ── */}
+      {validationErrors.length > 0 && (
+        <details className="text-[0.7rem]">
+          <summary className="cursor-pointer text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
+            {t('libraryNewTab.viewValidationDetails')}
+          </summary>
+          <ul className="mt-1.5 flex flex-col gap-1">
+            {validationErrors.map((v, i) => (
+              <li
+                key={`${v.path}_${i}`}
+                className={`flex items-start gap-1.5 px-2 py-1 rounded border ${
+                  v.severity === 'error'
+                    ? 'bg-red-500/5 border-red-500/30 text-red-700 dark:text-red-300'
+                    : 'bg-amber-500/5 border-amber-500/30 text-amber-700 dark:text-amber-300'
+                }`}
+              >
+                <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <code className="text-[0.625rem] font-mono opacity-70">
+                    {v.path}
+                  </code>
+                  <div className="mt-0.5">{v.message}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       {errorBanner && (
         <div className="px-3 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-[0.75rem] text-red-700 dark:text-red-300 flex items-start gap-2">
