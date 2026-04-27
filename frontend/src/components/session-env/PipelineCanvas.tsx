@@ -64,14 +64,17 @@ interface StageNodeProps {
   entry: StageManifestEntry | undefined;
   isSelected: boolean;
   onSelect: (order: number | null) => void;
+  /** Cycle 20260427_1 — pulse + accent ring when the stage has unsaved
+   *  edits in the Library (NEW) draft store. Optional so the read-only
+   *  SessionEnvironmentTab call site stays unchanged. */
+  isDirty?: boolean;
 }
 
-function StageNode({ order, entry, isSelected, onSelect }: StageNodeProps) {
+function StageNode({ order, entry, isSelected, onSelect, isDirty = false }: StageNodeProps) {
   const locale = useI18n((s) => s.locale);
   const meta = getStageMetaByOrder(order, locale);
   const displayName = meta?.displayName ?? entry?.name ?? `Stage ${order}`;
 
-  // Read-only: we only distinguish "configured & active" vs "missing/inactive".
   const isActive = !!entry?.active;
   const isPresent = !!entry;
 
@@ -90,13 +93,31 @@ function StageNode({ order, entry, isSelected, onSelect }: StageNodeProps) {
       }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <div className={cls}>{order}</div>
+      <div className={cls} style={{ position: 'relative' }}>
+        {order}
+        {isDirty && (
+          <span
+            aria-label="edited"
+            title="Edited (unsaved)"
+            style={{
+              position: 'absolute',
+              top: -4,
+              right: -4,
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              background: 'var(--pipe-accent)',
+              boxShadow: '0 0 0 2px var(--pipe-bg-primary), 0 0 10px var(--pipe-accent-glow, rgba(59,130,246,0.5))',
+            }}
+          />
+        )}
+      </div>
       <span
         className="mt-1.5 text-[10px] font-medium tracking-wide text-center leading-tight"
         style={{
           color: isSelected
             ? 'var(--pipe-accent)'
-            : isActive
+            : isActive || isDirty
               ? 'var(--pipe-accent)'
               : 'var(--pipe-text-secondary)',
           maxWidth: 88,
@@ -302,6 +323,10 @@ interface PipelineCanvasProps {
   selectedOrder: number | null;
   onSelectStage: (order: number | null) => void;
   onResetView?: (resetFn: () => void) => void;
+  /** Cycle 20260427_1 — Library (NEW) edit-mode highlight. Stage orders
+   *  in this set get an accent badge to signal "edited but not saved".
+   *  Read-only callers (SessionEnvironmentTab) omit it. */
+  dirtyOrders?: ReadonlySet<number>;
 }
 
 export default function PipelineCanvas({
@@ -309,6 +334,7 @@ export default function PipelineCanvas({
   selectedOrder,
   onSelectStage,
   onResetView,
+  dirtyOrders,
 }: PipelineCanvasProps) {
   const {
     containerRef,
@@ -402,6 +428,7 @@ export default function PipelineCanvas({
                 entry={stageByOrder.get(order)}
                 isSelected={selectedOrder === order}
                 onSelect={onSelectStage}
+                isDirty={dirtyOrders?.has(order) ?? false}
               />
             </div>
           );

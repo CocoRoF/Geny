@@ -1,0 +1,144 @@
+'use client';
+
+/**
+ * LibraryNewTab — Library (NEW): visual 21-stage environment builder.
+ *
+ * Cycle 20260427_1 PR-A scaffold. Composes:
+ *
+ *   ┌─ TabShell ─────────────────────────────────────────┐
+ *   │ TopBar (name/desc/tags/Save/Discard)               │
+ *   │ GlobalSection (model + pipeline + tools + ext.)    │
+ *   │ ┌───────────────────┬─ StageEditorPanel ─────────┐ │
+ *   │ │ PipelineCanvas     │ (slide-in side panel)     │ │
+ *   │ │ (21-stage view)    │  - generic editor (PR-A)  │ │
+ *   │ │                    │  - curated (PR-B…E)       │ │
+ *   │ └────────────────────┴───────────────────────────┘ │
+ *   └────────────────────────────────────────────────────┘
+ *
+ * The draft lives in useEnvironmentDraftStore — discarded when the
+ * user navigates away (with confirm if dirty). Save posts the full
+ * manifest in one call via mode=blank + manifest_override (cycle
+ * 20260427_1 backend patch).
+ */
+
+import { useEffect, useState } from 'react';
+import { Sparkles } from 'lucide-react';
+import { TabShell } from '@/components/layout';
+import { useI18n } from '@/lib/i18n';
+import { useAppStore } from '@/store/useAppStore';
+import { useEnvironmentDraftStore } from '@/store/useEnvironmentDraftStore';
+import { useEnvironmentStore } from '@/store/useEnvironmentStore';
+import PipelineCanvas from '@/components/session-env/PipelineCanvas';
+import TopBar from './TopBar';
+import GlobalSection from './GlobalSection';
+import StageEditorPanel from './StageEditorPanel';
+
+export default function LibraryNewTab() {
+  const { t } = useI18n();
+  const draft = useEnvironmentDraftStore((s) => s.draft);
+  const stageDirty = useEnvironmentDraftStore((s) => s.stageDirty);
+  const isDirty = useEnvironmentDraftStore((s) => s.isDirty);
+  const resetDraft = useEnvironmentDraftStore((s) => s.resetDraft);
+
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const requestOpenEnvDrawer = useEnvironmentStore(
+    (s) => s.requestOpenEnvDrawer,
+  );
+
+  const [selectedOrder, setSelectedOrder] = useState<number | null>(null);
+
+  // Beforeunload guard (browser tab close while dirty).
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (isDirty()) {
+        e.preventDefault();
+        // Browsers ignore the message string but still show the prompt.
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
+
+  // Component-unmount discard: clear the draft when the user navigates
+  // away from the tab. The TopBar already gates the Discard button on a
+  // confirm prompt; the parent activeTab change is gated by
+  // useAppStore.setActiveTab + this hook.
+  useEffect(() => {
+    return () => {
+      // Only auto-clear if we got here without a save (saveDraft already
+      // resets). isDirty() being true here means "navigating away with
+      // unsaved edits" — the beforeunload guard catches browser close,
+      // but in-app navigation falls through. Keep the draft so the user
+      // returning to the tab still sees their work; clear only on
+      // explicit Discard via TopBar.
+    };
+  }, []);
+
+  // Selecting a stage that no longer exists (e.g. after Save reset)
+  // should drop the selection.
+  useEffect(() => {
+    if (!draft && selectedOrder != null) {
+      setSelectedOrder(null);
+    }
+  }, [draft, selectedOrder]);
+
+  const handleSaved = (newEnvId: string) => {
+    setSelectedOrder(null);
+    // Hand off to the existing Library catalog so the user can see
+    // their new env in context (and the detail drawer opens
+    // automatically via requestOpenEnvDrawer).
+    requestOpenEnvDrawer(newEnvId);
+    setActiveTab('library');
+    resetDraft();
+  };
+
+  return (
+    <TabShell
+      title={t('libraryNewTab.title')}
+      subtitle={t('libraryNewTab.subtitle')}
+      icon={Sparkles}
+      bodyPadding="none"
+      bodyScroll="none"
+    >
+      <div className="flex flex-col h-full min-h-0">
+        <TopBar onSaved={handleSaved} />
+
+        {draft && <GlobalSection />}
+
+        {/* Canvas + side panel */}
+        <div className="flex-1 min-h-0 flex">
+          <div className="flex-1 min-w-0 flex flex-col">
+            {!draft ? (
+              <div className="flex-1 flex items-center justify-center text-[0.875rem] text-[hsl(var(--muted-foreground))]">
+                <div className="text-center max-w-[420px] p-8">
+                  <Sparkles className="w-10 h-10 mx-auto mb-3 opacity-40 text-[hsl(var(--primary))]" />
+                  <p className="font-medium mb-2 text-[hsl(var(--foreground))]">
+                    {t('libraryNewTab.canvasPlaceholderTitle')}
+                  </p>
+                  <p className="text-[0.8125rem] leading-relaxed">
+                    {t('libraryNewTab.canvasPlaceholderHint')}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <PipelineCanvas
+                stages={draft.stages}
+                selectedOrder={selectedOrder}
+                onSelectStage={setSelectedOrder}
+                dirtyOrders={stageDirty}
+              />
+            )}
+          </div>
+
+          {selectedOrder != null && draft && (
+            <StageEditorPanel
+              order={selectedOrder}
+              onClose={() => setSelectedOrder(null)}
+            />
+          )}
+        </div>
+      </div>
+    </TabShell>
+  );
+}

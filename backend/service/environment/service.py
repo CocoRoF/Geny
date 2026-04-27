@@ -350,16 +350,30 @@ class EnvironmentService:
         description: str = "",
         tags: Optional[List[str]] = None,
         base_preset: Optional[str] = None,
+        manifest_override: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Create a new environment template without a live session.
+
+        When *manifest_override* is supplied (cycle 20260427_1, Library NEW),
+        the caller-provided manifest dict is used verbatim — only metadata
+        name/description/tags are forced to the API call's values so the
+        list view stays consistent. base_preset is ignored in this mode.
 
         When *base_preset* names a registered PipelinePresets factory, that
         preset's snapshot is used as the starting point. Otherwise the
         library's ``blank_manifest`` seeds every stage inactive with its
-        default artifact + strategy picks — the UI renders 16 rows, the
+        default artifact + strategy picks — the UI renders 21 rows, the
         user toggles what they want, rebuild succeeds.
         """
-        if base_preset:
+        if manifest_override is not None:
+            manifest = EnvironmentManifest.from_dict(manifest_override)
+            # Force caller-provided metadata so the list view matches what
+            # the user typed in the create form, regardless of what the
+            # draft manifest had cached.
+            manifest.metadata.name = name
+            manifest.metadata.description = description
+            manifest.metadata.tags = list(tags or [])
+        elif base_preset:
             manifest = self._manifest_from_preset(
                 base_preset, name=name, description=description, tags=tags or []
             )
