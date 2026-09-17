@@ -476,6 +476,50 @@ class ChatConversationStore:
 
         return message
 
+    def reconcile_json_backup(self) -> Dict[str, int]:
+        """Make the on-disk backup say what the database says.
+
+        The JSON copy is a fallback for a server with no database, and it only
+        ever grew: rooms deleted from the database stayed in ``rooms.json``,
+        with their message files beside them. Production carried 118 rooms
+        that way — invisible while the database answers, and ready to come
+        back as real conversations the moment it does not.
+
+        Only meaningful with a database attached; without one the JSON copy IS
+        the truth and this refuses to touch it.
+        """
+        if not self._db_available:
+            raise RuntimeError("no database — the JSON copy is the only truth here")
+
+        from service.database.chat_db_helper import db_list_rooms
+
+        live = db_list_rooms(self._app_db) or []
+        live_ids = {str(r.get("room_id") or r.get("id")) for r in live}
+
+        removed_rooms = 0
+        removed_files = 0
+        with self._lock:
+            kept = [r for r in self._rooms if str(r.get("id")) in live_ids]
+            removed_rooms = len(self._rooms) - len(kept)
+            self._rooms = kept
+            self._save_rooms()
+
+            for path in self._dir.glob("*.json"):
+                if path == self._rooms_path:
+                    continue
+                if path.stem not in live_ids:
+                    try:
+                        path.unlink()
+                        removed_files += 1
+                    except OSError:
+                        logger.warning("could not remove stale %s", path)
+
+        logger.info(
+            "[ChatStore] JSON backup reconciled: %d stale rooms, %d message files removed",
+            removed_rooms, removed_files,
+        )
+        return {"rooms_removed": removed_rooms, "message_files_removed": removed_files}
+
     def resort_messages(self, room_id: str) -> None:
         """Put the JSON backup back in timestamp order.
 

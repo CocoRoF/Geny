@@ -152,3 +152,19 @@ def test_an_empty_server_is_still_fine(wired):
 
     plan = cleanup.clean(apply=True, backup=tmp / "b.json")
     assert plan.retire == [] and chat.deleted == []
+
+
+def test_the_json_backup_is_made_to_agree_with_the_database(wired):
+    """The fallback copy only ever grew: rooms deleted from the database
+    stayed in it, ready to come back as real conversations the moment the
+    database was unavailable. Production carried 118 of those."""
+    cleanup, chat, _, live, _, tmp = wired
+    live.append("s1")
+    chat.rooms = [room("home", ["s1"], 5)]
+    chat.reconciled = []
+    chat.reconcile_json_backup = lambda: ({"rooms_removed": 118, "message_files_removed": 120})
+
+    plan = cleanup.clean(apply=True, backup=tmp / "b.json")
+
+    assert plan.backup_rooms_removed == 118
+    assert "118 stale rooms" in plan.render()

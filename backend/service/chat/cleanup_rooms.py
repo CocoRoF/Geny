@@ -49,6 +49,8 @@ class Plan:
     retire: List[Dict[str, Any]] = field(default_factory=list)
     merged_messages: int = 0
     retired_messages: int = 0
+    backup_rooms_removed: int = 0
+    backup_files_removed: int = 0
 
     def render(self) -> str:
         lines = [
@@ -58,6 +60,11 @@ class Plan:
             f"merge away       : {len(self.merge)}  ({self.merged_messages} messages move)",
             f"retire           : {len(self.retire)}  ({self.retired_messages} messages, backed up)",
         ]
+        if self.backup_rooms_removed or self.backup_files_removed:
+            lines.append(
+                f"json backup      : {self.backup_rooms_removed} stale rooms, "
+                f"{self.backup_files_removed} message files removed"
+            )
         for m in self.merge[:10]:
             lines.append(f"   merge {m['room_id'][:8]} → {m['into'][:8]}  ({m['messages']} msgs)")
         for r in self.retire[:10]:
@@ -235,6 +242,16 @@ def clean(apply: bool = False, backup: Optional[Path] = None) -> Plan:
                 store.delete_room(item["room_id"])
             except Exception:  # noqa: BLE001
                 logger.error("[rooms] delete failed for %s", item["room_id"], exc_info=True)
+
+    # The JSON fallback only ever grew: rooms deleted from the database stayed
+    # in it, ready to come back as real conversations if the database were
+    # ever unavailable.
+    try:
+        reconciled = store.reconcile_json_backup()
+        plan.backup_rooms_removed = reconciled["rooms_removed"]
+        plan.backup_files_removed = reconciled["message_files_removed"]
+    except Exception:  # noqa: BLE001
+        logger.warning("[rooms] could not reconcile the JSON backup", exc_info=True)
 
     # Re-resolve every surviving session so its record points at the room it
     # actually has, and its name matches.
