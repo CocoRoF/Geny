@@ -1,0 +1,333 @@
+name: Apps
+
+# One release, one version, everything a user installs.
+#
+# The desktop connector and the mobile app are one product in two packages.
+# They used to ship from two workflows on two tags at two versions — which
+# meant two GitHub releases and no single answer to "which version am I on".
+# Now a `v*` tag builds all five targets and publishes them together.
+#
+# `scripts/version.mjs` keeps desktop/ and mobile/ on the same number, and the
+# first thing this workflow does is check that they are and that the tag
+# agrees. A release that disagrees with itself is worse than no release.
+#
+# Signing, as it stands today:
+#
+# · macOS is ad-hoc signed (desktop/build/afterPack.cjs) so Apple Silicon does
+#   not hard-block it as "damaged"; the user still bypasses the unidentified
+#   developer prompt. Windows is unsigned.
+# · iOS ships an UNSIGNED .ipa — Apple distribution needs a developer
+#   certificate and there is no Apple Developer account behind this project.
+# · Android CANNOT ship unsigned (the OS refuses to install one), so it uses a
+#   TEMPORARY but FIXED key from repository secrets. Swapping it for a
+#   permanent key later is a one-way door for installed users: Android treats
+#   a different signature as a different app.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    name: version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: The apps agree, and the tag agrees with them
+        id: read
+        run: |
+          VERSION=$(node scripts/version.mjs)   # fails when desktop/ and mobile/ differ
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME#v}"
+            if [ "$TAG" != "$VERSION" ]; then
+              echo "::error::tag v$TAG does not match the apps' version $VERSION — bump with scripts/version.mjs and retag"
+              exit 1
+            fi
+          fi
+          echo "releasing $VERSION"
+
+  # ── desktop connector — macOS / Windows / Linux ──────────────────────
+  desktop:
+    name: desktop (${{ matrix.os }})
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # latest*.yml + blockmaps are the electron-updater feed — upload them
+          # alongside the installers so auto-update can find new releases.
+          # Linux has NO *.blockmap sidecar: the AppImage blockmap is embedded
+          # in the file itself (electron-updater uses
+          # FileWithEmbeddedBlockMapDifferentialDownloader), and deb never has
+          # one — differential updates need no extra asset here.
+          - os: ubuntu-latest
+            flag: --linux
+            glob: |
+              desktop/dist/*.AppImage
+              desktop/dist/*.deb
+              desktop/dist/latest-linux.yml
+          - os: windows-latest
+            flag: --win
+            glob: |
+              desktop/dist/*.exe
+              desktop/dist/*.blockmap
+              desktop/dist/latest.yml
+          - os: macos-latest
+            flag: --mac
+            glob: |
+              desktop/dist/*.dmg
+              desktop/dist/*.blockmap
+              desktop/dist/latest-mac.yml
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # The native virtual drive ships as a Go sidecar (a filesystem
+      # driver cannot run inside Electron — the V8 memory cage corrupts
+      # native read buffers). Linux uses FUSE, Windows the Cloud Files
+      # API; macOS is skipped (it would need macFUSE installed) and a
+      # missing binary is handled at runtime by hiding the toggle.
+      - uses: actions/setup-go@v5
+        if: matrix.os != 'macos-latest'
+        with:
+          go-version: '1.22'
+          cache-dependency-path: drive-daemon/go.sum
+
+      - name: Build drive daemon
+        if: matrix.os != 'macos-latest'
+        shell: bash
+        run: ./build.sh ${{ matrix.os == 'windows-latest' && 'win' || 'linux' }}
+        working-directory: drive-daemon
+
+      - name: Install deps
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+
+      - name: Build renderer + main
+        working-directory: desktop
+        run: npm run build
+
+      - name: Package installer
+        working-directory: desktop
+        run: npx --no-install electron-builder ${{ matrix.flag }} --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Unsigned mac build — don't attempt to auto-discover signing certs.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          path: ${{ matrix.glob }}
+          if-no-files-found: error
+
+  # ── mobile — Android ────────────────────────────────────────────────
+  #
+  # The native projects (mobile/android, mobile/ios) are `expo prebuild`
+  # output committed to the repository, so CI builds exactly what a developer
+  # built — regenerating them here would make the release depend on whatever
+  # the Expo template looked like that morning.
+  android:
+    name: mobile — Android APK
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      # `npm install`, not `npm ci`, and no npm cache: this repository does
+      # not track lockfiles (see .gitignore), which is also why there is
+      # nothing for setup-node's cache to key on. Same as the desktop job.
+      - run: npm --prefix mobile install --no-audit --no-fund
+
+      - name: Tests + types
+        run: |
+          npm --prefix mobile test
+          npm --prefix mobile run typecheck
+
+      # ⚠ Every release must be signed with the SAME key, or Android refuses
+      # to install it over the previous version ("package conflicts with an
+      # existing package") and the user has to uninstall first — losing their
+      # server address, their token and their session.
+      #
+      # The key is TEMPORARY but FIXED, and lives in repository secrets — not
+      # in the tree, because a signing key in a public repo lets anyone build
+      # an APK the OS will accept as an update to this one.
+      #
+      # Without the secret (a fork, a manual run before setup) each run
+      # generates its own key, so those builds cannot update anything —
+      # including each other. Hence the warning.
+      - name: Prepare the signing key
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > /tmp/geny.keystore
+            echo "Using the fixed release key — installs as an update."
+          else
+            echo "::warning::ANDROID_KEYSTORE_B64 is not set; signing with a throwaway key. This APK cannot update an existing install."
+            keytool -genkeypair -v -keystore /tmp/geny.keystore -alias geny \
+              -keyalg RSA -keysize 2048 -validity 3650 \
+              -storepass geny-release -keypass geny-release \
+              -dname "CN=Geny, O=Geny"
+          fi
+
+      - name: Build the APK
+        working-directory: mobile/android
+        run: ./gradlew assembleRelease --no-daemon
+        env:
+          ANDROID_KEYSTORE_FILE: /tmp/geny.keystore
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || 'geny-release' }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || 'geny' }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || 'geny-release' }}
+
+      # The fingerprint in the log is how a future release proves it was
+      # signed with the same key as this one.
+      - name: Verify the signature
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs \
+            mobile/android/app/build/outputs/apk/release/app-release.apk | head -3
+
+      - name: Name it
+        run: |
+          VER=${{ needs.version.outputs.version }}
+          mkdir -p dist-mobile
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk "dist-mobile/Geny-$VER.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist-mobile/*.apk
+          if-no-files-found: error
+
+  # ── mobile — iOS (unsigned) ─────────────────────────────────────────
+  ios:
+    name: mobile — iOS (unsigned)
+    needs: version
+    # macos-latest ships an Xcode whose clang rejects the fmt version React
+    # Native 0.79 vendors. Pin to the image that still carries Xcode 16.
+    runs-on: macos-15
+    # Apple's toolchain moves under us regularly, and an iOS build that broke
+    # overnight should not hold back everything else in the release.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Select Xcode 16
+        run: |
+          XC=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XC" ] && sudo xcode-select -s "$XC"
+          xcodebuild -version
+
+      - run: npm --prefix mobile install --no-audit --no-fund
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            mobile/ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: ios-pods-${{ hashFiles('mobile/package.json', 'mobile/ios/Podfile') }}
+          restore-keys: ios-pods-
+
+      - name: Pod install
+        working-directory: mobile/ios
+        run: pod install
+
+      - name: Build (no signing)
+        working-directory: mobile/ios
+        run: |
+          xcodebuild -workspace Geny.xcworkspace -scheme Geny \
+            -configuration Release -sdk iphoneos -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+
+      - name: Package an unsigned IPA
+        run: |
+          VER=${{ needs.version.outputs.version }}
+          APP=$(find mobile/ios/build/Build/Products -name "*.app" -maxdepth 3 | head -1)
+          [ -n "$APP" ] || { echo "no .app was produced"; exit 1; }
+          mkdir -p /tmp/Payload dist-ios
+          cp -R "$APP" /tmp/Payload/
+          (cd /tmp && zip -qry "$OLDPWD/dist-ios/Geny-$VER-ios-unsigned.ipa" Payload)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios
+          path: dist-ios/*.ipa
+          if-no-files-found: error
+
+  release:
+    name: publish
+    needs: [version, desktop, android, ios]
+    # `ios` may have failed (continue-on-error); publish what exists. The
+    # desktop installers and the APK are what people actually install.
+    if: always() && needs.desktop.result == 'success' && needs.android.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Collect
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          ls -la release
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          name: Geny v${{ needs.version.outputs.version }}
+          files: release/*
+          fail_on_unmatched_files: true
+          body: |
+            **Geny v${{ needs.version.outputs.version }}** — 데스크톱 접속기와 모바일 앱이 한 버전으로 함께 나갑니다.
+
+            ## 데스크톱 접속기
+
+            아바타·음성·로컬 도구·워크스페이스 동기화까지 전부. 모델 계정과 에이전트 조종석도 여기 있습니다.
+
+            | OS | 파일 | 설치 |
+            |---|---|---|
+            | Windows | `Geny-Setup-*.exe` | 실행 → SmartScreen 이 뜨면 **추가 정보 → 실행** |
+            | macOS | `Geny-*.dmg` | 열어서 `Geny.app` 을 **응용 프로그램**으로 → 첫 실행은 **우클릭 → 열기** (또는 시스템 설정 → 개인정보 보호 및 보안 → **그래도 열기**) |
+            | Linux | `Geny-*.AppImage` / `*.deb` | AppImage: `chmod +x` 후 실행 (Ubuntu 22.04+ 는 `sudo apt install libfuse2`) / deb: `sudo dpkg -i` · 키체인은 gnome-keyring/kwallet 필요 |
+
+            > **macOS 가 "손상됨 — 휴지통으로 이동" 이라고 하면** (예전 빌드이거나 우클릭→열기가 안 될 때):
+            > 터미널에서 `xattr -dr com.apple.quarantine "/Applications/Geny.app"` 후 다시 여세요.
+
+            ## 모바일
+
+            **채팅과 설정만** 있습니다 — 아바타는 데스크톱의 몫입니다. 화면을 꺼도 턴은 서버에서
+            계속 돌아가고, 앱이 돌아오면 그 턴에 다시 붙어 처음부터 받아옵니다.
+
+            | | 파일 | 설치 |
+            |---|---|---|
+            | Android | `Geny-*.apk` | 받아서 실행 (출처를 알 수 없는 앱 허용 필요). **임시 키로 서명돼 있습니다** — 릴리스끼리는 그대로 업데이트되지만, 나중에 정식 키로 바꾸면 그때는 지우고 다시 깔아야 합니다 |
+            | iOS | `*-ios-unsigned.ipa` | **서명되지 않았습니다.** Apple 배포 서명에는 개발자 계정이 필요합니다 — 직접 서명하거나 사이드로딩 도구로 설치하세요 |
+
+            ---
+
+            첫 실행에서 **서버 주소**와 **관리자 계정**을 넣으면 됩니다. 기본 서버는 없습니다 —
+            본인의 Geny 서버를 가리키세요.

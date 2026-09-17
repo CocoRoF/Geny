@@ -6,17 +6,22 @@ name: Connector Checks
 # broken merge base or a widened link scope is caught here rather than on
 # someone's disk.
 #
-# The installer build lives in connector-release.yml and stays tag-triggered;
-# this job is deliberately cheap (typecheck + tests, no electron-builder).
+# The installer build lives in release.yml (tag-triggered, together with the
+# mobile apps); this job is deliberately cheap — typecheck + tests, no
+# electron-builder.
 
 on:
   push:
     paths:
       - 'desktop/**'
+      - 'mobile/package.json'
+      - 'scripts/version.mjs'
       - '.github/workflows/connector-check.yml'
   pull_request:
     paths:
       - 'desktop/**'
+      - 'mobile/package.json'
+      - 'scripts/version.mjs'
       - '.github/workflows/connector-check.yml'
   workflow_dispatch:
 
@@ -33,6 +38,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      # One product, one version: the desktop app and the mobile app ship in
+      # the same release and must agree before anything is built.
+      - name: The apps are on one version
+        working-directory: .
+        run: node scripts/version.mjs --check
 
       # `npm install`, not `npm ci` — the lockfile is gitignored in this repo
       # (connector-release.yml does the same). The electron binary download is

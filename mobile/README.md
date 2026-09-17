@@ -55,8 +55,18 @@ cleartext 허용과 `allowBackup=false` 는 `app.json` 에 있다 — 손으로 
 
 ## 릴리스
 
-`mobile-v*` 태그를 밀면 `.github/workflows/mobile-release.yml` 이 APK 와
-IPA 를 만들어 릴리스에 붙인다.
+`v*` 태그 하나가 **데스크톱 접속기와 이 앱을 함께** 낸다
+(`.github/workflows/release.yml`) — 한 릴리스, 한 버전.
+
+버전은 `scripts/version.mjs` 가 `desktop/`·`mobile/` 양쪽에 같이 쓴다:
+
+```
+node scripts/version.mjs 0.24.0   # 둘 다 올린다
+node scripts/version.mjs --check  # 다르면 실패 (CI 게이트)
+```
+
+둘이 갈라지면 같은 제품인데 버전이 두 개인 릴리스가 나온다 — 실제로 한 번
+그랬다(접속기 0.23.0 / 모바일 0.1.0, 릴리스 두 개).
 
 ## 서명 — 지금 상태
 

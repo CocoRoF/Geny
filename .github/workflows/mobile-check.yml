@@ -8,9 +8,9 @@ name: Mobile Check
 on:
   push:
     branches: [main]
-    paths: ['mobile/**', '.github/workflows/mobile-*.yml']
+    paths: ['mobile/**', 'desktop/package.json', 'scripts/version.mjs', '.github/workflows/mobile-check.yml']
   pull_request:
-    paths: ['mobile/**', '.github/workflows/mobile-*.yml']
+    paths: ['mobile/**', 'desktop/package.json', 'scripts/version.mjs', '.github/workflows/mobile-check.yml']
 
 jobs:
   check:
@@ -20,6 +20,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      # The desktop app and this one ship in one release at one version.
+      # They drifted the moment they had two package.json files, and the
+      # symptom was two GitHub releases claiming different versions of the
+      # same product.
+      - name: The apps are on one version
+        run: node scripts/version.mjs --check
       # `npm install`, not `npm ci`, and no npm cache: this repository does
       # not track lockfiles (see .gitignore), which is also why there is
       # nothing for setup-node's cache to key on. Same as the connector jobs.
