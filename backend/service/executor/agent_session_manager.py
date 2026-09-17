@@ -757,6 +757,18 @@ class AgentSessionManager:
             get_session_store().update(session_id, {"last_route": summary})
         except Exception:  # noqa: BLE001
             pass
+        # Into the session log too, so the workspace ledger can answer "which
+        # account paid for this turn" alongside what the turn did.
+        try:
+            from service.logging import get_session_logger
+
+            session_logger = get_session_logger(session_id, create_if_missing=False)
+            if session_logger is not None:
+                label = summary.get("label") or summary.get("accountId") or "?"
+                session_logger.log_session_event(kind, {"type": kind, **summary})
+                logger.debug("[%s] route event logged (%s)", session_id, label)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _extract_primary_provider(self, env_id: str) -> Optional[str]:
         """Return the active Stage 6 provider for ``env_id``.

@@ -96,7 +96,7 @@ from controller.skills_controller import router as skills_router
 from controller.admin_controller import router as admin_router
 from controller.permission_controller import router as permission_router  # PR-E.2.1
 from controller.hook_controller import router as hook_router  # PR-E.3.1 (env lifecycle hooks — removal pending)
-from controller.agent_workspace_controller import router as agent_workspace_router  # PR-E.4.3
+from controller.agent_workspace_controller import router as agent_workspace_router  # workspace state + activity ledger
 from controller.framework_settings_controller import router as framework_settings_router  # PR-F.1.x
 from controller.subagent_type_controller import router as subagent_type_router  # PR-F.3.1
 from controller.mcp_custom_controller import router as mcp_custom_router  # Cycle G — MCP UI
@@ -1224,7 +1224,7 @@ app.include_router(skills_router)  # Skills (SKILL.md registry) API
 app.include_router(admin_router)  # Admin viewers — permissions/hooks (G13)
 app.include_router(permission_router)  # Permission rules CRUD (PR-E.2.1)
 app.include_router(hook_router)  # Hook entries CRUD (PR-E.3.1) — env lifecycle hooks, removal pending
-app.include_router(agent_workspace_router)  # Per-agent workspace stack (PR-E.4.3)
+app.include_router(agent_workspace_router)  # Where the agent works, and the exact record of what it did there
 app.include_router(framework_settings_router)  # Framework settings sections (PR-F.1.x)
 app.include_router(subagent_type_router)  # Subagent types viewer (PR-F.3.1)
 app.include_router(mcp_custom_router)  # Custom MCP server CRUD (Cycle G)
