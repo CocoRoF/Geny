@@ -302,10 +302,19 @@ class LoginJobs:
                         "ok": False, "error": f"claude 실행 실패: {exc}"})
             return job_id
         self._jobs[job_id] = {"proc": proc, "account_id": account_id}
-        asyncio.create_task(self._pump(
-            job_id, account_id, proc, binary=binary, env=env, console=console,
-            plain=plain, on_done=on_done,
-        ))
+        # Through ``spawn_background``: a bare ``create_task`` is held only by
+        # a weak reference, so this pump can be collected mid-login and take
+        # the flow with it — no URL, no verdict, no error. The one thing worse
+        # than a failed login is one that never says anything.
+        from service.utils.background import spawn_background
+
+        spawn_background(
+            self._pump(
+                job_id, account_id, proc, binary=binary, env=env, console=console,
+                plain=plain, on_done=on_done,
+            ),
+            name=f"claude.login:{account_id}",
+        )
         return job_id
 
     async def _pump(

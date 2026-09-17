@@ -156,8 +156,16 @@ class DeviceLoginJobs:
         self._emit({"jobId": job_id, "accountId": account_id, "type": "device",
                     "userCode": user_code, "verificationUrl": DEVICE_URL,
                     "expiresAt": int(expires_at * 1000)})
-        asyncio.create_task(self._poll(job_id, account_id, str(device_auth_id), str(user_code),
-                                       interval, expires_at, on_tokens))
+        # Through ``spawn_background``: a bare ``create_task`` is held only by
+        # a weak reference, so this poll can be collected mid-flow and the
+        # user waits at a code page for fifteen minutes for nothing.
+        from service.utils.background import spawn_background
+
+        spawn_background(
+            self._poll(job_id, account_id, str(device_auth_id), str(user_code),
+                       interval, expires_at, on_tokens),
+            name=f"codex.device_login:{account_id}",
+        )
         return {"jobId": job_id, "userCode": user_code, "verificationUrl": DEVICE_URL,
                 "expiresAt": int(expires_at * 1000)}
 
