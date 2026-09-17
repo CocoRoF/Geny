@@ -2,7 +2,7 @@
   "expo": {
     "name": "Geny",
     "slug": "geny-mobile",
-    "version": "0.25.0",
+    "version": "0.26.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "geny",
