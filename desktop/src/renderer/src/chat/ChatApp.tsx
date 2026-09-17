@@ -373,8 +373,8 @@ export function ChatApp(): ReactNode {
           <div className="chat-body">
             <div className="chat-column">
               <div className="chat-log" ref={scroller} onScroll={onScroll}>
-                <Transcript messages={live.messages} running={live.running}
-                  loading={live.loading} t={t} />
+                <Transcript messages={live.messages} calls={live.calls}
+                  running={live.running} loading={live.loading} t={t} />
               </div>
 
               <footer className="chat-input">

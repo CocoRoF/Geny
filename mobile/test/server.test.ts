@@ -5,7 +5,9 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 
-import { normalizeBaseUrl, request, setUnauthorizedHandler, ServerError, toWsBase } from '../src/lib/server';
+import {
+  normalizeBaseUrl, request, rooms, setUnauthorizedHandler, ServerError, toWsBase,
+} from '../src/lib/server';
 
 test('a bare host becomes https, not http', () => {
   // Downgrading silently would send the password over the air in the clear.
@@ -72,6 +74,25 @@ test('an HTML error page is not dumped onto the screen', async () => {
       () => request({ baseUrl: 'https://geny.example', token: 't' }, '/api/agents'),
       (e: ServerError) => e.message === 'HTTP 502',
     );
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("the room for a session is asked of the server, not worked out here", async () => {
+  // Three surfaces each applying their own rule is what made one session show
+  // three conversations. The phone asks; the server answers.
+  const seen: string[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (url: string) => {
+    seen.push(String(url));
+    return new Response(JSON.stringify({ id: 'r1', name: 'x', session_ids: ['s 1'] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }) as unknown as typeof fetch;
+  try {
+    const room = await rooms.forSession({ baseUrl: 'https://g.example', token: 't' }, 's 1');
+    assert.equal(room.id, 'r1');
+    assert.deepEqual(seen, ['https://g.example/api/chat/rooms/for-session/s%201']);
   } finally {
     globalThis.fetch = original;
   }

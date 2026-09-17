@@ -1,6 +1,11 @@
 /**
  * The conversation.
  *
+ * The same room the desktop app and the web page show — so a question asked
+ * here an hour ago is on the laptop now, and an answer the agent gave to the
+ * web is here. What the phone draws differently is only how much fits: the
+ * live tool calls are one line each instead of an expandable timeline.
+ *
  * The connection banner is the screen's most load-bearing piece of honesty. A
  * phone loses its socket constantly, and the turn keeps running on the server
  * regardless — so the banner says which of those two is true, separately:
@@ -9,10 +14,11 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  FlatList, KeyboardAvoidingView, Platform, Pressable, Text, View,
+  ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, Text, View,
 } from 'react-native';
 
-import type { ConnState } from '../../../shared/chat/exec-ws';
+import type { ConnState, ToolCall } from '../../../shared/chat/room';
+import { describeTool } from '../../../shared/chat/tool-view';
 import type { Message } from '../../../shared/chat/transcript';
 import { useLiveTurn } from '../lib/useLiveTurn';
 import { Button, Input, Notice, Pill } from '../ui';
@@ -27,28 +33,28 @@ const CONNECTION_TEXT: Record<ConnState, string> = {
   closed: '연결 종료',
 };
 
+const MONO = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
+
 function Bubble({ message }: { message: Message }) {
+  // A buffer, not a message. The turn's answer arrives separately.
+  if (message.role === 'draft') return null;
+
   if (message.role === 'activity') {
     const tone = message.ok === false ? T.bad : message.ok === true ? T.muted : T.warn;
     return (
       <View style={{ paddingHorizontal: 14, paddingVertical: 4 }}>
-        <Text style={{ color: tone, fontSize: 12, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>
+        <Text style={{ color: tone, fontSize: 12, fontFamily: MONO }}>
           {message.ok === false ? '✗ ' : '· '}{message.text}
         </Text>
       </View>
     );
   }
-  // The agent woke on its own. Not a bubble — nobody said this.
-  if (message.role === 'system') {
+  if (message.role === 'notice' || message.role === 'system') {
     return (
-      <View style={{ paddingHorizontal: 14, paddingVertical: 6, alignItems: 'center' }}>
-        <Text style={{ color: T.muted, fontSize: 11 }}>· 스스로 시작한 turn ({message.text}) ·</Text>
-      </View>
-    );
-  }
-  if (message.role === 'notice') {
-    return (
-      <View style={{ marginHorizontal: 12, marginVertical: 4, padding: 10, borderRadius: 10, backgroundColor: '#3A1D22' }}>
+      <View style={{
+        marginHorizontal: 12, marginVertical: 4, padding: 10, borderRadius: 10,
+        backgroundColor: '#3A1D22',
+      }}>
         <Text style={{ color: T.bad, fontSize: 13 }}>{message.text}</Text>
       </View>
     );
@@ -70,16 +76,46 @@ function Bubble({ message }: { message: Message }) {
   );
 }
 
+/** What it is doing, while it does it. One line per call, newest last. */
+function Steps({ calls }: { calls: ToolCall[] }) {
+  if (calls.length === 0) return null;
+  return (
+    <View style={{
+      marginHorizontal: 12, marginBottom: 6, padding: 10, gap: 6,
+      borderRadius: 12, borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,
+    }}>
+      {calls.slice(-4).map((call) => {
+        const { text } = describeTool(call.name, call.input);
+        const mark = call.ok === null || call.ok === undefined ? '›' : call.ok ? '✓' : '✗';
+        const color = call.ok === false ? T.bad : call.ok ? T.muted : T.warn;
+        return (
+          <View key={call.key} style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
+            <Text style={{ color, fontSize: 12, fontFamily: MONO, width: 12 }}>{mark}</Text>
+            <Text numberOfLines={2} style={{ color: T.text, fontSize: 12.5, flex: 1, lineHeight: 17 }}>
+              {text}
+            </Text>
+            {call.durationMs ? (
+              <Text style={{ color: T.muted, fontSize: 11, fontFamily: MONO }}>
+                {(call.durationMs / 1000).toFixed(1)}s
+              </Text>
+            ) : null}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 export function ChatScreen({
-  wsBase, sessionId, sessionName, token, onOpenSettings,
+  baseUrl, sessionId, sessionName, token, onOpenSettings,
 }: {
-  wsBase: string;
+  baseUrl: string;
   sessionId: string | null;
   sessionName: string;
   token: string | null;
   onOpenSettings: () => void;
 }) {
-  const turn = useLiveTurn(wsBase, sessionId, token);
+  const turn = useLiveTurn(baseUrl, sessionId, token);
   const [draft, setDraft] = useState('');
   const listRef = useRef<FlatList<Message>>(null);
 
@@ -145,13 +181,21 @@ export function ChatScreen({
         contentContainerStyle={{ paddingVertical: 12, flexGrow: 1 }}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
         ListEmptyComponent={
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-            <Text style={{ color: T.muted, fontSize: 14, textAlign: 'center' }}>
-              무엇이든 시켜 보세요. 화면을 꺼도 서버에서 계속 돌아갑니다.
-            </Text>
-          </View>
+          turn.loading ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <ActivityIndicator color={T.accent} />
+            </View>
+          ) : (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+              <Text style={{ color: T.muted, fontSize: 14, textAlign: 'center' }}>
+                무엇이든 시켜 보세요. 화면을 꺼도 서버에서 계속 돌아갑니다.
+              </Text>
+            </View>
+          )
         }
       />
+
+      <Steps calls={turn.calls} />
 
       {turn.error ? (
         <Pressable onPress={turn.clearError} style={{ paddingHorizontal: 14, paddingBottom: 6 }}>

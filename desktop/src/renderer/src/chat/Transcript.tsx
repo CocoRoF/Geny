@@ -15,6 +15,7 @@
  */
 import { useState, type ReactNode } from 'react'
 
+import type { ToolCall } from '../../../../../shared/chat/room'
 import type { Message } from '../../../../../shared/chat/transcript'
 import { describeTool, resultView, type ResultView } from '../../../../../shared/chat/tool-view'
 import { Icon, KIND_ICON } from './icons'
@@ -94,16 +95,16 @@ function Result({ view }: { view: ResultView }): ReactNode {
  * for a list, a card for a named object, the first line otherwise — because
  * the useful half of a tool call is usually what came back.
  */
-function ToolRow({ message, t }: { message: Message; t: T }): ReactNode {
+function ToolRow({ call, t }: { call: ToolCall; t: T }): ReactNode {
   const [open, setOpen] = useState(false)
-  const { icon, text } = describeTool(message.tool ?? '', message.args)
-  const view = resultView(message.result)
-  const detail = pretty(message.args)
-  const openable = Boolean(detail || message.result)
-  const running = message.ok === null || message.ok === undefined
-  const failed = message.ok === false
-  const dur = seconds(message.durationMs)
-  const slow = (message.durationMs ?? 0) > 5000
+  const { icon, text } = describeTool(call.name, call.input)
+  const view = resultView(call.result)
+  const detail = pretty(typeof call.input === 'string' ? call.input : JSON.stringify(call.input))
+  const openable = Boolean(detail || call.result)
+  const running = call.ok === null || call.ok === undefined
+  const failed = call.ok === false
+  const dur = seconds(call.durationMs)
+  const slow = (call.durationMs ?? 0) > 5000
   return (
     <div
       className={[
@@ -130,10 +131,10 @@ function ToolRow({ message, t }: { message: Message; t: T }): ReactNode {
               <pre>{detail}</pre>
             </>
           )}
-          {message.result && (
+          {call.result && (
             <>
               <div className="ptl-label">{t('chat.tool.output')}</div>
-              <pre>{message.result}</pre>
+              <pre>{call.result}</pre>
             </>
           )}
         </div>
@@ -143,26 +144,25 @@ function ToolRow({ message, t }: { message: Message; t: T }): ReactNode {
 }
 
 /**
- * A turn's tool calls, as Dex's process timeline.
+ * What the agent is doing, as Dex's process timeline.
  *
- * A pill while it is closed — "작업 과정 · 도구 4회 · 실패 1 · 2.9초" — and a
- * rail of numbered nodes when open, each node carrying its own verdict and
- * its tool card beside it. The node is the point: a run of twenty is
- * readable down its left edge before any of it is read across.
+ * A pill while it is closed — 작업 과정 · 도구 4회 · 실패 1 · 2.9초 — and a rail
+ * of numbered nodes when open, each carrying its own verdict with its tool
+ * card beside it. It opens itself while a turn runs, because that is when
+ * someone is watching, and closes when the answer arrives.
  *
- * It opens itself while the turn is running, because that is when someone is
- * watching, and closes when the answer arrives, because that is what matters
- * then.
+ * The calls come from the ROOM's progress feed, which is the same source the
+ * web page reads. That is deliberate: a timeline built from somewhere else
+ * would disagree with the web about what just happened.
  */
-function Steps({ run, t }: { run: Message[]; t: T }): ReactNode {
-  const live = run.some((m) => m.ok === null || m.ok === undefined)
-  const failed = run.filter((m) => m.ok === false).length
+function Steps({ calls, live, t }: { calls: ToolCall[]; live: boolean; t: T }): ReactNode {
   const [manual, setManual] = useState<boolean | null>(null)
   const open = manual ?? live
-  const total = run.reduce((sum, m) => sum + (m.durationMs ?? 0), 0)
+  const failed = calls.filter((c) => c.ok === false).length
+  const total = calls.reduce((sum, c) => sum + (c.durationMs ?? 0), 0)
 
   const summary = [
-    t('chat.steps.tools', { n: run.length }),
+    t('chat.steps.tools', { n: calls.length }),
     failed ? t('chat.steps.failed', { n: failed }) : '',
     seconds(total),
   ].filter(Boolean).join(' · ')
@@ -183,18 +183,17 @@ function Steps({ run, t }: { run: Message[]; t: T }): ReactNode {
 
       {open && (
         <div className="ptl-steps">
-          {intoSteps(run).map((step, index) => {
-            const phase = step.rows.some((r) => r.ok === null || r.ok === undefined) ? 'run'
-              : step.rows.some((r) => r.ok === false) ? 'err'
-                : 'ok'
+          {calls.map((call, index) => {
+            const running = call.ok === null || call.ok === undefined
+            const phase = running ? 'run' : call.ok === false ? 'err' : 'ok'
             return (
-              <div className={`ptl-step ${phase}`} key={step.rows[0].key}>
+              <div className={`ptl-step ${phase}`} key={call.key}>
                 <span className="ptl-node">
                   {phase === 'ok' ? Icon.check : phase === 'err' ? '!' : index + 1}
                 </span>
-                {step.title && <div className="ptl-title">{step.title}</div>}
+                <div className="ptl-title">{call.name}</div>
                 <div className="ptl-tools">
-                  {step.rows.map((row) => <ToolRow key={row.key} message={row} t={t} />)}
+                  <ToolRow call={call} t={t} />
                 </div>
               </div>
             )
@@ -205,35 +204,7 @@ function Steps({ run, t }: { run: Message[]; t: T }): ReactNode {
   )
 }
 
-/**
- * Tool calls → steps. A call that arrived with a sentence in front of it
- * opens a new step and that sentence is its title; the calls after it belong
- * to the same step until the agent says something else. With no narration at
- * all this is one step, which is the honest shape of that turn.
- */
-function intoSteps(run: Message[]): { title?: string; rows: Message[] }[] {
-  const steps: { title?: string; rows: Message[] }[] = []
-  for (const row of run) {
-    const last = steps[steps.length - 1]
-    if (row.step || !last) steps.push({ title: row.step, rows: [row] })
-    else last.rows.push(row)
-  }
-  return steps
-}
-
-function Row({ message, t, times = 1 }: { message: Message; t: T; times?: number }): ReactNode {
-  if (message.role === 'system') {
-    // Nobody typed this: the agent woke on a schedule. In the flow, because
-    // it is why the next answer exists; not a bubble, because no one said it.
-    return (
-      <div className="trigger-row">
-        {times > 1
-          ? t('chat.selfStartedTimes', { reason: message.text, n: times })
-          : t('chat.selfStarted', { reason: message.text })}
-      </div>
-    )
-  }
-
+function Row({ message, t }: { message: Message; t: T }): ReactNode {
   if (message.role === 'notice') {
     return (
       <div className="msg-row">
@@ -272,49 +243,11 @@ function Row({ message, t, times = 1 }: { message: Message; t: T; times?: number
   )
 }
 
-/**
- * Consecutive tool calls become one step.
- *
- * A failed call produces two things in the fold: the call marked failed, and
- * a notice carrying its output — the phone needs the second because it shows
- * no output. Here the row already carries it, so that notice is dropped
- * rather than allowed to split the run in half and say the same thing twice.
- * Only that exact notice: anything else (a failed turn, an engine error) is
- * still a message of its own.
- */
-function group(messages: Message[]): Message[][] {
-  const out: Message[][] = []
-  for (const message of messages) {
-    // The fold's buffer for text that has not found its step yet.
-    if (message.role === 'draft') continue
-    const last = out[out.length - 1]
-    const lastIsTools = last && last[0].role === 'activity'
-
-    if (message.role === 'activity' && lastIsTools) {
-      last.push(message)
-      continue
-    }
-    if (message.role === 'notice' && lastIsTools) {
-      const failed = last[last.length - 1]
-      if (failed.ok === false && failed.result && message.text === failed.result) continue
-    }
-    // Ten identical "the agent woke on its own" rules in a row say nothing
-    // that one rule and a count does not. This happens whenever a silent
-    // stretch of triggers produced no answers to separate them.
-    if (message.role === 'system' && last && last[0].role === 'system'
-        && last[0].text === message.text) {
-      last.push(message)
-      continue
-    }
-    out.push([message])
-  }
-  return out
-}
-
 export function Transcript({
-  messages, running, loading, t,
+  messages, calls, running, loading, t,
 }: {
   messages: Message[]
+  calls: ToolCall[]
   running: boolean
   loading: boolean
   t: T
@@ -322,7 +255,7 @@ export function Transcript({
   if (loading && messages.length === 0) {
     return <div className="chat-empty">{t('chat.loading')}</div>
   }
-  if (messages.length === 0) {
+  if (messages.length === 0 && calls.length === 0) {
     return (
       <div className="chat-empty">
         <strong>{t('chat.empty.title')}</strong>
@@ -332,19 +265,16 @@ export function Transcript({
   }
   return (
     <>
-      {group(messages).map((run) =>
-        run[0].role === 'activity' ? (
-          <div className="msg-row" key={run[0].key}>
-            <span className="msg-avatar assistant">G</span>
-            <div className="msg-col" style={{ maxWidth: 'calc(100% - 44px)', width: '100%' }}>
-              <Steps run={run} t={t} />
-            </div>
+      {messages.map((message) => <Row key={message.key} message={message} t={t} />)}
+      {calls.length > 0 && (
+        <div className="msg-row">
+          <span className="msg-avatar assistant">G</span>
+          <div className="msg-col" style={{ maxWidth: 'calc(100% - 44px)', width: '100%' }}>
+            <Steps calls={calls} live={running} t={t} />
           </div>
-        ) : (
-          <Row key={run[0].key} message={run[0]} t={t} times={run.length} />
-        ),
+        </div>
       )}
-      {running && (
+      {running && calls.length === 0 && (
         <div className="msg-row">
           <span className="msg-avatar assistant">G</span>
           <div className="msg-col">

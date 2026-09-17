@@ -1,30 +1,37 @@
 /**
- * One session, live, in the connector's main window.
+ * One session's conversation, live.
  *
- * The desktop version of the phone's `useLiveTurn`, over the same socket and
- * the same fold (`shared/chat/*`). It differs in two ways, and both come from
- * the fact that a desktop window is not a phone screen:
+ * The conversation is the ROOM. This window used to fold the session's
+ * execute log instead, which looked right on its own and meant the app, the
+ * web page and the phone each showed a different conversation — messages
+ * typed here never reached the web, and messages the web sent never reached
+ * here. The room is the store every surface shares; the log is the engine's
+ * record and answers a different question ("what did it DO"), which is the
+ * work pane's job.
  *
- * · Opening a session loads its LOG first. A phone shows the turn it is in;
- *   a desktop window is where the work lives, and scrolling up to yesterday
- *   has to work. The log is the honest record, folded by the same function
- *   that folds the live stream, so the seam between "read from history" and
- *   "arrived just now" is invisible.
- * · Waking up is a window event, not an app-state one.
+ * Two streams, therefore, and they are not the same thing:
+ *
+ *  · the room socket — the conversation, and who is working
+ *  · the execute socket — nothing here. The room's `agent_progress` carries
+ *    the tool calls, which is what the web has always used, and using the
+ *    same source is the whole point of this file.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { connectExecWs, type ConnState, type ExecWsHandle, type LogEntry }
-  from '../../../../../shared/chat/exec-ws'
-import { foldAll, foldEntry, pendingUserMessage, type Message }
-  from '../../../../../shared/chat/transcript'
-import { authToken, sessions, wsBase } from '../server'
+import {
+  connectRoom, foldCalls, foldRoom, foldRoomMessage, lastRoomId,
+  type ConnState, type RoomHandle, type ToolCall,
+} from '../../../../../shared/chat/room'
+import { pendingUserMessage, type Message } from '../../../../../shared/chat/transcript'
+import { authToken, rooms, wsBase, type ChatRoom } from '../server'
 
 export interface LiveSession {
   state: ConnState
+  /** A turn is running somewhere in this room. */
   running: boolean
   messages: Message[]
-  /** The log is still being read — the window shows a skeleton, not "empty". */
+  /** What the agent is doing right now, from the room's progress feed. */
+  calls: ToolCall[]
   loading: boolean
   error: string | null
   send(prompt: string): void
@@ -36,17 +43,22 @@ export function useSession(sessionId: string | null): LiveSession {
   const [state, setState] = useState<ConnState>('connecting')
   const [running, setRunning] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
+  const [calls, setCalls] = useState<ToolCall[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const handle = useRef<ExecWsHandle | null>(null)
-  const seq = useRef(0)
+  const room = useRef<ChatRoom | null>(null)
+  const handle = useRef<RoomHandle | null>(null)
+  /** Read at connect time by the socket's greeting, so it resumes from here. */
+  const cursor = useRef<string | null>(null)
 
   useEffect(() => {
     handle.current?.close()
     handle.current = null
+    room.current = null
+    cursor.current = null
     setMessages([])
+    setCalls([])
     setRunning(false)
-    seq.current = 0
     if (!sessionId) {
       setState('closed')
       return
@@ -55,36 +67,51 @@ export function useSession(sessionId: string | null): LiveSession {
 
     let cancelled = false
     void (async () => {
-      // History first, socket second. The other order shows the live turn and
-      // then shoves it down the screen when the log lands.
       try {
-        const log = await sessions.logs(sessionId)
+        // The server decides which room this session talks in, and makes one
+        // if it never has. Deciding it here is what let this app, the web
+        // page and the phone each pick a different room.
+        const found = await rooms.forSession(sessionId)
         if (cancelled) return
-        // The endpoint answers newest-first; a conversation reads the other way.
-        setMessages(foldAll([...log.entries].reverse()))
-        seq.current = log.entries.length
+        room.current = found
+        const history = await rooms.messages(found.id)
+        if (cancelled) return
+        const folded = foldRoom(history.messages ?? [])
+        setMessages(folded)
+        cursor.current = lastRoomId(folded)
       } catch (e) {
         if (!cancelled) setError((e as Error).message)
       } finally {
         if (!cancelled) setLoading(false)
       }
-      if (cancelled) return
+      if (cancelled || !room.current) return
 
-      const [base, token] = await Promise.all([
-        wsBase().catch(() => ''),
-        authToken(),
-      ])
+      const [base, token] = await Promise.all([wsBase().catch(() => ''), authToken()])
       if (cancelled || !base) return
-      handle.current = connectExecWs({
+      handle.current = connectRoom({
         wsBase: base,
-        sessionId,
+        roomId: room.current.id,
         token,
+        after: () => cursor.current,
         onState: setState,
-        onRunning: setRunning,
         onError: setError,
-        onLog: (entry: LogEntry) => {
-          seq.current += 1
-          setMessages((prev) => foldEntry(prev, entry, seq.current))
+        onMessage: (raw) => {
+          setMessages((prev) => {
+            const next = foldRoomMessage(prev, raw)
+            cursor.current = lastRoomId(next)
+            return next
+          })
+        },
+        onProgress: (agents) => {
+          const mine = agents.filter((a) => !sessionId || a.session_id === sessionId)
+          const busy = mine.some((a) => a.status === 'executing' || a.status === 'pending')
+          setRunning(busy || agents.some((a) => a.status === 'executing'))
+          const logs = mine.flatMap((a) => a.recent_logs ?? [])
+          setCalls(foldCalls(logs))
+        },
+        onIdle: () => {
+          setRunning(false)
+          setCalls([])
         },
       })
     })()
@@ -97,8 +124,8 @@ export function useSession(sessionId: string | null): LiveSession {
   }, [sessionId])
 
   // A laptop that slept has a socket the OS kept and the network dropped.
-  // Both events mean the same thing: prove the connection, do not wait out a
-  // backoff timer that was counting for a server outage.
+  // Both events mean the same thing: prove the connection rather than wait
+  // out a backoff that was counting for a server outage.
   useEffect(() => {
     const wake = (): void => handle.current?.resume()
     window.addEventListener('focus', wake)
@@ -111,20 +138,42 @@ export function useSession(sessionId: string | null): LiveSession {
 
   const send = useCallback((prompt: string) => {
     const text = prompt.trim()
-    if (!text) return
-    // Drawn immediately; the server's own echo replaces it in place.
+    if (!text || !sessionId) return
+    // Drawn immediately; the room's own copy replaces it in place.
     setMessages((prev) => [...prev, pendingUserMessage(text)])
-    handle.current?.execute(text)
-  }, [])
+    setRunning(true)
+    void (async () => {
+      try {
+        if (!room.current) {
+          // The room lookup failed earlier (server was down, say). Ask again
+          // rather than dropping what the user just typed.
+          room.current = await rooms.forSession(sessionId)
+        }
+        if (!room.current) {
+          setError('이 세션의 대화방을 찾지 못했습니다')
+          setRunning(false)
+          return
+        }
+        await rooms.send(room.current.id, text)
+      } catch (e) {
+        setError((e as Error).message)
+        setRunning(false)
+      }
+    })()
+  }, [sessionId])
 
   return {
     state,
     running,
     messages,
+    calls,
     loading,
     error,
     send,
-    stop: () => handle.current?.stop(),
+    stop: () => {
+      // Stopping is a session-level act, not a room one.
+      if (sessionId) void import('../server').then(({ agents }) => agents.stop(sessionId))
+    },
     clearError: () => setError(null),
   }
 }

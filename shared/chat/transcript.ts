@@ -134,7 +134,19 @@ const SILENT = /^\s*\[SILENT\]/i;
  * speaks. A direction to the renderer, not something anybody said, so it
  * comes off the front of the line and is carried beside it.
  */
-const MOOD = /^\s*\[([a-z_]+)(?::\s*([0-9.]+))?\]\s*/i;
+const MOOD = /^\s*\[([a-z_]+)(?::\s*(-?[0-9]+(?:\.[0-9]+)?))?\]\s*/i;
+
+/**
+ * The same direction, dropped mid-sentence — which the model does, often.
+ *
+ * Only the form that carries a numeric strength is stripped away from the
+ * start of a message, because that form cannot be anything else. A bare
+ * `[something]` in the middle of a line is far more likely to be prose, a
+ * footnote marker or a markdown link, and eating it would be the worse bug.
+ * This mirrors the server's rule in `service/utils/text_sanitizer.py`, which
+ * is what makes the two agree on what a person is meant to read.
+ */
+const INLINE_MOOD = /\[\s*[a-z][a-z_]{1,19}\s*:\s*-?[0-9]+(?:\.[0-9]+)?\s*\][^\S\n]*/gi;
 
 export interface Spoken {
   text: string;
@@ -152,6 +164,7 @@ export function spoken(message: unknown): Spoken {
     text = text.slice(tag[0].length);
   }
   if (SILENT.test(text)) return { text: '', mood, silent: true };
+  text = text.replace(INLINE_MOOD, '');
   return { text: text.trim(), mood, silent: false };
 }
 

@@ -9,7 +9,8 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 
 import {
-  describeTool, foldAll, foldEntry, latestAssistantText, pendingUserMessage, type Message,
+  describeTool, foldAll, foldEntry, latestAssistantText, pendingUserMessage, spoken,
+  type Message,
 } from './transcript';
 
 const user = { timestamp: '2026-09-17T10:00:00', level: 'COMMAND', message: '테스트 돌려줘' };
@@ -337,4 +338,21 @@ test('text with no tool after it is dropped by the answer', () => {
 test('an empty delta changes nothing', () => {
   const m = foldEntry([], delta('', 't1'));
   assert.equal(m.length, 0);
+});
+
+test('a mood direction dropped mid-sentence is not read aloud to the user', () => {
+  const said = spoken('네, 확인했습니다. [curious:0.5] 다음은 무엇을 할까요?');
+  assert.equal(said.text, '네, 확인했습니다. 다음은 무엇을 할까요?');
+});
+
+test('the leading mood is still the one carried beside the text', () => {
+  const said = spoken('[calm:0.2] 준비됐습니다. [joy:0.9] 시작할까요?');
+  assert.equal(said.mood, 'calm');
+  assert.equal(said.text, '준비됐습니다. 시작할까요?');
+});
+
+test('bracketed prose in the middle of a line survives', () => {
+  // No numeric strength — this is a person's words, not a direction.
+  const said = spoken('배포는 [note: 내일] 하겠습니다. 문서는 [여기](http://x) 있습니다.');
+  assert.equal(said.text, '배포는 [note: 내일] 하겠습니다. 문서는 [여기](http://x) 있습니다.');
 });

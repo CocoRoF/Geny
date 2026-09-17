@@ -28,37 +28,29 @@ def _is_silent(raw: str) -> bool:
     return bool(_SILENT_RE.match(raw or ""))
 
 
-def _resolve_or_create_room(mgr: Any, agent: Any, session_id: str) -> Optional[str]:
-    """Find this session's chat room, creating one if it has none yet.
+def _resolve_or_create_room(agent: Any, session_id: str) -> Optional[str]:
+    """This session's chat room, creating one if it has none yet.
 
-    Order: the agent's cached ``_chat_room_id`` → the session's best existing
-    room (``AgentSessionManager._best_chat_room_for``) → a freshly created room.
-    The result is cached on the agent and persisted so future deliveries reuse
-    it (mirrors the VTuber create path at agent_session_manager.py:1432-1438).
+    The rule lives in ``service.chat.home_room`` — the same one the REST door
+    (``GET /api/chat/rooms/for-session/{id}``) answers with, so an autonomous
+    delivery lands in the room the user is actually looking at.
     """
     room_id = getattr(agent, "_chat_room_id", None)
     if room_id:
         return room_id
-    try:
-        room_id = mgr._best_chat_room_for(session_id)
-    except Exception:  # noqa: BLE001
-        room_id = None
-    if not room_id:
-        try:
-            from service.chat.conversation_store import get_chat_store
+    from service.chat.home_room import resolve_home_room
 
-            name = getattr(agent, "_session_name", None) or session_id
-            room = get_chat_store().create_room(f"{name} Chat", [session_id])
-            room_id = room.get("id") or room.get("room_id")
-        except Exception:  # noqa: BLE001
-            logger.warning("[autonomous-delivery] room create failed for %s", session_id, exc_info=True)
-            return None
+    room = resolve_home_room(
+        session_id,
+        create=True,
+        name_hint=getattr(agent, "_session_name", "") or "",
+    )
+    if not room:
+        logger.warning("[autonomous-delivery] room resolve failed for %s", session_id)
+        return None
+    room_id = room.get("id") or room.get("room_id")
     if room_id:
-        try:
-            agent._chat_room_id = room_id
-            mgr._store.update(session_id, {"chat_room_id": room_id})
-        except Exception:  # noqa: BLE001
-            pass
+        agent._chat_room_id = room_id
     return room_id
 
 
@@ -89,7 +81,7 @@ def post_autonomous_message(session_id: str, result: Any, *, source: str = "hook
             logger.warning("[autonomous-delivery] no agent for %s — skipping", session_id)
             return None
 
-        room_id = _resolve_or_create_room(mgr, agent, session_id)
+        room_id = _resolve_or_create_room(agent, session_id)
         if not room_id:
             logger.warning("[autonomous-delivery] no chat room for %s — skipping", session_id)
             return None

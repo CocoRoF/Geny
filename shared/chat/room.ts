@@ -1,0 +1,247 @@
+/**
+ * The conversation — the thing every surface must agree about.
+ *
+ * A Geny session has two streams, and confusing them is what made the web,
+ * the desktop app and the phone show three different conversations:
+ *
+ *  · The **room** is the conversation. Every message a person sends and every
+ *    message an agent delivers — including the ones it starts by itself —
+ *    is stored there, and that store is what the web has always rendered.
+ *  · The **execute log** is the engine's record of a turn: its tool calls,
+ *    its stages, its errors. It contains the answer too, which is exactly why
+ *    it was tempting to render, and why rendering it produced a second
+ *    conversation that nobody else could see.
+ *
+ * So: the room is the conversation, everywhere. The log stays what it is —
+ * the material for "what did it DO", which is a different question and has
+ * its own panel.
+ *
+ * Free of React and of any platform import; tested under `node:test`.
+ */
+
+import { openSocket, type ConnState, type SocketHandle } from './socket';
+import { spoken, type Message } from './transcript';
+
+export type { ConnState };
+
+/** A message as `/api/chat/rooms/{id}/messages` returns it. */
+export interface RoomMessage {
+  id: string;
+  /** 'user' | 'agent' | 'system' */
+  type?: string;
+  content?: string;
+  timestamp?: string;
+  session_id?: string | null;
+  session_name?: string | null;
+  duration_ms?: number | null;
+  meta?: Record<string, unknown> | null;
+}
+
+/**
+ * One room message → the conversation.
+ *
+ * Idempotent by id: the socket replays from a cursor on every reconnect, and
+ * a replayed message must land on itself rather than beside itself.
+ */
+export function foldRoomMessage(messages: Message[], raw: RoomMessage): Message[] {
+  const key = `room:${raw.id}`;
+  const at = messages.findIndex((m) => m.key === key);
+  const ts = raw.timestamp;
+
+  if (raw.type === 'user') {
+    const text = String(raw.content ?? '');
+    const next: Message = { key, role: 'user', text, ts };
+    if (at >= 0) return replace(messages, at, next);
+    // The server's copy of a message this screen already drew. Adopt its
+    // identity rather than appending a twin — and only over a PENDING one,
+    // so a user who really does send the same line twice gets two bubbles.
+    const pending = messages.findIndex((m) => m.role === 'user' && m.pending && m.text === text);
+    if (pending >= 0) return replace(messages, pending, next);
+    return [...messages, next];
+  }
+
+  if (raw.type === 'agent') {
+    const said = spoken(raw.content);
+    // Silence is an answer the agent asked us not to deliver.
+    if (said.silent || !said.text) return at >= 0 ? drop(messages, at) : messages;
+    const next: Message = {
+      key,
+      role: 'assistant',
+      text: said.text,
+      ts,
+      mood: said.mood,
+      durationMs: raw.duration_ms ?? undefined,
+    };
+    return at >= 0 ? replace(messages, at, next) : [...messages, next];
+  }
+
+  // 'system' — the server telling the room something happened. Rare, and
+  // always worth showing, because it is how a failure reaches a person who
+  // is not watching the log.
+  const next: Message = { key, role: 'notice', text: String(raw.content ?? ''), ts };
+  if (!next.text) return messages;
+  return at >= 0 ? replace(messages, at, next) : [...messages, next];
+}
+
+function replace(messages: Message[], at: number, next: Message): Message[] {
+  const out = messages.slice();
+  out[at] = next;
+  return out;
+}
+
+function drop(messages: Message[], at: number): Message[] {
+  const out = messages.slice();
+  out.splice(at, 1);
+  return out;
+}
+
+/** Fold a whole page of history, oldest first. */
+export function foldRoom(raws: RoomMessage[]): Message[] {
+  return raws.reduce<Message[]>((acc, raw) => foldRoomMessage(acc, raw), []);
+}
+
+/** The id to resume from: the newest room message this client has folded. */
+export function lastRoomId(messages: Message[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].key.startsWith('room:')) return messages[i].key.slice(5);
+  }
+  return null;
+}
+
+// ── what the agent is doing, while it does it ────────────────────────
+
+/** A log line as the room's `agent_progress` event carries it. */
+export interface ProgressLog {
+  level?: string;
+  message?: string;
+  tool_name?: string;
+  tool_id?: string;
+  input_preview?: string;
+  result_preview?: string;
+  duration_ms?: number;
+  is_error?: boolean;
+}
+
+export interface ToolCall {
+  key: string;
+  name: string;
+  input?: unknown;
+  result?: string;
+  ok?: boolean | null;
+  durationMs?: number;
+}
+
+/**
+ * TOOL / TOOL_RES log lines → one call each.
+ *
+ * Paired by `tool_id` where the server sent one, and otherwise by name onto
+ * the most recent call still waiting — production carries both shapes,
+ * because a batch summary arrives with neither an id nor a name.
+ */
+export function foldCalls(logs: ProgressLog[]): ToolCall[] {
+  const calls: ToolCall[] = [];
+  logs.forEach((log, i) => {
+    if (log.level === 'TOOL') {
+      calls.push({
+        key: log.tool_id ?? `${i}:${log.tool_name ?? 'tool'}`,
+        name: log.tool_name ?? 'tool',
+        input: log.input_preview,
+        ok: null,
+      });
+      return;
+    }
+    if (log.level !== 'TOOL_RES') return;
+    const match = log.tool_id
+      ? calls.find((c) => c.key === log.tool_id)
+      : [...calls].reverse().find((c) =>
+        c.ok === null && (!log.tool_name || c.name === log.tool_name));
+    if (!match) return;
+    match.ok = !log.is_error;
+    match.result = log.result_preview;
+    match.durationMs = log.duration_ms;
+  });
+  return calls;
+}
+
+// ── the socket ───────────────────────────────────────────────────────
+
+export interface RoomAgentState {
+  session_id?: string;
+  session_name?: string;
+  status?: string;
+  recent_logs?: ProgressLog[];
+}
+
+export interface RoomEvents {
+  onState?(state: ConnState): void;
+  onMessage?(message: RoomMessage): void;
+  /** Who is working, and on what. */
+  onProgress?(agents: RoomAgentState[]): void;
+  /** A broadcast finished — nothing is working any more. */
+  onIdle?(): void;
+  onError?(message: string): void;
+}
+
+export interface RoomOptions extends RoomEvents {
+  /** `wss://host` — no trailing slash needed. */
+  wsBase: string;
+  roomId: string;
+  token: string | null;
+  /** The newest message already on screen, so a reconnect resumes from it. */
+  after(): string | null;
+  wsFactory?: (url: string, protocols?: string[]) => WebSocket;
+  setTimeoutFn?: (fn: () => void, ms: number) => unknown;
+  clearTimeoutFn?: (handle: unknown) => void;
+  now?: () => number;
+  log?(line: string): void;
+}
+
+export interface RoomHandle {
+  resume(): void;
+  close(): void;
+  state(): ConnState;
+}
+
+export function connectRoom(opts: RoomOptions): RoomHandle {
+  const url = `${opts.wsBase.replace(/\/+$/, '')}/ws/chat/rooms/${encodeURIComponent(opts.roomId)}`;
+
+  const socket: SocketHandle = openSocket({
+    url,
+    token: opts.token,
+    wsFactory: opts.wsFactory,
+    setTimeoutFn: opts.setTimeoutFn,
+    clearTimeoutFn: opts.clearTimeoutFn,
+    now: opts.now,
+    log: opts.log,
+    onState: opts.onState,
+    onError: opts.onError,
+    // The cursor is read at connect time, not at setup time: after a minute
+    // in a tunnel this asks for what was missed, not for the whole room.
+    greeting: () => ({ type: 'subscribe', after: opts.after() }),
+    onFrame(type, data) {
+      switch (type) {
+        case 'message':
+          opts.onMessage?.(data as unknown as RoomMessage);
+          return;
+        case 'agent_progress': {
+          const agents = (data.agents as RoomAgentState[] | undefined) ?? [];
+          opts.onProgress?.(agents);
+          return;
+        }
+        case 'broadcast_done':
+          opts.onIdle?.();
+          return;
+        case 'error':
+          opts.onError?.(String(data.error ?? 'unknown error'));
+          return;
+        default:
+      }
+    },
+  });
+
+  return {
+    resume: socket.resume,
+    close: socket.close,
+    state: socket.state,
+  };
+}

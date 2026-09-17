@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 if TYPE_CHECKING:  # quoted-annotation only — no import cycle at runtime
     from service.tick.engine import TickEngine
 import asyncio
-import json
 import os
 import time
 import uuid
@@ -2305,35 +2304,21 @@ class AgentSessionManager:
     # ========================================================================
 
     def _best_chat_room_for(self, session_id: str) -> Optional[str]:
-        """Return this session's existing chat room id — the one with the MOST
-        messages (tiebreak: most recently updated) among rooms that list this
-        session. Reused on reload so the conversation is never orphaned behind a
-        fresh empty room. Returns None when the session has no room yet.
+        """This session's existing chat room id, or None when it has none.
+
+        Delegates to ``service.chat.home_room`` so the manager, the REST door
+        and the autonomous-delivery path cannot disagree about which room a
+        session's conversation is in.
         """
         try:
-            from service.chat.conversation_store import get_chat_store
+            from service.chat.home_room import best_existing_room
 
-            rooms = get_chat_store().list_rooms()
+            room = best_existing_room(session_id)
         except Exception:  # noqa: BLE001
             return None
-        candidates = []
-        for r in rooms or []:
-            sids = r.get("session_ids")
-            if isinstance(sids, str):
-                try:
-                    sids = json.loads(sids)
-                except Exception:  # noqa: BLE001
-                    sids = []
-            if session_id in (sids or []):
-                candidates.append(r)
-        if not candidates:
+        if not room:
             return None
-        candidates.sort(
-            key=lambda r: (int(r.get("message_count") or 0), str(r.get("updated_at") or "")),
-            reverse=True,
-        )
-        top = candidates[0]
-        return top.get("room_id") or top.get("id")
+        return room.get("id") or room.get("room_id")
 
     def _session_busy(self, session_id: str, agent: AgentSession) -> bool:
         """A turn is in-flight on this session, so a manifest reload must wait.

@@ -424,6 +424,28 @@ async def create_room(request: CreateRoomRequest, auth: dict = Depends(require_a
     return RoomResponse(**room)
 
 
+@router.get("/rooms/for-session/{session_id}", response_model=RoomResponse)
+async def room_for_session(session_id: str, create: bool = True):
+    """Where this session's conversation lives.
+
+    Every surface asks this rather than scanning the room list and applying a
+    rule of its own — that is how the web page, the desktop app and the phone
+    ended up showing three different conversations for one session. The rule
+    is in ``service.chat.home_room``; this is only its door.
+
+    ``create=false`` asks without making one, for a caller that wants to know
+    whether a conversation exists at all.
+    """
+    from service.chat.home_room import resolve_home_room
+
+    room = resolve_home_room(session_id, create=create)
+    if not room:
+        raise HTTPException(
+            status_code=404, detail=f"No chat room for session: {session_id}"
+        )
+    return RoomResponse(**room)
+
+
 @router.get("/rooms/{room_id}", response_model=RoomResponse)
 async def get_room(room_id: str):
     """Get a single chat room by ID."""

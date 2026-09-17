@@ -174,3 +174,48 @@ export const models = {
       body: JSON.stringify({ primary: route.primary, fallbacks: route.fallbacks }),
     }),
 };
+
+// ── the conversation ─────────────────────────────────────────────────
+//
+// The room, not the session log. The phone, the desktop app and the web page
+// read and write this same store; anything else and the three show three
+// different conversations. See `shared/chat/room.ts`.
+
+export interface ChatRoom {
+  id: string;
+  name: string;
+  session_ids: string[];
+  updated_at: string;
+}
+
+export interface RoomMessageDTO {
+  id: string;
+  type?: string;
+  content?: string;
+  timestamp?: string;
+  session_id?: string | null;
+  duration_ms?: number | null;
+}
+
+export const rooms = {
+  list: (creds: Credentials) => request<{ rooms: ChatRoom[] }>(creds, '/api/chat/rooms'),
+
+  messages: (creds: Credentials, roomId: string, limit = 200) =>
+    request<{ messages: RoomMessageDTO[] }>(
+      creds, `/api/chat/rooms/${encodeURIComponent(roomId)}/messages?limit=${limit}`),
+
+  /** Sends to every session in the room — the same path the web and the
+   *  desktop app use, so the three cannot diverge. */
+  send: (creds: Credentials, roomId: string, message: string) =>
+    request<{ message?: RoomMessageDTO }>(
+      creds, `/api/chat/rooms/${encodeURIComponent(roomId)}/broadcast`,
+      { method: 'POST', body: JSON.stringify({ message }) }),
+
+  /**
+   * Where this session's conversation lives — the SERVER's answer, not ours.
+   * It creates the room when the session has never spoken, so this always
+   * answers, and answers the same thing it answers the laptop.
+   */
+  forSession: (creds: Credentials, sessionId: string) =>
+    request<ChatRoom>(creds, `/api/chat/rooms/for-session/${encodeURIComponent(sessionId)}`),
+};

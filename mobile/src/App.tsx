@@ -17,7 +17,7 @@ import { ActivityIndicator, SafeAreaView, StatusBar, View } from 'react-native';
 
 import {
   auth as authApi, agents as agentsApi, setUnauthorizedHandler,
-  toWsBase, normalizeBaseUrl, type AgentSummary, type Credentials,
+  normalizeBaseUrl, type AgentSummary, type Credentials,
 } from './lib/server';
 import {
   loadBaseUrl, loadLastSession, loadToken, saveBaseUrl, saveLastSession, saveToken,
@@ -138,7 +138,7 @@ export default function App() {
         />
       ) : (
         <ChatScreen
-          wsBase={toWsBase(baseUrl)}
+          baseUrl={baseUrl}
           sessionId={sessionId}
           sessionName={sessionName}
           token={token}

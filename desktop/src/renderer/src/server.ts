@@ -288,6 +288,56 @@ export const sessions = {
     serverFetch<{ success?: boolean }>(`/api/agents/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 }
 
+// ── the conversation ─────────────────────────────────────────────────
+//
+// The room, not the session log. Every surface — this app, the web page, the
+// phone — reads and writes the same store, which is the only way they can
+// show the same conversation. See `shared/chat/room.ts`.
+
+export interface ChatRoom {
+  id: string
+  name: string
+  session_ids: string[]
+  updated_at: string
+  message_count: number
+}
+
+export const rooms = {
+  list: () => serverFetch<{ rooms: ChatRoom[] }>('/api/chat/rooms'),
+
+  messages: (roomId: string, limit = 200) =>
+    serverFetch<{ messages: RoomMessageDTO[] }>(
+      `/api/chat/rooms/${encodeURIComponent(roomId)}/messages?limit=${limit}`),
+
+  /** Sends to every session in the room — the same path the web uses, so a
+   *  message typed here reaches the same place a message typed there does. */
+  send: (roomId: string, message: string) =>
+    serverFetch<{ message?: RoomMessageDTO }>(
+      `/api/chat/rooms/${encodeURIComponent(roomId)}/broadcast`,
+      { method: 'POST', body: JSON.stringify({ message }) }),
+
+  /**
+   * Where this session's conversation lives — the SERVER's answer, not ours.
+   *
+   * Picking it here meant picking it differently from the web page and from
+   * the agent's own autonomous deliveries, which is how one session came to
+   * have three conversations. The server creates the room when the session
+   * has never spoken, so this always answers.
+   */
+  forSession: (sessionId: string) =>
+    serverFetch<ChatRoom>(
+      `/api/chat/rooms/for-session/${encodeURIComponent(sessionId)}`),
+}
+
+export interface RoomMessageDTO {
+  id: string
+  type?: string
+  content?: string
+  timestamp?: string
+  session_id?: string | null
+  duration_ms?: number | null
+}
+
 export interface EnvironmentSummary {
   id: string
   name: string

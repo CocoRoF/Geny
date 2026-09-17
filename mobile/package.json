@@ -7,7 +7,7 @@
   "main": "index.js",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "tsx --test ../shared/chat/exec-ws.test.ts ../shared/chat/transcript.test.ts test/server.test.ts",
+    "test": "tsx --test ../shared/chat/exec-ws.test.ts ../shared/chat/room.test.ts ../shared/chat/transcript.test.ts ../shared/chat/tool-view.test.ts test/server.test.ts",
     "start": "expo start",
     "prebuild": "expo prebuild --clean && node scripts/patch-android.mjs",
     "android": "expo run:android",
