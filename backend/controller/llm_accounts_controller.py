@@ -237,14 +237,25 @@ async def login_events(request: Request, job_id: Optional[str] = None,
 
     Replays what this job has already emitted before going live, so opening
     the stream a moment late does not lose the URL the whole flow hangs on.
+
+    A stream following one job ENDS when that job reports its verdict. A login
+    is a bounded thing; holding the connection open afterwards leaks one per
+    sign-in and leaves the client waiting for a frame that will never come.
+    Following everything (no ``job_id``) stays open, because there is no such
+    moment.
     """
     service = get_account_service()
     queue = service.events.subscribe()
 
+    def frame(event: Dict[str, Any]) -> str:
+        return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
     async def stream():
         try:
             for event in service.events.replay(job_id):
-                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                yield frame(event)
+                if job_id and event.get("type") == "done":
+                    return
             while True:
                 if await request.is_disconnected():
                     return
@@ -255,7 +266,9 @@ async def login_events(request: Request, job_id: Optional[str] = None,
                     continue
                 if job_id and event.get("jobId") != job_id:
                     continue
-                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                yield frame(event)
+                if job_id and event.get("type") == "done":
+                    return
         finally:
             service.events.unsubscribe(queue)
 
