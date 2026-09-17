@@ -8,11 +8,19 @@ name: Mobile Apps
 # regenerating them here would make the release depend on whatever the Expo
 # template looked like that morning.
 #
-# Android ships a real, installable APK. iOS ships an UNSIGNED .ipa: Apple
-# distribution needs a developer certificate and provisioning profile, which
-# are not in this repository. The unsigned build still proves the iOS side
-# compiles, and is the input to a signing step for anyone who has an Apple
-# Developer account (or to a sideloading tool).
+Signing, as it stands today:
+#
+# · iOS ships an UNSIGNED .ipa. Apple distribution needs a developer
+#   certificate and a provisioning profile, and there is no Apple Developer
+#   account behind this project. The build still proves the iOS side compiles,
+#   and it is the input to a signing step for anyone who has one.
+# · Android CANNOT ship unsigned — the OS refuses to install an unsigned APK —
+#   so it is signed with a TEMPORARY key held in repository secrets. It is a
+#   real, installable APK and successive releases update over each other.
+#   Swapping it for a permanent key later is a one-way door for installed
+#   users: Android treats a different signature as a different app, so they
+#   will have to uninstall first and lose their server address, token and
+#   session. Do it before anyone depends on this, or not at all.
 
 on:
   workflow_dispatch:
@@ -55,10 +63,15 @@ jobs:
       # ⚠ Every release must be signed with the SAME key, or Android refuses
       # to install it over the previous version ("package conflicts with an
       # existing package") and the user has to uninstall first — losing their
-      # server address, their token and their session. The key lives in
-      # repository secrets; this repo is public, so it cannot be committed.
-      # Without the secret (a fork, a manual run before setup) we fall back to
-      # a throwaway key and say so loudly.
+      # server address, their token and their session.
+      #
+      # The key is TEMPORARY but FIXED, and lives in repository secrets — not
+      # in the tree, because a signing key in a public repo lets anyone build
+      # an APK the OS will accept as an update to this one.
+      #
+      # Without the secret (a fork, a manual run before setup) each run
+      # generates its own key, so those builds cannot update anything —
+      # including each other. Hence the warning.
       - name: Prepare the signing key
         env:
           KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
@@ -192,6 +205,9 @@ jobs:
             ### 설치
 
             - **Android**: `Geny-*.apk` 를 받아 실행하세요 (출처를 알 수 없는 앱 허용 필요).
+              **임시 키로 서명돼 있습니다.** 릴리스끼리는 그대로 업데이트되지만,
+              나중에 정식 키로 바꾸면 안드로이드가 다른 앱으로 보기 때문에 그때는
+              지우고 다시 깔아야 합니다 (서버 주소·로그인·세션이 사라집니다).
             - **iOS**: `*-ios-unsigned.ipa` 는 **서명되지 않았습니다.** Apple 배포
               서명에는 개발자 계정이 필요합니다 — 직접 서명하거나 사이드로딩
               도구로 설치하세요.
