@@ -852,9 +852,12 @@
 }
 
 .composer:focus-within {
-  border-color: var(--primary-end);
-  box-shadow: 0 0 0 3px var(--violet-ring);
+  border-color: var(--gray-300);
   background: var(--panel);
+}
+
+:root[data-theme='dark'] .composer:focus-within {
+  border-color: var(--gray-600);
 }
 
 .composer-input {
@@ -1428,4 +1431,257 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+/* ── timeline steps ───────────────────────────────────────────────────── */
+/* Dex's shape: a numbered node per step on a connector rail, the tools of
+   that step in a card beside it. The node carries the verdict, so a run of
+   twenty is readable down its left edge before any of it is read across. */
+
+.ptl-progress {
+  position: relative;
+  height: 2px;
+  margin: 8px 0 0;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--primary-soft);
+}
+
+.ptl-progress::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  border-radius: 2px;
+  background: var(--primary-grad);
+  animation: ptl-slide 1.8s ease-in-out infinite;
+}
+
+@keyframes ptl-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+.ptl-steps {
+  margin: 12px 0 0;
+}
+
+.ptl-step {
+  position: relative;
+  padding: 0 0 14px 32px;
+}
+
+.ptl-step::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 24px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.ptl-step:last-child::before {
+  display: none;
+}
+
+.ptl-step.ok::before {
+  background: linear-gradient(var(--success), var(--border));
+  opacity: 0.45;
+}
+
+.ptl-node {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1.5px solid var(--border);
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+.ptl-node svg {
+  width: 12px;
+  height: 12px;
+}
+
+.ptl-step.ok .ptl-node {
+  color: var(--success);
+  background: rgba(46, 177, 70, 0.14);
+  border-color: transparent;
+}
+
+.ptl-step.err .ptl-node {
+  color: var(--error);
+  background: var(--error-bg);
+  border-color: var(--error-border);
+}
+
+.ptl-step.run .ptl-node {
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-color: var(--primary-soft-border);
+}
+
+.ptl-step.run .ptl-node::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: var(--primary);
+  animation: ptl-spin 0.9s linear infinite;
+}
+
+@keyframes ptl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ptl-step .ptl-title {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 22px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ptl-step.run .ptl-title {
+  color: var(--primary);
+}
+
+.ptl-step .ptl-tools {
+  margin-top: 6px;
+}
+
+/* ── explorer ─────────────────────────────────────────────────────────── */
+
+.explorer-path {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.explorer-crumb {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.explorer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.explorer-row:hover {
+  background: var(--panel-2);
+}
+
+.explorer-ico {
+  flex: none;
+  display: flex;
+  color: var(--muted);
+}
+
+.explorer-ico.dir {
+  color: var(--primary);
+}
+
+.explorer-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explorer-size {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+/* ── the file a click in the explorer opened ──────────────────────────── */
+
+.file-view {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+}
+
+.file-view-head {
+  height: var(--header-h);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px 0 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.file-view-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.file-view-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 16px 20px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre;
+  tab-size: 2;
 }

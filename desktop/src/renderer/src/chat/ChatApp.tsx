@@ -23,6 +23,7 @@ import {
   agents, environments, sessions as sessionApi,
   type AgentSummary, type EnvironmentSummary,
 } from '../server'
+import Explorer from './Explorer'
 import { Icon } from './icons'
 import RouteBar from './RouteBar'
 import SystemMonitorFooter from './SystemMonitorFooter'
@@ -59,7 +60,10 @@ export function ChatApp(): ReactNode {
   const [creating, setCreating] = useState(false)
   const [envs, setEnvs] = useState<EnvironmentSummary[]>([])
   const [showWork, setShowWork] = useState(false)
-  const [showSidebar, setShowSidebar] = useState(true)
+  /** Which sidebar view, or none. The activity bar switches it, and clicking
+   *  the view you are already in closes the sidebar — the VS Code idiom. */
+  const [side, setSide] = useState<'sessions' | 'files' | null>('sessions')
+  const [openFile, setOpenFile] = useState<{ path: string; name: string; content: string } | null>(null)
   const [draft, setDraft] = useState('')
   const scroller = useRef<HTMLDivElement>(null)
   const composer = useRef<HTMLTextAreaElement>(null)
@@ -223,10 +227,17 @@ export function ChatApp(): ReactNode {
       <nav className="activity-bar">
         <span className="ab-logo"><img src={genyIcon} alt="Geny" draggable={false} /></span>
         <div className="ab-top">
-          <button type="button" className={`ab-btn ${showSidebar ? 'active' : ''}`}
-            title={t('chat.sessions')} onClick={() => setShowSidebar((v) => !v)}>
-            {showSidebar && <span className="ab-ind" />}
+          <button type="button" className={`ab-btn ${side === 'sessions' ? 'active' : ''}`}
+            title={t('chat.sessions')}
+            onClick={() => setSide((v) => (v === 'sessions' ? null : 'sessions'))}>
+            {side === 'sessions' && <span className="ab-ind" />}
             {Icon.chat}
+          </button>
+          <button type="button" className={`ab-btn ${side === 'files' ? 'active' : ''}`}
+            title={t('explorer.title')}
+            onClick={() => setSide((v) => (v === 'files' ? null : 'files'))}>
+            {side === 'files' && <span className="ab-ind" />}
+            {Icon.files}
           </button>
           <button type="button" className={`ab-btn ${showWork ? 'active' : ''}`}
             title={t('chat.activity')} onClick={() => setShowWork((v) => !v)}>
@@ -241,39 +252,54 @@ export function ChatApp(): ReactNode {
         </div>
       </nav>
 
-      <aside className={`sidebar ${showSidebar ? '' : 'hidden'}`}>
+      <aside className={`sidebar ${side ? '' : 'hidden'}`}>
         <div className="sidebar-title">
-          <span className="sidebar-title-text">{t('chat.sessions')}</span>
-          <span style={{ display: 'flex', gap: 2 }}>
-            <button type="button" className="icon-btn" title={t('chat.refresh')}
-              onClick={() => void refreshList()}>{Icon.refresh}</button>
-            <button type="button" className="icon-btn" title={t('chat.newSession')}
-              onClick={() => void openCreate()}>{Icon.plus}</button>
+          <span className="sidebar-title-text">
+            {side === 'files' ? t('explorer.title') : t('chat.sessions')}
           </span>
-        </div>
-
-        {running.length > 0 && (
-          <div className="side-live">
-            <div className="side-live-h">{t('chat.liveNow')}</div>
-            {running.map(sessionRow)}
-          </div>
-        )}
-
-        <div className="agent-list">
-          {listError && <div className="side-error">{listError}</div>}
-          {list.map(sessionRow)}
-          {list.length === 0 && !listError && (
-            <div className="side-empty">{t('chat.noSessions')}</div>
+          {side === 'sessions' && (
+            <span style={{ display: 'flex', gap: 2 }}>
+              <button type="button" className="icon-btn" title={t('chat.refresh')}
+                onClick={() => void refreshList()}>{Icon.refresh}</button>
+              <button type="button" className="icon-btn" title={t('chat.newSession')}
+                onClick={() => void openCreate()}>{Icon.plus}</button>
+            </span>
           )}
         </div>
 
-        <button type="button" className="side-foot"
-          onClick={() => window.connector?.windowControl.openSettings()}>
-          {Icon.settings} {t('chat.openSettings')}
-        </button>
+        {side === 'files' ? (
+          <Explorer sessionId={sessionId} running={live.running} t={t} onOpen={setOpenFile} />
+        ) : (
+          <>
+            {running.length > 0 && (
+              <div className="side-live">
+                <div className="side-live-h">{t('chat.liveNow')}</div>
+                {running.map(sessionRow)}
+              </div>
+            )}
+            <div className="agent-list">
+              {listError && <div className="side-error">{listError}</div>}
+              {list.map(sessionRow)}
+              {list.length === 0 && !listError && (
+                <div className="side-empty">{t('chat.noSessions')}</div>
+              )}
+            </div>
+          </>
+        )}
       </aside>
 
-      <main className="main-pane">
+      <main className="main-pane" style={{ position: 'relative' }}>
+        {openFile && (
+          <div className="file-view">
+            <div className="file-view-head">
+              <span className="file-view-name" title={openFile.path}>{openFile.name}</span>
+              <button type="button" className="chat-hbtn" onClick={() => setOpenFile(null)}>
+                {Icon.close} {t('explorer.close')}
+              </button>
+            </div>
+            <pre className="file-view-body">{openFile.content}</pre>
+          </div>
+        )}
         <div className="chat">
           <header className="chat-header">
             <div className="chat-title">

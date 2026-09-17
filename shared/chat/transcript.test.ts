@@ -262,3 +262,41 @@ test('the server verdict beats the prefix', () => {
   assert.equal(after[0].role, 'notice');
   assert.equal(after[0].text, 'Error: exited with code 1');
 });
+
+// ── what the agent asked us not to say ───────────────────────────────
+
+test('a silent answer produces nothing', () => {
+  // `[SILENT]` means "nothing to report" — delivery.py skips it entirely.
+  // Showing it anyway fills the screen with bubbles reading "[SILENT]".
+  const after = foldEntry([], {
+    level: 'RESPONSE', timestamp: 't1', message: 'SUCCESS: [SILENT]',
+    metadata: { success: true },
+  });
+  assert.equal(after.length, 0);
+});
+
+test('a silent answer behind a mood tag is still silent', () => {
+  const after = foldEntry([], {
+    level: 'RESPONSE', timestamp: 't1', message: 'SUCCESS: [calm:0.3] [SILENT]',
+    metadata: { success: true },
+  });
+  assert.equal(after.length, 0);
+});
+
+test('the mood tag comes off the front and rides beside the words', () => {
+  const after = foldEntry([], {
+    level: 'RESPONSE', timestamp: 't1', message: 'SUCCESS: [calm:0.4] 빌드 다 끝났네.',
+    metadata: { success: true },
+  });
+  assert.equal(after[0].text, '빌드 다 끝났네.');
+  assert.equal(after[0].mood, 'calm');
+});
+
+test('a failed turn keeps its text even when it looks like a mood tag', () => {
+  const after = foldEntry([], {
+    level: 'RESPONSE', timestamp: 't1', message: 'FAILED: [SILENT]',
+    metadata: { success: false },
+  });
+  assert.equal(after.length, 1);
+  assert.equal(after[0].role, 'notice');
+});

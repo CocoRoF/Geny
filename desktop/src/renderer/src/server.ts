@@ -298,3 +298,29 @@ export interface EnvironmentSummary {
 export const environments = {
   list: () => serverFetch<{ environments: EnvironmentSummary[] }>('/api/environments'),
 }
+
+// ── the agent's own workspace ────────────────────────────────────────
+//
+// What the agent is working ON, as opposed to what it said about it. The
+// listing is rooted at `workspace/` (scope=workspace) rather than the whole
+// session directory: the rest of that directory is the engine's own state —
+// the memory vault, transcripts, the database — and it is neither the
+// agent's work nor anyone's business here.
+
+export interface StorageEntry {
+  name: string
+  path: string
+  is_dir: boolean
+  size?: number | null
+  modified_at?: string | null
+}
+
+export const workspace = {
+  list: (sessionId: string, path = '') =>
+    serverFetch<{ files: StorageEntry[] }>(
+      `/api/agents/${encodeURIComponent(sessionId)}/storage`
+      + `?scope=workspace&path=${encodeURIComponent(path)}`),
+  read: (sessionId: string, filePath: string) =>
+    serverFetch<{ content: string; size: number; encoding: string }>(
+      `/api/agents/${encodeURIComponent(sessionId)}/storage/${filePath.split('/').map(encodeURIComponent).join('/')}`),
+}

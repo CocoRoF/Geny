@@ -66,10 +66,7 @@ function ToolRow({ message, t }: { message: Message; t: T }): ReactNode {
       <button type="button" className="ptl-tool-head" disabled={!openable}
         onClick={() => setOpen((v) => !v)}>
         <span className="ptl-ico">{KIND_ICON[kind]}</span>
-        <span className="ptl-sum">
-          <strong>{message.tool}</strong>
-          {message.text ? `  ${message.text}` : ''}
-        </span>
+        <span className="ptl-sum">{message.text || message.tool}</span>
         {dur && <span className={`ptl-dur ${failed ? 'err' : (message.durationMs ?? 0) > 5000 ? 'slow' : ''}`}>{dur}</span>}
       </button>
       {open && (
@@ -92,40 +89,79 @@ function ToolRow({ message, t }: { message: Message; t: T }): ReactNode {
   )
 }
 
-/** A run of tool calls, as one collapsible step. */
+/**
+ * A turn's tool calls, as Dex's process timeline.
+ *
+ * A pill while it is closed — "작업 과정 · 도구 4회 · 실패 1 · 2.9초" — and a
+ * rail of numbered nodes when open, each node carrying its own verdict and
+ * its tool card beside it. The node is the point: a run of twenty is
+ * readable down its left edge before any of it is read across.
+ *
+ * It opens itself while the turn is running, because that is when someone is
+ * watching, and closes when the answer arrives, because that is what matters
+ * then.
+ */
 function Steps({ run, t }: { run: Message[]; t: T }): ReactNode {
   const live = run.some((m) => m.ok === null || m.ok === undefined)
-  const failed = run.some((m) => m.ok === false)
-  // Open while it is happening — that is when someone is watching — and
-  // closed once it is done, when the answer is what matters.
-  const [open, setOpen] = useState(live)
+  const failed = run.filter((m) => m.ok === false).length
+  const [manual, setManual] = useState<boolean | null>(null)
+  const open = manual ?? live
   const total = run.reduce((sum, m) => sum + (m.durationMs ?? 0), 0)
+
+  const summary = [
+    t('chat.steps.tools', { n: run.length }),
+    failed ? t('chat.steps.failed', { n: failed }) : '',
+    seconds(total),
+  ].filter(Boolean).join(' · ')
+
   return (
-    <div className={`ptl ${live ? 'live' : ''} ${failed ? 'err' : ''}`}>
-      <button type="button" className="ptl-head-toggle" onClick={() => setOpen((v) => !v)}>
+    <div className={`ptl ${live ? 'live' : 'done'} ${failed ? 'err' : ''}`}>
+      <button type="button" className="ptl-head-toggle" aria-expanded={open}
+        onClick={() => setManual(!open)}>
         <span className="ptl-pulse">{live ? '' : failed ? Icon.alert : Icon.check}</span>
         <span className="ptl-head-label">
-          {live ? t('chat.steps.running') : t('chat.steps.done', { n: run.length })}
+          {live ? t('chat.steps.running') : t('chat.steps.title')}
         </span>
-        <span className="ptl-head-sub">
-          {live ? t('chat.steps.count', { n: run.length }) : seconds(total)}
-        </span>
-        <span className="ptl-chevron">{open ? '▾' : '▸'}</span>
+        <span className="ptl-head-sub">{summary}</span>
+        <span className="ptl-chevron" aria-hidden>{open ? '▾' : '▸'}</span>
       </button>
+
+      {live && <div className="ptl-progress" aria-hidden />}
+
       {open && (
-        <div className="ptl-tools">
-          {run.map((message) => <ToolRow key={message.key} message={message} t={t} />)}
+        <div className="ptl-steps">
+          {run.map((message, index) => {
+            const running = message.ok === null || message.ok === undefined
+            const phase = running ? 'run' : message.ok === false ? 'err' : 'ok'
+            return (
+              <div className={`ptl-step ${phase}`} key={message.key}>
+                <span className="ptl-node">
+                  {phase === 'ok' ? Icon.check : phase === 'err' ? '!' : index + 1}
+                </span>
+                <div className="ptl-title">{message.tool}</div>
+                <div className="ptl-tools">
+                  <ToolRow message={message} t={t} />
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
   )
 }
 
-function Row({ message, t }: { message: Message; t: T }): ReactNode {
+function Row({ message, t, times = 1 }: { message: Message; t: T; times?: number }): ReactNode {
   if (message.role === 'system') {
     // Nobody typed this: the agent woke on a schedule. In the flow, because
     // it is why the next answer exists; not a bubble, because no one said it.
-    return <div className="trigger-row">{t('chat.selfStarted', { reason: message.text })}</div>
+    return (
+      <div className="trigger-row">
+        {times > 1
+          ? t('chat.selfStartedTimes', { reason: message.text, n: times })
+          : t('chat.selfStarted', { reason: message.text })}
+      </div>
+    )
   }
 
   if (message.role === 'notice') {
@@ -191,6 +227,14 @@ function group(messages: Message[]): Message[][] {
       const failed = last[last.length - 1]
       if (failed.ok === false && failed.result && message.text === failed.result) continue
     }
+    // Ten identical "the agent woke on its own" rules in a row say nothing
+    // that one rule and a count does not. This happens whenever a silent
+    // stretch of triggers produced no answers to separate them.
+    if (message.role === 'system' && last && last[0].role === 'system'
+        && last[0].text === message.text) {
+      last.push(message)
+      continue
+    }
     out.push([message])
   }
   return out
@@ -226,7 +270,7 @@ export function Transcript({
             </div>
           </div>
         ) : (
-          <Row key={run[0].key} message={run[0]} t={t} />
+          <Row key={run[0].key} message={run[0]} t={t} times={run.length} />
         ),
       )}
       {running && (

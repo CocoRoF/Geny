@@ -43,6 +43,8 @@ export interface Message {
   args?: string;
   result?: string;
   durationMs?: number;
+  /** assistant only: the mood tag the answer carried, if any. */
+  mood?: string;
   /**
    * `system` only: what woke the agent, when nobody typed anything. Kept
    * short — the trigger's full text is prompt engineering, not conversation.
@@ -95,6 +97,42 @@ export function promptText(message: unknown): string {
  */
 export function answerText(message: unknown): string {
   return String(message ?? '').replace(/^(SUCCESS|FAILED):\s*/, '');
+}
+
+/**
+ * The agent looked and decided there was nothing worth saying.
+ *
+ * `[SILENT]` is a contract, not a word: `service/hooks_runtime/delivery.py`
+ * skips delivery entirely when an answer starts with it. A screen that shows
+ * it anyway fills a conversation with bubbles reading "[SILENT]" — which is
+ * the opposite of what the tag asked for.
+ */
+const SILENT = /^\s*\[SILENT\]/i;
+
+/**
+ * `[calm:0.4]`, `[curious]` — the mood the avatar should wear while it
+ * speaks. A direction to the renderer, not something anybody said, so it
+ * comes off the front of the line and is carried beside it.
+ */
+const MOOD = /^\s*\[([a-z_]+)(?::\s*([0-9.]+))?\]\s*/i;
+
+export interface Spoken {
+  text: string;
+  mood?: string;
+  silent: boolean;
+}
+
+/** Split an answer into what was said and how it was meant to sound. */
+export function spoken(message: unknown): Spoken {
+  let text = answerText(message);
+  let mood: string | undefined;
+  const tag = MOOD.exec(text);
+  if (tag) {
+    mood = tag[1].toLowerCase();
+    text = text.slice(tag[0].length);
+  }
+  if (SILENT.test(text)) return { text: '', mood, silent: true };
+  return { text: text.trim(), mood, silent: false };
 }
 
 /** A turn the agent started by itself, not one anybody asked for. */
@@ -169,12 +207,18 @@ export function foldEntry(messages: Message[], entry: LogLike, index = 0): Messa
     return [...messages, { key, role: 'user', text, ts }];
   }
   if (level === 'RESPONSE') {
-    const text = answerText(entry.message);
     // The log knows whether the turn succeeded; a failed one is not something
     // the agent said, it is something that went wrong. `success` is written
     // by the server, so believe it over the prefix when both are present.
     const failed = m.success === false || /^FAILED:/.test(String(entry.message ?? ''));
-    return [...messages, { key, role: failed ? 'notice' : 'assistant', text, ts }];
+    if (failed) {
+      return [...messages, { key, role: 'notice', text: answerText(entry.message), ts }];
+    }
+    const said = spoken(entry.message);
+    // Silence is an answer the agent asked us not to deliver. Nothing on
+    // screen is the correct rendering of it.
+    if (said.silent || !said.text) return messages;
+    return [...messages, { key, role: 'assistant', text: said.text, ts, mood: said.mood }];
   }
   if (level === 'TOOL') {
     const { tool, text } = describeTool(entry);

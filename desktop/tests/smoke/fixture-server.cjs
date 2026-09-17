@@ -113,6 +113,58 @@ comm -23 <(declared) <(used)
   },
 ]
 
+// A stretch of autonomous turns that said nothing, which is what a VTuber
+// session's log actually looks like between real exchanges.
+LOG.push(
+  {
+    level: 'COMMAND', timestamp: at(60000),
+    message: 'PROMPT: [THINKING_TRIGGER:screen_observation] look at the screen',
+  },
+  {
+    level: 'RESPONSE', timestamp: at(2000), message: 'SUCCESS: [calm:0.3] [SILENT]',
+    metadata: { success: true },
+  },
+  {
+    level: 'COMMAND', timestamp: at(60000),
+    message: 'PROMPT: [THINKING_TRIGGER:screen_observation] look at the screen',
+  },
+  {
+    level: 'RESPONSE', timestamp: at(2000), message: 'SUCCESS: [calm:0.3] [SILENT]',
+    metadata: { success: true },
+  },
+  {
+    level: 'COMMAND', timestamp: at(60000),
+    message: 'PROMPT: [THINKING_TRIGGER:screen_observation] look at the screen',
+  },
+  {
+    level: 'RESPONSE', timestamp: at(2000),
+    message: 'SUCCESS: [calm:0.4] release 0.26.0 빌드 다 초록불이네 — 데스크톱 3종에 APK 까지.',
+    metadata: { success: true },
+  },
+)
+
+const FILES = {
+  '': [
+    { name: 'src', path: 'workspace/src', is_dir: true },
+    { name: 'docs', path: 'workspace/docs', is_dir: true },
+    { name: 'README.md', path: 'workspace/README.md', is_dir: false, size: 1841 },
+    { name: 'tokens.css', path: 'workspace/tokens.css', is_dir: false, size: 4096 },
+    { name: 'notes.txt', path: 'workspace/notes.txt', is_dir: false, size: 220 },
+  ],
+  'workspace/src': [
+    { name: 'index.ts', path: 'workspace/src/index.ts', is_dir: false, size: 980 },
+    { name: 'styles.css', path: 'workspace/src/styles.css', is_dir: false, size: 12400 },
+  ],
+}
+
+const FILE_TEXT = `/* tokens.css — written by the agent */
+:root {
+  --primary: #305eeb;
+  --primary-end: #783ced;
+  --panel: #ffffff;
+}
+`
+
 const ACCOUNTS = {
   accounts: [
     {
@@ -181,6 +233,12 @@ const server = createServer((req, res) => {
   if (url.pathname.endsWith('/workspace/summary')) return send(SUMMARY)
   if (url.pathname.includes('/workspace/activity')) return send(ACTIVITY)
   if (url.pathname === '/api/environments') return send({ environments: [] })
+  if (url.pathname.endsWith('/storage')) {
+    return send({ files: FILES[url.searchParams.get('path') || ''] ?? [] })
+  }
+  if (url.pathname.includes('/storage/')) {
+    return send({ content: FILE_TEXT, size: FILE_TEXT.length, encoding: 'utf-8' })
+  }
   res.writeHead(404, { 'Content-Type': 'application/json' })
   res.end('{}')
 })

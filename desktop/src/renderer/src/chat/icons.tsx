@@ -79,6 +79,22 @@ export const Icon = {
       <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
     </Svg>
   ),
+  folder: (
+    <Svg size={14}>
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    </Svg>
+  ),
+  files: (
+    <Svg>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+    </Svg>
+  ),
+  close: (
+    <Svg size={14}>
+      <path d="M18 6 6 18M6 6l12 12" />
+    </Svg>
+  ),
   // ── tool kinds ──
   terminal: (
     <Svg size={14}>
