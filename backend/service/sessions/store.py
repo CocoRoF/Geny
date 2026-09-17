@@ -306,31 +306,38 @@ class SessionStore:
             except Exception as e:
                 logger.debug(f"[SessionStore] Session-log cleanup failed for {session_id}: {e}")
 
-            # Chat rooms + their messages. A room lists its sessions in a JSON
-            # ``session_ids`` array (usually one). On permanent delete: drop this
-            # session from every room it's in; when that empties the room, delete
-            # the room and its messages. Rooms shared with a surviving session
-            # keep their history. (Previously nothing cleaned these — 78% of
-            # prod rooms/messages were orphaned tails of deleted sessions.)
+            # The session's conversation goes with it. A room belongs to one
+            # session (see service/chat/home_room.py), so deleting the session
+            # deletes the room and its messages.
+            #
+            # This block existed and did nothing: ``db_list_rooms`` returns
+            # each row keyed ``id``, this asked for ``room_id``, got None and
+            # `continue`d past every room. Every permanent delete left its
+            # conversation behind — 204 of the 207 rooms on the production
+            # server belonged to sessions that no longer existed.
             try:
                 from service.database.chat_db_helper import (
                     db_list_rooms, db_delete_room, db_update_room_sessions,
                 )
+                removed = 0
                 for room in (db_list_rooms(self._app_db) or []):
+                    rid = room.get("id") or room.get("room_id")
                     sids = room.get("session_ids") or []
-                    if session_id not in sids:
+                    if not rid or session_id not in sids:
                         continue
+                    # A legacy room shared with a surviving session keeps its
+                    # history; it just loses this member.
                     remaining = [s for s in sids if s != session_id]
-                    rid = room.get("room_id")
-                    if not rid:
-                        continue
                     if remaining:
                         db_update_room_sessions(self._app_db, rid, remaining)
                     else:
                         db_delete_room(self._app_db, rid)  # cascades to messages
-                logger.debug(f"[SessionStore] Chat rooms cleaned for {session_id}")
+                        removed += 1
+                logger.info(
+                    f"[SessionStore] Chat rooms cleaned for {session_id}: {removed} removed"
+                )
             except Exception as e:
-                logger.debug(f"[SessionStore] Chat-room cleanup failed for {session_id}: {e}")
+                logger.warning(f"[SessionStore] Chat-room cleanup failed for {session_id}: {e}")
 
             # The agent's own runtime side-effects, deleted WITH the agent:
             #   • work queue — its background tasks (+ outputs)

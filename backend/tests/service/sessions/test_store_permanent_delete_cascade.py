@@ -39,10 +39,15 @@ def patched(monkeypatch, tmp_path):
         "service.database.session_log_db_helper.db_delete_session_logs",
         lambda db, sid: (calls["logs"].append(sid) or True),
     )
+    # The shape db_list_rooms ACTUALLY returns: keyed "id" (not "room_id"),
+    # with session_ids already parsed out of its JSON column. This fixture used
+    # to say "room_id", which is what the cascade asked for — so the test was
+    # green while production quietly kept every room it was supposed to delete.
+    # 204 of the 207 rooms on the server belonged to sessions long gone.
     rooms = [
-        {"room_id": "r-solo", "session_ids": ["S"]},           # only S → delete
-        {"room_id": "r-shared", "session_ids": ["S", "OTHER"]},  # shared → update
-        {"room_id": "r-unrelated", "session_ids": ["X", "Y"]},   # skip
+        {"id": "r-solo", "session_ids": ["S"]},             # only S → delete
+        {"id": "r-shared", "session_ids": ["S", "OTHER"]},  # shared → update
+        {"id": "r-unrelated", "session_ids": ["X", "Y"]},   # skip
     ]
     monkeypatch.setattr("service.database.chat_db_helper.db_list_rooms", lambda db: rooms)
     monkeypatch.setattr(
