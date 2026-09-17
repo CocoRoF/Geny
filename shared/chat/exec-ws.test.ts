@@ -8,7 +8,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 
-import { connectExecWs, WS_UNAUTHORIZED_CODE, type ConnState } from '../src/lib/exec-ws';
+import { connectExecWs, WS_UNAUTHORIZED_CODE, type ConnState } from './exec-ws';
 
 /** A socket a test can open, feed, and kill. */
 class FakeSocket {

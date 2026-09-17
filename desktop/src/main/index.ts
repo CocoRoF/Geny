@@ -803,17 +803,17 @@ function createOverlay(): void {
 function createControl(): void {
   const wa = screen.getPrimaryDisplay().workArea
   const b = restoreWinBounds(loadConfig().control, {
-    width: 640, height: 760,
-    x: Math.round(wa.x + (wa.width - 640) / 2),
-    y: Math.round(wa.y + (wa.height - 760) / 2),
+    width: 1120, height: 780,
+    x: Math.round(wa.x + (wa.width - 1120) / 2),
+    y: Math.round(wa.y + (wa.height - 780) / 2),
   })
   control = new BrowserWindow({
     width: b.width,
     height: b.height,
     x: b.x,
     y: b.y,
-    minWidth: 460,
-    minHeight: 560,
+    minWidth: 760,
+    minHeight: 520,
     show: false,
     title: 'Geny',
     webPreferences: {
@@ -845,27 +845,22 @@ function createControl(): void {
   })
 }
 
-// Control window content: the server's /connector panel (session + chat +
-// TTS/STT + model) once logged in, else the local login screen.
+// Control window content: the connector's OWN chat workspace.
+//
+// This used to load the server's /connector web page — the app was a browser
+// pointed at the app. Everything a user comes to this window for (which model
+// answered, what the agent just ran, what it changed on disk) lives in the
+// renderer now, over the same execute socket the phone uses. The window keeps
+// its identity, its bounds and its tray entry; only what is inside changed.
+//
+// It loads whether or not there is a token: the renderer shows an empty
+// session list and the Settings window handles login, which is a better first
+// screen than a blank frame.
 async function applyControlContent(): Promise<void> {
   if (!control) return
   const token = await getStoredToken()
-  const { serverUrl, overlaySession, theme } = loadConfig()
-  if (token && serverUrl) {
-    const base = serverUrl.replace(/\/+$/, '')
-    const sessQ = overlaySession ? `&session=${encodeURIComponent(overlaySession)}` : ''
-    const themeQ = `&theme=${encodeURIComponent(theme || 'system')}`
-    // Swallow the rejection — a failed load is recovered by the did-fail-load
-    // resilience handler (attachContentResilience), which retries with backoff.
-    dlog('control', `loadURL ${base}/connector ${redactTok(token)}`)
-    await control
-      .loadURL(`${base}/connector?token=${encodeURIComponent(token)}${sessQ}${themeQ}`)
-      .then(() => dlog('control', 'loadURL ok'))
-      .catch((e) => dlog('control', `loadURL FAILED: ${(e as Error)?.message}`))
-  } else {
-    dlog('control', `skipped (token=${token ? 'yes' : 'no'} serverUrl=${serverUrl || '(empty)'})`)
-  }
-  // No token → the panel stays hidden; the Settings window handles login.
+  dlog('control', `chat workspace (token=${token ? 'yes' : 'no'})`)
+  loadRoute(control, 'control')
 }
 
 // ── settings window: server URL / account / auto-update (local, always open) ─
@@ -1137,17 +1132,11 @@ async function deliverQuickChat(
   if (!body && !images) return { ok: false, error: nt('qc.emptyMessage') }
   const token = await getStoredToken()
   if (!token || !loadConfig().serverUrl) return { ok: false, error: nt('qc.loginRequired') }
+  const fresh = !control
   if (!control) createControl()
-  // Make sure the /connector chat page is loaded (it mounts the listener that
-  // relays the message into the chat). Normally it's already up from startup.
-  let justLoaded = false
-  if (!control!.webContents.getURL().includes('/connector')) {
-    await applyControlContent()
-    justLoaded = true
-  }
-  // If we had to (re)load, give React a beat to mount its onQuickSend listener
-  // before the event arrives (an early send would be dropped).
-  if (justLoaded) await new Promise((r) => setTimeout(r, 450))
+  // A window created a moment ago has not mounted its listener yet, and an
+  // early send is dropped with no sign that it was.
+  if (fresh) await new Promise((r) => setTimeout(r, 450))
   control!.webContents.send('connector:quick-send', { text: body, images })
   return { ok: true }
 }
@@ -2265,6 +2254,7 @@ function registerIpc(): void {
     // Push the merged config to the avatar overlay so its capability drivers
     // (TTS/STT/screen) apply overlayTuning changes live — no reload.
     overlay?.webContents.send('config:changed', next)
+    control?.webContents.send('config:changed', next)
     // Server address changed → re-derive every window's content NOW. Before
     // this, a URL saved via 연결확인 only took effect at the next login or
     // restart — the overlay sat on the logged-out placeholder forever.

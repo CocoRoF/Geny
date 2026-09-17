@@ -12,8 +12,9 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/renderer/src/*"],
-      "@geny/*": ["../frontend/src/*"]
+      "@geny/*": ["../frontend/src/*"],
+      "@shared/*": ["../shared/*"]
     }
   },
-  "include": ["src/renderer/**/*", "src/preload/index.d.ts"]
+  "include": ["src/renderer/**/*", "src/preload/index.d.ts", "../shared/**/*.ts"]
 }

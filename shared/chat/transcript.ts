@@ -34,6 +34,16 @@ export interface Message {
   tool?: string;
   ok?: boolean | null;
   /**
+   * activity only, and only useful where there is room to open it: the call's
+   * own record. The phone shows the one line above and nothing else; the
+   * desktop expands the row. The fold is shared, so both read the same fields
+   * rather than each deciding separately what a tool call was.
+   */
+  toolId?: string;
+  args?: string;
+  result?: string;
+  durationMs?: number;
+  /**
    * Shown before the server confirmed it — the user's own message, echoed
    * locally so the app answers the keyboard instantly. The server logs the
    * same message a moment later with its own timestamp; without this flag the
@@ -119,20 +129,30 @@ export function foldEntry(messages: Message[], entry: LogLike, index = 0): Messa
   }
   if (level === 'TOOL') {
     const { tool, text } = describeTool(entry);
-    return [...messages, { key, role: 'activity', text, tool, ts, ok: null }];
+    const args = typeof m.input_preview === 'string' ? m.input_preview : undefined;
+    const toolId = typeof m.tool_id === 'string' ? m.tool_id : undefined;
+    return [...messages, { key, role: 'activity', text, tool, ts, ok: null, args, toolId }];
   }
   if (level === 'TOOL_RES') {
     // The verdict belongs to the call that is already on screen: "ran a
     // command" and "ran a command that failed" are different claims, and the
     // second one should not arrive as a separate line.
-    const toolId = m.tool_id;
+    const toolId = typeof m.tool_id === 'string' ? m.tool_id : undefined;
     const failed = Boolean(m.is_error);
+    const preview = typeof m.result_preview === 'string' ? m.result_preview : undefined;
+    const durationMs = typeof m.duration_ms === 'number' ? m.duration_ms : undefined;
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       const candidate = messages[i];
-      if (candidate.role !== 'activity' || candidate.ok !== null) continue;
-      if (candidate.tool !== String(m.tool_name ?? candidate.tool)) continue;
+      if (candidate.role !== 'activity') continue;
+      // The id is the real answer to "which call is this the result of".
+      // Falling back to the name + "still open" is what the phone had, and it
+      // is right whenever two calls to the same tool are not in flight at once.
+      const sameCall = toolId && candidate.toolId
+        ? candidate.toolId === toolId
+        : candidate.ok === null && candidate.tool === String(m.tool_name ?? candidate.tool);
+      if (!sameCall) continue;
       const next = messages.slice();
-      next[i] = { ...candidate, ok: !failed };
+      next[i] = { ...candidate, ok: !failed, result: preview, durationMs };
       if (failed) {
         next.splice(i + 1, 0, {
           key: `${key}:err`,

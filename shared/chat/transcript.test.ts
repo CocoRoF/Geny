@@ -10,7 +10,7 @@ import { test } from 'node:test';
 
 import {
   describeTool, foldAll, foldEntry, latestAssistantText, pendingUserMessage, type Message,
-} from '../src/lib/transcript';
+} from './transcript';
 
 const user = { timestamp: '2026-09-17T10:00:00', level: 'COMMAND', message: '테스트 돌려줘' };
 const answer = { timestamp: '2026-09-17T10:00:30', level: 'RESPONSE', message: '전부 통과했습니다.' };
@@ -118,4 +118,63 @@ test('the same line genuinely sent twice stays two messages', () => {
   const first = foldEntry([pendingUserMessage('다시')], { level: 'COMMAND', message: '다시', timestamp: 'a' }, 1);
   const second = foldEntry([...first, pendingUserMessage('다시')], { level: 'COMMAND', message: '다시', timestamp: 'b' }, 2);
   assert.equal(second.filter((m) => m.role === 'user').length, 2);
+});
+
+// ── what the desktop opens ───────────────────────────────────────────
+// The phone shows a tool call as one line. A desktop row expands, and what it
+// expands into has to come from the same fold — a second folder written for
+// the bigger screen is how the two surfaces start disagreeing about what the
+// agent did.
+
+test('a tool call carries its arguments and its result', () => {
+  const start = foldEntry([], {
+    level: 'TOOL',
+    timestamp: 't1',
+    message: 'TOOL_USE: Bash',
+    metadata: {
+      tool_name: 'Bash',
+      tool_id: 'call_1',
+      input_preview: '{"command": "npm test"}',
+      command_data: { command: 'npm test' },
+    },
+  });
+  const done = foldEntry(start, {
+    level: 'TOOL_RES',
+    timestamp: 't2',
+    message: 'TOOL_RESULT [OK]: Bash',
+    metadata: {
+      tool_name: 'Bash',
+      tool_id: 'call_1',
+      result_preview: '41 passing',
+      duration_ms: 3200,
+    },
+  });
+  assert.equal(done.length, 1);
+  assert.equal(done[0].args, '{"command": "npm test"}');
+  assert.equal(done[0].result, '41 passing');
+  assert.equal(done[0].durationMs, 3200);
+  assert.equal(done[0].ok, true);
+});
+
+test('the result lands on the call with the same id, not the nearest one', () => {
+  // Two calls to the same tool in flight. Name matching would close the first
+  // one with the second one's verdict.
+  let messages = foldEntry([], {
+    level: 'TOOL', timestamp: 't1', message: 'TOOL_USE: Read',
+    metadata: { tool_name: 'Read', tool_id: 'a', file_read: { file_path: '/a' } },
+  });
+  messages = foldEntry(messages, {
+    level: 'TOOL', timestamp: 't2', message: 'TOOL_USE: Read',
+    metadata: { tool_name: 'Read', tool_id: 'b', file_read: { file_path: '/b' } },
+  });
+  messages = foldEntry(messages, {
+    level: 'TOOL_RES', timestamp: 't3', message: 'TOOL_RESULT [ERROR]: Read',
+    metadata: { tool_name: 'Read', tool_id: 'b', is_error: true, result_preview: 'no such file' },
+  });
+
+  const rows = messages.filter((m) => m.role === 'activity');
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].ok, null, 'the first call is still open');
+  assert.equal(rows[1].ok, false);
+  assert.equal(rows[1].result, 'no such file');
 });

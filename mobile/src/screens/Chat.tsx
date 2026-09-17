@@ -12,8 +12,8 @@ import {
   FlatList, KeyboardAvoidingView, Platform, Pressable, Text, View,
 } from 'react-native';
 
-import type { ConnState } from '../lib/exec-ws';
-import type { Message } from '../lib/transcript';
+import type { ConnState } from '../../../shared/chat/exec-ws';
+import type { Message } from '../../../shared/chat/transcript';
 import { useLiveTurn } from '../lib/useLiveTurn';
 import { Button, Input, Notice, Pill } from '../ui';
 import { T } from '../theme';

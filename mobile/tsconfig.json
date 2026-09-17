@@ -8,5 +8,5 @@
     "types": ["react", "node"],
     "skipLibCheck": true
   },
-  "include": ["src/**/*", "test/**/*", "index.js"]
+  "include": ["src/**/*", "test/**/*", "index.js", "../shared/**/*"]
 }

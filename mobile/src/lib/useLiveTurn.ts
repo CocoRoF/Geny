@@ -11,8 +11,8 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import * as Network from 'expo-network';
 
-import { connectExecWs, type ConnState, type ExecWsHandle, type LogEntry } from './exec-ws';
-import { foldEntry, pendingUserMessage, type Message } from './transcript';
+import { connectExecWs, type ConnState, type ExecWsHandle, type LogEntry } from '../../../shared/chat/exec-ws';
+import { foldEntry, pendingUserMessage, type Message } from '../../../shared/chat/transcript';
 
 export interface LiveTurn {
   state: ConnState;

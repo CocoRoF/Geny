@@ -26,6 +26,16 @@ async function base(): Promise<string> {
   return url
 }
 
+/** The server's WebSocket origin, derived from the configured HTTP one. */
+export async function wsBase(): Promise<string> {
+  const root = await base()
+  return root.replace(/^http/, 'ws')
+}
+
+export async function authToken(): Promise<string | null> {
+  return (await window.connector?.secureStore.get(TOKEN_KEY)) ?? null
+}
+
 export async function serverFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const [root, token] = await Promise.all([base(), window.connector?.secureStore.get(TOKEN_KEY)])
   const res = await fetch(`${root}${path}`, {
@@ -242,4 +252,42 @@ export const agents = {
       method: 'POST', body: JSON.stringify({ prompt }),
     }),
   stop: (id: string) => serverFetch<{ success: boolean }>(`/api/agents/${id}/stop`, { method: 'POST' }),
+}
+
+// ── the session's own record ─────────────────────────────────────────
+//
+// The log is what the server actually wrote, and the conversation is folded
+// out of it (`shared/chat/transcript`). Opening a session reads its log;
+// staying on it follows the execute socket. Both produce the same entries, so
+// the same fold turns them into the same conversation.
+
+export interface SessionLogEntry {
+  timestamp?: string
+  level?: string
+  message?: string
+  metadata?: Record<string, unknown> | string
+}
+
+export const sessions = {
+  /** Newest first, as the endpoint returns them. */
+  logs: (id: string, limit = 400) =>
+    serverFetch<{ entries: SessionLogEntry[]; total_entries: number }>(
+      `/api/command/logs/${encodeURIComponent(id)}?limit=${limit}`),
+  create: (body: Record<string, unknown>) =>
+    serverFetch<{ session_id: string; session_name?: string }>('/api/agents', {
+      method: 'POST', body: JSON.stringify(body),
+    }),
+  remove: (id: string) =>
+    serverFetch<{ success?: boolean }>(`/api/agents/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+}
+
+export interface EnvironmentSummary {
+  id: string
+  name: string
+  description?: string
+  is_template?: boolean
+}
+
+export const environments = {
+  list: () => serverFetch<{ environments: EnvironmentSummary[] }>('/api/environments'),
 }
