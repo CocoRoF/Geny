@@ -80,6 +80,7 @@ from controller.gapt_settings_controller import router as gapt_settings_router  
 from controller.sync_controller import router as sync_router  # cross-service settings sync
 from controller.avatar_controller import router as avatar_router  # geny-avatar integration
 from controller.llm_backends_controller import router as llm_backends_router
+from controller.llm_accounts_controller import router as llm_accounts_router
 from controller.mcp_bridge_controller import router as mcp_bridge_router
 from controller.chat_controller import router as chat_router
 from controller.upload_controller import router as upload_router
@@ -1207,6 +1208,7 @@ app.include_router(gapt_settings_router)  # GAPT settings proxy (GAPT category i
 app.include_router(sync_router)  # cross-service provider-key sync
 app.include_router(avatar_router)  # geny-avatar integration (Avatar category)
 app.include_router(llm_backends_router)  # LLM backend health + Claude Code login + subagent listing (Phase E4)
+app.include_router(llm_accounts_router)  # Model accounts: many Claude/Codex logins, keys, and the route a session uses
 app.include_router(mcp_bridge_router)  # Phase I — internal MCP endpoint for claude_code_cli tool wrap
 app.include_router(chat_router)  # Chat broadcast
 app.include_router(upload_router)  # File / image uploads (multipart)

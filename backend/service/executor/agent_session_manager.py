@@ -655,6 +655,109 @@ class AgentSessionManager:
         except Exception:  # noqa: BLE001
             return None
 
+    # ── the session's route ──────────────────────────────────────────
+    #
+    # A route is which model accounts a session talks to, in order. The
+    # pipeline only ever names one provider (``geny_router``); the route is
+    # what that provider resolves per call. Because history stays canonical,
+    # changing the route mid-conversation continues the SAME conversation
+    # with the same tools, memory, hooks and permission policy — which is the
+    # whole reason model switching is cheap here.
+
+    async def _resolve_session_route(
+        self, session_id: str, request: CreateSessionRequest
+    ) -> Dict[str, Any]:
+        route = getattr(request, "route", None)
+        if isinstance(route, dict) and route.get("primary"):
+            return route
+        stored = self._stored_route(session_id)
+        if stored:
+            return stored
+        try:
+            from service.llm_accounts import get_account_service
+
+            return get_account_service().default_route()
+        except Exception as exc:  # noqa: BLE001 — no accounts yet is not a crash
+            logger.warning("route: falling back to an empty route (%s)", exc)
+            return {"primary": None, "fallbacks": []}
+
+    def _stored_route(self, session_id: str) -> Optional[Dict[str, Any]]:
+        try:
+            from service.sessions.store import get_session_store
+
+            record = get_session_store().get(session_id) or {}
+        except Exception:  # noqa: BLE001
+            return None
+        route = record.get("route")
+        return route if isinstance(route, dict) and route.get("primary") else None
+
+    async def _route_targets(self, route: Dict[str, Any]) -> List[Dict[str, Any]]:
+        try:
+            from service.llm_accounts import get_account_service
+
+            return await get_account_service().resolve_route(route or {})
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("route: could not resolve any hop (%s)", exc)
+            return []
+
+    def _route_notifier(self, session_id: str):
+        """What the router tells the host while a turn runs.
+
+        Three things matter here. ``route`` and ``failover`` are the only
+        record of WHICH account answered — without them a user watching a
+        subscription burn down has no way to tell which one. ``tokens`` is
+        load-bearing: a Codex refresh token is single-use, so a rotation that
+        is not persisted logs the account out on the next turn, silently.
+        """
+
+        def notify(event: Dict[str, Any]) -> None:
+            kind = str(event.get("kind") or "")
+            try:
+                if kind == "tokens":
+                    account_id = str(event.get("accountId") or "")
+                    tokens = event.get("tokens")
+                    if account_id and isinstance(tokens, dict):
+                        from service.llm_accounts import get_secret_store
+
+                        get_secret_store().set(account_id, tokens)
+                    return
+                if kind in ("route", "failover"):
+                    self._record_route_event(session_id, kind, event)
+                    return
+                if kind in ("rate_limit", "notice"):
+                    logger.info("[%s] route %s: %s", session_id, kind,
+                                event.get("message") or event.get("info"))
+            except Exception:  # noqa: BLE001 — a notification never breaks a turn
+                logger.debug("route notify failed", exc_info=True)
+
+        return notify
+
+    def _record_route_event(self, session_id: str, kind: str, event: Dict[str, Any]) -> None:
+        agent = self._local_agents.get(session_id)
+        summary = {
+            "accountId": event.get("accountId"),
+            "label": event.get("label") or event.get("from"),
+            "kind": event.get("accountKind"),
+            "model": event.get("model"),
+            "index": event.get("index"),
+            "failedOver": kind == "failover",
+        }
+        if agent is not None:
+            setattr(agent, "last_route", summary)
+        if kind == "failover":
+            logger.warning(
+                "[%s] route failover from %s (%s): %s",
+                session_id, event.get("from"), event.get("category"), event.get("error"),
+            )
+        else:
+            logger.info("[%s] route → %s (%s)", session_id, summary["label"], summary["model"])
+        try:
+            from service.sessions.store import get_session_store
+
+            get_session_store().update(session_id, {"last_route": summary})
+        except Exception:  # noqa: BLE001
+            pass
+
     def _extract_primary_provider(self, env_id: str) -> Optional[str]:
         """Return the active Stage 6 provider for ``env_id``.
 
@@ -1235,8 +1338,22 @@ class AgentSessionManager:
             gapt_sandbox is not None
             and self._extract_primary_provider(env_id) == "claude_code_cli"
         )
+        # The session's route — which model accounts it talks to, in order.
+        # Explicit on the request wins; otherwise a restored session keeps the
+        # route it had; otherwise every enabled account, arranged as the user
+        # arranged them. Resolved here (not at call time) so a turn never waits
+        # on a token refresh, and so a route naming a deleted account is
+        # noticed at creation rather than mid-conversation.
+        route = await self._resolve_session_route(session_id, request)
+        route_targets = await self._route_targets(route)
+
         credentials = CredentialBundleBuilder(
-            mcp_bridge=mcp_bridge_ctx, sandbox_fs_isolation=_fs_isolate
+            mcp_bridge=mcp_bridge_ctx,
+            sandbox_fs_isolation=_fs_isolate,
+            route_targets=route_targets,
+            route_notify=self._route_notifier(session_id),
+            session_id=session_id,
+            route_timeout_s=request.timeout,
         ).build()
 
         # Determine the active session's primary provider so we can
@@ -1245,7 +1362,12 @@ class AgentSessionManager:
         # logged in / never set ANTHROPIC_API_KEY" case at session
         # creation time instead of at first LLM call.
         primary_provider = self._extract_primary_provider(env_id)
-        if primary_provider and not credentials.has(primary_provider):
+        if primary_provider == "geny_router" and not route_targets:
+            raise ValueError(
+                "이 세션이 쓸 모델 계정이 없습니다. 설정 › 모델에서 계정을 추가하고 "
+                "켜 두세요 (Claude Code 로그인, ChatGPT·Codex 로그인, API 키 모두 가능합니다)."
+            )
+        if primary_provider and primary_provider != "geny_router" and not credentials.has(primary_provider):
             raise ValueError(
                 f"환경 '{env_id}'의 Stage 6 provider '{primary_provider}'에 사용할 "
                 f"자격증명이 설정되지 않았습니다. Settings → LLM Backends에서 해당 provider 카드를 "
@@ -1654,6 +1776,10 @@ class AgentSessionManager:
 
         # Register in local store
         self._local_agents[session_id] = agent
+
+        # The route this session resolved with, so the session screen can show
+        # which accounts it will use before a single turn has run.
+        agent.route = route
 
         # Wire DB into session memory manager (if available)
         if self._app_db is not None and agent.memory_manager is not None:

@@ -70,7 +70,7 @@ def test_names_are_isolated_from_the_tool_loader_universe():
 def test_vscode_env_template_gates_and_isolates():
     from service.environment.templates import create_vscode_env, VSCODE_ENV_ID
 
-    m = create_vscode_env(provider="anthropic")
+    m = create_vscode_env()
     assert m.metadata.id == VSCODE_ENV_ID
     # vscode_* are NOT baked into the whitelist — they arrive via the gate.
     assert list(getattr(m.tools, "external", []) or []) == []

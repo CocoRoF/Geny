@@ -27,6 +27,7 @@ from service.database.models.trigger_preset import TriggerPresetModel
 from service.database.models.custom_tool import CustomToolModel
 from service.database.models.sandbox_tool_pack import SandboxToolPackModel
 from service.database.models.persona_preset import PersonaPresetModel
+from service.database.models.llm_account import LLMAccountModel
 
 __all__ = [
     'BaseModel',
@@ -47,6 +48,7 @@ __all__ = [
     'CustomToolModel',
     'SandboxToolPackModel',
     'PersonaPresetModel',
+    'LLMAccountModel',
 ]
 
 # List of models used by the application
@@ -70,4 +72,5 @@ APPLICATION_MODELS = [
     CustomToolModel,
     SandboxToolPackModel,
     PersonaPresetModel,
+    LLMAccountModel,
 ]

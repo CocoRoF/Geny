@@ -183,13 +183,13 @@ async def reseed_templates(request: Request, auth: dict = Depends(require_auth))
     wizard), the seed envs still pin the old provider. This endpoint re-runs
     the seed so they adopt the now-active backend, with no restart.
 
-    Only the four template seeds are rewritten; user-created environments are
-    never touched (same guarantee as the boot path).
+    Only the three template seeds are rewritten; user-created environments
+    are never touched (same guarantee as the boot path).
     """
     svc = _env_svc(request)
     tool_loader = getattr(request.app.state, "tool_loader", None)
     from service.environment.templates import (
-        _resolve_active_provider,
+        ROUTER_PROVIDER,
         install_environment_templates,
     )
 
@@ -197,7 +197,7 @@ async def reseed_templates(request: Request, auth: dict = Depends(require_auth))
     count = install_environment_templates(
         svc, external_tool_names=names, tool_loader=tool_loader
     )
-    return {"reseeded": count, "active_provider": _resolve_active_provider()}
+    return {"reseeded": count, "active_provider": ROUTER_PROVIDER}
 
 
 @router.get("/session-counts", response_model=EnvironmentSessionCountsResponse)

@@ -1,4 +1,4 @@
-"""G12 — Phase 7 strategy activations on worker_adaptive.
+"""G12 — Phase 7 strategy activations on the one harness.
 
 Each flip is documented in cycle 20260425_2 / G12. Strict-superset
 defaults mean behaviour is unchanged at default config; the
@@ -25,39 +25,36 @@ def _entry(preset: str, order: int) -> dict:
 # ── s06 api router ─────────────────────────────────────────────────
 
 
-def test_worker_adaptive_uses_adaptive_router() -> None:
-    api = _entry("worker_adaptive", 6)
-    assert api["strategies"]["router"] == "adaptive"
-
-
-def test_vtuber_keeps_passthrough_router() -> None:
-    api = _entry("vtuber", 6)
-    # vtuber's preset has its own api stage entry (not from worker_adaptive).
-    # Whichever it picked, the regression check is "not adaptive" — vtuber
-    # turns are short and the router would only add latency.
-    assert api["strategies"]["router"] != "adaptive"
+def test_the_router_never_substitutes_the_chosen_model() -> None:
+    """``passthrough``: the model is the one the session's account route
+    names. An adaptive substitution overrides the user's choice with no
+    trace — and once pointed the CLI backend at a model id that did not
+    exist, which simply hung."""
+    assert _entry("default", 6)["strategies"]["router"] == "passthrough"
 
 
 # ── s14 evaluate strategy ───────────────────────────────────────────
 
 
-def test_worker_adaptive_uses_evaluation_chain() -> None:
-    eval_entry = _entry("worker_adaptive", 14)
+def test_the_evaluator_is_the_adaptive_chain() -> None:
+    eval_entry = _entry("default", 14)
     assert eval_entry["strategies"]["strategy"] == "evaluation_chain"
     chain_cfg = eval_entry.get("strategy_configs", {}).get("strategy", {})
     assert chain_cfg.get("evaluators") == ["binary_classify", "signal_based"]
 
 
-def test_vtuber_keeps_signal_based_evaluator() -> None:
-    eval_entry = _entry("vtuber", 14)
-    assert eval_entry["strategies"]["strategy"] == "signal_based"
+def test_a_conversational_turn_costs_one_pass() -> None:
+    """Why there is no lighter chain for conversation any more: the
+    classifier completes a plain answer on the first turn."""
+    config = _entry("default", 14)["strategy_configs"]["strategy"]
+    assert config["easy_max_turns"] == 1
 
 
 # ── s16 loop controller ─────────────────────────────────────────────
 
 
-def test_worker_adaptive_uses_multi_dim_budget() -> None:
-    loop = _entry("worker_adaptive", 16)
+def test_the_loop_is_budget_aware() -> None:
+    loop = _entry("default", 16)
     assert loop["strategies"]["controller"] == "multi_dim_budget"
     dims = loop.get("strategy_configs", {}).get("controller", {}).get("dimensions")
     assert dims == ["iterations"]
@@ -66,43 +63,32 @@ def test_worker_adaptive_uses_multi_dim_budget() -> None:
     assert "max_turns" in loop["config"]
 
 
-def test_vtuber_keeps_standard_controller() -> None:
-    loop = _entry("vtuber", 16)
-    assert loop["strategies"]["controller"] == "standard"
 
 
 # ── s18 memory strategy ────────────────────────────────────────────
 
 
-def test_worker_adaptive_uses_structured_reflective() -> None:
-    mem = _entry("worker_adaptive", 18)
+def test_memory_is_structured_reflective() -> None:
+    mem = _entry("default", 18)
     assert mem["strategies"]["strategy"] == "structured_reflective"
     # persistence stays "null" — the attach_runtime path swaps in
     # the real GenyPersistence rooted at the session's memory_manager.
     assert mem["strategies"]["persistence"] == "null"
 
 
-def test_vtuber_keeps_append_only_memory() -> None:
-    mem = _entry("vtuber", 18)
-    assert mem["strategies"]["strategy"] == "append_only"
 
 
 # ── End-to-end: pipeline still materialises ────────────────────────
 
 
-@pytest.mark.parametrize("preset", ("worker_adaptive", "vtuber"))
-def test_pipeline_builds_with_new_strategies(preset: str) -> None:
+def test_pipeline_builds_with_these_strategies() -> None:
     """Strict-superset defaults mean the new strategies must
     instantiate cleanly through Pipeline.from_manifest. If a strategy
     needs a required config field that we forgot to set, this fails
     here with a clear ValueError."""
     from geny_executor.core.pipeline import Pipeline
 
-    manifest = build_manifest(preset, provider="anthropic", model="claude-haiku-4-5-20251001")
+    manifest = build_manifest("default", provider="anthropic", model="claude-haiku-4-5-20251001")
     pipeline = Pipeline.from_manifest(manifest, api_key="sk-test", strict=False)
-    # Sanity: stages we flipped are all registered.
-    orders = {s.order for s in pipeline.stages}
-    if preset == "vtuber":
-        assert {6, 14, 16, 18}.issubset(orders)
-    else:
-        assert {6, 14, 16, 18}.issubset(orders)
+    # Sanity: the stages these strategies live on are all registered.
+    assert {6, 14, 16, 18}.issubset({s.order for s in pipeline.stages})

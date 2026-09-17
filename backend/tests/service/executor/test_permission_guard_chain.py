@@ -2,7 +2,7 @@
 
 Three layers of assertion:
 
-1. **Manifest factory** — worker_adaptive emits an explicit guards
+1. **Manifest factory** — the harness emits an explicit guards
    chain with `permission` at the tail; vtuber stays on the executor's
    silent default (token + cost + iteration only).
 2. **Pipeline materialization** — `Pipeline.from_manifest` resolves
@@ -24,8 +24,8 @@ from geny_executor.core.pipeline import Pipeline  # noqa: E402
 from geny_executor import build_manifest  # noqa: E402
 
 
-def test_worker_adaptive_declares_permission_guard() -> None:
-    manifest = build_manifest("worker_adaptive", provider="anthropic")
+def test_the_harness_declares_the_permission_guard() -> None:
+    manifest = build_manifest("default", provider="anthropic")
     guard_entry = next(e for e in manifest.stages if e["order"] == 4)
     assert guard_entry["name"] == "guard"
     assert guard_entry["chain_order"]["guards"] == [
@@ -33,23 +33,12 @@ def test_worker_adaptive_declares_permission_guard() -> None:
     ]
 
 
-def test_vtuber_stays_on_default_guard_chain() -> None:
-    """VTuber turns don't run general-purpose tools — no permission
-    matrix evaluation needed. Stays on the executor's silent default
-    (token + cost + iteration)."""
-    manifest = build_manifest("vtuber", provider="anthropic")
-    guard_entry = next(e for e in manifest.stages if e["order"] == 4)
-    # Either no chain_order set, or set without permission.
-    chain = guard_entry.get("chain_order", {}).get("guards", [])
-    assert "permission" not in chain
-
-
 def test_pipeline_factory_does_not_populate_chain_alone() -> None:
     """The manifest's chain_order is a *reorder hint* — `Pipeline.from_manifest`
     does NOT automatically add chain items because the executor's
     `reorder_chain` only reorders existing items. Guard chain population
     happens at session-build time via `populate_guard_chain`."""
-    manifest = build_manifest("worker_adaptive", model="claude-haiku-4-5-20251001", provider="anthropic")
+    manifest = build_manifest("default", model="claude-haiku-4-5-20251001", provider="anthropic")
     pipeline = Pipeline.from_manifest(manifest, api_key="sk-test", strict=False)
 
     guard_stage = next(s for s in pipeline.stages if s.order == 4)
@@ -64,7 +53,7 @@ def test_populate_guard_chain_adds_default_guards() -> None:
     of guards including PermissionGuard at the tail."""
     from service.permission.install import populate_guard_chain
 
-    manifest = build_manifest("worker_adaptive", model="claude-haiku-4-5-20251001", provider="anthropic")
+    manifest = build_manifest("default", model="claude-haiku-4-5-20251001", provider="anthropic")
     pipeline = Pipeline.from_manifest(manifest, api_key="sk-test", strict=False)
     added = populate_guard_chain(pipeline)
     assert added == 4
@@ -79,7 +68,7 @@ def test_populate_guard_chain_is_idempotent() -> None:
     """Calling populate_guard_chain twice doesn't double-add guards."""
     from service.permission.install import populate_guard_chain
 
-    manifest = build_manifest("worker_adaptive", model="claude-haiku-4-5-20251001", provider="anthropic")
+    manifest = build_manifest("default", model="claude-haiku-4-5-20251001", provider="anthropic")
     pipeline = Pipeline.from_manifest(manifest, api_key="sk-test", strict=False)
     first = populate_guard_chain(pipeline)
     second = populate_guard_chain(pipeline)
@@ -92,7 +81,7 @@ def test_populate_guard_chain_custom_list() -> None:
     variations."""
     from service.permission.install import populate_guard_chain
 
-    manifest = build_manifest("worker_adaptive", model="claude-haiku-4-5-20251001", provider="anthropic")
+    manifest = build_manifest("default", model="claude-haiku-4-5-20251001", provider="anthropic")
     pipeline = Pipeline.from_manifest(manifest, api_key="sk-test", strict=False)
     added = populate_guard_chain(pipeline, chain=["token_budget", "permission"])
     assert added == 2

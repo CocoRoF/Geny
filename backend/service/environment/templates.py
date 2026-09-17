@@ -1,37 +1,42 @@
-"""Default environment templates — WORKER + VTUBER seeds.
+"""The seed environments — WORKER + VTUBER + VSCODE.
 
-Mirrors :mod:`service.tool_preset.templates` for the environment layer.
-Every session the user creates runs through one of two seed
-:class:`EnvironmentManifest` templates — ``template-worker-env`` (task
-work) or ``template-vtuber-env`` (conversation). Sub-Worker / solo
-Worker / developer / researcher / planner all resolve to the worker
-seed; only the VTuber role gets the lightweight vtuber seed.
+An environment says which TOOLS an agent has and which PERSONA it wears.
+It no longer says which pipeline it runs or which model answers:
 
-The seeds are **materialized on disk** at app boot via
-:func:`install_environment_templates`. Reasoning (from
-``plan/02_default_env_per_role.md``):
+* The pipeline is the one harness (:func:`geny_executor.build_manifest`
+  materialises a single blueprint since 2.66.0), so improving it improves
+  every agent and no agent quietly runs a weaker one.
+* The model is whatever the session's **route** names — the accounts the
+  user picked, in order — resolved at Stage 6 by the ``geny_router``
+  provider. That is why switching model mid-conversation is cheap: the
+  environment does not change, so neither do the tools, the memory, the
+  hooks or the permission policy.
 
-- The seeded env is inspectable — users can open the environment
-  editor and see what their worker does.
-- Edits to the seed env persist in the user's database and are
-  picked up on next session create, matching how
-  :class:`~service.tool_preset.store.ToolPresetStore` behaves today.
-- Matches the user's directive: the default envs are *the envs
-  users see in the UI*, not invisible defaults.
+Before this, the seeds were eleven: worker and VTuber for each of four
+backends, plus VSCode. The backend half of that grid is gone — an
+environment pinned to ``openai`` was really a model choice wearing an
+environment's clothes, and the user had to rebuild their whole tool roster
+to change models. Three seeds remain because three tool rosters genuinely
+differ:
 
-The manifests themselves come from the library-owned
-:func:`geny_executor.build_manifest` factory (2.2.0) — the canonical
-preset → manifest builder. So "what the seed looks like" and "what an
-ephemeral session looks like" never diverge, and Geny no longer
-hand-mirrors the stage catalogue (the old
-``service.executor.default_manifest`` compensation module is gone).
+============  ============================================================
+일반 환경      every tool, no persona
+VTuber 환경    every tool + persona + an owned sub-agent
+VSCode 확장    ONLY the ``vscode_*`` tools — the agent works the user's real
+              editor, and must never reach for the server sandbox instead
+============  ============================================================
+
+The seeds are **materialized on disk** at app boot by
+:func:`install_environment_templates`, rewritten from the canonical builder
+every time, so "what the seed looks like" and "what a session runs" cannot
+drift. Custom environments — any id but the three seeds — are never touched.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Dict, List, Optional
 
-from geny_executor import EnvironmentManifest, build_manifest, build_manifest_for
+from geny_executor import EnvironmentManifest, build_manifest
 from geny_executor import known_manifest_presets as known_presets
 
 from service.environment.service import EnvironmentService
@@ -39,16 +44,17 @@ from service.environment.service import EnvironmentService
 if TYPE_CHECKING:
     from service.tool_loader import ToolLoader
 
+#: Stage 6's provider for every environment. The accounts behind it are the
+#: session's route, so an environment never has to be rebuilt to change model.
+ROUTER_PROVIDER = "geny_router"
+
 __all__ = [
+    "ROUTER_PROVIDER",
     "WORKER_ENV_ID",
     "VTUBER_ENV_ID",
-    "CLAUDE_CODE_WORKER_ENV_ID",
-    "CLAUDE_CODE_VTUBER_ENV_ID",
     "VSCODE_ENV_ID",
     "create_worker_env",
     "create_vtuber_env",
-    "create_claude_code_worker_env",
-    "create_claude_code_vtuber_env",
     "create_vscode_env",
     "install_environment_templates",
     # Re-export of the library's known_manifest_presets() under the
@@ -59,34 +65,19 @@ __all__ = [
 
 WORKER_ENV_ID = "template-worker-env"
 VTUBER_ENV_ID = "template-vtuber-env"
-# Geny VSCode extension — a dedicated environment whose ONLY external tools are
+# Geny VSCode extension — the one environment whose ONLY external tools are
 # the isolated vscode_* local-development set (gated by extras.vscode_enabled).
 VSCODE_ENV_ID = "template-vscode-env"
+
 # Minimal framework built-ins for the VSCode coding agent: plan / interact /
 # research + tool discovery. Deliberately EXCLUDES the sandbox fs/shell tools
 # (Read/Write/Edit/Bash/Glob/Grep) — those act on the session's server sandbox,
-# not the user's VSCode workspace; the vscode_* tools are the only file/terminal
-# interface here, so the agent never confuses the two targets.
+# not the user's VSCode workspace; the vscode_* tools are the only file and
+# terminal interface here, so the agent never confuses the two targets.
 _VSCODE_BUILT_IN_TOOL_NAMES = [
     "AskUserQuestion", "TodoWrite", "EnterPlanMode", "ExitPlanMode",
     "WebSearch", "WebFetch", "ToolSearch",
 ]
-# Dedicated Claude Code engine presets — the worker/vtuber stage blueprints
-# locked to the ``claude_code_cli`` provider (geny-executor 2.4.0 catalog).
-# Distinct from the default worker/vtuber seeds (which use whichever provider
-# is *preferred*), so a user can run an API-backed worker AND a Claude-Code
-# worker side by side.
-CLAUDE_CODE_WORKER_ENV_ID = "template-claude-code-worker-env"
-CLAUDE_CODE_VTUBER_ENV_ID = "template-claude-code-vtuber-env"
-# Explicit per-backend presets (provider locked). Each backend × {general,
-# vtuber}. The two seeds above (worker/vtuber) follow the user's *active* login;
-# these let a user force a specific backend regardless of the default.
-CLAUDE_WORKER_ENV_ID = "template-claude-worker-env"
-CLAUDE_VTUBER_ENV_ID = "template-claude-vtuber-env"
-OPENAI_WORKER_ENV_ID = "template-openai-worker-env"
-OPENAI_VTUBER_ENV_ID = "template-openai-vtuber-env"
-LOCAL_WORKER_ENV_ID = "template-local-worker-env"
-LOCAL_VTUBER_ENV_ID = "template-local-vtuber-env"
 
 
 # Custom tools the VTuber persona should keep access to. Distinct
@@ -326,14 +317,11 @@ def _vtuber_tool_roster(
 
 def create_worker_env(
     external_tool_names: Optional[List[str]] = None,
-    *,
-    provider: Optional[str] = None,
 ) -> EnvironmentManifest:
     """Default worker environment manifest.
 
-    Uses the ``worker_adaptive`` stage chain — adaptive loop with
-    ``binary_classify`` evaluation, ``aggressive_cache``, and
-    ``max_turns=30``. Binds to every provider-backed tool supplied
+    Runs the one harness on the ``geny_router`` provider, so the model is
+    whatever the session's route names. Binds to every tool supplied
     via *external_tool_names* — both Geny platform builtins
     (``geny_*``, ``memory_*``, ``knowledge_*``, ``opsidian_*``) and
     custom tools. The executor's manifest loader only registers
@@ -360,22 +348,22 @@ def create_worker_env(
     # external roster). Users narrow per-environment in the editor; the seed is
     # maximal. The ``model`` block is filled at session creation.
     manifest = build_manifest(
-        "worker_adaptive",
-        provider=provider or "anthropic",
+        "default",
+        provider=ROUTER_PROVIDER,
         external_tools=list(external_tool_names or []),
         built_in_tools=["*"],
     )
     manifest.metadata.id = WORKER_ENV_ID
     manifest.metadata.name = "일반 환경"
     manifest.metadata.description = (
-        "범용 작업 환경 — 적응형 루프 + 모든 도구. 현재 로그인된 백엔드를 사용합니다."
+        "범용 작업 환경 — 모든 도구. 모델은 세션이 고른 계정이 정합니다."
     )
     _promote_core_tools(manifest)
     _use_llm_compactor(manifest)
     return manifest
 
 
-def create_vscode_env(*, provider: Optional[str] = None) -> EnvironmentManifest:
+def create_vscode_env() -> EnvironmentManifest:
     """Geny VSCode-extension environment manifest.
 
     A coding agent that operates the user's real VSCode workspace through the
@@ -388,8 +376,8 @@ def create_vscode_env(*, provider: Optional[str] = None) -> EnvironmentManifest:
     sandbox. ``model`` is filled at session creation.
     """
     manifest = build_manifest(
-        "worker_adaptive",
-        provider=provider or "anthropic",
+        "default",
+        provider=ROUTER_PROVIDER,
         external_tools=[],  # vscode_* arrive via the runtime vscode_enabled gate
         built_in_tools=list(_VSCODE_BUILT_IN_TOOL_NAMES),
     )
@@ -409,14 +397,14 @@ def create_vscode_env(*, provider: Optional[str] = None) -> EnvironmentManifest:
 def create_vtuber_env(
     all_tool_names: Optional[List[str]] = None,
     tool_loader: Optional["ToolLoader"] = None,
-    *,
-    provider: Optional[str] = None,
 ) -> EnvironmentManifest:
     """Default VTuber environment manifest.
 
-    Uses the ``vtuber`` stage chain — Stage 8 (Think) ships
-    ``active=False`` (host can opt the persona into Extended Thinking),
-    ``system_cache``, ``signal_based`` evaluation, ``max_turns=10``.
+    Runs the same harness as every other environment — the lighter VTuber
+    chain is gone, because the adaptive classifier already answers a
+    conversational turn in a single pass. What makes this environment a
+    persona is the persona preset, the owned sub-agent and the narrowed
+    tool roster below, not a weaker pipeline.
 
     *all_tool_names* is the full roster the boot-time
     :class:`ToolLoader` knows about (builtin + custom). The VTuber
@@ -445,15 +433,15 @@ def create_vtuber_env(
     # affect/voice/avatar — NOT a tool restriction. Users narrow per-env if they
     # want a quieter persona.
     manifest = build_manifest(
-        "vtuber",
-        provider=provider or "anthropic",
+        "default",
+        provider=ROUTER_PROVIDER,
         external_tools=_without_gapt_tools(all_tool_names),
         built_in_tools=["*"],
     )
     manifest.metadata.id = VTUBER_ENV_ID
     manifest.metadata.name = "VTuber 환경"
     manifest.metadata.description = (
-        "VTuber 페르소나 환경 — 감정/음성/아바타 + 모든 도구. 현재 로그인된 백엔드를 사용합니다."
+        "VTuber 페르소나 환경 — 감정/음성/아바타 + 모든 도구. 모델은 세션이 고른 계정이 정합니다."
     )
     _declare_owned_subagent(manifest)
     _declare_gapt_subworker(manifest)
@@ -630,133 +618,6 @@ def _declare_gapt_subworker(manifest: "EnvironmentManifest") -> None:
         pass
 
 
-def create_claude_code_worker_env(
-    external_tool_names: Optional[List[str]] = None,
-) -> EnvironmentManifest:
-    """Worker environment backed by the Claude Code CLI provider.
-
-    Same ``worker_adaptive`` stage blueprint + tool roster as
-    :func:`create_worker_env`, but the provider is locked to
-    ``claude_code_cli`` by the geny-executor catalog
-    (``claude_code_worker`` preset). Lets a user run a Claude-Code-backed
-    worker regardless of which provider is the global default.
-    """
-    manifest = build_manifest_for(
-        "claude_code_worker",
-        external_tools=list(external_tool_names or []),
-        built_in_tools=["*"],
-    )
-    manifest.metadata.id = CLAUDE_CODE_WORKER_ENV_ID
-    manifest.metadata.name = "Claude Code · 일반"
-    manifest.metadata.description = (
-        "Claude Code CLI(구독 인증) 백엔드 · 일반 환경 — 적응형 루프 + 모든 도구."
-    )
-    _promote_core_tools(manifest)
-    _use_llm_compactor(manifest)
-    return manifest
-
-
-def create_claude_code_vtuber_env(
-    all_tool_names: Optional[List[str]] = None,
-    tool_loader: Optional["ToolLoader"] = None,
-) -> EnvironmentManifest:
-    """VTuber environment backed by the Claude Code CLI provider.
-
-    Same ``vtuber`` blueprint + narrowed roster as
-    :func:`create_vtuber_env`, locked to ``claude_code_cli`` via the
-    catalog (``claude_code_vtuber`` preset).
-    """
-    manifest = build_manifest_for(
-        "claude_code_vtuber",
-        external_tools=_without_gapt_tools(all_tool_names),
-        built_in_tools=["*"],
-    )
-    manifest.metadata.id = CLAUDE_CODE_VTUBER_ENV_ID
-    manifest.metadata.name = "Claude Code · VTuber"
-    manifest.metadata.description = (
-        "Claude Code CLI 백엔드 · VTuber 페르소나 환경 — 모든 도구."
-    )
-    _declare_owned_subagent(manifest)
-    _declare_gapt_subworker(manifest)
-    _declare_persona_preset(manifest)
-    _promote_core_tools(manifest)
-    _use_llm_compactor(manifest)
-    return manifest
-
-
-def _backend_env(
-    chain: str,
-    provider: str,
-    env_id: str,
-    name: str,
-    description: str,
-    all_names: List[str],
-    *,
-    vtuber: bool,
-) -> EnvironmentManifest:
-    """Build a provider-locked preset (every tool enabled).
-
-    ``chain`` is the stage blueprint (``worker_adaptive`` / ``vtuber``);
-    ``provider`` locks Stage 6. VTuber presets additionally own a sub-agent.
-    """
-    manifest = build_manifest(
-        chain,
-        provider=provider,
-        # VTuber presets drop gapt_* (delegated to the gapt sub-worker);
-        # worker presets keep them (do-it-yourself).
-        external_tools=(
-            _without_gapt_tools(all_names) if vtuber else list(all_names or [])
-        ),
-        built_in_tools=["*"],
-    )
-    manifest.metadata.id = env_id
-    manifest.metadata.name = name
-    manifest.metadata.description = description
-    if vtuber:
-        _declare_owned_subagent(manifest)
-        _declare_gapt_subworker(manifest)
-        _declare_persona_preset(manifest)
-    _promote_core_tools(manifest)
-    _use_llm_compactor(manifest)
-    return manifest
-
-
-def _resolve_active_provider() -> str:
-    """Pick the Stage-6 provider for the boot-time template reseed.
-
-    Builds the same :class:`geny_executor.CredentialBundle` live
-    sessions use and asks the library which configured backend should
-    win (``preferred_provider`` — claude_code_cli first, then vendor
-    APIs). Never raises: config-unavailable early-boot callers and an
-    empty bundle both land on Geny's conservative ``"anthropic"``
-    default so ``install_environment_templates`` cannot crash boot.
-    """
-    try:
-        from service.executor.credentials import CredentialBundleBuilder
-
-        # Explicit order: cloud/CLI backends keep priority (an existing
-        # Claude/OpenAI setup is unchanged), but the branded local
-        # providers (executor 2.9.0) are appended so a *local-only*
-        # install — Ollama running, no cloud keys — resolves to ``ollama``
-        # instead of falling through to the keyless ``anthropic``
-        # last-resort and failing every session.
-        provider = CredentialBundleBuilder().build().preferred_provider(
-            order=(
-                "claude_code_cli",
-                "anthropic",
-                "openai",
-                "google",
-                "vllm",
-                "ollama",
-                "lmstudio",
-                "custom",
-            )
-        )
-    except Exception:  # noqa: BLE001 — defensive, very early-boot callers
-        provider = None
-    return provider or "anthropic"
-
-
 def install_environment_templates(
     service: EnvironmentService,
     *,
@@ -773,76 +634,24 @@ def install_environment_templates(
     land in ``manifest.tools.external`` will never reach the
     session's tool registry.
 
-    The two template seed envs (``template-worker-env`` /
-    ``template-vtuber-env``) are rewritten every boot from the
-    canonical :func:`geny_executor.build_manifest` output. Custom envs —
-    any id other than the two template seeds — are never touched.
-    This keeps the seeds in lockstep with manifest-builder changes
-    (e.g. a new stage added to the default chain) without needing a
+    The three seeds are rewritten every boot from the canonical
+    :func:`geny_executor.build_manifest` output. Custom envs — any id other
+    than the seeds — are never touched. This keeps the seeds in lockstep
+    with manifest-builder changes (a new stage in the chain, say) without a
     migration framework.
+
+    They no longer differ by backend: which model answers is the session's
+    route, not the environment. A user changing model keeps the tool roster,
+    persona and permission policy they built.
 
     Returns the number of environment files written (always equal to
     the seed count after the write loop completes).
     """
     all_names = list(external_tool_names or [])
-    # Resolve the active backend ONCE per install so both seeds agree
-    # on what the user's current default is. This is what makes the
-    # boot-time template re-seed reflect "I logged in to Claude Code"
-    # without the user having to also create a separate env manually.
-    #
-    # 2.2.0: the heuristic lives in the library now
-    # (CredentialBundle.preferred_provider — same order the old
-    # backend_resolver encoded: claude_code_cli, anthropic, openai,
-    # google, vllm). ``None`` means "nothing configured"; keep Geny's
-    # historical anthropic last-resort so the boot reseed never fails.
-    active_provider = _resolve_active_provider()
     seeds: List[EnvironmentManifest] = [
-        # Defaults — follow the user's active login (role-default targets).
-        create_worker_env(external_tool_names=all_names, provider=active_provider),
-        create_vtuber_env(
-            all_tool_names=all_names,
-            tool_loader=tool_loader,
-            provider=active_provider,
-        ),
-        # ── Explicit per-backend presets (4 backends × {general, vtuber}) ──
-        # Claude Code (CLI subscription auth).
-        create_claude_code_worker_env(external_tool_names=all_names),
-        create_claude_code_vtuber_env(all_tool_names=all_names, tool_loader=tool_loader),
-        # Claude (Anthropic API key).
-        _backend_env(
-            "worker_adaptive", "anthropic", CLAUDE_WORKER_ENV_ID,
-            "Claude · 일반", "Anthropic API 백엔드 · 일반 환경 — 모든 도구.",
-            all_names, vtuber=False,
-        ),
-        _backend_env(
-            "vtuber", "anthropic", CLAUDE_VTUBER_ENV_ID,
-            "Claude · VTuber", "Anthropic API 백엔드 · VTuber 페르소나 환경 — 모든 도구.",
-            all_names, vtuber=True,
-        ),
-        # OpenAI.
-        _backend_env(
-            "worker_adaptive", "openai", OPENAI_WORKER_ENV_ID,
-            "OpenAI · 일반", "OpenAI 백엔드 · 일반 환경 — 모든 도구.",
-            all_names, vtuber=False,
-        ),
-        _backend_env(
-            "vtuber", "openai", OPENAI_VTUBER_ENV_ID,
-            "OpenAI · VTuber", "OpenAI 백엔드 · VTuber 페르소나 환경 — 모든 도구.",
-            all_names, vtuber=True,
-        ),
-        # Local LLM (Ollama — model/base_url come from LLM Backends settings).
-        _backend_env(
-            "worker_adaptive", "ollama", LOCAL_WORKER_ENV_ID,
-            "Local LLM · 일반", "로컬 LLM(Ollama) 백엔드 · 일반 환경 — 모든 도구.",
-            all_names, vtuber=False,
-        ),
-        _backend_env(
-            "vtuber", "ollama", LOCAL_VTUBER_ENV_ID,
-            "Local LLM · VTuber", "로컬 LLM(Ollama) 백엔드 · VTuber 페르소나 환경 — 모든 도구.",
-            all_names, vtuber=True,
-        ),
-        # Geny VSCode extension — isolated vscode_* coding environment.
-        create_vscode_env(provider=active_provider),
+        create_worker_env(external_tool_names=all_names),
+        create_vtuber_env(all_tool_names=all_names, tool_loader=tool_loader),
+        create_vscode_env(),
     ]
     for manifest in seeds:
         _seed_system_prompt(manifest)

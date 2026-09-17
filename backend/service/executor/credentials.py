@@ -21,6 +21,12 @@ Cycle 20260520 — the legacy ``copilot_cli`` provider was removed. The
 cannot host Geny's Sub-Worker delegation or Stage-10 dispatch. Its
 config + credential builder + auth controller + frontend card were all
 deleted; only ``claude_code_cli`` remains on the CLI-driven path.
+
+2026-09-17 — ``geny_router``. Every environment now names one provider,
+and a session's **route** (the accounts it uses, in order) arrives here
+as that provider's credentials. The per-provider entries below stay:
+they are what a route hop built from an API-key account resolves to,
+and what a legacy environment pinned to ``anthropic`` still uses.
 """
 
 from __future__ import annotations
@@ -165,10 +171,18 @@ class CredentialBundleBuilder:
         *,
         mcp_bridge: Optional[McpBridgeContext] = None,
         sandbox_fs_isolation: bool = False,
+        route_targets: Optional[list] = None,
+        route_notify: Optional[Any] = None,
+        session_id: Optional[str] = None,
+        route_timeout_s: Optional[float] = None,
     ) -> None:
         self._cm = config_manager or get_config_manager()
         self._mcp_bridge = mcp_bridge
         self._sandbox_fs_isolation = sandbox_fs_isolation
+        self._route_targets = list(route_targets or [])
+        self._route_notify = route_notify
+        self._session_id = session_id
+        self._route_timeout_s = route_timeout_s
 
     # ─────────────────────────────────────────────────────────── build ─
 
@@ -225,6 +239,20 @@ class CredentialBundleBuilder:
             by_provider["claude_code_cli"] = self._build_claude_code(
                 creds, claude_cli, mcp_bridge=self._mcp_bridge,
             )
+
+        # The session's route. Registered ONLY when it resolved to at least
+        # one usable hop, so ``bundle.has("geny_router")`` answers the
+        # question session creation actually asks — "can this session reach
+        # a model?" — instead of reporting a route of nothing as configured.
+        if self._route_targets:
+            extras: Dict[str, Any] = {"targets": self._route_targets}
+            if self._route_notify is not None:
+                extras["notify"] = self._route_notify
+            if self._session_id:
+                extras["session_id"] = self._session_id
+            if self._route_timeout_s:
+                extras["timeout_s"] = float(self._route_timeout_s)
+            by_provider["geny_router"] = ProviderCredentials(extras=extras)
 
         return CredentialBundle(by_provider=by_provider)
 

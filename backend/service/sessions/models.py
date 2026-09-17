@@ -155,6 +155,15 @@ class CreateSessionRequest(BaseModel):
         default=None,
         description="Claude model to use (e.g., claude-sonnet-4-20250514)"
     )
+    route: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Which model accounts this session uses, in order: "
+            "{primary: {accountId, model, effort?}, fallbacks: [...]}. "
+            "Omitted → the default route (every enabled account, in the "
+            "order they are arranged)."
+        ),
+    )
     max_turns: Optional[int] = Field(
         default=50,
         description="Maximum conversation turns per invocation"
@@ -270,6 +279,13 @@ class SessionInfo(BaseModel):
     # the UI never paints a non-Anthropic session with a claude-* default.
     model: Optional[str] = None
     model_provider: Optional[str] = None
+
+    # The accounts this session talks to, in order, and who answered last.
+    # ``route`` is what the user picked; ``last_route`` is what the router
+    # actually used on the previous turn — they differ exactly when a hop
+    # failed over, which is the moment a user wants to see it.
+    route: Optional[Dict[str, Any]] = None
+    last_route: Optional[Dict[str, Any]] = None
 
     # Human name of the session's environment (manifest metadata.name) — the
     # UI shows this instead of the bare env id.

@@ -242,16 +242,22 @@ def test_build_manifest_threads_provider():
     same single-source contract the old build_default_manifest had."""
     from geny_executor import build_manifest
 
-    m = build_manifest("vtuber", provider="claude_code_cli").to_dict()
+    m = build_manifest("default", provider="claude_code_cli").to_dict()
     s6 = next(s for s in m["stages"] if s["name"] == "api")
     assert s6["config"]["provider"] == "claude_code_cli"
 
 
-def test_template_factories_default_to_anthropic():
-    """Backward-compat: template factories called without a provider
-    still produce a working (anthropic) manifest."""
-    from service.environment.templates import create_vtuber_env
+def test_every_seed_names_the_router():
+    """A seed no longer picks a backend. Which model answers is the
+    session's account route, so changing model never costs the user the
+    tool roster, persona and permission policy they built here."""
+    from service.environment.templates import (
+        create_vscode_env,
+        create_vtuber_env,
+        create_worker_env,
+    )
 
-    m = create_vtuber_env().to_dict()
-    s6 = next(s for s in m["stages"] if s["name"] == "api")
-    assert s6["config"]["provider"] == "anthropic"
+    for factory in (create_worker_env, create_vtuber_env, create_vscode_env):
+        m = factory().to_dict()
+        s6 = next(s for s in m["stages"] if s["name"] == "api")
+        assert s6["config"]["provider"] == "geny_router", factory.__name__

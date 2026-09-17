@@ -5500,9 +5500,18 @@ class AgentSession:
             except Exception:
                 pass
 
+        # Which accounts this session talks to (what the user picked), and who
+        # actually answered last turn. They differ exactly when a hop failed
+        # over — which is the moment a user wants to see it.
+        _record = self._store_record() or {}
+        _route = getattr(self, "route", None) or _record.get("route")
+        _last_route = getattr(self, "last_route", None) or _record.get("last_route")
+
         return SessionInfo(
             session_id=self._session_id,
             session_name=self._session_name,
+            route=_route if isinstance(_route, dict) else None,
+            last_route=_last_route if isinstance(_last_route, dict) else None,
             status=self._status,
             created_at=self._created_at,
             pid=None,

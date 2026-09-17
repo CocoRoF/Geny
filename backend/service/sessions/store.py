@@ -453,6 +453,11 @@ class SessionStore:
             # next wake. Restoring it here also lets the change-env feature
             # (PUT /api/agents/{id}/env) survive the manifest reload.
             "env_id": rec.get("env_id"),
+            # The accounts this session talks to. Same class of bug as env_id
+            # below if omitted: a restart would silently move the session back
+            # to the default route, which for a user who deliberately pinned a
+            # cheap model is a bill, not a preference.
+            "route": rec.get("route"),
             # Same shape of bug as env_id above: the owner was registered but
             # never handed back, so every restart re-created the session with
             # no owner — losing its cloud identity (no adoption, a sandbox
