@@ -4661,8 +4661,16 @@ class AgentSession:
 
         if not success:
             self._error_message = error_msg
+            # The failure travels WITH the text. Returning only "Error: …" as
+            # the output made every caller treat a dead turn as a successful
+            # one whose answer happened to begin with the word Error — the
+            # session log recorded success, and the chat room stored it as a
+            # message from the agent. A user reading the conversation sees the
+            # agent calmly announcing "You've hit your session limit".
             return {
                 "output": f"Error: {error_msg}",
+                "success": False,
+                "error": error_msg,
                 "total_cost": total_cost,
                 "tool_calls": tool_calls_completed,
             }

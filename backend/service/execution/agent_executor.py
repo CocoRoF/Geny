@@ -1155,6 +1155,19 @@ async def _execute_core(
             if isinstance(invoke_result, dict)
             else str(invoke_result)
         )
+        # A turn that died still returns text — "Error: you've hit your session
+        # limit" — and this used to build a SUCCESSFUL result around it. The
+        # session log then said the turn worked, and the chat room stored the
+        # failure as a message from the agent, so the conversation showed the
+        # agent announcing its own outage in its own voice. It reports what
+        # the pipeline actually said about itself.
+        invoke_failed = (
+            isinstance(invoke_result, dict) and invoke_result.get("success") is False
+        )
+        invoke_error = (
+            str(invoke_result.get("error") or result_text or "실행에 실패했습니다")
+            if invoke_failed else ""
+        )
         result_cost = (
             invoke_result.get("total_cost", 0.0)
             if isinstance(invoke_result, dict)
@@ -1181,14 +1194,24 @@ async def _execute_core(
 
         # 3. Log response
         if session_logger:
-            session_logger.log_response(
-                success=True,
-                output=result_text,
-                duration_ms=duration_ms,
-                cost_usd=result_cost,
-                env_id=log_env_id,
-                role=log_role,
-            )
+            if invoke_failed:
+                session_logger.log_response(
+                    success=False,
+                    error=invoke_error,
+                    duration_ms=duration_ms,
+                    cost_usd=result_cost,
+                    env_id=log_env_id,
+                    role=log_role,
+                )
+            else:
+                session_logger.log_response(
+                    success=True,
+                    output=result_text,
+                    duration_ms=duration_ms,
+                    cost_usd=result_cost,
+                    env_id=log_env_id,
+                    role=log_role,
+                )
 
         # 4. Persist cost
         if result_cost and result_cost > 0:
@@ -1207,9 +1230,10 @@ async def _execute_core(
             logger.debug("user-file drain failed for %s", session_id, exc_info=True)
 
         result = ExecutionResult(
-            success=True,
+            success=not invoke_failed,
             session_id=session_id,
-            output=result_text,
+            output="" if invoke_failed else result_text,
+            error=invoke_error or None,
             duration_ms=duration_ms,
             cost_usd=result_cost,
             tool_calls=result_tool_calls,
