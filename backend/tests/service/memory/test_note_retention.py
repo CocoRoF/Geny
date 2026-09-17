@@ -19,10 +19,16 @@ from service.memory import note_retention as nr
 NOW = datetime(2026, 8, 9, 12, 0, tzinfo=timezone.utc)
 
 
-def _meta(filename, *, category="observations", days_old=0, importance="low"):
+def _meta(filename, *, category="observations", days_old=0, importance="low", now=NOW):
+    """A note ``days_old`` days before *now*.
+
+    ``now`` defaults to the fixed ``NOW`` the pure-function tests pin. Tests
+    that go through the manager must pass the real clock instead — the sweep
+    reads ``datetime.now()`` and cannot be told otherwise.
+    """
     return SimpleNamespace(
         ref=SimpleNamespace(filename=filename, category=category),
-        updated_at=NOW - timedelta(days=days_old),
+        updated_at=now - timedelta(days=days_old),
         importance=importance,
     )
 
@@ -162,9 +168,20 @@ def _mgr(notes):
 @pytest.mark.asyncio
 async def test_the_sweep_deletes_through_the_store(monkeypatch):
     """Through `delete()`, not by unlinking: that is what carries the removal
-    into the vector index and the sidecars."""
+    into the vector index and the sidecars.
+
+    Ages are relative to the real clock here, not to ``NOW``. The sweep reads
+    ``datetime.now()`` itself — and an earlier version of this test built its
+    notes from ``NOW``, so it passed when written and began failing the day
+    real time moved past the retention window. A test that expires on a
+    calendar tells you nothing on the day it breaks.
+    """
     monkeypatch.setattr(nr, "DEFAULT_RETENTION_DAYS", 30)
-    notes = _Notes([_meta("old.md", days_old=90), _meta("new.md", days_old=1)])
+    today = datetime.now(timezone.utc)
+    notes = _Notes([
+        _meta("old.md", days_old=90, now=today),
+        _meta("new.md", days_old=1, now=today),
+    ])
 
     assert await _mgr(notes).prune_expired_notes() == 1
     assert notes.deleted == ["old.md"]
