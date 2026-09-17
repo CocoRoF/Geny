@@ -385,7 +385,9 @@ jobs:
           mkdir -p release
           find artifacts -type f -exec cp {} release/ \;
           ls -la release
-      - uses: softprops/action-gh-release@v2
+      - id: release
+        uses: softprops/action-gh-release@v2
+        continue-on-error: true
         with:
           tag_name: v${{ needs.version.outputs.version }}
           name: Geny v${{ needs.version.outputs.version }}
@@ -421,3 +423,16 @@ jobs:
 
             첫 실행에서 **서버 주소**와 **관리자 계정**을 넣으면 됩니다. 기본 서버는 없습니다 —
             본인의 Geny 서버를 가리키세요.
+
+      # Uploading ~500MB of installers over one HTTP session fails now and
+      # then — v0.28.2 lost the AppImage upload to a "Headers Timeout Error"
+      # after every other asset had landed, and the release stayed a DRAFT
+      # nobody could install. The action is idempotent: it updates the same
+      # release and only re-uploads what is missing.
+      - name: Upload again if the first attempt dropped a file
+        if: steps.release.outcome == 'failure'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          files: release/*
+          fail_on_unmatched_files: true
