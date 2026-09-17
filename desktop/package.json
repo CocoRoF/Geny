@@ -1,7 +1,7 @@
 {
   "name": "geny-connector",
-  "version": "0.22.2",
-  "description": "Geny VTuber desktop connector — a thin, always-on-top overlay that renders the live avatar from a running Geny server. The server stays the brain; this is the face.",
+  "version": "0.23.0",
+  "description": "Geny desktop connector — the always-on-top avatar, plus the controls for work running on the server: which model accounts it can reach, which one each agent uses, and the exact record of what each agent did.",
   "type": "module",
   "author": {
     "name": "Geny",

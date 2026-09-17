@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactNode, type KeyboardEvent as ReactKeyboar
 import genyIcon from './assets/geny_character.png'
 import type { OverlayTuning, ComputerUseConfig, ConsentMode, MCPServerConfig, MCPServerStatus } from '../../preload/index'
 import { makeT, type Lang } from './i18n'
+import ModelsTab from './ModelsTab'
+import AgentsTab from './AgentsTab'
 
 // Sentinels marking spans that should render as <b> inside an interpolated i18n
 // string (the consent-mode hint bolds the "always ask" / "auto-allow" labels).
@@ -134,7 +136,7 @@ type CaptureSource = { id: string; name: string; display_id: string }
 const TOKEN_KEY = 'geny_auth_token'
 
 type StatusKind = 'idle' | 'working' | 'ok' | 'err'
-type Tab = 'account' | 'voice' | 'control' | 'workspace' | 'mcp' | 'app'
+type Tab = 'account' | 'models' | 'agents' | 'voice' | 'control' | 'workspace' | 'mcp' | 'app'
 
 interface SyncStatusView {
   id: string
@@ -685,6 +687,12 @@ export function ControlApp() {
           <button className={`gy-tab ${tab === 'account' ? 'is-active' : ''}`} onClick={() => setTab('account')}>
             {I.user} {t('tab.account')}
           </button>
+          <button className={`gy-tab ${tab === 'models' ? 'is-active' : ''}`} onClick={() => setTab('models')}>
+            {I.sliders} {t('tab.models')}
+          </button>
+          <button className={`gy-tab ${tab === 'agents' ? 'is-active' : ''}`} onClick={() => setTab('agents')}>
+            {I.monitor} {t('tab.agents')}
+          </button>
           <button className={`gy-tab ${tab === 'voice' ? 'is-active' : ''}`} onClick={() => setTab('voice')}>
             {I.mic} {t('tab.voice')}
           </button>
@@ -779,6 +787,10 @@ export function ControlApp() {
         )}
 
         {/* ─────────────── 음성 ─────────────── */}
+        {tab === 'models' && <ModelsTab t={t} />}
+
+        {tab === 'agents' && <AgentsTab t={t} />}
+
         {tab === 'voice' && (
           <>
             <section className="gy-card">
