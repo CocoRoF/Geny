@@ -159,7 +159,7 @@ export function openRealtimeVoiceWs(sessionId: string): WebSocket {
  * (connector: open the login window; browser: drop to logged-out) — rather
  * than letting reconnect loops hammer the server with a dead token.
  */
-function handleAuthFailure(): void {
+export function handleAuthFailure(): void {
   removeToken();
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('geny:auth-failed'));

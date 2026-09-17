@@ -13,6 +13,7 @@ import RestoreCheckpointModal from '@/components/modals/RestoreCheckpointModal';
 import SkillPanel from '@/components/skills/SkillPanel';
 import SlashCommandAutocomplete from '@/components/SlashCommandAutocomplete';
 import WorkspaceBadge from '@/components/command/WorkspaceBadge';
+import ModelSwitcher from '@/components/chat/ModelSwitcher';
 import {
   Square,
   Loader2,
@@ -598,6 +599,9 @@ export default function CommandTab() {
             </div>
           </div>
           <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+            {/* Which model answers — switchable from here, because the
+                 conversation does not end when it changes. */}
+            {selectedSessionId && <ModelSwitcher sessionId={selectedSessionId} />}
             {/* PR-E.4.5 — workspace stack badge */}
             {selectedSessionId && <WorkspaceBadge sessionId={selectedSessionId} />}
             {/* Elapsed timer — compact on mobile */}

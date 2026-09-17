@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { configApi, gaptApi, avatarApi } from '@/lib/api';
-import LLMBackendsPanel from './LLMBackendsPanel';
+import ModelAccountsPanel from './ModelAccountsPanel';
+import { llmAccountsApi } from '@/lib/llmAccountsApi';
 import GaptSettingsPanel from './GaptSettingsPanel';
 import GoogleSettingsPanel from './GoogleSettingsPanel';
 import ConnectorsPanel from './ConnectorsPanel';
@@ -100,10 +101,20 @@ export default function SettingsTab() {
   useEffect(() => {
     fetchLlmHealth();
   }, [fetchLlmHealth]);
-  const llmBackendCount =
+  // The badge counts ACCOUNTS, not providers: "how many ways can this server
+  // answer" is the question the Models section exists to answer, and a
+  // provider with no account behind it answers nothing.
+  const [accountCount, setAccountCount] = useState<number | null>(null);
+  useEffect(() => {
+    llmAccountsApi.list()
+      .then((res) => setAccountCount(res.accounts.filter((a) => a.enabled).length))
+      .catch(() => setAccountCount(null));
+  }, []);
+  const llmBackendCount = accountCount ?? (
     llmHealthLoaded && Object.keys(llmHealthProviders).length > 0
       ? Object.keys(llmHealthProviders).length
-      : PROVIDERS.length;
+      : PROVIDERS.length
+  );
 
   // GAPT connection — the "GAPT" settings category appears only when a GAPT
   // instance is wired up AND answering /health (same gate the header button uses).
@@ -246,17 +257,15 @@ export default function SettingsTab() {
               <span className="flex-1">{t('settings.all')}</span>
               <span className="text-[0.6875rem] md:text-[0.75rem] text-[var(--text-muted)] bg-[var(--bg-tertiary)] py-[2px] px-2 rounded-[10px]">{configs.length}</span>
             </button>
-            {/* Phase F2 — virtual 'LLM Backends' category. Swaps the
-                 main pane to the health/login panel. The count is derived
-                 (``llmBackendCount``) from the live health snapshot with the
-                 provider taxonomy as fallback — NOT hardcoded, so adding a
-                 provider (e.g. the 2.9.0 ollama / lmstudio / custom backends)
-                 updates it automatically. */}
+            {/* Models — every account this server can reach a model with.
+                 The badge is the count of ENABLED accounts: the list on that
+                 page is the default route, so the number is also "how many
+                 hops a session has before it runs out". */}
             <button
               className={`whitespace-nowrap md:w-full flex items-center gap-2 md:gap-2.5 py-2 md:py-2.5 px-3 rounded-[var(--border-radius)] text-[0.8125rem] md:text-[0.875rem] font-medium text-left md:mb-1 transition-colors shrink-0 ${selectedCategory === 'llm_backends' ? 'bg-[rgba(59,130,246,0.1)] text-[var(--primary-color)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'}`}
               onClick={() => setSelectedCategory('llm_backends')}
             >
-              <span className="flex-1">{t('settings.llmBackends.navLabel')}</span>
+              <span className="flex-1">{t('settings.models.navLabel')}</span>
               <span className="text-[0.6875rem] md:text-[0.75rem] text-[var(--text-muted)] bg-[var(--bg-tertiary)] py-[2px] px-2 rounded-[10px]">{llmBackendCount}</span>
             </button>
             {/* ── Geny's own settings (top) ── */}
@@ -321,7 +330,7 @@ export default function SettingsTab() {
              gives this pane its own scroll context independent from the sidebar. */}
         <div className="flex-1 h-full min-h-0 overflow-y-auto p-3 md:p-5">
           {selectedCategory === 'llm_backends' ? (
-            <LLMBackendsPanel />
+            <ModelAccountsPanel />
           ) : selectedCategory === 'gapt' ? (
             <GaptSettingsPanel />
           ) : selectedCategory === 'google' ? (

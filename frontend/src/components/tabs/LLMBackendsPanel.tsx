@@ -166,8 +166,8 @@ function ProviderCard({
 }
 
 
-export default function LLMBackendsPanel() {
-  return <LLMBackendsPanelInner />;
+export default function LLMBackendsPanel({ embedded = false }: { embedded?: boolean } = {}) {
+  return <LLMBackendsPanelInner embedded={embedded} />;
 }
 
 // ── Claude Code CLI version manager (keep-latest + rollback) ─────────
@@ -268,7 +268,7 @@ function ClaudeCodeVersionCard() {
   );
 }
 
-function LLMBackendsPanelInner() {
+function LLMBackendsPanelInner({ embedded }: { embedded: boolean }) {
   const { t } = useI18n();
   const [providers, setProviders] = useState<ProviderHealth[]>([]);
   const [loading, setLoading] = useState(false);
@@ -345,15 +345,21 @@ function LLMBackendsPanelInner() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Header */}
+      {/* Header. Hidden when this panel sits inside the Models page — that
+           page already said what this section is, and repeating it there
+           reads as two settings rather than one. */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <h3 className="text-[1.0625rem] font-semibold">{t('settings.llmBackends.title')}</h3>
-          <p className="text-[0.8125rem] text-[var(--text-secondary)] mt-1 leading-relaxed">
-            {t('settings.llmBackends.description', {
-              count: providers.length || PROVIDERS.length,
-            })}
-          </p>
+          {!embedded && (
+            <>
+              <h3 className="text-[1.0625rem] font-semibold">{t('settings.llmBackends.title')}</h3>
+              <p className="text-[0.8125rem] text-[var(--text-secondary)] mt-1 leading-relaxed">
+                {t('settings.llmBackends.description', {
+                  count: providers.length || PROVIDERS.length,
+                })}
+              </p>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {/* Push Geny's provider keys to connected sister services (GAPT + avatar).
