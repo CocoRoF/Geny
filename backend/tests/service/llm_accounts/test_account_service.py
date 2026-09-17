@@ -26,7 +26,15 @@ from service.llm_accounts.service import AccountService
 
 
 class _FakeDb:
-    """The slice of AppDatabaseManager the service uses, in memory."""
+    """The slice of AppDatabaseManager the service uses, in memory.
+
+    Reads return MODEL objects, because that is what the real manager returns
+    (``model_class.from_dict(dict(row))``). An earlier version of this fake
+    returned dicts — every test passed and the service raised
+    ``'LLMAccountModel' object has no attribute 'get'`` on its first real
+    query in production. A fake that is kinder than the real thing does not
+    test anything.
+    """
 
     def __init__(self) -> None:
         self.rows: List[Dict[str, Any]] = []
@@ -52,12 +60,16 @@ class _FakeDb:
         self.rows = [r for r in self.rows if r.get("id") != record_id]
         return len(self.rows) != before
 
-    def find_all(self, model_class: Any, limit: int = 500, offset: int = 0) -> List[Dict[str, Any]]:
-        return [dict(r) for r in self.rows]
+    @staticmethod
+    def _model(row: Dict[str, Any]) -> LLMAccountModel:
+        return LLMAccountModel.from_dict(dict(row))
+
+    def find_all(self, model_class: Any, limit: int = 500, offset: int = 0) -> List[Any]:
+        return [self._model(r) for r in self.rows]
 
     def find_by_condition(self, model_class: Any, conditions: Dict[str, Any],
-                          limit: int = 100, **kwargs: Any) -> List[Dict[str, Any]]:
-        out = [dict(r) for r in self.rows
+                          limit: int = 100, **kwargs: Any) -> List[Any]:
+        out = [self._model(r) for r in self.rows
                if all(r.get(k) == v for k, v in conditions.items())]
         return out[:limit]
 

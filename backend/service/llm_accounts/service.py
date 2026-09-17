@@ -122,13 +122,27 @@ class AccountService:
         return str(accounts_root() / "claude" / account_id / "scratch")
 
     # ── storage ──────────────────────────────────────────────────────
+    #
+    # ``AppDatabaseManager`` hands back MODEL objects, not dicts. Everything
+    # above this line reads rows as mappings, so the conversion happens here,
+    # once — a single boundary rather than an ``isinstance`` at every field
+    # access. (Learned the hard way: the fake database in the tests returned
+    # dicts, so the whole service passed its tests and failed on the first
+    # real query in production.)
+
+    @staticmethod
+    def _as_row(record: Any) -> Dict[str, Any]:
+        if isinstance(record, dict):
+            return record
+        return {k: v for k, v in vars(record).items() if not k.startswith("_")}
+
     def _rows(self) -> List[Dict[str, Any]]:
-        rows = self._db.find_all(LLMAccountModel, limit=500) or []
+        rows = [self._as_row(r) for r in (self._db.find_all(LLMAccountModel, limit=500) or [])]
         return sorted(rows, key=lambda r: (r.get("sort_order") or 0, r.get("id") or 0))
 
     def _row(self, account_id: str) -> Optional[Dict[str, Any]]:
         found = self._db.find_by_condition(LLMAccountModel, {"account_id": account_id}, limit=1)
-        return found[0] if found else None
+        return self._as_row(found[0]) if found else None
 
     def _to_public(self, row: Dict[str, Any]) -> Dict[str, Any]:
         kind = row.get("kind") or ""
