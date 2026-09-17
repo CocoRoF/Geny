@@ -2621,6 +2621,88 @@ class AgentSessionManager:
             "applies": "next_turn",
         }
 
+    async def change_session_route(
+        self, session_id: str, route: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Point a session at different model accounts — mid-conversation.
+
+        This is the whole reason the pipeline names one provider. The session
+        keeps its id, storage, memory, transcripts, tools, hooks, permission
+        policy and conversation; only who answers the next turn changes. A
+        live session has its Stage 6 credentials swapped in place — no
+        pipeline rebuild, because rebuilding is exactly what would cost it
+        all of the above.
+
+        A route that resolves to nothing is refused. Leaving a session with
+        no way to reach a model, in exchange for a switch the user can simply
+        retry, is not a trade worth making.
+
+        Raises:
+            ValueError — the session is unknown, or the route named no usable
+                account (every hop disabled, deleted, or unknown).
+        """
+        record = self._store.get(session_id)
+        if not record:
+            raise ValueError(f"session not found: {session_id}")
+
+        targets = await self._route_targets(route)
+        if not targets:
+            raise ValueError(
+                "그 라우트에는 쓸 수 있는 계정이 없습니다 — 계정이 켜져 있는지 확인하세요. "
+                "지금 쓰던 라우트는 그대로 둡니다."
+            )
+
+        previous = record.get("route")
+        self._store.update(session_id, {"route": route})
+
+        agent = self._local_agents.get(session_id)
+        applied = "next_turn"
+        if agent is not None:
+            agent.route = route
+            pipeline = getattr(agent, "_pipeline", None)
+            swap = getattr(pipeline, "set_provider_credentials", None)
+            if callable(swap):
+                from service.executor.credentials import CredentialBundleBuilder
+
+                bundle = CredentialBundleBuilder(
+                    route_targets=targets,
+                    route_notify=self._route_notifier(session_id),
+                    session_id=session_id,
+                ).build()
+                swap("geny_router", bundle.get("geny_router"))
+                applied = "immediately"
+
+        logger.info(
+            "🔀 session %s route → %s (%d hop(s), applies %s)",
+            session_id,
+            ", ".join(f"{t['label']}·{t['model']}" for t in targets),
+            len(targets), applied,
+        )
+        return {
+            "session_id": session_id,
+            "route": route,
+            "previous_route": previous,
+            "targets": [
+                {k: t.get(k) for k in ("accountId", "label", "kind", "model")}
+                for t in targets
+            ],
+            "live": agent is not None,
+            "applies": applied,
+        }
+
+    def get_session_route(self, session_id: str) -> Dict[str, Any]:
+        """The route a session is on, and who answered its last turn."""
+        record = self._store.get(session_id) or {}
+        agent = self._local_agents.get(session_id)
+        route = (getattr(agent, "route", None) if agent else None) or record.get("route")
+        last = (getattr(agent, "last_route", None) if agent else None) or record.get("last_route")
+        return {
+            "session_id": session_id,
+            "route": route if isinstance(route, dict) else None,
+            "last_route": last if isinstance(last, dict) else None,
+            "live": agent is not None,
+        }
+
     async def _reload_session_manifest(self, session_id: str) -> Optional[AgentSession]:
         """Tear down a live session and re-create it (same id) from the
         current manifest — the in-place equivalent of a restart that reuses the

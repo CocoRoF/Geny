@@ -551,6 +551,26 @@ class ChangeEnvRequest(BaseModel):
     env_id: str = Field(..., description="The environment id to bind to.")
 
 
+class RouteRef(BaseModel):
+    """One hop: an account, and the model to ask it for."""
+
+    accountId: str = Field(..., description="Model account id.")
+    model: Optional[str] = Field(None, description="Model id; omitted → the account's default.")
+    effort: Optional[str] = Field(None, description="low | medium | high | xhigh | max.")
+
+
+class ChangeRouteRequest(BaseModel):
+    """Which model accounts this session should use, in order.
+
+    The primary answers; the fallbacks are tried, in order, only when a hop
+    fails in a way another account could survive — a usage limit, a dead
+    login, an outage.
+    """
+
+    primary: RouteRef
+    fallbacks: List[RouteRef] = Field(default_factory=list)
+
+
 @router.put("/{session_id}/system-prompt")
 async def update_system_prompt(
     request: UpdateSystemPromptRequest,
@@ -740,6 +760,44 @@ async def change_session_env(
         raise HTTPException(status_code=status, detail=msg)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+    return {"success": True, **result}
+
+
+@router.get("/{session_id}/route")
+async def get_session_route(
+    session_id: str = Path(..., description="Session ID"),
+    auth: dict = Depends(require_auth),
+):
+    """Which model accounts this session uses, and who answered last turn."""
+    _enforce_session_owner(session_id, auth)
+    return agent_manager.get_session_route(session_id)
+
+
+@router.put("/{session_id}/route")
+async def change_session_route(
+    request: ChangeRouteRequest,
+    session_id: str = Path(..., description="Session ID"),
+    auth: dict = Depends(require_auth),
+):
+    """Switch which model answers — without ending the conversation.
+
+    A live session has its Stage 6 credentials swapped in place, so the next
+    turn goes to the new account and everything else (history, tools, memory,
+    hooks, permission policy) carries on untouched. A dormant session picks
+    the route up on its next wake.
+
+    Returns 404 when the session is unknown, 400 when the route named no
+    usable account — in which case the session keeps the route it had.
+    """
+    _enforce_session_owner(session_id, auth)
+    try:
+        result = await agent_manager.change_session_route(
+            session_id, request.model_dump(exclude_none=True)
+        )
+    except ValueError as exc:
+        message = str(exc)
+        status = 404 if "session not found" in message else 400
+        raise HTTPException(status_code=status, detail=message)
     return {"success": True, **result}
 
 
