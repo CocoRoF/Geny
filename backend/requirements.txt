@@ -37,10 +37,17 @@ ddgs==9.11.4
 # into the guard recovery path (no code change) and marks
 # persists_own_compaction so the snapshot isn't recorded twice.
 #
+# geny-executor 2.67.0 — one Responses wire.
+#
+# OpenAI refuses function tools on a reasoning model unless reasoning is
+# switched off outright, so an agent on gpt-5 could not take a turn. Those
+# turns now go to the Responses API, which carries tools and reasoning
+# together, over the same wire the Codex subscription already used.
+#
 # Must match the version pin in backend/pyproject.toml — out-of-sync
 # pins are what caused the prod Docker build to install 1.21.0 and
 # blow up on `from geny_executor import CredentialBundle`.
-geny-executor[qdrant,ssh]>=2.66.3,<3.0.0
+geny-executor[qdrant,ssh]>=2.67.0,<3.0.0
 geny-memory-adaptor>=1.11.1
 contextifier[pdf]>=0.5.0
 # Knowledge connectors — cron schedules + DB sources (postgres/mysql/sqlite)
