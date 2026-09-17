@@ -2097,17 +2097,6 @@ export interface SubagentsResponse {
   items: SubagentInfo[];
 }
 
-// Phase G — auth flow shapes.
-
-export interface ClaudeCodeAuthStatus {
-  raw: Record<string, unknown>;
-  logged_in?: boolean | null;
-  auth_method?: string | null;       // "claude.ai" | "console" | ...
-  subscription_type?: string | null; // "max" | "pro" | ...
-  email?: string | null;
-  org_name?: string | null;
-}
-
 export interface ClaudeCodeVersionStatus {
   package: string;
   current: string | null;
@@ -2120,28 +2109,6 @@ export interface ClaudeCodeVersionStatus {
   ok?: boolean;
   installed?: string;
   error?: string;
-}
-
-export interface AuthLoginStartResponse {
-  job_id: string;
-  kind: 'claude_code';
-  argv: string[];
-  hint: string;
-}
-
-export interface AuthJobEvent {
-  channel: 'stdout' | 'stderr' | 'exit';
-  text: string;
-  ts: number;
-  exit_code?: number;
-}
-
-export interface TestConnectionResponse {
-  ok: boolean;
-  duration_ms: number;
-  detail: string;
-  raw_stdout_tail?: string | null;
-  raw_stderr_tail?: string | null;
 }
 
 export const llmBackendsApi = {
@@ -2210,65 +2177,9 @@ export const llmBackendsApi = {
       method: 'POST',
     }),
 
-  // ── Phase G — Claude Code auth ────────────────────────────────
-
-  claudeCodeStatus: () =>
-    apiCall<ClaudeCodeAuthStatus>('/api/llm-backends/cli/claude-code/auth/status'),
-
-  claudeCodeStartLogin: (opts?: { useConsole?: boolean; email?: string }) => {
-    const params = new URLSearchParams();
-    if (opts?.useConsole) params.set('use_console', 'true');
-    if (opts?.email) params.set('email', opts.email);
-    const qs = params.toString();
-    return apiCall<AuthLoginStartResponse>(
-      `/api/llm-backends/cli/claude-code/auth/login${qs ? `?${qs}` : ''}`,
-      { method: 'POST' },
-    );
-  },
-
-  claudeCodeLogout: () =>
-    apiCall<{ ok: boolean }>('/api/llm-backends/cli/claude-code/auth/logout', { method: 'POST' }),
-
-  claudeCodeTest: () =>
-    apiCall<TestConnectionResponse>('/api/llm-backends/cli/claude-code/test', { method: 'POST' }),
-
-  // ── Phase G — Shared SSE / cancel ─────────────────────────────
-
-  /** Polling fallback / full snapshot of an auth job. */
-  authJobState: (jobId: string) =>
-    apiCall<{
-      job_id: string;
-      kind: string;
-      argv: string[];
-      started_at: number;
-      finished_at: number | null;
-      exit_code: number | null;
-      history: AuthJobEvent[];
-    }>(`/api/llm-backends/auth/login/${encodeURIComponent(jobId)}`),
-
-  cancelAuthJob: (jobId: string) =>
-    apiCall<{ ok: boolean; already_finished?: boolean }>(
-      `/api/llm-backends/auth/login/${encodeURIComponent(jobId)}/cancel`,
-      { method: 'POST' },
-    ),
-
-  /** Forward one line (or raw bytes) to the auth subprocess's stdin.
-   *  Used by the modal to deliver the OAuth auth code the user pastes
-   *  back from the browser into the CLI's prompt. */
-  submitAuthJobInput: (jobId: string, text: string, appendNewline = true) =>
-    apiCall<{ ok: boolean }>(
-      `/api/llm-backends/auth/login/${encodeURIComponent(jobId)}/input`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ text, append_newline: appendNewline }),
-      },
-    ),
-
-  /** Returns the SSE URL the modal opens an EventSource against.
-   *  Browser's EventSource carries cookies for same-origin requests,
-   *  which is how we authenticate. */
-  authJobEventsUrl: (jobId: string) =>
-    `${getBackendUrl()}/api/llm-backends/auth/login/${encodeURIComponent(jobId)}/events`,
+  // The server-wide Claude Code login that used to be called from here is
+  // gone. A login belongs to an ACCOUNT — see `llmAccountsApi` — because an
+  // account has its own config dir and you can hold several side by side.
 };
 
 // ==================== Chat API ====================

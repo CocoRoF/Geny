@@ -853,9 +853,10 @@ function createControl(): void {
 // renderer now, over the same execute socket the phone uses. The window keeps
 // its identity, its bounds and its tray entry; only what is inside changed.
 //
-// It loads whether or not there is a token: the renderer shows an empty
-// session list and the Settings window handles login, which is a better first
-// screen than a blank frame.
+// The content is local, so it loads whether or not there is a token — there
+// is nothing to fetch and nothing to fail. Which window the user actually
+// SEES is still decided by refreshAll(): signed out, this one stays hidden
+// and Settings takes the screen.
 async function applyControlContent(): Promise<void> {
   if (!control) return
   const token = await getStoredToken()
