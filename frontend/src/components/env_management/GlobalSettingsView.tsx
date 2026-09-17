@@ -53,6 +53,7 @@ import {
   type ProviderId,
 } from '@/lib/modelCatalog';
 import SectionHelpButton from './section_help/SectionHelpButton';
+import RouteNotice from './RouteNotice';
 import {
   PermissionEnvPicker,
   SkillEnvPicker,
@@ -177,26 +178,6 @@ export default function GlobalSettingsView() {
   const computerUseEnabled =
     !!draft.host_selections?.extras?.computer_use_enabled;
 
-  // ── Provider state ──
-  const apiStage = draft.stages.find((s) => s.order === S06_API_ORDER);
-  const apiConfig = (apiStage?.config ?? {}) as Record<string, unknown>;
-  const explicitProvider =
-    typeof apiConfig.provider === 'string' ? (apiConfig.provider as string) : '';
-  const validIds: string[] = PROVIDERS.map((p) => p.id);
-  const provider: ProviderId = validIds.includes(explicitProvider)
-    ? (explicitProvider as ProviderId)
-    : inferProvider(draft.model?.model as string | undefined);
-
-  const handleProviderChange = (next: ProviderId) => {
-    patchStage(S06_API_ORDER, { config: { ...apiConfig, provider: next } });
-    if (next === 'vllm') return;
-    const currentModel = (draft.model?.model as string | undefined) ?? '';
-    const inCatalog = MODEL_CATALOG[next].some((o) => o.id === currentModel);
-    if (!inCatalog) {
-      patchModel({ model: PROVIDER_DEFAULT_MODEL[next] });
-    }
-  };
-
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-[hsl(var(--background))]">
       <div className="max-w-[1300px] mx-auto p-6 flex flex-col gap-6">
@@ -316,17 +297,11 @@ export default function GlobalSettingsView() {
             <div className="absolute right-3 top-3 z-10">
               <SectionHelpButton helpId={PANEL_HELP_ID[panel]} />
             </div>
-            {panel === 'model' && (
-              <ModelConfigEditor
-                initial={draft.model ?? {}}
-                saving={false}
-                error={null}
-                onSave={(changes) => patchModel(changes)}
-                onClearError={() => {}}
-                provider={provider}
-                onProviderChange={handleProviderChange}
-              />
-            )}
+            {/* The provider and model pickers that lived here are gone. Stage 6
+                 runs the router, which replaces the model on every call with
+                 the one the session's account route names — anything set here
+                 would look saved and be overwritten immediately. */}
+            {panel === 'model' && <RouteNotice />}
 
             {panel === 'pipeline' && (
               <PipelineConfigEditor

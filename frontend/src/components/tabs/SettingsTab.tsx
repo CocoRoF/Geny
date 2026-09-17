@@ -10,8 +10,6 @@ import ConnectorsPanel from './ConnectorsPanel';
 import AvatarSettingsPanel from './AvatarSettingsPanel';
 import { SettingsCard, type CardStatusTone } from '@/components/settings/SettingsCard';
 import SshServersEditor from '@/components/settings/SshServersEditor';
-import { PROVIDERS } from '@/lib/modelCatalog';
-import { useLLMBackendsHealthStore } from '@/store/useLLMBackendsHealthStore';
 import { twMerge } from 'tailwind-merge';
 import { Eye, EyeOff, AlertTriangle, X, BookOpen } from 'lucide-react';
 import MarkdownRenderer from '@/components/file-viewer/MarkdownRenderer';
@@ -89,32 +87,16 @@ export default function SettingsTab() {
   const [importData, setImportData] = useState('');
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // LLM-backends count for the sidebar badge — derived, never hardcoded.
-  // Source of truth = the live health snapshot (exactly what LLMBackendsPanel
-  // renders as cards). Before that loads, fall back to the canonical provider
-  // taxonomy (`modelCatalog.PROVIDERS`, which mirrors the executor
-  // ClientRegistry) so the badge is correct on first paint and auto-updates
-  // when a provider is added/removed — no manual sync.
-  const llmHealthProviders = useLLMBackendsHealthStore((s) => s.providers);
-  const llmHealthLoaded = useLLMBackendsHealthStore((s) => s.loaded);
-  const fetchLlmHealth = useLLMBackendsHealthStore((s) => s.fetch);
-  useEffect(() => {
-    fetchLlmHealth();
-  }, [fetchLlmHealth]);
-  // The badge counts ACCOUNTS, not providers: "how many ways can this server
-  // answer" is the question the Models section exists to answer, and a
-  // provider with no account behind it answers nothing.
+  // Enabled ACCOUNTS — "how many ways can this server answer", which is the
+  // question the Models section exists for. It used to count providers, back
+  // when a provider with no account behind it still counted for something.
   const [accountCount, setAccountCount] = useState<number | null>(null);
   useEffect(() => {
     llmAccountsApi.list()
       .then((res) => setAccountCount(res.accounts.filter((a) => a.enabled).length))
       .catch(() => setAccountCount(null));
   }, []);
-  const llmBackendCount = accountCount ?? (
-    llmHealthLoaded && Object.keys(llmHealthProviders).length > 0
-      ? Object.keys(llmHealthProviders).length
-      : PROVIDERS.length
-  );
+  const llmBackendCount = accountCount ?? 0;
 
   // GAPT connection — the "GAPT" settings category appears only when a GAPT
   // instance is wired up AND answering /health (same gate the header button uses).

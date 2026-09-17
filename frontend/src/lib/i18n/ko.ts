@@ -459,6 +459,8 @@ const ko: Translations = {
       remove: '삭제',
       removeConfirm: '{label} 계정을 삭제할까요? 저장된 로그인과 키도 함께 지워집니다.',
       label: '이름',
+      kind: '종류',
+      addAndSignIn: '추가하고 로그인',
       baseUrl: '주소',
       secret: 'API 키',
       secretKept: '저장되어 있습니다 — 비워 두면 그대로 둡니다',
@@ -2531,6 +2533,11 @@ const ko: Translations = {
       unavailable: '현재 빌드에서 사용할 수 없음',
       advancedTitle: '고급',
       advancedHint: 'artifact / 원시 config 키 / 템플릿 변수',
+    },
+    route: {
+      title: '모델은 이 환경이 정하지 않습니다',
+      body: '6단계는 라우터를 돌리고, 라우터는 세션이 고른 계정 순서대로 묻습니다. 그래서 여기서 모델을 고르면 매 호출마다 덮어써집니다 — 저장된 것처럼 보이고 아무 일도 일어나지 않습니다. 환경이 정하는 것은 도구·페르소나·권한·기억이고, 누가 답하느냐는 계정이 정합니다.',
+      link: '설정 › 모델에서 계정 관리',
     },
     stage06: {
       activeTitle: '이 단계 실행',

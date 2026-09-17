@@ -522,6 +522,35 @@ async def lifespan(app: FastAPI):
     )
     logger.info(f"   - Environment templates installed: {env_templates_installed}")
 
+    # Installing the three seeds is only half of collapsing the harness: the
+    # per-backend seeds and every user environment still named the provider
+    # they were created with, so their sessions ran that backend directly and
+    # never reached the route — no failover, and a spend cap failed every
+    # turn. Runs once; the second boot finds nothing to do.
+    from service.environment.migrate_to_router import migrate_environments_to_router
+
+    def _rebind_sessions(old_env_id: str, new_env_id: str) -> int:
+        from service.sessions.store import get_session_store
+
+        store = get_session_store()
+        moved = 0
+        for record in store.list_all():
+            if record.get("env_id") != old_env_id:
+                continue
+            store.update(record["session_id"], {"env_id": new_env_id})
+            moved += 1
+        return moved
+
+    env_migration = migrate_environments_to_router(
+        environment_service, rebind=_rebind_sessions
+    )
+    if env_migration["deleted"] or env_migration["repointed"]:
+        logger.info(
+            "   - Environments migrated to the one harness: %d deleted, %d repointed, %d session(s) rebound",
+            len(env_migration["deleted"]), len(env_migration["repointed"]),
+            env_migration["rebound"],
+        )
+
     # An install that predates accounts reaches its model through the legacy
     # per-provider credentials. Environments now name ``geny_router``, so
     # without this an upgrade leaves the server unable to start a session —

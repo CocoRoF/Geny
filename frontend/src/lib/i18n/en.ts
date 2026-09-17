@@ -458,6 +458,8 @@ const en = {
       remove: 'Remove',
       removeConfirm: 'Remove {label}? Its stored login and key are deleted with it.',
       label: 'Name',
+      kind: 'Kind',
+      addAndSignIn: 'Add and sign in',
       baseUrl: 'Address',
       secret: 'API key',
       secretKept: 'Stored — leave blank to keep it',
@@ -2491,6 +2493,11 @@ const en = {
       unavailable: 'Not available in this build',
       advancedTitle: 'Advanced',
       advancedHint: 'artifact / raw config keys / template variables',
+    },
+    route: {
+      title: 'The model is not this environment\'s choice',
+      body: 'Stage 6 runs the router, and the router asks the accounts the session picked, in order. Choosing a model here would be overwritten on every call — it would look saved and do nothing. An environment decides tools, persona, permissions and memory; which account answers is the account route.',
+      link: 'Manage accounts in Settings › Models',
     },
     stage06: {
       activeTitle: 'Run this stage',

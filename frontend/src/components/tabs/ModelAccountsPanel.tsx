@@ -8,10 +8,15 @@
  * editable here and not buried in a dialog — it is the most consequential
  * setting on the page and the cheapest to get wrong.
  *
- * Document embedding is a different boundary: it still uses one key per
- * provider, and those — along with the embedding model choice — stay in the
- * panel folded away at the bottom. Sessions do not use them, and saying so
- * plainly is cheaper than letting someone wonder which key is in play.
+ * The provider grid that used to sit under this is gone. It listed eight
+ * backends with keys and health, none of which a session uses any more — a
+ * session asks the accounts above. Keeping it would have left two places
+ * claiming to say which model answers.
+ *
+ * Two things survived it, because they describe something real: document
+ * embedding, which genuinely still uses one key per provider and is not what
+ * a session talks to, and the version of the `claude` binary these accounts
+ * spawn.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -31,8 +36,10 @@ import {
 } from '@/lib/llmAccountsApi';
 import { useI18n } from '@/lib/i18n';
 import { SettingsCard, type CardStatusTone } from '@/components/settings/SettingsCard';
-import LLMBackendsPanel from './LLMBackendsPanel';
 import AccountLoginModal from './AccountLoginModal';
+import ClaudeCodeVersionCard from './ClaudeCodeVersionCard';
+import { EmbeddingSettingsCard } from './EmbeddingSettingsCard';
+import { llmBackendsApi, type ProviderHealth } from '@/lib/api';
 
 const SUBSCRIPTION_KINDS = new Set<AccountKind>(['claude_code', 'codex']);
 
@@ -395,7 +402,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // ── add ──────────────────────────────────────────────────────────────
 
-function AddAccount({ kinds, onAdded }: { kinds: Record<string, KindInfo>; onAdded: () => void }) {
+function AddAccount({
+  kinds, onAdded,
+}: {
+  kinds: Record<string, KindInfo>;
+  /** The account that was just created, so a subscription kind can go
+   *  straight into signing in — adding one and then hunting for a button is
+   *  how "there is no OAuth login" happens when there is. */
+  onAdded: (account: LlmAccount) => void;
+}) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<AccountKind>('claude_code');
@@ -413,7 +428,7 @@ function AddAccount({ kinds, onAdded }: { kinds: Record<string, KindInfo>; onAdd
     setSaving(true);
     setError(null);
     try {
-      await llmAccountsApi.create({
+      const created = await llmAccountsApi.create({
         kind,
         label: label || undefined,
         baseUrl: baseUrl || undefined,
@@ -422,7 +437,7 @@ function AddAccount({ kinds, onAdded }: { kinds: Record<string, KindInfo>; onAdd
       setOpen(false);
       setLabel('');
       setSecret('');
-      onAdded();
+      onAdded(created.account);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -445,7 +460,7 @@ function AddAccount({ kinds, onAdded }: { kinds: Record<string, KindInfo>; onAdd
   return (
     <div className="flex flex-col gap-3 rounded-[var(--border-radius)] border border-[var(--border-color)] p-4">
       <h4 className="text-[0.875rem] font-semibold">{t('settings.models.addTitle')}</h4>
-      <Field label={t('settings.models.label')}>
+      <Field label={t('settings.models.kind')}>
         <select
           className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded px-3 py-2 text-[0.8125rem]"
           value={kind}
@@ -498,7 +513,11 @@ function AddAccount({ kinds, onAdded }: { kinds: Record<string, KindInfo>; onAdd
           disabled={saving}
           onClick={() => void submit()}
         >
-          {saving ? t('settings.models.saving') : t('settings.models.save')}
+          {saving
+            ? t('settings.models.saving')
+            : SUBSCRIPTION_KINDS.has(kind)
+              ? t('settings.models.addAndSignIn')
+              : t('settings.models.save')}
         </button>
         <button
           type="button"
@@ -522,7 +541,9 @@ export default function ModelAccountsPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loginFor, setLoginFor] = useState<LlmAccount | null>(null);
-  const [showLegacy, setShowLegacy] = useState(false);
+  // Only for the embedding card's "is a key set" line — the grid it came
+  // from is gone.
+  const [health, setHealth] = useState<ProviderHealth[]>([]);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -541,6 +562,10 @@ export default function ModelAccountsPanel() {
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  useEffect(() => {
+    llmBackendsApi.health().then((r) => setHealth(r.providers)).catch(() => setHealth([]));
+  }, []);
 
   useEffect(() => {
     // Only meaningful once a Claude Code account exists — probing otherwise
@@ -619,24 +644,24 @@ export default function ModelAccountsPanel() {
         </div>
       )}
 
-      <AddAccount kinds={kinds} onAdded={() => void refresh()} />
+      <AddAccount
+        kinds={kinds}
+        onAdded={(account) => {
+          void refresh();
+          // A Claude or ChatGPT account is useless until it is signed in, and
+          // the sign-in is the part people cannot find. Open it.
+          if (SUBSCRIPTION_KINDS.has(account.kind)) setLoginFor(account);
+        }}
+      />
 
-      <div className="flex flex-col gap-2">
-        <button
-          type="button"
-          className="flex items-center gap-1.5 self-start text-[0.75rem] text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-          onClick={() => setShowLegacy((v) => !v)}
-        >
-          <ChevronRight size={12} className={showLegacy ? 'rotate-90 transition-transform' : 'transition-transform'} />
-          {t('settings.models.advanced')}
-        </button>
-        {showLegacy && (
-          <div className="flex flex-col gap-3">
-            <p className="text-[0.75rem] text-[var(--text-muted)]">{t('settings.models.advancedHint')}</p>
-            <LLMBackendsPanel embedded />
-          </div>
-        )}
-      </div>
+      {/* Not an account: one key per provider, used to embed documents. A
+           session never touches it, which is exactly why it is down here and
+           labelled. */}
+      <EmbeddingSettingsCard providers={health} />
+
+      {/* The binary the Claude Code accounts spawn. A CLI too old for a flag
+           the client sends fails in a way that reads as an account problem. */}
+      {accounts.some((a) => a.kind === 'claude_code') && <ClaudeCodeVersionCard />}
 
       {loginFor && (
         <AccountLoginModal
