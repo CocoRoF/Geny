@@ -59,3 +59,27 @@ jobs:
       # sync-prod-e2e.ts is excluded by the runner: it talks to production.
       - name: Tests
         run: npm test
+
+  # The main window is a React app. The failure a typecheck cannot see is the
+  # one that ships: it builds, it installs, and it paints nothing because
+  # something threw on mount. So the window is opened, for real, headless.
+  smoke:
+    name: the main window comes up
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # No ELECTRON_SKIP_BINARY_DOWNLOAD here, unlike the job above: this one
+      # needs the binary it is about to launch.
+      - name: Install
+        run: npm install --no-audit --no-fund
+
+      - name: Open the window
+        run: xvfb-run -a npm run smoke

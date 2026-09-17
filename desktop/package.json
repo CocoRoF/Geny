@@ -1,7 +1,7 @@
 {
   "name": "geny-connector",
   "version": "0.24.0",
-  "description": "Geny desktop connector — the always-on-top avatar, plus the controls for work running on the server: which model accounts it can reach, which one each agent uses, and the exact record of what each agent did.",
+  "description": "Geny desktop connector \u2014 the always-on-top avatar, plus the controls for work running on the server: which model accounts it can reach, which one each agent uses, and the exact record of what each agent did.",
   "type": "module",
   "author": {
     "name": "Geny",
@@ -25,7 +25,8 @@
     "dist": "electron-vite build && electron-builder",
     "dist:linux": "electron-vite build && electron-builder --linux",
     "dist:win": "electron-vite build && electron-builder --win",
-    "dist:mac": "electron-vite build && electron-builder --mac"
+    "dist:mac": "electron-vite build && electron-builder --mac",
+    "smoke": "electron-vite build && node tests/smoke/run.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.0",

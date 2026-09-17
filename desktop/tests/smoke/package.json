@@ -1,0 +1,6 @@
+{
+  "name": "geny-connector-smoke",
+  "version": "0.0.0",
+  "private": true,
+  "main": "main.cjs"
+}
