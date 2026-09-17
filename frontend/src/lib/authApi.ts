@@ -111,4 +111,17 @@ export const authApi = {
 
   /** Get current user info */
   me: () => authCall<{ username: string; display_name: string }>('/api/auth/me'),
+
+  /**
+   * Rotate the admin password. The current one is required even though we
+   * already hold a token — the token is what a thief would have.
+   *
+   * Every OTHER device is signed out by this; the fresh token that comes
+   * back keeps this one signed in.
+   */
+  changePassword: (data: { current_password: string; new_password: string }) =>
+    authCall<AuthTokenResponse>('/api/auth/password', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };

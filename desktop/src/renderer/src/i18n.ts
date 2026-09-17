@@ -16,6 +16,15 @@ export const messages: Record<string, Entry> = {
   // ── header + tabs ──
   'app.subtitle': { ko: 'VTuber 데스크톱 접속기', en: 'VTuber desktop connector' },
   'tab.account': { ko: '계정', en: 'Account' },
+  'account.passwordChange': { ko: '비밀번호 변경', en: 'Change password' },
+  'account.passwordCurrent': { ko: '지금 비밀번호', en: 'Current password' },
+  'account.passwordNew': { ko: '새 비밀번호', en: 'New password' },
+  'account.passwordHint': {
+    ko: '바꾸면 다른 기기는 모두 로그아웃됩니다. 이 접속기는 그대로 유지됩니다.',
+    en: 'Changing it signs every other device out. This connector stays signed in.',
+  },
+  'account.passwordChanged': { ko: '비밀번호를 바꿨습니다 — 다른 기기는 로그아웃됐습니다', en: 'Password changed — every other device has been signed out' },
+  'account.passwordFailed': { ko: '비밀번호 변경 실패 — {msg}', en: 'Could not change the password — {msg}' },
   'tab.models': { ko: '모델', en: 'Models' },
   'tab.agents': { ko: '에이전트', en: 'Agents' },
   'tab.voice': { ko: '음성', en: 'Voice' },

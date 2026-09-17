@@ -28,6 +28,19 @@ const ko: Translations = {
     login: '로그인',
     logout: '로그아웃',
     memory: '메모리',
+    changePassword: '비밀번호 변경',
+    password: {
+      title: '비밀번호 변경',
+      current: '지금 비밀번호',
+      next: '새 비밀번호',
+      confirm: '새 비밀번호 확인',
+      mismatch: '새 비밀번호가 서로 다릅니다',
+      hint: '바꾸면 다른 기기는 모두 로그아웃됩니다. 이 창은 그대로 유지됩니다.',
+      submit: '변경',
+      saving: '변경 중…',
+      done: '비밀번호를 바꿨습니다. 다른 기기는 로그아웃됐습니다.',
+      cancel: '취소',
+    },
   },
 
   // ─── Auth ───

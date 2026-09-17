@@ -7,15 +7,17 @@ import { useI18n } from '@/lib/i18n';
 import type { Locale } from '@/lib/i18n';
 import { useTheme } from '@/lib/theme';
 import { configApi, gaptApi } from '@/lib/api';
-import { Menu, Sun, Moon, BookOpen, Sliders, LogIn, LogOut, Brain, Layers, Palette, Container } from 'lucide-react';
+import { Menu, Sun, Moon, BookOpen, Sliders, LogIn, LogOut, KeyRound, Brain, Layers, Palette, Container } from 'lucide-react';
 import Link from 'next/link';
 import LoginModal from '@/components/auth/LoginModal';
+import ChangePasswordModal from '@/components/auth/ChangePasswordModal';
 import { Button } from '@/components/ui/button';
 
 export default function Header() {
   const { healthStatus, sessions, setMobileSidebarOpen } = useAppStore();
   const { isAuthenticated, hasUsers, displayName, logout } = useAuthStore();
   const [showLogin, setShowLogin] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const { t, locale, setLocale } = useI18n();
   const { theme, setTheme } = useTheme();
@@ -213,6 +215,14 @@ export default function Header() {
         {/* ── Login / Logout Button ── */}
         {hasUsers && (
           isAuthenticated ? (
+            <>
+            <button
+              onClick={() => setShowPassword(true)}
+              className="hidden sm:flex items-center h-7 md:h-8 px-2 text-[0.6875rem] font-medium rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-all duration-150"
+              title={t('header.changePassword')}
+            >
+              <KeyRound size={13} />
+            </button>
             <button
               onClick={() => logout()}
               className="hidden sm:flex items-center gap-1.5 h-7 md:h-8 px-2.5 text-[0.6875rem] font-medium rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-all duration-150"
@@ -221,6 +231,7 @@ export default function Header() {
               <LogOut size={13} />
               <span className="hidden md:inline">{displayName || t('header.logout')}</span>
             </button>
+            </>
           ) : (
             <Button
               variant="gradient"
@@ -253,6 +264,7 @@ export default function Header() {
 
       {/* Login Modal */}
       {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
+      {showPassword && <ChangePasswordModal onClose={() => setShowPassword(false)} />}
     </header>
   );
 }

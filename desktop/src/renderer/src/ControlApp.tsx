@@ -272,6 +272,9 @@ export function ControlApp() {
   const [quickChatHotkey, setQuickChatHotkey] = useState('CommandOrControl+Shift+Enter')
   const [quickChatMsg, setQuickChatMsg] = useState('')
   const [resetDone, setResetDone] = useState(false)
+  const [pwCurrent, setPwCurrent] = useState('')
+  const [pwNext, setPwNext] = useState('')
+  const [pwMsg, setPwMsg] = useState('')
   const [debugText, setDebugText] = useState('')
   const [debugCopied, setDebugCopied] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -654,6 +657,46 @@ export function ControlApp() {
     }
   }
 
+  // Rotating the one account's password. The current one is required even
+  // though we already hold a token — the token is what a thief would have.
+  // The server signs every OTHER device out and hands back a fresh token so
+  // this connector keeps working.
+  const changePassword = async (): Promise<void> => {
+    setBusy(true)
+    setPwMsg('')
+    const base = await saveServerUrl()
+    try {
+      const token = await window.connector?.secureStore.get(TOKEN_KEY)
+      const r = await fetch(`${base}/api/auth/password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ current_password: pwCurrent, new_password: pwNext }),
+      })
+      if (!r.ok) {
+        const body = await r.text()
+        let detail = `HTTP ${r.status}`
+        try {
+          const parsed = JSON.parse(body)
+          if (typeof parsed?.detail === 'string') detail = parsed.detail
+        } catch { /* non-JSON body — the status is the message */ }
+        setPwMsg(t('account.passwordFailed', { msg: detail }))
+        return
+      }
+      const j = await r.json()
+      await window.connector?.secureStore.set(TOKEN_KEY, j.access_token)
+      setPwCurrent('')
+      setPwNext('')
+      setPwMsg(t('account.passwordChanged'))
+    } catch (e) {
+      setPwMsg(t('account.passwordFailed', { msg: (e as Error).message }))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const logout = async () => {
     await window.connector?.secureStore.delete(TOKEN_KEY)
     setHasToken(false)
@@ -754,6 +797,7 @@ export function ControlApp() {
             <section className="gy-card">
               <div className="gy-card-h">{I.user} {t('account.accountCard')}</div>
               {hasToken ? (
+                <>
                 <div className="gy-row">
                   <span className="gy-pill grow is-ok">
                     <span className="gy-dot" />
@@ -761,6 +805,23 @@ export function ControlApp() {
                   </span>
                   <button className="gy-btn gy-btn--danger gy-btn--sm" onClick={logout}>{t('account.logout')}</button>
                 </div>
+                <div className="gy-spacer" />
+                <label className="gy-field-label" htmlFor="gy-pw-cur">{t('account.passwordCurrent')}</label>
+                <input id="gy-pw-cur" className="gy-input" type="password" value={pwCurrent}
+                  onChange={(e) => setPwCurrent(e.target.value)} autoComplete="current-password" />
+                <div className="gy-spacer" />
+                <label className="gy-field-label" htmlFor="gy-pw-new">{t('account.passwordNew')}</label>
+                <input id="gy-pw-new" className="gy-input" type="password" value={pwNext}
+                  onChange={(e) => setPwNext(e.target.value)} autoComplete="new-password"
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !busy && pwCurrent && pwNext) void changePassword() }} />
+                <p className="gy-hint">{t('account.passwordHint')}</p>
+                <div className="gy-spacer" />
+                <button className="gy-btn gy-btn--ghost gy-btn--block gy-btn--sm"
+                  disabled={busy || !pwCurrent || !pwNext} onClick={() => void changePassword()}>
+                  {t('account.passwordChange')}
+                </button>
+                {pwMsg && <p className="gy-hint">{pwMsg}</p>}
+                </>
               ) : (
                 <>
                   <label className="gy-field-label" htmlFor="gy-id">{t('account.idLabel')}</label>

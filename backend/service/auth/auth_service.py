@@ -11,12 +11,19 @@ Security model:
 - First user to call setup() becomes the admin
 - setup() is permanently disabled once a user exists
 - All subsequent access requires login() → JWT token
+- Failed logins throttle, per source. One account on a public host means one
+  username and one password to guess; bcrypt slows that down, and slowing is
+  not the same as stopping.
+- Changing the password invalidates every token issued before the change.
+  A rotation that leaves other devices signed in has revoked nothing.
 """
 import os
 import secrets
 import logging
+import threading
+import time
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 
 import bcrypt
 import jwt
@@ -28,6 +35,75 @@ logger = logging.getLogger("auth-service")
 
 # Module-level singleton
 _auth_service: Optional['AuthService'] = None
+
+
+class TooManyAttempts(Exception):
+    """Raised when a source must wait before trying to sign in again."""
+
+    def __init__(self, retry_after_s: float) -> None:
+        super().__init__(f"Too many attempts — retry in {retry_after_s:.0f}s")
+        self.retry_after_s = max(1.0, retry_after_s)
+
+
+class LoginThrottle:
+    """Failed logins cost more each time, per source.
+
+    A single-admin service has one username (usually the obvious one) and one
+    password. bcrypt at 12 rounds makes each guess expensive for the server
+    too — which is why the answer is not "hash harder" but "answer slower and
+    then stop answering".
+
+    The delay doubles with each failure from 1s to a minute, and after
+    ``MAX_FAILURES`` the source is locked out for ``LOCKOUT_S`` regardless.
+    A success clears the record: a legitimate user who mistyped twice is not
+    punished for the rest of the hour.
+    """
+
+    MAX_FAILURES = 10
+    LOCKOUT_S = 15 * 60
+    BASE_DELAY_S = 1.0
+    MAX_DELAY_S = 60.0
+
+    def __init__(self) -> None:
+        self._failures: Dict[str, Tuple[int, float]] = {}
+        self._lock = threading.Lock()
+
+    def check(self, source: str) -> Optional[float]:
+        """Seconds this source must wait, or ``None`` when it may try now."""
+        with self._lock:
+            record = self._failures.get(source)
+            if record is None:
+                return None
+            count, last = record
+            if count >= self.MAX_FAILURES:
+                remaining = self.LOCKOUT_S - (time.monotonic() - last)
+                if remaining > 0:
+                    return remaining
+                # Served the lockout — start again rather than staying barred
+                # forever, which would lock the only account out of its own
+                # service after a bad afternoon.
+                self._failures.pop(source, None)
+                return None
+            delay = min(self.MAX_DELAY_S, self.BASE_DELAY_S * (2 ** (count - 1)))
+            remaining = delay - (time.monotonic() - last)
+            return remaining if remaining > 0 else None
+
+    def record_failure(self, source: str) -> None:
+        with self._lock:
+            count, _ = self._failures.get(source, (0, 0.0))
+            self._failures[source] = (count + 1, time.monotonic())
+
+    def record_success(self, source: str) -> None:
+        with self._lock:
+            self._failures.pop(source, None)
+
+    def snapshot(self) -> Dict[str, Dict[str, Any]]:
+        now = time.monotonic()
+        with self._lock:
+            return {
+                source: {"failures": count, "secondsAgo": round(now - last)}
+                for source, (count, last) in self._failures.items()
+            }
 
 
 class AuthService:
@@ -47,6 +123,7 @@ class AuthService:
         # token stays alive indefinitely with regular use.
         self.TOKEN_EXPIRE_HOURS = int(os.getenv("GENY_AUTH_TOKEN_HOURS", "720"))
         self._secret_key: Optional[str] = None
+        self.throttle = LoginThrottle()
 
     @property
     def secret_key(self) -> str:
@@ -173,31 +250,44 @@ class AuthService:
         # Return JWT token (auto-login after setup)
         return self._create_token(username, display_name or username)
 
-    def login(self, username: str, password: str) -> Dict[str, Any]:
+    def login(self, username: str, password: str, *, source: str = "unknown") -> Dict[str, Any]:
         """
         Authenticate admin user and return JWT token.
 
         Args:
             username: Admin username
             password: Admin password
+            source: Who is asking (client IP). Failed attempts are throttled
+                per source — one account means one password to guess.
 
         Returns:
             JWT token response dict
 
         Raises:
+            TooManyAttempts: This source must wait before trying again
             ValueError: If credentials are invalid
         """
+        wait = self.throttle.check(source)
+        if wait is not None:
+            raise TooManyAttempts(wait)
+
+        def refuse() -> None:
+            self.throttle.record_failure(source)
+            raise ValueError("Invalid credentials")
+
         user = self.get_user_by_username(username)
         if not user:
-            raise ValueError("Invalid credentials")
+            refuse()
 
         # Verify password
         stored_hash = user.get("password_hash", "")
         if not stored_hash:
-            raise ValueError("Invalid credentials")
+            refuse()
 
         if not bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8")):
-            raise ValueError("Invalid credentials")
+            refuse()
+
+        self.throttle.record_success(source)
 
         # Update last login time
         try:
@@ -215,16 +305,82 @@ class AuthService:
         logger.info(f"Admin login successful: {username}")
         return self._create_token(username, display_name)
 
+    def change_password(self, username: str, current_password: str, new_password: str) -> Dict[str, Any]:
+        """Rotate the admin password, and revoke every token issued before it.
+
+        The current password is required even though the caller already holds
+        a valid token: the token is what a thief would have, and it is exactly
+        what this is protecting against.
+
+        The returned token is a fresh one — the caller's own session survives
+        the rotation it just performed, and every other device does not.
+        """
+        user = self.get_user_by_username(username)
+        if not user:
+            raise ValueError("Invalid credentials")
+        stored_hash = user.get("password_hash", "")
+        if not stored_hash or not bcrypt.checkpw(
+            current_password.encode("utf-8"), stored_hash.encode("utf-8")
+        ):
+            raise ValueError("Invalid credentials")
+        if len(new_password) < 4:
+            raise ValueError("New password must be at least 4 characters")
+        if bcrypt.checkpw(new_password.encode("utf-8"), stored_hash.encode("utf-8")):
+            raise ValueError("New password must differ from the current one")
+
+        changed_at = datetime.now(timezone.utc)
+        password_hash = bcrypt.hashpw(
+            new_password.encode("utf-8"), bcrypt.gensalt(rounds=12)
+        ).decode("utf-8")
+        user_id = user.get("id")
+        if not user_id:
+            raise ValueError("Admin account is missing its record id")
+        self.app_db.update_record("admin_users", user_id, {
+            "password_hash": password_hash,
+            "password_changed_at": changed_at.isoformat(),
+        })
+        logger.info("Admin password changed for %s — earlier tokens revoked", username)
+        # Stamped with the generation it belongs to, so the caller's own
+        # session survives the rotation it just performed.
+        return self._create_token(
+            user.get("username", username),
+            user.get("display_name", username),
+            password_generation=changed_at.isoformat(),
+        )
+
+    def _password_generation(self, username: str) -> str:
+        """Which password a token belongs to. Empty for an account that has
+        never rotated — tokens from before this feature carry no ``pwd`` claim
+        and must keep working."""
+        user = self.get_user_by_username(username)
+        return str((user or {}).get("password_changed_at") or "")
+
     # ================================================================
     #  Token Management
     # ================================================================
 
-    def _create_token(self, username: str, display_name: str) -> Dict[str, Any]:
-        """Generate JWT token with expiry."""
+    def _create_token(
+        self, username: str, display_name: str, *, password_generation: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Generate JWT token with expiry.
+
+        ``pwd`` carries the password generation this token belongs to — the
+        stored ``password_changed_at``, verbatim. Verification compares it by
+        equality rather than comparing timestamps, because ``iat`` has
+        one-second resolution: a token minted in the same second as the
+        rotation is indistinguishable from one minted just before it, and one
+        of those two must be revoked while the other must not.
+        """
         expire = datetime.now(timezone.utc) + timedelta(hours=self.TOKEN_EXPIRE_HOURS)
+        generation = (
+            password_generation
+            if password_generation is not None
+            else self._password_generation(username)
+        )
         payload = {
             "sub": username,
             "display_name": display_name,
+            "pwd": generation,
             "exp": expire,
             "iat": datetime.now(timezone.utc),
         }
@@ -265,6 +421,12 @@ class AuthService:
             jwt.InvalidTokenError: Token is invalid
         """
         payload = jwt.decode(token, self.secret_key, algorithms=[self.ALGORITHM])
+        # A token belonging to an older password is revoked. Without this the
+        # rotation is cosmetic: whoever held a token still holds it, for up to
+        # thirty days.
+        current = self._password_generation(str(payload.get("sub") or ""))
+        if current and str(payload.get("pwd") or "") != current:
+            raise jwt.InvalidTokenError("token belongs to a previous password")
         return payload
 
     def get_user_from_token(self, token: str) -> Optional[Dict[str, Any]]:

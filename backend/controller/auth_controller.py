@@ -11,11 +11,12 @@ Endpoints:
 import logging
 from fastapi import APIRouter, HTTPException, Depends, Request, Response
 
-from service.auth.auth_service import get_auth_service
+from service.auth.auth_service import TooManyAttempts, get_auth_service
 from service.auth.auth_middleware import require_auth, _extract_token
 from service.auth.auth_models import (
     SetupRequest,
     LoginRequest,
+    ChangePasswordRequest,
     AuthStatusResponse,
     AuthTokenResponse,
     AuthMessageResponse,
@@ -115,8 +116,22 @@ async def setup_admin(request: SetupRequest, response: Response):
     return AuthTokenResponse(**token_data)
 
 
+def _client_source(request: Request) -> str:
+    """Who is asking, for throttling purposes.
+
+    Behind a reverse proxy every request arrives from the proxy, so
+    ``X-Forwarded-For``'s first hop is the real client. It is client-supplied
+    and therefore forgeable — which is fine here: a forged value splits an
+    attacker's own budget across buckets, and the global lockout still holds.
+    """
+    forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    if forwarded:
+        return forwarded
+    return request.client.host if request.client else "unknown"
+
+
 @router.post("/login", response_model=AuthTokenResponse)
-async def login(request: LoginRequest, response: Response):
+async def login(request: LoginRequest, response: Response, http: Request):
     """
     Authenticate admin and return JWT token.
 
@@ -134,6 +149,15 @@ async def login(request: LoginRequest, response: Response):
         token_data = auth_service.login(
             username=request.username,
             password=request.password,
+            source=_client_source(http),
+        )
+    except TooManyAttempts as exc:
+        # 429 with Retry-After, not 401: the caller needs to know that waiting
+        # is the fix, or a legitimate user retries into a longer lockout.
+        raise HTTPException(
+            status_code=429,
+            detail=f"로그인 시도가 너무 잦습니다 — {int(exc.retry_after_s)}초 뒤에 다시 시도하세요",
+            headers={"Retry-After": str(int(exc.retry_after_s))},
         )
     except ValueError:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -197,6 +221,47 @@ async def refresh(response: Response, auth: dict = Depends(require_auth)):
         httponly=False,
     )
 
+    return AuthTokenResponse(**token_data)
+
+
+@router.post("/password", response_model=AuthTokenResponse)
+async def change_password(
+    request: ChangePasswordRequest,
+    response: Response,
+    auth: dict = Depends(require_auth),
+):
+    """Rotate the admin password and sign every other device out.
+
+    The current password is required even though the caller already holds a
+    valid token — the token is what a thief would have, and it is what this
+    protects against. Tokens issued before the change stop verifying, so the
+    rotation actually revokes; the caller gets a fresh one so its own session
+    survives the change it just made.
+    """
+    auth_service = get_auth_service()
+    if auth_service is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication service not available (database required)",
+        )
+    try:
+        token_data = auth_service.change_password(
+            username=auth.get("username", ""),
+            current_password=request.current_password,
+            new_password=request.new_password,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        status = 401 if message == "Invalid credentials" else 400
+        raise HTTPException(status_code=status, detail=message)
+
+    response.set_cookie(
+        key="geny_auth_token",
+        value=token_data["access_token"],
+        max_age=60 * 60 * auth_service.TOKEN_EXPIRE_HOURS,
+        samesite="lax",
+        httponly=False,
+    )
     return AuthTokenResponse(**token_data)
 
 

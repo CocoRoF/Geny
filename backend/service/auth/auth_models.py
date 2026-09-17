@@ -18,6 +18,16 @@ class LoginRequest(BaseModel):
     password: str = Field(..., description="Admin password")
 
 
+class ChangePasswordRequest(BaseModel):
+    """Request body for rotating the admin password.
+
+    ``current_password`` is required even from an authenticated caller: the
+    token is what a thief would have.
+    """
+    current_password: str = Field(..., description="The password in use now")
+    new_password: str = Field(..., min_length=4, max_length=128, description="The password to use from now on")
+
+
 class AuthStatusResponse(BaseModel):
     """Response for auth status check."""
     has_users: bool = Field(..., description="Whether any admin user exists")

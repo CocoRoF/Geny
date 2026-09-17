@@ -28,6 +28,19 @@ const en = {
     login: 'Login',
     logout: 'Logout',
     memory: 'Memory',
+    changePassword: 'Change password',
+    password: {
+      title: 'Change password',
+      current: 'Current password',
+      next: 'New password',
+      confirm: 'Confirm new password',
+      mismatch: 'The two new passwords do not match',
+      hint: 'Changing it signs every other device out. This one stays signed in.',
+      submit: 'Change',
+      saving: 'Changing…',
+      done: 'Password changed. Every other device has been signed out.',
+      cancel: 'Cancel',
+    },
   },
 
   // ─── Auth ───
