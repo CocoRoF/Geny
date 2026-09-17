@@ -38,6 +38,14 @@ function Bubble({ message }: { message: Message }) {
       </View>
     );
   }
+  // The agent woke on its own. Not a bubble — nobody said this.
+  if (message.role === 'system') {
+    return (
+      <View style={{ paddingHorizontal: 14, paddingVertical: 6, alignItems: 'center' }}>
+        <Text style={{ color: T.muted, fontSize: 11 }}>· 스스로 시작한 turn ({message.text}) ·</Text>
+      </View>
+    );
+  }
   if (message.role === 'notice') {
     return (
       <View style={{ marginHorizontal: 12, marginVertical: 4, padding: 10, borderRadius: 10, backgroundColor: '#3A1D22' }}>

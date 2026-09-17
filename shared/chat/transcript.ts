@@ -23,7 +23,7 @@
  * Pure — no React, no platform. Tested under `node:test`.
  */
 
-export type MessageRole = 'user' | 'assistant' | 'activity' | 'notice';
+export type MessageRole = 'user' | 'assistant' | 'activity' | 'notice' | 'system';
 
 export interface Message {
   key: string;
@@ -43,6 +43,10 @@ export interface Message {
   args?: string;
   result?: string;
   durationMs?: number;
+  /**
+   * `system` only: what woke the agent, when nobody typed anything. Kept
+   * short — the trigger's full text is prompt engineering, not conversation.
+   */
   /**
    * Shown before the server confirmed it — the user's own message, echoed
    * locally so the app answers the keyboard instantly. The server logs the
@@ -71,6 +75,28 @@ function meta(entry: LogLike): Record<string, unknown> {
     }
   }
   return {};
+}
+
+/**
+ * The server writes the user's message as `PROMPT: <text>`. That prefix is
+ * the log's, not the user's — and while it was carried through, the echo
+ * never matched the message already on screen, so every single thing anyone
+ * sent appeared twice: once pending, once confirmed.
+ */
+export function promptText(message: unknown): string {
+  return String(message ?? '').replace(/^PROMPT:\s*/, '');
+}
+
+/** A turn the agent started by itself, not one anybody asked for. */
+const TRIGGER = /^\[(THINKING_TRIGGER|autonomous_signal)[:\]]/;
+
+/**
+ * A trigger's text is a paragraph of prompt engineering. What belongs on
+ * screen is only that the agent spoke on its own, and roughly why.
+ */
+function triggerLabel(text: string): string {
+  const named = /^\[THINKING_TRIGGER:([^\]]+)\]/.exec(text);
+  return named ? named[1] : 'autonomous';
 }
 
 function keyOf(entry: LogLike, index: number): string {
@@ -111,7 +137,15 @@ export function foldEntry(messages: Message[], entry: LogLike, index = 0): Messa
   const ts = entry.timestamp;
 
   if (level === 'COMMAND') {
-    const text = String(entry.message ?? '');
+    const text = promptText(entry.message);
+
+    // Not everything the agent is given was typed by someone. A scheduled
+    // thought arrives down the same channel, and rendering it as the user's
+    // own message is a lie the screen tells every evening.
+    if (TRIGGER.test(text)) {
+      return [...messages, { key, role: 'system', text: triggerLabel(text), ts }];
+    }
+
     // The server's echo of a message this screen already drew. Adopt the
     // server's identity rather than appending a twin — and match only against
     // a PENDING one, so a user who really does send the same line twice gets

@@ -178,3 +178,52 @@ test('the result lands on the call with the same id, not the nearest one', () =>
   assert.equal(rows[1].ok, false);
   assert.equal(rows[1].result, 'no such file');
 });
+
+// ── the echo has to be recognised ────────────────────────────────────
+// The server writes the user's line as `PROMPT: <text>`. While that prefix
+// was carried through, no pending message ever matched its own echo, and
+// every message anyone sent appeared on screen twice. Found by driving the
+// real window against the real server.
+
+test('the server echo adopts the pending message instead of twinning it', () => {
+  const pending = pendingUserMessage('한 단어로만 답해: 커넥터?');
+  const after = foldEntry([pending], {
+    level: 'COMMAND',
+    timestamp: 't1',
+    message: 'PROMPT: 한 단어로만 답해: 커넥터?',
+  });
+  assert.equal(after.length, 1, 'one message, not two');
+  assert.equal(after[0].pending, undefined);
+  assert.equal(after[0].text, '한 단어로만 답해: 커넥터?');
+  assert.equal(after[0].ts, 't1', "the server's timestamp wins");
+});
+
+test('a prompt with no prefix still folds', () => {
+  const after = foldEntry([], { level: 'COMMAND', timestamp: 't1', message: 'bare' });
+  assert.equal(after[0].text, 'bare');
+});
+
+test('a scheduled thought is not the user speaking', () => {
+  // These arrive down the same channel as a typed message. Rendered as the
+  // user's own, the screen claims every evening that someone asked the agent
+  // to reflect on the evening.
+  const after = foldEntry([], {
+    level: 'COMMAND',
+    timestamp: 't1',
+    message: 'PROMPT: [THINKING_TRIGGER:time_evening] [time_context: 목요일 저녁] The evening is here.',
+  });
+  assert.equal(after.length, 1);
+  assert.equal(after[0].role, 'system');
+  assert.equal(after[0].text, 'time_evening', 'the label, not the paragraph');
+});
+
+test('a trigger never adopts a pending user message', () => {
+  const pending = pendingUserMessage('[THINKING_TRIGGER:time_evening] something');
+  const after = foldEntry([pending], {
+    level: 'COMMAND',
+    timestamp: 't1',
+    message: 'PROMPT: [THINKING_TRIGGER:time_evening] something',
+  });
+  assert.equal(after.length, 2, 'the typed one stays typed');
+  assert.equal(after[1].role, 'system');
+});

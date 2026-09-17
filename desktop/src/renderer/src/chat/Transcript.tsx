@@ -97,6 +97,16 @@ export function Transcript({
         if (message.role === 'activity') {
           return <ToolRow key={message.key} message={message} t={t} />
         }
+        if (message.role === 'system') {
+          // Nobody typed this: the agent was woken on a schedule. It belongs
+          // in the flow (it is why the next answer exists) but not as a
+          // message, because no one said it.
+          return (
+            <div key={message.key} className="gy-selfstart">
+              <span>{t('chat.selfStarted', { reason: message.text })}</span>
+            </div>
+          )
+        }
         if (message.role === 'notice') {
           return (
             <div key={message.key} className="gy-notice">

@@ -19,5 +19,10 @@ const electron = createRequire(import.meta.url)('electron')
 const env = { ...process.env }
 delete env.ELECTRON_RUN_AS_NODE
 
-const child = spawn(electron, [here, '--no-sandbox'], { stdio: 'inherit', env })
+// `--live` swaps the app's entry point: same window, real server behind it.
+const live = process.argv.includes('--live')
+const args = [here, '--no-sandbox', ...process.argv.slice(2)]
+if (live) env.GENY_SMOKE_ENTRY = 'live'
+
+const child = spawn(electron, args, { stdio: 'inherit', env })
 child.on('exit', (code, signal) => process.exit(code ?? (signal ? 1 : 0)))

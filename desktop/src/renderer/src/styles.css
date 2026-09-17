@@ -1116,3 +1116,22 @@ html, body, #root { height: 100%; }
   border-bottom: 1px solid var(--gy-card-border);
   padding-bottom: 5px;
 }
+
+/* A turn nobody asked for — the agent woke on a schedule. In the flow,
+   because it is why the next answer exists; not a message, because no one
+   said it. */
+.gy-selfstart {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+  color: var(--gy-text-3);
+  font-size: 11px;
+}
+.gy-selfstart::before,
+.gy-selfstart::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--gy-card-border);
+}

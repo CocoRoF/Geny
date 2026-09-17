@@ -432,6 +432,10 @@ export const messages: Record<string, Entry> = {
     ko: '이 세션은 서버에서 계속 살아 있습니다 — 창을 닫아도 하던 일은 이어집니다.',
     en: 'This session lives on the server — closing the window does not stop the work.',
   },
+  'chat.selfStarted': {
+    ko: '스스로 시작한 turn · {reason}',
+    en: 'Started on its own · {reason}',
+  },
   'chat.tool.input': { ko: '넣은 값', en: 'Input' },
   'chat.tool.output': { ko: '돌려받은 값', en: 'Output' },
   'chat.state.ready': { ko: '연결됨', en: 'Connected' },
