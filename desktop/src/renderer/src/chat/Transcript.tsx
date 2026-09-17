@@ -1,30 +1,27 @@
 /**
- * The conversation, the way an agent's conversation actually reads.
+ * The conversation, as Dex renders one.
  *
- * An agent's turn is not two bubbles. It is: the question, then twenty tool
- * calls, then the answer — and the tool calls are the part a person scans
- * rather than reads. So they render one line each, in the flow, joined by a
- * rail so a run of them reads as a single sequence instead of twenty
- * interruptions; the verdict sits on the rail and the cost at the right edge.
- * They open only when someone wants to know what was in them.
+ * Bubbles, because that is what a conversation is: what a person said on the
+ * right in brand colour, what the agent said on the left under its mark.
  *
- * What a person wrote gets a surface, because finding it again is the most
- * common reason anyone scrolls back. What the model wrote gets none: it is
- * the page.
+ * What the agent DID is a separate question from what it said, so it is not
+ * in the bubble. A run of tool calls collapses to one pill — "작업 8단계 ·
+ * 12.4초" — and opens into a card of colour-badged rows, each with its
+ * duration and its own input and output. That way twenty calls between two
+ * sentences cost one line of the conversation instead of twenty.
  *
  * Every row comes from the shared fold, so this file decides how a tool call
  * LOOKS and never what it was.
  */
-import { Fragment, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import type { Message } from '../../../../../shared/chat/transcript'
+import { Icon, KIND_ICON, toolKind } from './icons'
 import Markdown from './markdown'
 
 type T = (key: string, vars?: Record<string, string | number>) => string
 
-/** `2026-09-17T21:37:02` → `21:37`. Anything unparseable shows nothing.
- *  Always 24h: a timestamp beside a message is glanced at, and "오후 09:37"
- *  is three words where two digits would do. */
+/** `2026-09-17T21:37:02` → `21:37`. Anything unparseable shows nothing. */
 function clock(ts?: string): string {
   if (!ts) return ''
   const at = new Date(ts)
@@ -32,13 +29,18 @@ function clock(ts?: string): string {
   return at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 }
 
+function seconds(ms?: number): string {
+  if (typeof ms !== 'number' || ms <= 0) return ''
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}초` : `${ms}ms`
+}
+
 function pretty(args?: string): string {
   if (!args) return ''
   try {
     return JSON.stringify(JSON.parse(args), null, 2)
   } catch {
-    // A truncated preview is not valid JSON; showing it raw beats showing
-    // nothing, and it is still the honest content of the call.
+    // A truncated preview is not valid JSON; the raw text is still the honest
+    // content of the call.
     return args
   }
 }
@@ -47,34 +49,40 @@ function ToolRow({ message, t }: { message: Message; t: T }): ReactNode {
   const [open, setOpen] = useState(false)
   const detail = pretty(message.args)
   const openable = Boolean(detail || message.result)
-  const tone = message.ok === false ? 'is-err' : message.ok === true ? 'is-ok' : 'is-pending'
+  const kind = toolKind(message.tool)
+  const running = message.ok === null || message.ok === undefined
+  const failed = message.ok === false
+  const dur = seconds(message.durationMs)
   return (
-    <div className="gy-tool">
-      <button
-        type="button"
-        className="gy-tool-head"
-        disabled={!openable}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className={`gy-tool-dot ${tone}`} />
-        <span className="gy-tool-name">{message.tool}</span>
-        <span className="gy-tool-text">{message.text}</span>
-        {typeof message.durationMs === 'number' && message.durationMs > 0 && (
-          <span className="gy-tool-ms">{(message.durationMs / 1000).toFixed(1)}s</span>
-        )}
-        {openable && <span className="gy-tool-caret">{open ? '⌃' : '⌄'}</span>}
+    <div
+      className={[
+        'ptl-tool',
+        `ptl-kind-${kind}`,
+        running ? 'run' : '',
+        failed ? 'err' : '',
+        open ? 'open' : '',
+      ].filter(Boolean).join(' ')}
+    >
+      <button type="button" className="ptl-tool-head" disabled={!openable}
+        onClick={() => setOpen((v) => !v)}>
+        <span className="ptl-ico">{KIND_ICON[kind]}</span>
+        <span className="ptl-sum">
+          <strong>{message.tool}</strong>
+          {message.text ? `  ${message.text}` : ''}
+        </span>
+        {dur && <span className={`ptl-dur ${failed ? 'err' : (message.durationMs ?? 0) > 5000 ? 'slow' : ''}`}>{dur}</span>}
       </button>
       {open && (
-        <div className="gy-tool-body">
+        <div className="ptl-body">
           {detail && (
             <>
-              <div className="gy-tool-label">{t('chat.tool.input')}</div>
+              <div className="ptl-label">{t('chat.tool.input')}</div>
               <pre>{detail}</pre>
             </>
           )}
           {message.result && (
             <>
-              <div className="gy-tool-label">{t('chat.tool.output')}</div>
+              <div className="ptl-label">{t('chat.tool.output')}</div>
               <pre>{message.result}</pre>
             </>
           )}
@@ -84,65 +92,106 @@ function ToolRow({ message, t }: { message: Message; t: T }): ReactNode {
   )
 }
 
+/** A run of tool calls, as one collapsible step. */
+function Steps({ run, t }: { run: Message[]; t: T }): ReactNode {
+  const live = run.some((m) => m.ok === null || m.ok === undefined)
+  const failed = run.some((m) => m.ok === false)
+  // Open while it is happening — that is when someone is watching — and
+  // closed once it is done, when the answer is what matters.
+  const [open, setOpen] = useState(live)
+  const total = run.reduce((sum, m) => sum + (m.durationMs ?? 0), 0)
+  return (
+    <div className={`ptl ${live ? 'live' : ''} ${failed ? 'err' : ''}`}>
+      <button type="button" className="ptl-head-toggle" onClick={() => setOpen((v) => !v)}>
+        <span className="ptl-pulse">{live ? '' : failed ? Icon.alert : Icon.check}</span>
+        <span className="ptl-head-label">
+          {live ? t('chat.steps.running') : t('chat.steps.done', { n: run.length })}
+        </span>
+        <span className="ptl-head-sub">
+          {live ? t('chat.steps.count', { n: run.length }) : seconds(total)}
+        </span>
+        <span className="ptl-chevron">{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="ptl-tools">
+          {run.map((message) => <ToolRow key={message.key} message={message} t={t} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Row({ message, t }: { message: Message; t: T }): ReactNode {
   if (message.role === 'system') {
-    // Nobody typed this: the agent was woken on a schedule. It belongs in the
-    // flow (it is why the next answer exists) but not as a message, because
-    // no one said it.
-    return (
-      <div className="gy-selfstart">
-        <span>{t('chat.selfStarted', { reason: message.text })}</span>
-      </div>
-    )
+    // Nobody typed this: the agent woke on a schedule. In the flow, because
+    // it is why the next answer exists; not a bubble, because no one said it.
+    return <div className="trigger-row">{t('chat.selfStarted', { reason: message.text })}</div>
   }
 
   if (message.role === 'notice') {
     return (
-      <div className="gy-notice">
-        <div className="gy-notice-h">{t('chat.failed')}</div>
-        <pre>{message.text}</pre>
+      <div className="msg-row">
+        <span className="msg-avatar assistant">G</span>
+        <div className="msg-col">
+          <div className="bubble assistant error">
+            <div className="chat-error-head">{Icon.alert} {t('chat.failed')}</div>
+            <pre className="chat-error-body">{message.text}</pre>
+          </div>
+        </div>
       </div>
     )
   }
 
   if (message.role === 'user') {
     return (
-      <article className={`gy-turn gy-turn--user ${message.pending ? 'is-pending' : ''}`}>
-        <div className="gy-turn-meta">
-          <span className="gy-turn-who">{t('chat.you')}</span>
-          {clock(message.ts) && <time className="gy-turn-time">{clock(message.ts)}</time>}
+      <div className="msg-row user">
+        <span className="msg-avatar user">{t('chat.you')}</span>
+        <div className="msg-col">
+          <div className={`bubble user ${message.pending ? 'pending' : ''}`}>{message.text}</div>
+          {clock(message.ts) && <span className="msg-time">{clock(message.ts)}</span>}
         </div>
-        <div className="gy-turn-body">{message.text}</div>
-      </article>
+      </div>
     )
   }
 
   return (
-    <article className="gy-turn gy-turn--agent">
-      <div className="gy-turn-meta">
-        <span className="gy-turn-avatar">G</span>
-        <span className="gy-turn-who">Geny</span>
-        {clock(message.ts) && <time className="gy-turn-time">{clock(message.ts)}</time>}
+    <div className="msg-row">
+      <span className="msg-avatar assistant">G</span>
+      <div className="msg-col">
+        <div className="bubble assistant">
+          <Markdown text={message.text} />
+        </div>
+        {clock(message.ts) && <span className="msg-time">{clock(message.ts)}</span>}
       </div>
-      <div className="gy-turn-body">
-        <Markdown text={message.text} />
-      </div>
-    </article>
+    </div>
   )
 }
 
 /**
- * Consecutive tool calls become one group, so the rail behind them is
- * continuous. Splitting them per-row would draw twenty two-pixel stubs.
+ * Consecutive tool calls become one step.
+ *
+ * A failed call produces two things in the fold: the call marked failed, and
+ * a notice carrying its output — the phone needs the second because it shows
+ * no output. Here the row already carries it, so that notice is dropped
+ * rather than allowed to split the run in half and say the same thing twice.
+ * Only that exact notice: anything else (a failed turn, an engine error) is
+ * still a message of its own.
  */
 function group(messages: Message[]): Message[][] {
   const out: Message[][] = []
   for (const message of messages) {
     const last = out[out.length - 1]
-    const isTool = message.role === 'activity'
-    const lastIsTool = last && last[0].role === 'activity'
-    if (isTool && lastIsTool) last.push(message)
-    else out.push([message])
+    const lastIsTools = last && last[0].role === 'activity'
+
+    if (message.role === 'activity' && lastIsTools) {
+      last.push(message)
+      continue
+    }
+    if (message.role === 'notice' && lastIsTools) {
+      const failed = last[last.length - 1]
+      if (failed.ok === false && failed.result && message.text === failed.result) continue
+    }
+    out.push([message])
   }
   return out
 }
@@ -156,13 +205,13 @@ export function Transcript({
   t: T
 }): ReactNode {
   if (loading && messages.length === 0) {
-    return <div className="gy-chat-empty">{t('chat.loading')}</div>
+    return <div className="chat-empty">{t('chat.loading')}</div>
   }
   if (messages.length === 0) {
     return (
-      <div className="gy-chat-empty">
-        <p className="gy-chat-empty-title">{t('chat.empty.title')}</p>
-        <p>{t('chat.empty.hint')}</p>
+      <div className="chat-empty">
+        <strong>{t('chat.empty.title')}</strong>
+        {t('chat.empty.hint')}
       </div>
     )
   }
@@ -170,19 +219,27 @@ export function Transcript({
     <>
       {group(messages).map((run) =>
         run[0].role === 'activity' ? (
-          <div className="gy-steps" key={run[0].key}>
-            {run.map((message) => <ToolRow key={message.key} message={message} t={t} />)}
+          <div className="msg-row" key={run[0].key}>
+            <span className="msg-avatar assistant">G</span>
+            <div className="msg-col" style={{ maxWidth: 'calc(100% - 44px)', width: '100%' }}>
+              <Steps run={run} t={t} />
+            </div>
           </div>
         ) : (
-          <Fragment key={run[0].key}>
-            <Row message={run[0]} t={t} />
-          </Fragment>
+          <Row key={run[0].key} message={run[0]} t={t} />
         ),
       )}
       {running && (
-        <div className="gy-working">
-          <span className="gy-working-dot" />
-          {t('chat.working')}
+        <div className="msg-row">
+          <span className="msg-avatar assistant">G</span>
+          <div className="msg-col">
+            <div className="ptl live">
+              <span className="ptl-head-toggle" style={{ cursor: 'default' }}>
+                <span className="ptl-pulse" />
+                <span className="ptl-head-label">{t('chat.working')}</span>
+              </span>
+            </div>
+          </div>
         </div>
       )}
     </>

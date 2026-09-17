@@ -98,25 +98,25 @@ export function RouteBar({ sessionId, t }: { sessionId: string | null; t: T }): 
   const divergent = Boolean(answered && last?.accountId && last.accountId !== primaryId)
 
   return (
-    <div className="gy-route" ref={box}>
-      <button type="button" className="gy-route-btn" onClick={() => setOpen((v) => !v)} disabled={!sessionId}>
-        <span className={`gy-route-dot ${divergent ? 'is-warn' : ''}`} />
-        <span className="gy-route-label">{pointedAt}</span>
-        <span className="gy-route-caret">⌄</span>
+    <div className="route" ref={box}>
+      <button type="button" className="route-btn" onClick={() => setOpen((v) => !v)} disabled={!sessionId}>
+        <span className={`route-dot ${divergent ? 'warn' : ''}`} />
+        <span className="route-label">{pointedAt}</span>
+        <span className="route-caret">⌄</span>
       </button>
       {divergent && (
-        <span className="gy-route-answered" title={t('chat.route.answeredHint')}>
+        <span className="route-answered" title={t('chat.route.answeredHint')}>
           {t('chat.route.answered', { label: answered })}
         </span>
       )}
       {open && (
-        <div className="gy-route-menu">
+        <div className="route-menu">
           {list.filter((a) => a.enabled).length === 0 && (
-            <div className="gy-route-empty">{t('chat.route.none')}</div>
+            <div className="route-empty">{t('chat.route.none')}</div>
           )}
           {list.filter((a) => a.enabled).map((account) => (
-            <div key={account.id} className="gy-route-group">
-              <div className="gy-route-group-h">
+            <div key={account.id} className="route-group">
+              <div className="route-group-h">
                 {account.label}
                 {account.identity?.email ? <span> · {account.identity.email}</span> : null}
               </div>
@@ -130,12 +130,12 @@ export function RouteBar({ sessionId, t }: { sessionId: string | null; t: T }): 
                   <button
                     key={`${account.id}:${choice.id}`}
                     type="button"
-                    className={`gy-route-item ${active ? 'is-active' : ''}`}
+                    className={`route-item ${active ? 'active' : ''}`}
                     disabled={busy}
                     onClick={() => void choose(account, choice.id)}
                   >
                     <span>{choice.label}</span>
-                    {active && <span className="gy-route-check">✓</span>}
+                    {active && <span className="route-check">✓</span>}
                   </button>
                 )
               })}
@@ -143,7 +143,7 @@ export function RouteBar({ sessionId, t }: { sessionId: string | null; t: T }): 
           ))}
         </div>
       )}
-      {error && <span className="gy-route-err">{error}</span>}
+      {error && <span className="route-answered">{error}</span>}
     </div>
   )
 }

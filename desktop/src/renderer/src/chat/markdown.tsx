@@ -114,13 +114,13 @@ function parse(source: string): Block[] {
 export function Markdown({ text }: { text: string }): ReactNode {
   const blocks = parse(text)
   return (
-    <div className="gy-md">
+    <div className="md">
       {blocks.map((block, index) => {
         const key = `b${index}`
         if (block.kind === 'code') {
           return (
-            <pre key={key} className="gy-md-code">
-              {block.lang && <span className="gy-md-lang">{block.lang}</span>}
+            <pre key={key} className="md-code">
+              {block.lang && <span className="md-lang">{block.lang}</span>}
               <code>{block.lines.join('\n')}</code>
             </pre>
           )

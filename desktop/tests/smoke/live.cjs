@@ -64,17 +64,17 @@ app.on('ready', async () => {
   await new Promise((resolve) => setTimeout(resolve, 6000))
 
   const probe = await win.webContents.executeJavaScript(`(() => {
-    const rail = [...document.querySelectorAll('.gy-rail-item')].map((el) => el.innerText.trim())
+    const rail = [...document.querySelectorAll('.agent-list .agent-item')].map((el) => el.innerText.trim())
     return {
       sessions: rail,
-      railError: document.querySelector('.gy-rail-err')?.innerText ?? '',
-      title: document.querySelector('.gy-chat-title')?.innerText ?? '',
-      lamp: document.querySelector('.gy-lamp')?.innerText ?? '',
-      route: document.querySelector('.gy-route-label')?.innerText ?? '',
-      answered: document.querySelector('.gy-route-answered')?.innerText ?? '',
-      turns: document.querySelectorAll('.gy-turn').length,
-      tools: document.querySelectorAll('.gy-tool').length,
-      composerEnabled: !document.querySelector('.gy-composer-input')?.disabled,
+      railError: document.querySelector('.side-error')?.innerText ?? '',
+      title: document.querySelector('.chat-title-text')?.innerText ?? '',
+      lamp: document.querySelector('.system-monitor-state')?.innerText ?? '',
+      route: document.querySelector('.route-label')?.innerText ?? '',
+      answered: document.querySelector('.route-answered')?.innerText ?? '',
+      turns: document.querySelectorAll('.msg-row').length,
+      tools: document.querySelectorAll('.ptl-tool').length,
+      composerEnabled: !document.querySelector('.composer-input')?.disabled,
     }
   })()`)
 
@@ -99,7 +99,7 @@ app.on('ready', async () => {
   if (SEND && failures.length === 0) {
     console.log('\nsending a message…')
     await win.webContents.executeJavaScript(`(() => {
-      const box = document.querySelector('.gy-composer-input')
+      const box = document.querySelector('.composer-input')
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
       setter.call(box, '한 단어로만 답해: 커넥터?')
       box.dispatchEvent(new Event('input', { bubbles: true }))
@@ -108,9 +108,9 @@ app.on('ready', async () => {
     })()`)
     await new Promise((resolve) => setTimeout(resolve, 45000))
     const after = await win.webContents.executeJavaScript(`(() => ({
-      turns: document.querySelectorAll('.gy-turn').length,
-      last: [...document.querySelectorAll('.gy-turn--agent')].pop()?.innerText.slice(0, 160) ?? '',
-      pending: document.querySelectorAll('.gy-turn--user.is-pending').length,
+      turns: document.querySelectorAll('.msg-row').length,
+      last: [...document.querySelectorAll('.bubble.assistant')].pop()?.innerText.slice(0, 160) ?? '',
+      pending: document.querySelectorAll('.bubble.user.pending').length,
     }))()`)
     console.log('after send    :', after.turns, 'turns; last answer:', JSON.stringify(after.last))
     if (after.turns <= probe.turns) failures.push('the message produced no new turn')

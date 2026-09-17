@@ -1,70 +1,173 @@
 /* ─────────────────────────────────────────────────────────────────────────
    The design system.
 
-   Everything visible in this app resolves to a token here. That is the point:
-   the previous sheet mixed literal colours with variables and grew a second
-   palette for every new panel, so "dark" meant four different greys and the
-   light theme was whatever the dark one looked like with the values flipped.
+   These are XGen Dex's tokens, which are xgen-frontend's, which are the
+   Figma ones (XGEN-BO-Design): Pretendard, the gray scale, the brand gradient
+   #305eeb → #783ced. Geny and Dex are the same company's desktop apps and
+   were drifting into two different-looking products; this is the one place
+   that decides what either of them looks like.
 
-   The language:
+   Everything visible resolves to a token here. Nothing below this file
+   carries a hex — if a value is missing, add a token.
 
-   · Neutrals are near-black with a trace of blue, so the one warm accent
-     reads as the only colour on the screen and therefore as meaning.
-   · Separation comes from SURFACE and SPACE, not from borders. A 1px line is
-     for edges that carry structure (a rail, a header), not for wrapping every
-     box in a rectangle.
-   · Two families and nothing else: proportional for what a person or a model
-     wrote, monospace for what the machine produced (paths, commands, ids,
-     numbers that should line up). The distinction is information.
-   · Everything sits on a 4px grid.
+   Theme is an attribute on <html>, not a class on a wrapper: `data-theme` of
+   "dark" or "light", absent meaning "follow the OS". A window that themes
+   itself through a wrapper class cannot theme its own scrollbars or its
+   <body>, which is how the old light theme ended up as grey text on a grey
+   card on a grey page.
    ───────────────────────────────────────────────────────────────────────── */
 
-.gy {
-  /* ── surfaces ──────────────────────────────────────────────────────── */
-  --bg: #0c0d11;
-  --bg-veil: radial-gradient(120% 80% at 50% -20%, #16181f 0%, #0c0d11 60%);
-  --surface: #111318;
-  --surface-2: #161920;
-  --raised: #1b1f27;
-  --overlay: #1a1d25;
+@font-face {
+  font-family: 'Pretendard Variable';
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+  src: url('../assets/fonts/PretendardVariable.woff2') format('woff2-variations');
+}
 
-  /* ── lines ─────────────────────────────────────────────────────────── */
-  --line: rgba(255, 255, 255, 0.07);
-  --line-strong: rgba(255, 255, 255, 0.13);
-  --line-accent: rgba(124, 140, 255, 0.45);
+:root {
+  /* ── gray scale ────────────────────────────────────────────────────── */
+  --gray-50: #f8f9fa;
+  --gray-100: #f2f4f7;
+  --gray-200: #e4e7ec;
+  --gray-300: #d0d5dd;
+  --gray-400: #abb1ba;
+  --gray-500: #7a7f89;
+  --gray-600: #40444d;
+  --gray-700: #282b31;
+  --gray-800: #1d1f23;
+  --gray-900: #17181c;
 
-  /* ── ink ───────────────────────────────────────────────────────────── */
-  --text: #eceef3;
-  --dim: #9aa1af;
-  --faint: #656c7b;
+  /* ── brand ─────────────────────────────────────────────────────────── */
+  --primary: #305eeb;
+  --primary-start: #305eeb;
+  --primary-end: #783ced;
+  --primary-grad: linear-gradient(90deg, #305eeb 0%, #783ced 100%);
+  --primary-soft: rgba(48, 94, 235, 0.1);
+  --primary-soft-border: rgba(48, 94, 235, 0.25);
+  --violet-ring: rgba(120, 60, 237, 0.14);
+
+  /* ── semantic surfaces ─────────────────────────────────────────────── */
+  --app-bg: #f7f8fa;
+  --panel: #ffffff;
+  --panel-2: #f8f9fa;
+  --border: #e4e7ec;
+  --border-soft: rgba(0, 0, 0, 0.08);
+  --text: #1d1f23;
+  --text-secondary: #40444d;
+  --muted: #6b7280;
+  --input-bg: #f8f9fa;
+
+  /* ── chat ──────────────────────────────────────────────────────────── */
+  --user-bubble: #305eeb;
+  --user-bubble-text: #ffffff;
+  --assistant-bubble: #ffffff;
+  --assistant-bubble-text: #1d1f23;
+
+  /* ── status ────────────────────────────────────────────────────────── */
+  --error: #e03131;
+  --error-bg: #fdf3f3;
+  --error-border: #f6c1c1;
+  --success: #2eb146;
+  --warning: #f59f00;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-card: 0 8px 30px rgba(0, 0, 0, 0.08);
+
+  --font-sans:
+    'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui,
+    'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+  --font-mono: 'Fira Code', 'SFMono-Regular', Consolas, 'D2Coding', monospace;
+
+  /* Shared bar heights, so the sidebar and the chat column line up top and
+     bottom instead of each guessing. */
+  --header-h: 61px;
+  --footer-h: 84px;
+  --system-footer-h: 26px;
+
+  color-scheme: light;
+}
+
+/* ── dark ────────────────────────────────────────────────────────────── */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --app-bg: #16181d;
+    --panel: #1d1f23;
+    --panel-2: #22252b;
+    --border: #2b2f37;
+    --border-soft: rgba(255, 255, 255, 0.08);
+    --text: #e7e9ee;
+    --text-secondary: #b6bcc6;
+    --muted: #9aa1ac;
+    --input-bg: #22252b;
+    --assistant-bubble: #22252b;
+    --assistant-bubble-text: #e7e9ee;
+    --error-bg: #2a1c1c;
+    --error-border: #5a2b2b;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --app-bg: #16181d;
+  --panel: #1d1f23;
+  --panel-2: #22252b;
+  --border: #2b2f37;
+  --border-soft: rgba(255, 255, 255, 0.08);
+  --text: #e7e9ee;
+  --text-secondary: #b6bcc6;
+  --muted: #9aa1ac;
+  --input-bg: #22252b;
+  --assistant-bubble: #22252b;
+  --assistant-bubble-text: #e7e9ee;
+  --error-bg: #2a1c1c;
+  --error-border: #5a2b2b;
+  color-scheme: dark;
+}
+
+/* ── aliases ─────────────────────────────────────────────────────────────
+   The settings window and the avatar overlay are written against Geny's own
+   names. They map onto the tokens above rather than keeping a second
+   palette alive — the point of this file is that there is one. */
+:root {
+  --bg: var(--app-bg);
+  --bg-veil: none;
+  --surface: var(--panel);
+  --surface-2: var(--panel-2);
+  --raised: var(--panel-2);
+  --overlay: var(--panel);
+  --line: var(--border);
+  --line-strong: var(--border);
+  --line-accent: var(--primary-soft-border);
+  --dim: var(--text-secondary);
+  --faint: var(--muted);
   --on-accent: #ffffff;
-
-  /* ── meaning ───────────────────────────────────────────────────────── */
-  --accent: #7c8cff;
-  --accent-deep: #5b6bf0;
-  --accent-wash: rgba(124, 140, 255, 0.12);
-  --ok: #4ade80;
-  --ok-wash: rgba(74, 222, 128, 0.12);
-  --warn: #f5b64a;
-  --warn-wash: rgba(245, 182, 74, 0.12);
-  --err: #fb7185;
-  --err-wash: rgba(251, 113, 133, 0.11);
-
-  /* ── interaction ───────────────────────────────────────────────────── */
-  --hover: rgba(255, 255, 255, 0.045);
-  --active: rgba(255, 255, 255, 0.08);
-  --focus-ring: 0 0 0 3px rgba(124, 140, 255, 0.28);
-
-  /* ── depth (used sparingly: menus and modals only) ─────────────────── */
-  --lift: 0 16px 40px -12px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.4);
-
-  /* ── shape ─────────────────────────────────────────────────────────── */
-  --r-sm: 6px;
-  --r-md: 10px;
-  --r-lg: 14px;
+  --accent: var(--primary);
+  --accent-deep: var(--primary);
+  --accent-grad: var(--primary-grad);
+  --accent-wash: var(--primary-soft);
+  --ok: var(--success);
+  --ok-wash: rgba(46, 177, 70, 0.12);
+  --warn: var(--warning);
+  --warn-wash: rgba(245, 159, 0, 0.12);
+  --err: var(--error);
+  --err-wash: var(--error-bg);
+  --hover: var(--panel-2);
+  --active: var(--panel-2);
+  --focus-ring: 0 0 0 3px var(--violet-ring);
+  --lift: var(--shadow-lg);
+  --r-sm: var(--radius-sm);
+  --r-md: var(--radius-md);
+  --r-lg: var(--radius-lg);
   --r-pill: 999px;
-
-  /* ── space (4px grid) ──────────────────────────────────────────────── */
   --s1: 4px;
   --s2: 8px;
   --s3: 12px;
@@ -72,61 +175,17 @@
   --s5: 20px;
   --s6: 24px;
   --s8: 32px;
-
-  /* The reading column. The conversation and the composer under it are the
-     same width, or the box you type into does not line up with the words it
-     produced. */
-  --measure: 740px;
-
-  /* ── type ──────────────────────────────────────────────────────────── */
-  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Pretendard',
-    'Apple SD Gothic Neo', 'Malgun Gothic', Roboto, sans-serif;
-  --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Mono', Menlo,
-    Consolas, 'D2Coding', monospace;
-
-  /* ── motion ────────────────────────────────────────────────────────── */
-  --quick: 130ms cubic-bezier(0.32, 0.72, 0, 1);
-  --slow: 220ms cubic-bezier(0.32, 0.72, 0, 1);
-}
-
-/* Light is its own palette, not the dark one inverted. Warm paper, real ink,
-   and a deeper accent so it still reads as the only colour — the previous
-   light theme was grey text on grey card on grey page, which is the washed
-   look the whole screen had. */
-.gy.gy--light {
-  --bg: #f4f5f8;
-  --bg-veil: radial-gradient(120% 80% at 50% -20%, #ffffff 0%, #eef0f4 65%);
-  --surface: #ffffff;
-  --surface-2: #f7f8fa;
-  --raised: #ffffff;
-  --overlay: #ffffff;
-
-  --line: rgba(16, 20, 28, 0.09);
-  --line-strong: rgba(16, 20, 28, 0.17);
-  --line-accent: rgba(79, 91, 213, 0.4);
-
-  --text: #14171d;
-  --dim: #58606e;
-  --faint: #8790a0;
-
-  --accent: #4f5bd5;
-  --accent-deep: #3f49b8;
-  --accent-wash: rgba(79, 91, 213, 0.09);
-  --ok: #0f9d58;
-  --ok-wash: rgba(15, 157, 88, 0.1);
-  --warn: #b26a00;
-  --warn-wash: rgba(178, 106, 0, 0.1);
-  --err: #d33a4b;
-  --err-wash: rgba(211, 58, 75, 0.09);
-
-  --hover: rgba(16, 20, 28, 0.04);
-  --active: rgba(16, 20, 28, 0.07);
-  --focus-ring: 0 0 0 3px rgba(79, 91, 213, 0.2);
-  --lift: 0 16px 40px -14px rgba(16, 20, 28, 0.22), 0 2px 6px rgba(16, 20, 28, 0.08);
+  --measure: 100%;
+  --sans: var(--font-sans);
+  --mono: var(--font-mono);
+  --quick: 130ms ease;
+  --slow: 220ms ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .gy * {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

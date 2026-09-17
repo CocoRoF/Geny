@@ -4,7 +4,7 @@ import type { OverlayTuning, ComputerUseConfig, ConsentMode, MCPServerConfig, MC
 import { makeT, type Lang } from './i18n'
 import ModelsTab from './ModelsTab'
 import AgentsTab from './AgentsTab'
-import StatusBar from './chat/StatusBar'
+import SystemMonitorFooter from './chat/SystemMonitorFooter'
 
 // Sentinels marking spans that should render as <b> inside an interpolated i18n
 // string (the consent-mode hint bolds the "always ask" / "auto-allow" labels).
@@ -527,13 +527,17 @@ export function ControlApp() {
     return () => mq.removeEventListener('change', onChange)
   }, [])
 
-  const resolvedDark = theme === 'system' ? sysDark : theme === 'dark'
+  // The theme is an attribute on <html>, so it reaches the scrollbars and the
+  // page behind the content — a wrapper class reaches neither.
+  useEffect(() => {
+    const root = document.documentElement
+    if (theme === 'dark' || theme === 'light') root.dataset.theme = theme
+    else delete root.dataset.theme
+  }, [theme, sysDark])
 
   const changeTheme = (mode: ThemeMode) => {
     setThemeState(mode)
     window.connector?.serverConfig.set({ theme: mode })
-    // Reload the chat panel so the remote /connector page picks up ?theme.
-    window.connector?.windowControl.reloadPanel()
   }
 
   const changeLang = (v: Lang) => {
@@ -717,7 +721,7 @@ export function ControlApp() {
     statusKind === 'ok' ? 'is-ok' : statusKind === 'err' ? 'is-err' : statusKind === 'working' ? 'is-working' : ''
 
   return (
-    <div className={`control-root gy ${resolvedDark ? '' : 'gy--light'}`}>
+    <div className="control-root gy">
       <div className="gy-scroll">
       <div className="gy-wrap">
         <header className="gy-head">
@@ -1574,7 +1578,7 @@ export function ControlApp() {
 
       {/* The same bar the workspace has: this window is the same app, and the
           machine it runs on is the same machine. */}
-      <StatusBar t={t} />
+      <SystemMonitorFooter t={t} />
     </div>
   )
 }

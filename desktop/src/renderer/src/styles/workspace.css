@@ -1,220 +1,252 @@
 /* ─────────────────────────────────────────────────────────────────────────
-   The workspace: sessions, the conversation, the ledger, the status bar.
+   The workspace, in XGen Dex's shape.
 
-   The conversation is the one screen in this app that people READ, so it is
-   built like a document and not like a control panel: one column at a
-   readable measure, hierarchy by weight and space rather than by boxes, and
-   the machine's own output (tool calls, commands, errors) set in monospace so
-   it is visibly not what anyone said.
+   Three columns and a floor, which is the shape Dex settled on and the one a
+   tool like this wants: a 48px activity bar saying which view you are in, a
+   sidebar listing what you can open, the work itself, and a status bar across
+   the bottom that never goes away.
 
-   The tool calls are the reason this shape exists. An agent's turn is a
-   question, then twenty tool calls, then an answer — and the tool calls are
-   scanned, not read. Each is one line, in the flow, with the verdict at the
-   left and the cost at the right, joined by a rail so a run of them reads as
-   one sequence instead of twenty interruptions.
+   The conversation is bubbles, not a document: what a person said on the
+   right in brand colour, what the agent said on the left under its mark.
+   What the agent DID is a different question from what it said, so the tool
+   calls are a timeline of their own — a pill while they are done, a card of
+   colour-badged rows when opened.
    ───────────────────────────────────────────────────────────────────────── */
 
-.gy-chat {
+.workspace {
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-columns: 48px max-content minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) var(--system-footer-h);
   height: 100vh;
   overflow: hidden;
-  background: var(--bg);
-  background-image: var(--bg-veil);
-  background-attachment: fixed;
+  background: var(--app-bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13px;
 }
 
-/* ── sessions rail ────────────────────────────────────────────────────── */
+/* ── activity bar ─────────────────────────────────────────────────────── */
 
-.gy-rail {
+.activity-bar {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0 12px;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  -webkit-app-region: drag;
+}
+
+.activity-bar > * {
+  -webkit-app-region: no-drag;
+}
+
+.ab-logo {
+  width: 26px;
+  height: 26px;
+  margin-bottom: 10px;
+  display: flex;
+}
+
+.ab-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.ab-top {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.ab-bottom {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.ab-btn {
+  position: relative;
+  width: 100%;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+
+.ab-btn:hover {
+  color: var(--text);
+}
+
+.ab-btn.active {
+  color: var(--primary);
+}
+
+/* The 2px bar on the panel-facing edge — the VS Code idiom Dex uses. */
+.ab-ind {
+  position: absolute;
+  left: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--primary-grad);
+}
+
+/* ── sidebar ──────────────────────────────────────────────────────────── */
+
+.sidebar {
+  grid-column: 2;
+  grid-row: 1;
+  width: 264px;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-right: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border-right: 1px solid var(--border);
+  background: var(--panel);
 }
 
-.gy-rail-h {
+.sidebar.hidden {
+  display: none;
+}
+
+.sidebar-title {
+  height: 36px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--s4) var(--s3) var(--s2) var(--s4);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--faint);
+  padding: 0 8px 0 16px;
   -webkit-app-region: drag;
 }
 
-.gy-rail-new {
+.sidebar-title > * {
   -webkit-app-region: no-drag;
-  display: inline-flex;
+}
+
+.sidebar-title-text {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.icon-btn {
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: 1px solid var(--line-strong);
-  border-radius: 7px;
-  background: transparent;
-  color: var(--dim);
-  font-size: 15px;
-  line-height: 1;
-  padding: 0 0 2px;
-  transition: color var(--quick), border-color var(--quick), background var(--quick);
+  padding: 6px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
 }
 
-.gy-rail-new:hover {
+.icon-btn:hover {
+  background: var(--panel-2);
   color: var(--text);
-  border-color: var(--accent);
-  background: var(--accent-wash);
 }
 
-.gy-rail-list {
+.icon-btn.active {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+/* What is running now is a different question from what exists, so it gets
+   its own block above the list. */
+.side-live {
+  flex-shrink: 0;
+  padding: 2px 8px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.side-live-h {
+  padding: 4px 8px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.agent-list {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--s1) var(--s2) var(--s3);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.gy-rail-item {
-  position: relative;
+.agent-item {
   display: flex;
   align-items: center;
-  gap: var(--s2);
+  gap: 9px;
   width: 100%;
   padding: 8px 10px;
-  margin-bottom: 1px;
   border: none;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--dim);
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text);
+  font: inherit;
   text-align: left;
-  transition: background var(--quick), color var(--quick);
+  cursor: pointer;
+  transition: background-color 0.12s ease;
 }
 
-.gy-rail-item:hover {
-  background: var(--hover);
-  color: var(--text);
+.agent-item:hover {
+  background: var(--panel-2);
 }
 
-.gy-rail-item.is-active {
-  background: var(--active);
-  color: var(--text);
+.agent-item.active {
+  background: var(--primary-soft);
 }
 
-/* The active session gets a spine, not a fill — the list is scanned down its
-   left edge, which is where the marker belongs. */
-.gy-rail-item.is-active::before {
-  content: '';
-  position: absolute;
-  left: -2px;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
-  border-radius: var(--r-pill);
-  background: var(--accent);
-}
-
-.gy-rail-dot {
-  width: 6px;
-  height: 6px;
+.agent-dot {
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex: none;
-  background: var(--faint);
+  background: var(--gray-300);
 }
 
-.gy-rail-dot.is-run {
-  background: var(--ok);
-  box-shadow: 0 0 0 3px var(--ok-wash);
-  animation: gy-pulse 1.6s ease-in-out infinite;
+.agent-dot.run {
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 14%, transparent);
+  animation: livePulse 1.6s ease-in-out infinite;
 }
 
-.gy-rail-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+@keyframes livePulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.agent-text {
   flex: 1;
-}
-
-.gy-rail-name {
-  font-size: 12.5px;
-  font-weight: 550;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.gy-rail-env {
-  font-size: 10.5px;
-  color: var(--faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.gy-rail-empty,
-.gy-rail-err {
-  padding: var(--s3) 10px;
-  font-size: 11.5px;
-  color: var(--faint);
-  line-height: 1.5;
-}
-
-.gy-rail-err {
-  color: var(--err);
-}
-
-.gy-rail-foot {
-  flex: none;
-  padding: var(--s3);
-  border: none;
-  border-top: 1px solid var(--line);
-  background: transparent;
-  color: var(--faint);
-  font-size: 11.5px;
-  transition: color var(--quick), background var(--quick);
-}
-
-.gy-rail-foot:hover {
-  color: var(--text);
-  background: var(--hover);
-}
-
-/* ── main column ──────────────────────────────────────────────────────── */
-
-.gy-main {
-  display: flex;
-  flex-direction: column;
   min-width: 0;
-  min-height: 0;
 }
 
-.gy-chat-head {
-  display: flex;
-  align-items: center;
-  gap: var(--s3);
-  flex: none;
-  padding: 0 var(--s4);
-  height: 46px;
-  border-bottom: 1px solid var(--line);
-  -webkit-app-region: drag;
-}
-
-.gy-chat-head > * {
-  -webkit-app-region: no-drag;
-}
-
-.gy-chat-title {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s2);
-  min-width: 0;
-  max-width: 32%;
-}
-
-.gy-chat-name {
+.agent-name {
+  display: block;
   font-size: 13px;
   font-weight: 600;
   overflow: hidden;
@@ -222,62 +254,170 @@
   white-space: nowrap;
 }
 
-.gy-chat-env {
-  font-size: 10.5px;
-  color: var(--faint);
+.agent-meta {
+  display: block;
+  font-size: 11.5px;
+  color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: none;
 }
 
-.gy-head-right {
-  margin-left: auto;
+.side-empty,
+.side-error {
+  padding: 14px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.side-error {
+  color: var(--error);
+}
+
+.side-foot {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: var(--s2);
+  gap: 8px;
+  padding: 10px 14px;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
 }
 
-.gy-chat-toggle {
-  padding: 5px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--dim);
-  font-size: 11.5px;
-  transition: color var(--quick), border-color var(--quick), background var(--quick);
-}
-
-.gy-chat-toggle:hover {
+.side-foot:hover {
+  background: var(--panel-2);
   color: var(--text);
-  background: var(--hover);
 }
 
-.gy-chat-toggle.is-active {
-  color: var(--text);
-  border-color: var(--line-accent);
-  background: var(--accent-wash);
+/* ── main ─────────────────────────────────────────────────────────────── */
+
+.main-pane {
+  grid-column: 3;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 
-.gy-chat-error {
-  margin: var(--s2) var(--s4) 0;
-  padding: 8px 12px;
-  border: 1px solid color-mix(in srgb, var(--err) 35%, transparent);
-  border-radius: var(--r-md);
-  background: var(--err-wash);
-  color: var(--err);
+.chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.chat-header {
+  height: var(--header-h);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  -webkit-app-region: drag;
+}
+
+.chat-header > * {
+  -webkit-app-region: no-drag;
+}
+
+.chat-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.agent-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--primary-grad);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.chat-title-text {
+  min-width: 0;
+}
+
+.chat-title-text strong {
+  display: block;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-title-text .agent-meta {
   font-size: 12px;
 }
 
-.gy-chat-body {
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.chat-hbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.chat-hbtn:hover:not(:disabled) {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.chat-hbtn.on {
+  color: var(--primary);
+}
+
+.chat-banner {
+  margin: 10px 28px 0;
+  padding: 9px 12px;
+  border: 1px solid var(--error-border);
+  border-radius: var(--radius-md);
+  background: var(--error-bg);
+  color: var(--error);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.chat-body {
   flex: 1;
   display: flex;
   min-height: 0;
 }
 
-/* The conversation and its composer are one column. The ledger is a sibling
-   of that column, not of the scroller, so opening it narrows both together. */
-.gy-chat-column {
+.chat-column {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -285,646 +425,590 @@
   min-height: 0;
 }
 
-.gy-chat-scroll {
+.chat-log {
   flex: 1;
-  min-width: 0;
+  min-height: 0;
   overflow-y: auto;
-  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+  /* Scroll anchoring pulls scrollTop back while an answer grows, and that
+     movement reads as "the user scrolled up". Following the bottom is ours. */
+  overflow-anchor: none;
+  padding: 22px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
-.gy-chat-thread {
-  max-width: var(--measure);
-  margin: 0 auto;
-  padding: var(--s6) 0 var(--s8);
+/* ── messages ─────────────────────────────────────────────────────────── */
+
+.msg-row {
+  display: flex;
+  gap: 12px;
+  width: 100%;
 }
 
-.gy-chat-scroll {
-  padding: 0 var(--s6);
+.msg-row.user {
+  flex-direction: row-reverse;
 }
 
-/* ── status lamp ──────────────────────────────────────────────────────── */
+.msg-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
 
-.gy-lamp {
-  display: inline-flex;
-  align-items: center;
+.msg-avatar.assistant {
+  background: var(--primary-grad);
+}
+
+.msg-avatar.user {
+  background: var(--gray-300);
+  color: var(--gray-700);
+}
+
+.msg-col {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
-  font-size: 11.5px;
-  color: var(--faint);
-  white-space: nowrap;
+  min-width: 0;
+  max-width: calc(100% - 44px);
 }
 
-.gy-lamp-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--faint);
+.msg-row.user .msg-col {
+  align-items: flex-end;
+  max-width: 82%;
 }
 
-.gy-lamp.is-ok .gy-lamp-dot {
-  background: var(--ok);
-  box-shadow: 0 0 0 3px var(--ok-wash);
+.msg-time {
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
-.gy-lamp.is-warn .gy-lamp-dot {
-  background: var(--warn);
-  animation: gy-pulse 1.2s ease-in-out infinite;
+.bubble {
+  width: fit-content;
+  max-width: 100%;
+  padding: 11px 15px;
+  border-radius: var(--radius-xl);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.6;
+  font-size: 14px;
 }
 
-.gy-lamp.is-err .gy-lamp-dot {
-  background: var(--err);
+.bubble.user {
+  background: var(--user-bubble);
+  color: var(--user-bubble-text);
+  border-bottom-right-radius: 6px;
 }
 
-/* ── turns ────────────────────────────────────────────────────────────── */
-
-.gy-turn {
-  margin: var(--s5) 0;
-  animation: gy-rise var(--slow) both;
+.bubble.user.pending {
+  opacity: 0.6;
 }
 
-.gy-turn-meta {
+.bubble.assistant {
+  background: var(--assistant-bubble);
+  color: var(--assistant-bubble-text);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 6px;
+  white-space: normal;
+}
+
+.bubble.assistant.error {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+}
+
+/* A failure shows its shape, not one raw line: what happened, with the
+   technical text under it. */
+.chat-error-head {
   display: flex;
   align-items: center;
   gap: 7px;
-  margin-bottom: 6px;
-  font-size: 11px;
-  color: var(--faint);
+  color: var(--error);
+  font-weight: 600;
 }
 
-.gy-turn-who {
-  font-weight: 650;
-  letter-spacing: 0.02em;
-  color: var(--dim);
-}
-
-.gy-turn-time {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  opacity: 0.75;
-}
-
-.gy-turn-avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 17px;
-  height: 17px;
-  border-radius: 5px;
-  background: var(--accent-deep);
-  color: var(--on-accent);
-  font-size: 10px;
-  font-weight: 700;
-  flex: none;
-}
-
-/* What the user said gets a surface: it is the one thing on the page that a
-   person wrote, and finding it again while scrolling back is the most common
-   reason anyone scrolls back. It hugs the text — a five-word question in a
-   740px box reads as an empty box with something lost in it. */
-.gy-turn--user .gy-turn-body {
-  display: inline-block;
-  max-width: 100%;
-  padding: 10px 14px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--line);
-  border-left: 2px solid var(--accent);
-  background: var(--surface);
+.chat-error-body {
+  margin: 7px 0 0;
+  max-height: 180px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-secondary);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-size: 13.5px;
 }
 
-.gy-turn--user.is-pending .gy-turn-body {
-  opacity: 0.55;
-}
-
-/* The answer gets no container at all — it is the page. */
-.gy-turn--agent .gy-turn-body {
-  font-size: 14px;
-  line-height: 1.72;
-  overflow-wrap: anywhere;
-}
-
-/* ── tool steps ───────────────────────────────────────────────────────── */
-
-.gy-steps {
-  position: relative;
-  margin: var(--s3) 0;
-  padding-left: var(--s3);
-}
-
-/* A tool's failure belongs to the call above it, so it sits inside the group
-   and lines up under it rather than interrupting at full width. */
-.gy-steps .gy-notice {
-  margin: 2px 0 var(--s2) var(--s2);
-}
-
-/* One rail behind a run of calls, so twenty of them read as one sequence.
-   It must pass through the CENTRE of the dots: 12px of group padding plus 8px
-   of row padding, minus the 13px the dot is pulled back by, plus half of the
-   6px dot — 10px. Anywhere else it is a stray line beside them. */
-.gy-steps::before {
-  content: '';
-  position: absolute;
-  left: 10px;
-  top: 12px;
-  bottom: 12px;
-  width: 1px;
-  background: var(--line-strong);
-}
-
-.gy-tool + .gy-tool {
-  margin-top: 1px;
-}
-
-.gy-tool-head {
+/* A turn nobody asked for: the agent woke on a schedule. In the flow because
+   it is why the next answer exists; not a bubble, because no one said it. */
+.trigger-row {
   display: flex;
   align-items: center;
-  gap: var(--s2);
-  width: 100%;
-  padding: 4px 8px;
-  border: none;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--dim);
-  font-size: 12px;
-  text-align: left;
-  transition: background var(--quick);
+  gap: 12px;
+  color: var(--muted);
+  font-size: 11.5px;
 }
 
-.gy-tool-head:hover:not(:disabled) {
-  background: var(--hover);
-}
-
-.gy-tool-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex: none;
-  margin-left: -13px;
-  box-shadow: 0 0 0 3px var(--bg);
-}
-
-.gy-tool-dot.is-ok {
-  background: var(--ok);
-}
-
-.gy-tool-dot.is-err {
-  background: var(--err);
-}
-
-.gy-tool-dot.is-pending {
-  background: var(--warn);
-  animation: gy-pulse 1.1s ease-in-out infinite;
-}
-
-.gy-tool-name {
-  flex: none;
-  color: var(--text);
-  font-weight: 600;
-  font-size: 12px;
-}
-
-.gy-tool-text {
+.trigger-row::before,
+.trigger-row::after {
+  content: '';
   flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.chat-empty {
+  margin: auto;
+  padding: 0 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.chat-empty strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 15px;
+}
+
+/* ── the process timeline (what it DID) ───────────────────────────────── */
+
+.ptl {
+  width: 100%;
   min-width: 0;
+}
+
+.ptl-head-toggle {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 5px 12px 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-2);
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.ptl-head-toggle:hover {
+  border-color: var(--primary-soft-border);
+  background: var(--primary-soft);
+}
+
+.ptl.live .ptl-head-toggle {
+  border-color: var(--primary-soft-border);
+  background: var(--primary-soft);
+}
+
+.ptl-head-label {
+  flex: none;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ptl-head-sub {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--faint);
 }
 
-.gy-tool-ms,
-.gy-tool-caret {
+.ptl-chevron {
   flex: none;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--faint);
+  color: var(--muted);
+  font-size: 11px;
 }
 
-.gy-tool-body {
-  margin: var(--s1) 0 var(--s3) var(--s2);
-  animation: gy-rise var(--quick) both;
+.ptl-pulse {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--success);
+  background: rgba(46, 177, 70, 0.14);
+  font-size: 11px;
 }
 
-.gy-tool-label {
-  font-size: 9.5px;
+.ptl.err .ptl-pulse {
+  color: var(--error);
+  background: var(--error-bg);
+}
+
+.ptl.live .ptl-pulse {
+  width: 9px;
+  height: 9px;
+  margin: 0 4px;
+  background: var(--primary);
+  animation: ptl-pulse 1.6s infinite;
+}
+
+@keyframes ptl-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--primary-soft-border);
+  }
+  70% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.ptl-tools {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.ptl-tool + .ptl-tool {
+  border-top: 1px solid var(--border-soft);
+}
+
+.ptl-tool.run {
+  background-color: var(--primary-soft);
+}
+
+.ptl-tool.open {
+  background-color: var(--panel-2);
+}
+
+.ptl-tool-head {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.ptl-tool:not(.run):not(.open) .ptl-tool-head:hover {
+  background: var(--panel-2);
+}
+
+/* A badge per kind of tool, so a run of twenty is scannable by colour before
+   it is readable by name. */
+.ptl-ico {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: #475569;
+  background: rgba(71, 85, 105, 0.1);
+}
+
+.ptl-ico svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ptl-kind-terminal .ptl-ico {
+  color: #334155;
+  background: rgba(51, 65, 85, 0.1);
+}
+
+.ptl-kind-file .ptl-ico {
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.11);
+}
+
+.ptl-kind-edit .ptl-ico {
+  color: #0f766e;
+  background: rgba(13, 148, 136, 0.12);
+}
+
+.ptl-kind-search .ptl-ico {
+  color: #7c3aed;
+  background: rgba(124, 58, 237, 0.11);
+}
+
+.ptl-kind-web .ptl-ico {
+  color: #0e7490;
+  background: rgba(8, 145, 178, 0.12);
+}
+
+.ptl-kind-external .ptl-ico {
+  color: #fff;
+  background: var(--primary-grad);
+}
+
+:root[data-theme='dark'] .ptl-ico {
+  filter: brightness(1.5) saturate(1.1);
+}
+
+.ptl-sum {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ptl-tool.err .ptl-sum {
+  color: var(--error);
+}
+
+.ptl-dur {
+  flex: none;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ptl-dur.slow {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.ptl-dur.err {
+  color: var(--error);
+  background: var(--error-bg);
+}
+
+.ptl-body {
+  padding: 0 12px 12px 48px;
+}
+
+.ptl-label {
+  margin: 8px 0 4px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--faint);
-  margin: var(--s2) 0 4px;
+  color: var(--muted);
 }
 
-.gy-tool-body pre {
+.ptl-body pre {
   margin: 0;
   max-height: 260px;
   overflow: auto;
   padding: 9px 11px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--bg);
-  font-family: var(--mono);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--input-bg);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   line-height: 1.55;
-  color: var(--dim);
+  color: var(--text-secondary);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-/* ── notice: a failure, set apart from the conversation ───────────────── */
-
-.gy-notice {
-  margin: var(--s3) 0;
-  padding: 9px 11px;
-  border: 1px solid color-mix(in srgb, var(--err) 28%, transparent);
-  border-left-width: 2px;
-  border-radius: var(--r-md);
-  background: var(--err-wash);
-}
-
-.gy-notice-h {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 5px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--err);
-}
-
-.gy-notice pre {
-  margin: 0;
-  max-height: 180px;
-  overflow: auto;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  line-height: 1.6;
-  color: var(--dim);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-/* ── a turn nobody asked for ──────────────────────────────────────────── */
-
-.gy-selfstart {
-  display: flex;
-  align-items: center;
-  gap: var(--s3);
-  margin: var(--s6) 0;
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
-  color: var(--faint);
-}
-
-.gy-selfstart::before,
-.gy-selfstart::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--line);
-}
-
-/* ── working / empty ──────────────────────────────────────────────────── */
-
-.gy-working {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  margin: var(--s4) 0;
-  font-size: 12px;
-  color: var(--dim);
-}
-
-.gy-working-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: gy-pulse 1.1s ease-in-out infinite;
-}
-
-.gy-chat-empty {
-  padding: 18vh var(--s5) 0;
-  text-align: center;
-  color: var(--faint);
-  font-size: 12.5px;
-  line-height: 1.7;
-}
-
-.gy-chat-empty-title {
-  color: var(--dim);
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-
-/* ── markdown ─────────────────────────────────────────────────────────── */
-
-.gy-md > :first-child {
-  margin-top: 0;
-}
-
-.gy-md > :last-child {
-  margin-bottom: 0;
-}
-
-.gy-md p {
-  margin: 0.7em 0;
-  white-space: pre-wrap;
-}
-
-.gy-md h1,
-.gy-md h2,
-.gy-md h3,
-.gy-md h4 {
-  margin: 1.5em 0 0.5em;
-  font-size: 14px;
-  font-weight: 650;
-}
-
-.gy-md ul,
-.gy-md ol {
-  margin: 0.7em 0;
-  padding-left: 1.3em;
-}
-
-.gy-md li {
-  margin: 0.25em 0;
-}
-
-.gy-md li::marker {
-  color: var(--faint);
-}
-
-.gy-md blockquote {
-  margin: 0.8em 0;
-  padding-left: 12px;
-  border-left: 2px solid var(--line-strong);
-  color: var(--dim);
-}
-
-.gy-md code {
-  font-family: var(--mono);
-  font-size: 0.87em;
-  padding: 1.5px 5px;
-  border-radius: 5px;
-  background: var(--active);
-  color: var(--text);
-}
-
-.gy-md a {
-  color: var(--accent);
-  text-decoration: none;
-  border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  cursor: pointer;
-}
-
-.gy-md a:hover {
-  border-bottom-color: var(--accent);
-}
-
-.gy-md-code {
-  position: relative;
-  margin: 0.9em 0;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--bg);
-  overflow-x: auto;
-}
-
-.gy-md-code code {
-  background: none;
-  padding: 0;
-  font-size: 12px;
-  line-height: 1.6;
-  color: color-mix(in srgb, var(--text) 88%, transparent);
-}
-
-.gy-md-lang {
-  position: absolute;
-  top: 7px;
-  right: 11px;
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-
-/* ── the route picker in the header ───────────────────────────────────── */
-
-.gy-route {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  min-width: 0;
-}
-
-.gy-route-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  max-width: 280px;
-  padding: 5px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--dim);
-  font-size: 12px;
-  transition: color var(--quick), border-color var(--quick), background var(--quick);
-}
-
-.gy-route-btn:hover:not(:disabled) {
-  color: var(--text);
-  background: var(--hover);
-}
-
-.gy-route-btn:disabled {
-  opacity: 0.45;
-}
-
-.gy-route-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex: none;
-  background: var(--accent);
-}
-
-.gy-route-dot.is-warn {
-  background: var(--warn);
-}
-
-.gy-route-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.gy-route-caret {
-  color: var(--faint);
-  flex: none;
-  font-size: 10px;
-}
-
-.gy-route-answered {
-  font-size: 10.5px;
-  color: var(--warn);
-  white-space: nowrap;
-}
-
-.gy-route-err {
-  font-size: 10.5px;
-  color: var(--err);
 }
 
 /* ── composer ─────────────────────────────────────────────────────────── */
 
-.gy-composer-wrap {
-  flex: none;
-  padding: var(--s3) var(--s6) var(--s2);
+.chat-input {
+  min-height: var(--footer-h);
+  box-sizing: border-box;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding: 9px 28px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
 }
 
-.gy-composer {
+.composer {
   display: flex;
   align-items: flex-end;
-  gap: var(--s2);
-  max-width: var(--measure);
-  margin: 0 auto;
-  padding: 8px 8px 8px 14px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  transition: border-color var(--quick), box-shadow var(--quick);
+  gap: 10px;
+  padding: 5px 5px 5px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--input-bg);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 
-.gy-composer:focus-within {
-  border-color: var(--accent);
-  box-shadow: var(--focus-ring);
+.composer:focus-within {
+  border-color: var(--primary-end);
+  box-shadow: 0 0 0 3px var(--violet-ring);
+  background: var(--panel);
 }
 
-.gy-composer-input {
+.composer-input {
   flex: 1;
   min-width: 0;
-  max-height: 220px;
-  padding: 4px 0;
+  max-height: 150px;
+  padding: 6px 0;
   border: none;
   outline: none;
   resize: none;
   background: transparent;
   color: var(--text);
-  font-size: 13.5px;
-  line-height: 1.6;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.45;
 }
 
-.gy-composer-input::placeholder {
-  color: var(--faint);
+.composer-input::placeholder {
+  color: var(--gray-400);
 }
 
-.gy-composer-btn {
+.composer-send {
   flex: none;
-  padding: 7px 14px;
+  width: 36px;
+  height: 36px;
   border: none;
-  border-radius: var(--r-md);
-  background: var(--accent-deep);
-  color: var(--on-accent);
-  font-size: 12.5px;
-  font-weight: 600;
-  transition: background var(--quick), opacity var(--quick);
+  border-radius: 10px;
+  background: var(--primary-grad);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(48, 94, 235, 0.34);
+  transition: filter 0.15s ease, transform 0.08s ease, opacity 0.15s ease;
 }
 
-.gy-composer-btn:hover:not(:disabled) {
-  background: var(--accent);
+.composer-send:hover:not(:disabled) {
+  filter: brightness(1.1);
 }
 
-.gy-composer-btn:disabled {
-  opacity: 0.35;
+.composer-send:active:not(:disabled) {
+  transform: scale(0.94);
 }
 
-.gy-composer-btn.is-stop {
-  background: var(--err);
+.composer-send:disabled {
+  opacity: 0.4;
+  cursor: default;
+  box-shadow: none;
 }
 
-.gy-composer-hint {
-  max-width: var(--measure);
-  margin: 6px auto 0;
-  font-size: 10.5px;
-  color: var(--faint);
+.composer-send.stop {
+  background: var(--panel);
+  color: var(--error);
+  border: 1px solid var(--error-border);
+  box-shadow: none;
 }
 
-/* ── ledger ───────────────────────────────────────────────────────────── */
+.kbd-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
 
-.gy-ledger {
+.kbd-hint kbd {
+  display: inline-block;
+  margin: 0 1px;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--panel-2);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.kbd-hint .spacer {
+  margin-left: auto;
+}
+
+/* ── the ledger, as a right-hand pane ─────────────────────────────────── */
+
+.work-pane {
   width: 320px;
   flex: none;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-left: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border-left: 1px solid var(--border);
+  background: var(--panel);
 }
 
-.gy-ledger-tabs {
-  display: flex;
-  gap: 2px;
+.work-tabs {
   flex: none;
-  padding: var(--s2) var(--s2) var(--s1);
+  display: flex;
+  gap: 4px;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid var(--border);
 }
 
-.gy-ledger-tab {
+.work-tab {
   flex: 1;
   padding: 5px 0;
   border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--faint);
-  font-size: 11.5px;
-  transition: color var(--quick), background var(--quick);
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
 }
 
-.gy-ledger-tab:hover {
+.work-tab:hover {
   color: var(--text);
 }
 
-.gy-ledger-tab.is-active {
-  color: var(--text);
-  background: var(--active);
+.work-tab.active {
+  border-color: var(--primary-soft-border);
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
-.gy-ledger-body {
+.work-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--s1) var(--s2) var(--s4);
+  padding: 8px 10px 14px;
 }
 
-.gy-ledger-row {
+.work-row {
   display: flex;
   align-items: center;
-  gap: var(--s2);
-  padding: 6px 8px;
-  border-radius: 7px;
-  font-size: 11.5px;
-  color: var(--dim);
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
-.gy-ledger-row.is-column {
+.work-row:hover {
+  background: var(--panel-2);
+}
+
+.work-row.column {
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: 3px;
 }
 
-.gy-ledger-row:hover {
-  background: var(--hover);
-}
-
-.gy-ledger-path {
+.work-path {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -932,133 +1016,416 @@
   white-space: nowrap;
   direction: rtl;
   text-align: left;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 
-.gy-ledger-delta {
+.work-delta {
+  flex: none;
   display: flex;
   gap: 6px;
-  flex: none;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10.5px;
 }
 
-.gy-ledger-delta .is-add {
-  color: var(--ok);
+.work-delta .add {
+  color: var(--success);
 }
 
-.gy-ledger-delta .is-del {
-  color: var(--err);
+.work-delta .del {
+  color: var(--error);
 }
 
-.gy-ledger-delta .is-err {
-  color: var(--warn);
-}
-
-.gy-ledger-row code {
+.work-row code {
   display: block;
   width: 100%;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
+  color: var(--text-secondary);
   overflow-wrap: anywhere;
-  color: var(--dim);
 }
 
-.gy-ledger-row code.is-err {
-  color: var(--err);
+.work-row code.err {
+  color: var(--error);
 }
 
-.gy-ledger-kind {
+.work-kind {
   font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--faint);
+  color: var(--muted);
 }
 
-.gy-ledger-ms {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--faint);
+.work-empty {
+  padding: 14px 8px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
-.gy-ledger-text {
-  color: var(--dim);
-  overflow-wrap: anywhere;
-}
+/* ── system monitor footer ────────────────────────────────────────────── */
 
-/* ── status bar ───────────────────────────────────────────────────────── */
-/* The app runs here even though the agent does not. When the window feels
-   slow the first honest question is whether it is this machine, and a task
-   manager is a bad way to answer it. */
-
-.gy-statusbar {
+.system-monitor-footer {
   grid-column: 1 / -1;
+  grid-row: 2;
+  height: var(--system-footer-h);
   display: flex;
   align-items: center;
-  gap: var(--s3);
-  height: 26px;
-  padding: 0 var(--s3);
-  border-top: 1px solid var(--line);
-  background: var(--surface);
-  font-size: 10.5px;
-  color: var(--faint);
+  justify-content: flex-end;
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
   user-select: none;
 }
 
-.gy-stat {
-  display: inline-flex;
+.system-monitor-state,
+.system-metric {
+  height: 100%;
+  display: flex;
   align-items: center;
+}
+
+.system-monitor-state {
+  margin-right: auto;
   gap: 6px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.system-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 14%, transparent);
+}
+
+.system-monitor-state.offline .system-live-dot {
+  background: var(--error);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--error) 14%, transparent);
+}
+
+.system-monitor-state.busy .system-live-dot {
+  background: var(--warning);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 14%, transparent);
+}
+
+.system-metric {
+  gap: 6px;
+  padding: 0 12px;
+  border-left: 1px solid var(--border-soft);
   white-space: nowrap;
 }
 
-.gy-stat + .gy-stat::before {
-  content: '';
-  width: 1px;
-  height: 11px;
-  margin-right: var(--s1);
-  background: var(--line-strong);
+.system-metric-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
 }
 
-.gy-stat-k {
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  opacity: 0.8;
+.system-metric-value {
+  min-width: 28px;
+  color: var(--text-secondary);
+  font-weight: 650;
 }
 
-.gy-stat-v {
-  font-family: var(--mono);
-  color: var(--dim);
-}
-
-.gy-stat--right {
-  margin-left: auto;
-}
-
-/* A meter, not a chart: the question is "is it busy", not "how busy exactly". */
-.gy-meter {
+.system-meter {
   width: 34px;
-  height: 4px;
-  border-radius: var(--r-pill);
-  background: var(--active);
+  height: 3px;
   overflow: hidden;
-  flex: none;
+  border-radius: 99px;
+  background: var(--border);
 }
 
-.gy-meter i {
+.system-meter > span {
   display: block;
   height: 100%;
-  border-radius: var(--r-pill);
-  background: var(--accent);
-  transition: width var(--slow), background var(--slow);
+  border-radius: inherit;
+  background: var(--primary-grad);
+  transition: width 0.35s ease;
 }
 
-.gy-meter.is-warn i {
-  background: var(--warn);
+@media (max-width: 940px) {
+  .system-metric {
+    padding: 0 8px;
+    gap: 5px;
+  }
+  .system-meter {
+    display: none;
+  }
+  .system-monitor-state > span:last-child {
+    display: none;
+  }
 }
 
-.gy-meter.is-hot i {
-  background: var(--err);
+/* ── the route picker ─────────────────────────────────────────────────── */
+
+.route {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.route-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 260px;
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.route-btn:hover:not(:disabled) {
+  border-color: var(--primary-soft-border);
+  color: var(--text);
+}
+
+.route-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.route-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--success);
+}
+
+.route-dot.warn {
+  background: var(--warning);
+}
+
+.route-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-answered {
+  font-size: 11px;
+  color: var(--warning);
+  white-space: nowrap;
+}
+
+.route-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  min-width: 300px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-lg);
+}
+
+.route-group + .route-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.route-group-h {
+  padding: 7px 10px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.route-item:hover:not(:disabled) {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.route-item.active {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.route-empty {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── new-session modal ────────────────────────────────────────────────── */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(12, 14, 20, 0.45);
+}
+
+.modal-card {
+  width: 400px;
+  max-height: 72vh;
+  overflow-y: auto;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-card);
+}
+
+.modal-title {
+  margin-bottom: 4px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.modal-hint {
+  margin-bottom: 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ── markdown inside the assistant bubble ─────────────────────────────── */
+
+.md > :first-child {
+  margin-top: 0;
+}
+
+.md > :last-child {
+  margin-bottom: 0;
+}
+
+.md p {
+  margin: 0.6em 0;
+  white-space: pre-wrap;
+}
+
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  margin: 1.2em 0 0.45em;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.md ul,
+.md ol {
+  margin: 0.6em 0;
+  padding-left: 1.35em;
+}
+
+.md li {
+  margin: 0.25em 0;
+}
+
+.md li::marker {
+  color: var(--muted);
+}
+
+.md blockquote {
+  margin: 0.7em 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.md code {
+  padding: 1.5px 5px;
+  border-radius: 5px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+}
+
+.bubble.user .md code {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.md a {
+  color: var(--primary);
+  text-decoration: none;
+  border-bottom: 1px solid var(--primary-soft-border);
+  cursor: pointer;
+}
+
+.md a:hover {
+  border-bottom-color: var(--primary);
+}
+
+.md-code {
+  position: relative;
+  margin: 0.8em 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--input-bg);
+  overflow-x: auto;
+}
+
+.md-code code {
+  padding: 0;
+  background: none;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.md-lang {
+  position: absolute;
+  top: 7px;
+  right: 11px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
 }

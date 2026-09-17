@@ -17,7 +17,7 @@ import { agents, type ActivityEntry, type WorkspaceSummary } from '../server'
 type T = (key: string, vars?: Record<string, string | number>) => string
 type View = 'files' | 'commands' | 'log'
 
-export function ActivityPanel({ sessionId, t }: { sessionId: string; t: T }): ReactNode {
+export function WorkPane({ sessionId, t }: { sessionId: string; t: T }): ReactNode {
   const [view, setView] = useState<View>('files')
   const [summary, setSummary] = useState<WorkspaceSummary | null>(null)
   const [entries, setEntries] = useState<ActivityEntry[]>([])
@@ -46,65 +46,65 @@ export function ActivityPanel({ sessionId, t }: { sessionId: string; t: T }): Re
   }, [refresh])
 
   return (
-    <aside className="gy-ledger">
-      <div className="gy-ledger-tabs">
+    <aside className="work-pane">
+      <div className="work-tabs">
         {(['files', 'commands', 'log'] as View[]).map((v) => (
           <button key={v} type="button"
-            className={`gy-ledger-tab ${view === v ? 'is-active' : ''}`}
+            className={`work-tab ${view === v ? 'active' : ''}`}
             onClick={() => setView(v)}>
             {t(`chat.ledger.${v}`)}
           </button>
         ))}
       </div>
-      {error && <div className="gy-rail-err">{error}</div>}
+      {error && <div className="side-error">{error}</div>}
 
       {view === 'files' && (
-        <div className="gy-ledger-body">
+        <div className="work-body">
           {(summary?.files ?? []).map((file) => (
-            <div key={file.path} className="gy-ledger-row">
-              <span className="gy-ledger-path" title={file.path}>{file.path}</span>
-              <span className="gy-ledger-delta">
-                {file.linesAdded > 0 && <span className="is-add">+{file.linesAdded}</span>}
-                {file.linesRemoved > 0 && <span className="is-del">-{file.linesRemoved}</span>}
-                {file.failed > 0 && <span className="is-err">!{file.failed}</span>}
+            <div key={file.path} className="work-row">
+              <span className="work-path" title={file.path}>{file.path}</span>
+              <span className="work-delta">
+                {file.linesAdded > 0 && <span className="add">+{file.linesAdded}</span>}
+                {file.linesRemoved > 0 && <span className="del">-{file.linesRemoved}</span>}
+                {file.failed > 0 && <span className="err">!{file.failed}</span>}
               </span>
             </div>
           ))}
-          {!summary?.files.length && <div className="gy-rail-empty">{t('chat.ledger.noFiles')}</div>}
+          {!summary?.files.length && <div className="work-empty">{t('chat.ledger.noFiles')}</div>}
         </div>
       )}
 
       {view === 'commands' && (
-        <div className="gy-ledger-body">
+        <div className="work-body">
           {(summary?.commands ?? []).map((command) => (
-            <div key={command.seq} className="gy-ledger-row is-column">
-              <code className={command.ok === false ? 'is-err' : ''}>$ {command.command}</code>
+            <div key={command.seq} className="work-row column">
+              <code className={command.ok === false ? 'err' : ''}>$ {command.command}</code>
               {typeof command.durationMs === 'number' && (
-                <span className="gy-ledger-ms">{(command.durationMs / 1000).toFixed(1)}s</span>
+                <span className="work-kind">{(command.durationMs / 1000).toFixed(1)}s</span>
               )}
             </div>
           ))}
-          {!summary?.commands.length && <div className="gy-rail-empty">{t('chat.ledger.noCommands')}</div>}
+          {!summary?.commands.length && <div className="work-empty">{t('chat.ledger.noCommands')}</div>}
         </div>
       )}
 
       {view === 'log' && (
-        <div className="gy-ledger-body">
+        <div className="work-body">
           {entries.map((entry) => (
-            <div key={entry.seq} className="gy-ledger-row is-column">
-              <span className="gy-ledger-kind">
+            <div key={entry.seq} className="work-row column">
+              <span className="work-kind">
                 {entry.role === 'trigger' ? t('chat.ledger.trigger') : entry.kind}
               </span>
-              <span className="gy-ledger-text">
+              <span className="work-text">
                 {entry.text ?? entry.command ?? entry.path ?? entry.detail ?? entry.tool ?? ''}
               </span>
             </div>
           ))}
-          {entries.length === 0 && <div className="gy-rail-empty">{t('chat.ledger.noLog')}</div>}
+          {entries.length === 0 && <div className="work-empty">{t('chat.ledger.noLog')}</div>}
         </div>
       )}
     </aside>
   )
 }
 
-export default ActivityPanel
+export default WorkPane

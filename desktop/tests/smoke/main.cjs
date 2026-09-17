@@ -60,11 +60,12 @@ app.on('ready', async () => {
   await new Promise((resolve) => setTimeout(resolve, 2500))
 
   const probe = await win.webContents.executeJavaScript(`(() => {
-    const composer = document.querySelector('.gy-composer-input')
+    const composer = document.querySelector('.composer-input')
     return {
-      mounted: Boolean(document.querySelector('.gy-chat')),
-      rail: Boolean(document.querySelector('.gy-rail')),
-      header: Boolean(document.querySelector('.gy-chat-head')),
+      mounted: Boolean(document.querySelector('.workspace')),
+      rail: Boolean(document.querySelector('.sidebar')),
+      header: Boolean(document.querySelector('.chat-header')),
+      footer: Boolean(document.querySelector('.system-monitor-footer')),
       composer: Boolean(composer),
       placeholder: composer ? composer.placeholder : '',
       // The window must not render its own key names at the user.
@@ -73,7 +74,7 @@ app.on('ready', async () => {
   })()`)
 
   const failures = []
-  for (const part of ['mounted', 'rail', 'header', 'composer']) {
+  for (const part of ['mounted', 'rail', 'header', 'footer', 'composer']) {
     if (!probe[part]) failures.push(`no ${part}`)
   }
   if (!probe.placeholder) failures.push('the composer has no placeholder')
