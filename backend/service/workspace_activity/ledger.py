@@ -196,6 +196,15 @@ def _kind_before_failure(target: Dict[str, Any]) -> str:
 _TRIGGER = re.compile(r"^\[(THINKING_TRIGGER|autonomous_signal)[:\]]")
 
 
+def _answer_text(message: Any) -> str:
+    """Strip the log's own ``SUCCESS:`` / ``FAILED:`` verdict.
+
+    Same mistake as ``PROMPT:`` at the other end of the turn: it is the log
+    line's word, not the agent's, and left on it reads as part of the answer.
+    """
+    return re.sub(r"^(SUCCESS|FAILED):\s*", "", str(message or ""))
+
+
 def _prompt_text(message: Any) -> str:
     """Strip the log's own ``PROMPT:`` prefix.
 
@@ -270,7 +279,8 @@ def build_activity(
             seq += 1
             activity.append({
                 "seq": seq, "ts": entry.get("timestamp"), "kind": "turn",
-                "role": "assistant", "text": entry.get("message"),
+                "role": "assistant", "text": _answer_text(entry.get("message")),
+                "ok": meta.get("success"),
                 "durationMs": meta.get("duration_ms"),
                 "cost": meta.get("cost_usd"),
             })

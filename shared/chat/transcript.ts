@@ -87,6 +87,16 @@ export function promptText(message: unknown): string {
   return String(message ?? '').replace(/^PROMPT:\s*/, '');
 }
 
+/**
+ * The log's own words for "the turn finished". Like ``PROMPT:`` these belong
+ * to the log line and not to what was said — left on, the answer on screen
+ * reads ``SUCCESS: Error: CLI exited with code 1``, which is both prefixes
+ * lying at once.
+ */
+export function answerText(message: unknown): string {
+  return String(message ?? '').replace(/^(SUCCESS|FAILED):\s*/, '');
+}
+
 /** A turn the agent started by itself, not one anybody asked for. */
 const TRIGGER = /^\[(THINKING_TRIGGER|autonomous_signal)[:\]]/;
 
@@ -159,7 +169,12 @@ export function foldEntry(messages: Message[], entry: LogLike, index = 0): Messa
     return [...messages, { key, role: 'user', text, ts }];
   }
   if (level === 'RESPONSE') {
-    return [...messages, { key, role: 'assistant', text: String(entry.message ?? ''), ts }];
+    const text = answerText(entry.message);
+    // The log knows whether the turn succeeded; a failed one is not something
+    // the agent said, it is something that went wrong. `success` is written
+    // by the server, so believe it over the prefix when both are present.
+    const failed = m.success === false || /^FAILED:/.test(String(entry.message ?? ''));
+    return [...messages, { key, role: failed ? 'notice' : 'assistant', text, ts }];
   }
   if (level === 'TOOL') {
     const { tool, text } = describeTool(entry);

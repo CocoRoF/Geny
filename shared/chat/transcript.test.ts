@@ -227,3 +227,38 @@ test('a trigger never adopts a pending user message', () => {
   assert.equal(after.length, 2, 'the typed one stays typed');
   assert.equal(after[1].role, 'system');
 });
+
+// ── the log's words are not the agent's words ────────────────────────
+// Seen on screen, in production: `SUCCESS: Error: CLI '/usr/bin/claude'
+// exited with code 1`. Two of the log's own prefixes, contradicting each
+// other, in front of an answer that was actually a failure.
+
+test('the answer is not prefixed with the log verdict', () => {
+  const after = foldEntry([], {
+    level: 'RESPONSE', timestamp: 't1', message: 'SUCCESS: 준비됐어.',
+    metadata: { success: true },
+  });
+  assert.equal(after[0].role, 'assistant');
+  assert.equal(after[0].text, '준비됐어.');
+});
+
+test('a failed turn is a failure, not something the agent said', () => {
+  const after = foldEntry([], {
+    level: 'RESPONSE', timestamp: 't1',
+    message: "FAILED: CLI '/usr/bin/claude' exited with code 1",
+    metadata: { success: false },
+  });
+  assert.equal(after[0].role, 'notice');
+  assert.equal(after[0].text, "CLI '/usr/bin/claude' exited with code 1");
+});
+
+test('the server verdict beats the prefix', () => {
+  // The screenshot case: logged as SUCCESS, carrying an error as its output.
+  // `success` is what the server actually decided.
+  const after = foldEntry([], {
+    level: 'RESPONSE', timestamp: 't1', message: 'SUCCESS: Error: exited with code 1',
+    metadata: { success: false },
+  });
+  assert.equal(after[0].role, 'notice');
+  assert.equal(after[0].text, 'Error: exited with code 1');
+});

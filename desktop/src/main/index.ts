@@ -10,6 +10,7 @@ import { driveCapabilities } from './drive-preflight'
 import { randomUUID } from 'crypto'
 import { browserCall, getBrowserControl } from './browser-control'
 import { getWinAutoHost, disposeWinAutoHost } from './winauto-host'
+import { currentSystemStats, startSystemStats, stopSystemStats } from './system-stats'
 
 // Tray icon (32px), embedded so it works regardless of packaging layout.
 // Generated from img/Geny_Charactor_small.png (the Geny mascot).
@@ -1632,6 +1633,7 @@ function forceOverlayInteractive(): void {
 let appQuitting = false
 app.on('before-quit', () => {
   appQuitting = true
+  stopSystemStats()
 })
 
 // ── Geny Drive helpers ───────────────────────────────────────────────────
@@ -2248,6 +2250,10 @@ async function mapImageToScreen(nut: any, x: number, y: number): Promise<{ x: nu
 
 // ── IPC: the connectorBridge surface (preload calls these) ──────────────────
 function registerIpc(): void {
+  // The status bar's first reading — a window that just opened should not
+  // show blanks for two seconds waiting for the first push.
+  ipcMain.handle('system:stats', () => currentSystemStats())
+
   ipcMain.handle('config:get', () => loadConfig())
   ipcMain.handle('config:set', (_e, patch: Partial<ConnectorConfig>) => {
     const prevServer = loadConfig().serverUrl
@@ -3109,6 +3115,7 @@ app.whenReady().then(() => {
   })
 
   registerIpc()
+  startSystemStats()
   // Load the user's local MCP servers into the manager (lazy-connects on use).
   try { getMcpManager().configure(loadConfig().mcpServers) } catch { /* SDK missing */ }
 

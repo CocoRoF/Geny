@@ -84,7 +84,7 @@ class KindInfo:
 KINDS: Dict[str, KindInfo] = {
     "claude_code": KindInfo(
         family="subscription",
-        label="Claude Code (구독 로그인)",
+        label="Claude Code",
         short="Claude Code",
         engine_provider="geny_claude_code",
         secret="none",
@@ -102,7 +102,7 @@ KINDS: Dict[str, KindInfo] = {
     ),
     "codex": KindInfo(
         family="subscription",
-        label="ChatGPT · Codex (구독 로그인)",
+        label="ChatGPT · Codex",
         short="Codex",
         engine_provider="geny_codex",
         secret="oauth",

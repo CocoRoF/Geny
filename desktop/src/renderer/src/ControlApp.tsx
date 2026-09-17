@@ -4,6 +4,7 @@ import type { OverlayTuning, ComputerUseConfig, ConsentMode, MCPServerConfig, MC
 import { makeT, type Lang } from './i18n'
 import ModelsTab from './ModelsTab'
 import AgentsTab from './AgentsTab'
+import StatusBar from './chat/StatusBar'
 
 // Sentinels marking spans that should render as <b> inside an interpolated i18n
 // string (the consent-mode hint bolds the "always ask" / "auto-allow" labels).
@@ -717,6 +718,7 @@ export function ControlApp() {
 
   return (
     <div className={`control-root gy ${resolvedDark ? '' : 'gy--light'}`}>
+      <div className="gy-scroll">
       <div className="gy-wrap">
         <header className="gy-head">
           <img className="gy-logo" src={genyIcon} alt="Geny" draggable={false} />
@@ -1568,6 +1570,11 @@ export function ControlApp() {
           </>
         )}
       </div>
+      </div>
+
+      {/* The same bar the workspace has: this window is the same app, and the
+          machine it runs on is the same machine. */}
+      <StatusBar t={t} />
     </div>
   )
 }

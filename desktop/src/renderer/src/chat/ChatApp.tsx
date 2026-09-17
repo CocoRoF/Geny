@@ -25,6 +25,7 @@ import {
 } from '../server'
 import ActivityPanel from './ActivityPanel'
 import RouteBar from './RouteBar'
+import StatusBar from './StatusBar'
 import Transcript from './Transcript'
 import { useSession } from './useSession'
 
@@ -48,7 +49,7 @@ function StateLamp({ state, running, t }: {
     : state === 'offline' ? t('chat.state.offline')
     : t('chat.state.reconnecting')
   return (
-    <span className={`gy-lamp ${tone}`}>
+    <span className={`gy-stat gy-lamp ${tone}`}>
       <span className="gy-lamp-dot" />
       {label}
     </span>
@@ -219,10 +220,12 @@ export function ChatApp(): ReactNode {
               onClick={() => setSessionId(session.session_id)}
             >
               <span className={`gy-rail-dot ${session.status === 'running' ? 'is-run' : ''}`} />
-              <span className="gy-rail-name">
-                {session.session_name || session.session_id.slice(0, 8)}
+              <span className="gy-rail-text">
+                <span className="gy-rail-name">
+                  {session.session_name || session.session_id.slice(0, 8)}
+                </span>
+                {session.env_name && <span className="gy-rail-env">{session.env_name}</span>}
               </span>
-              {session.env_name && <span className="gy-rail-env">{session.env_name}</span>}
             </button>
           ))}
           {list.length === 0 && !listError && (
@@ -237,18 +240,19 @@ export function ChatApp(): ReactNode {
       <main className="gy-main">
         <header className="gy-chat-head">
           <div className="gy-chat-title">
-            {current?.session_name || t('chat.untitled')}
+            <span className="gy-chat-name">{current?.session_name || t('chat.untitled')}</span>
             {current?.env_name && <span className="gy-chat-env">{current.env_name}</span>}
           </div>
-          <RouteBar sessionId={sessionId} t={t} />
-          <StateLamp state={live.state} running={live.running} t={t} />
-          <button
-            type="button"
-            className={`gy-chat-toggle ${showActivity ? 'is-active' : ''}`}
-            onClick={() => setShowActivity((v) => !v)}
-          >
-            {t('chat.activity')}
-          </button>
+          <div className="gy-head-right">
+            <RouteBar sessionId={sessionId} t={t} />
+            <button
+              type="button"
+              className={`gy-chat-toggle ${showActivity ? 'is-active' : ''}`}
+              onClick={() => setShowActivity((v) => !v)}
+            >
+              {t('chat.activity')}
+            </button>
+          </div>
         </header>
 
         {live.error && (
@@ -259,15 +263,18 @@ export function ChatApp(): ReactNode {
         )}
 
         <div className="gy-chat-body">
-          <div className="gy-chat-scroll" ref={scroller} onScroll={onScroll}>
-            <div className="gy-chat-thread">
-              <Transcript messages={live.messages} running={live.running} loading={live.loading} t={t} />
+          {/* The conversation and the box you type into are one column, so
+              opening the ledger moves them together instead of leaving the
+              composer centred under a width the text no longer has. */}
+          <div className="gy-chat-column">
+            <div className="gy-chat-scroll" ref={scroller} onScroll={onScroll}>
+              <div className="gy-chat-thread">
+                <Transcript messages={live.messages} running={live.running} loading={live.loading} t={t} />
+              </div>
             </div>
-          </div>
-          {showActivity && sessionId && <ActivityPanel sessionId={sessionId} t={t} />}
-        </div>
 
-        <footer className="gy-composer">
+            <footer className="gy-composer-wrap">
+          <div className="gy-composer">
           <textarea
             ref={composer}
             className="gy-composer-input"
@@ -293,9 +300,15 @@ export function ChatApp(): ReactNode {
               {t('chat.send')}
             </button>
           )}
-        </footer>
-        <div className="gy-composer-hint">{t('chat.composerHint')}</div>
+          </div>
+              <div className="gy-composer-hint">{t('chat.composerHint')}</div>
+            </footer>
+          </div>
+          {showActivity && sessionId && <ActivityPanel sessionId={sessionId} t={t} />}
+        </div>
       </main>
+
+      <StatusBar t={t} left={<StateLamp state={live.state} running={live.running} t={t} />} />
 
       {creating && (
         <div className="gy-modal" role="dialog">

@@ -1,0 +1,134 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   The design system.
+
+   Everything visible in this app resolves to a token here. That is the point:
+   the previous sheet mixed literal colours with variables and grew a second
+   palette for every new panel, so "dark" meant four different greys and the
+   light theme was whatever the dark one looked like with the values flipped.
+
+   The language:
+
+   · Neutrals are near-black with a trace of blue, so the one warm accent
+     reads as the only colour on the screen and therefore as meaning.
+   · Separation comes from SURFACE and SPACE, not from borders. A 1px line is
+     for edges that carry structure (a rail, a header), not for wrapping every
+     box in a rectangle.
+   · Two families and nothing else: proportional for what a person or a model
+     wrote, monospace for what the machine produced (paths, commands, ids,
+     numbers that should line up). The distinction is information.
+   · Everything sits on a 4px grid.
+   ───────────────────────────────────────────────────────────────────────── */
+
+.gy {
+  /* ── surfaces ──────────────────────────────────────────────────────── */
+  --bg: #0c0d11;
+  --bg-veil: radial-gradient(120% 80% at 50% -20%, #16181f 0%, #0c0d11 60%);
+  --surface: #111318;
+  --surface-2: #161920;
+  --raised: #1b1f27;
+  --overlay: #1a1d25;
+
+  /* ── lines ─────────────────────────────────────────────────────────── */
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.13);
+  --line-accent: rgba(124, 140, 255, 0.45);
+
+  /* ── ink ───────────────────────────────────────────────────────────── */
+  --text: #eceef3;
+  --dim: #9aa1af;
+  --faint: #656c7b;
+  --on-accent: #ffffff;
+
+  /* ── meaning ───────────────────────────────────────────────────────── */
+  --accent: #7c8cff;
+  --accent-deep: #5b6bf0;
+  --accent-wash: rgba(124, 140, 255, 0.12);
+  --ok: #4ade80;
+  --ok-wash: rgba(74, 222, 128, 0.12);
+  --warn: #f5b64a;
+  --warn-wash: rgba(245, 182, 74, 0.12);
+  --err: #fb7185;
+  --err-wash: rgba(251, 113, 133, 0.11);
+
+  /* ── interaction ───────────────────────────────────────────────────── */
+  --hover: rgba(255, 255, 255, 0.045);
+  --active: rgba(255, 255, 255, 0.08);
+  --focus-ring: 0 0 0 3px rgba(124, 140, 255, 0.28);
+
+  /* ── depth (used sparingly: menus and modals only) ─────────────────── */
+  --lift: 0 16px 40px -12px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.4);
+
+  /* ── shape ─────────────────────────────────────────────────────────── */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+
+  /* ── space (4px grid) ──────────────────────────────────────────────── */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 20px;
+  --s6: 24px;
+  --s8: 32px;
+
+  /* The reading column. The conversation and the composer under it are the
+     same width, or the box you type into does not line up with the words it
+     produced. */
+  --measure: 740px;
+
+  /* ── type ──────────────────────────────────────────────────────────── */
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Pretendard',
+    'Apple SD Gothic Neo', 'Malgun Gothic', Roboto, sans-serif;
+  --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Mono', Menlo,
+    Consolas, 'D2Coding', monospace;
+
+  /* ── motion ────────────────────────────────────────────────────────── */
+  --quick: 130ms cubic-bezier(0.32, 0.72, 0, 1);
+  --slow: 220ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Light is its own palette, not the dark one inverted. Warm paper, real ink,
+   and a deeper accent so it still reads as the only colour — the previous
+   light theme was grey text on grey card on grey page, which is the washed
+   look the whole screen had. */
+.gy.gy--light {
+  --bg: #f4f5f8;
+  --bg-veil: radial-gradient(120% 80% at 50% -20%, #ffffff 0%, #eef0f4 65%);
+  --surface: #ffffff;
+  --surface-2: #f7f8fa;
+  --raised: #ffffff;
+  --overlay: #ffffff;
+
+  --line: rgba(16, 20, 28, 0.09);
+  --line-strong: rgba(16, 20, 28, 0.17);
+  --line-accent: rgba(79, 91, 213, 0.4);
+
+  --text: #14171d;
+  --dim: #58606e;
+  --faint: #8790a0;
+
+  --accent: #4f5bd5;
+  --accent-deep: #3f49b8;
+  --accent-wash: rgba(79, 91, 213, 0.09);
+  --ok: #0f9d58;
+  --ok-wash: rgba(15, 157, 88, 0.1);
+  --warn: #b26a00;
+  --warn-wash: rgba(178, 106, 0, 0.1);
+  --err: #d33a4b;
+  --err-wash: rgba(211, 58, 75, 0.09);
+
+  --hover: rgba(16, 20, 28, 0.04);
+  --active: rgba(16, 20, 28, 0.07);
+  --focus-ring: 0 0 0 3px rgba(79, 91, 213, 0.2);
+  --lift: 0 16px 40px -14px rgba(16, 20, 28, 0.22), 0 2px 6px rgba(16, 20, 28, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gy * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

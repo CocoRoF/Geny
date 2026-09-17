@@ -79,6 +79,19 @@ export interface ConnectorConfig {
   mcpServers?: MCPServerConfig[]
 }
 
+export interface SystemStats {
+  /** 0-100, all cores, over the last sample interval. */
+  cpu: number
+  /** Bytes. */
+  memUsed: number
+  memTotal: number
+  /** The connector's own resident memory, in bytes. */
+  appMem: number
+  cores: number
+  /** 1-minute load average; 0 on Windows, which keeps none. */
+  load1: number
+}
+
 export interface ConnectorBridge {
   /** Which window this renderer is: 'overlay' (avatar), 'settings'/'control', or
    *  'quickchat' (the floating Spotlight-style input bar). */
@@ -97,6 +110,13 @@ export interface ConnectorBridge {
   /** OS-derived default UI language ('ko' if the OS locale starts with "ko",
    *  else 'en'). The settings window uses this when config.lang is unset. */
   appDefaultLang(): Promise<'ko' | 'en'>
+
+  /** This machine, for the status bar. `get()` is the first reading (so a
+   *  fresh window shows numbers immediately); `onChange` is the 2s push. */
+  system: {
+    get(): Promise<SystemStats>
+    onChange(cb: (stats: SystemStats) => void): () => void
+  }
 
   serverConfig: {
     get(): Promise<ConnectorConfig>
@@ -416,6 +436,14 @@ const api: ConnectorBridge = {
     get: () => ipcRenderer.invoke('debug:get'),
   },
   appDefaultLang: () => ipcRenderer.invoke('i18n:default-lang'),
+  system: {
+    get: () => ipcRenderer.invoke('system:stats'),
+    onChange: (cb) => {
+      const h = (_e: unknown, stats: SystemStats) => cb(stats)
+      ipcRenderer.on('system:stats', h)
+      return () => ipcRenderer.removeListener('system:stats', h)
+    },
+  },
   serverConfig: {
     get: () => ipcRenderer.invoke('config:get'),
     set: (patch) => ipcRenderer.invoke('config:set', patch),

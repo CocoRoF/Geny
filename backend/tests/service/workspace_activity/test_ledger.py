@@ -249,3 +249,20 @@ class TestWhatWasAsked:
         log(_entry("COMMAND", "just this", {}))
         turns = [e for e in build_activity("s")["entries"] if e["kind"] == "turn"]
         assert turns[0]["text"] == "just this"
+
+
+def test_the_answer_is_not_prefixed_with_the_log_verdict(log) -> None:
+    """`SUCCESS:` is the log line's word for "the turn finished", not part of
+    what the agent said. On screen it read `SUCCESS: Error: CLI exited with
+    code 1` — both of the log's prefixes, disagreeing, in front of a failure."""
+    log(_entry("RESPONSE", "SUCCESS: 준비됐어.", {"success": True}))
+    turns = [e for e in build_activity("s")["entries"] if e["kind"] == "turn"]
+    assert turns[0]["text"] == "준비됐어."
+    assert turns[0]["ok"] is True
+
+
+def test_a_failed_turn_says_so(log) -> None:
+    log(_entry("RESPONSE", "FAILED: exited with code 1", {"success": False}))
+    turns = [e for e in build_activity("s")["entries"] if e["kind"] == "turn"]
+    assert turns[0]["text"] == "exited with code 1"
+    assert turns[0]["ok"] is False

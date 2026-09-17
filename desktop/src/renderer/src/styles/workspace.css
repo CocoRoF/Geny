@@ -1,0 +1,1064 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   The workspace: sessions, the conversation, the ledger, the status bar.
+
+   The conversation is the one screen in this app that people READ, so it is
+   built like a document and not like a control panel: one column at a
+   readable measure, hierarchy by weight and space rather than by boxes, and
+   the machine's own output (tool calls, commands, errors) set in monospace so
+   it is visibly not what anyone said.
+
+   The tool calls are the reason this shape exists. An agent's turn is a
+   question, then twenty tool calls, then an answer — and the tool calls are
+   scanned, not read. Each is one line, in the flow, with the verdict at the
+   left and the cost at the right, joined by a rail so a run of them reads as
+   one sequence instead of twenty interruptions.
+   ───────────────────────────────────────────────────────────────────────── */
+
+.gy-chat {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+  background-image: var(--bg-veil);
+  background-attachment: fixed;
+}
+
+/* ── sessions rail ────────────────────────────────────────────────────── */
+
+.gy-rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+}
+
+.gy-rail-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--s4) var(--s3) var(--s2) var(--s4);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  -webkit-app-region: drag;
+}
+
+.gy-rail-new {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--dim);
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 0 2px;
+  transition: color var(--quick), border-color var(--quick), background var(--quick);
+}
+
+.gy-rail-new:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+
+.gy-rail-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--s1) var(--s2) var(--s3);
+}
+
+.gy-rail-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 1px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--dim);
+  text-align: left;
+  transition: background var(--quick), color var(--quick);
+}
+
+.gy-rail-item:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.gy-rail-item.is-active {
+  background: var(--active);
+  color: var(--text);
+}
+
+/* The active session gets a spine, not a fill — the list is scanned down its
+   left edge, which is where the marker belongs. */
+.gy-rail-item.is-active::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+}
+
+.gy-rail-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--faint);
+}
+
+.gy-rail-dot.is-run {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px var(--ok-wash);
+  animation: gy-pulse 1.6s ease-in-out infinite;
+}
+
+.gy-rail-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.gy-rail-name {
+  font-size: 12.5px;
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gy-rail-env {
+  font-size: 10.5px;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gy-rail-empty,
+.gy-rail-err {
+  padding: var(--s3) 10px;
+  font-size: 11.5px;
+  color: var(--faint);
+  line-height: 1.5;
+}
+
+.gy-rail-err {
+  color: var(--err);
+}
+
+.gy-rail-foot {
+  flex: none;
+  padding: var(--s3);
+  border: none;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  color: var(--faint);
+  font-size: 11.5px;
+  transition: color var(--quick), background var(--quick);
+}
+
+.gy-rail-foot:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+/* ── main column ──────────────────────────────────────────────────────── */
+
+.gy-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.gy-chat-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex: none;
+  padding: 0 var(--s4);
+  height: 46px;
+  border-bottom: 1px solid var(--line);
+  -webkit-app-region: drag;
+}
+
+.gy-chat-head > * {
+  -webkit-app-region: no-drag;
+}
+
+.gy-chat-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  min-width: 0;
+  max-width: 32%;
+}
+
+.gy-chat-name {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gy-chat-env {
+  font-size: 10.5px;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: none;
+}
+
+.gy-head-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.gy-chat-toggle {
+  padding: 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dim);
+  font-size: 11.5px;
+  transition: color var(--quick), border-color var(--quick), background var(--quick);
+}
+
+.gy-chat-toggle:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.gy-chat-toggle.is-active {
+  color: var(--text);
+  border-color: var(--line-accent);
+  background: var(--accent-wash);
+}
+
+.gy-chat-error {
+  margin: var(--s2) var(--s4) 0;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--err) 35%, transparent);
+  border-radius: var(--r-md);
+  background: var(--err-wash);
+  color: var(--err);
+  font-size: 12px;
+}
+
+.gy-chat-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* The conversation and its composer are one column. The ledger is a sibling
+   of that column, not of the scroller, so opening it narrows both together. */
+.gy-chat-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.gy-chat-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+.gy-chat-thread {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: var(--s6) 0 var(--s8);
+}
+
+.gy-chat-scroll {
+  padding: 0 var(--s6);
+}
+
+/* ── status lamp ──────────────────────────────────────────────────────── */
+
+.gy-lamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.gy-lamp-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+.gy-lamp.is-ok .gy-lamp-dot {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px var(--ok-wash);
+}
+
+.gy-lamp.is-warn .gy-lamp-dot {
+  background: var(--warn);
+  animation: gy-pulse 1.2s ease-in-out infinite;
+}
+
+.gy-lamp.is-err .gy-lamp-dot {
+  background: var(--err);
+}
+
+/* ── turns ────────────────────────────────────────────────────────────── */
+
+.gy-turn {
+  margin: var(--s5) 0;
+  animation: gy-rise var(--slow) both;
+}
+
+.gy-turn-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.gy-turn-who {
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--dim);
+}
+
+.gy-turn-time {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  opacity: 0.75;
+}
+
+.gy-turn-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 5px;
+  background: var(--accent-deep);
+  color: var(--on-accent);
+  font-size: 10px;
+  font-weight: 700;
+  flex: none;
+}
+
+/* What the user said gets a surface: it is the one thing on the page that a
+   person wrote, and finding it again while scrolling back is the most common
+   reason anyone scrolls back. It hugs the text — a five-word question in a
+   740px box reads as an empty box with something lost in it. */
+.gy-turn--user .gy-turn-body {
+  display: inline-block;
+  max-width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--surface);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13.5px;
+}
+
+.gy-turn--user.is-pending .gy-turn-body {
+  opacity: 0.55;
+}
+
+/* The answer gets no container at all — it is the page. */
+.gy-turn--agent .gy-turn-body {
+  font-size: 14px;
+  line-height: 1.72;
+  overflow-wrap: anywhere;
+}
+
+/* ── tool steps ───────────────────────────────────────────────────────── */
+
+.gy-steps {
+  position: relative;
+  margin: var(--s3) 0;
+  padding-left: var(--s3);
+}
+
+/* A tool's failure belongs to the call above it, so it sits inside the group
+   and lines up under it rather than interrupting at full width. */
+.gy-steps .gy-notice {
+  margin: 2px 0 var(--s2) var(--s2);
+}
+
+/* One rail behind a run of calls, so twenty of them read as one sequence.
+   It must pass through the CENTRE of the dots: 12px of group padding plus 8px
+   of row padding, minus the 13px the dot is pulled back by, plus half of the
+   6px dot — 10px. Anywhere else it is a stray line beside them. */
+.gy-steps::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 12px;
+  bottom: 12px;
+  width: 1px;
+  background: var(--line-strong);
+}
+
+.gy-tool + .gy-tool {
+  margin-top: 1px;
+}
+
+.gy-tool-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--dim);
+  font-size: 12px;
+  text-align: left;
+  transition: background var(--quick);
+}
+
+.gy-tool-head:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.gy-tool-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  margin-left: -13px;
+  box-shadow: 0 0 0 3px var(--bg);
+}
+
+.gy-tool-dot.is-ok {
+  background: var(--ok);
+}
+
+.gy-tool-dot.is-err {
+  background: var(--err);
+}
+
+.gy-tool-dot.is-pending {
+  background: var(--warn);
+  animation: gy-pulse 1.1s ease-in-out infinite;
+}
+
+.gy-tool-name {
+  flex: none;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.gy-tool-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+.gy-tool-ms,
+.gy-tool-caret {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.gy-tool-body {
+  margin: var(--s1) 0 var(--s3) var(--s2);
+  animation: gy-rise var(--quick) both;
+}
+
+.gy-tool-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin: var(--s2) 0 4px;
+}
+
+.gy-tool-body pre {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--dim);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ── notice: a failure, set apart from the conversation ───────────────── */
+
+.gy-notice {
+  margin: var(--s3) 0;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--err) 28%, transparent);
+  border-left-width: 2px;
+  border-radius: var(--r-md);
+  background: var(--err-wash);
+}
+
+.gy-notice-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--err);
+}
+
+.gy-notice pre {
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--dim);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ── a turn nobody asked for ──────────────────────────────────────────── */
+
+.gy-selfstart {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin: var(--s6) 0;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+}
+
+.gy-selfstart::before,
+.gy-selfstart::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+/* ── working / empty ──────────────────────────────────────────────────── */
+
+.gy-working {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin: var(--s4) 0;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.gy-working-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: gy-pulse 1.1s ease-in-out infinite;
+}
+
+.gy-chat-empty {
+  padding: 18vh var(--s5) 0;
+  text-align: center;
+  color: var(--faint);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.gy-chat-empty-title {
+  color: var(--dim);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+/* ── markdown ─────────────────────────────────────────────────────────── */
+
+.gy-md > :first-child {
+  margin-top: 0;
+}
+
+.gy-md > :last-child {
+  margin-bottom: 0;
+}
+
+.gy-md p {
+  margin: 0.7em 0;
+  white-space: pre-wrap;
+}
+
+.gy-md h1,
+.gy-md h2,
+.gy-md h3,
+.gy-md h4 {
+  margin: 1.5em 0 0.5em;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.gy-md ul,
+.gy-md ol {
+  margin: 0.7em 0;
+  padding-left: 1.3em;
+}
+
+.gy-md li {
+  margin: 0.25em 0;
+}
+
+.gy-md li::marker {
+  color: var(--faint);
+}
+
+.gy-md blockquote {
+  margin: 0.8em 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--line-strong);
+  color: var(--dim);
+}
+
+.gy-md code {
+  font-family: var(--mono);
+  font-size: 0.87em;
+  padding: 1.5px 5px;
+  border-radius: 5px;
+  background: var(--active);
+  color: var(--text);
+}
+
+.gy-md a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  cursor: pointer;
+}
+
+.gy-md a:hover {
+  border-bottom-color: var(--accent);
+}
+
+.gy-md-code {
+  position: relative;
+  margin: 0.9em 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  overflow-x: auto;
+}
+
+.gy-md-code code {
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: color-mix(in srgb, var(--text) 88%, transparent);
+}
+
+.gy-md-lang {
+  position: absolute;
+  top: 7px;
+  right: 11px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ── the route picker in the header ───────────────────────────────────── */
+
+.gy-route {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.gy-route-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 280px;
+  padding: 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dim);
+  font-size: 12px;
+  transition: color var(--quick), border-color var(--quick), background var(--quick);
+}
+
+.gy-route-btn:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.gy-route-btn:disabled {
+  opacity: 0.45;
+}
+
+.gy-route-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--accent);
+}
+
+.gy-route-dot.is-warn {
+  background: var(--warn);
+}
+
+.gy-route-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gy-route-caret {
+  color: var(--faint);
+  flex: none;
+  font-size: 10px;
+}
+
+.gy-route-answered {
+  font-size: 10.5px;
+  color: var(--warn);
+  white-space: nowrap;
+}
+
+.gy-route-err {
+  font-size: 10.5px;
+  color: var(--err);
+}
+
+/* ── composer ─────────────────────────────────────────────────────────── */
+
+.gy-composer-wrap {
+  flex: none;
+  padding: var(--s3) var(--s6) var(--s2);
+}
+
+.gy-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--s2);
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  transition: border-color var(--quick), box-shadow var(--quick);
+}
+
+.gy-composer:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.gy-composer-input {
+  flex: 1;
+  min-width: 0;
+  max-height: 220px;
+  padding: 4px 0;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.gy-composer-input::placeholder {
+  color: var(--faint);
+}
+
+.gy-composer-btn {
+  flex: none;
+  padding: 7px 14px;
+  border: none;
+  border-radius: var(--r-md);
+  background: var(--accent-deep);
+  color: var(--on-accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: background var(--quick), opacity var(--quick);
+}
+
+.gy-composer-btn:hover:not(:disabled) {
+  background: var(--accent);
+}
+
+.gy-composer-btn:disabled {
+  opacity: 0.35;
+}
+
+.gy-composer-btn.is-stop {
+  background: var(--err);
+}
+
+.gy-composer-hint {
+  max-width: var(--measure);
+  margin: 6px auto 0;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+/* ── ledger ───────────────────────────────────────────────────────────── */
+
+.gy-ledger {
+  width: 320px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+}
+
+.gy-ledger-tabs {
+  display: flex;
+  gap: 2px;
+  flex: none;
+  padding: var(--s2) var(--s2) var(--s1);
+}
+
+.gy-ledger-tab {
+  flex: 1;
+  padding: 5px 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 11.5px;
+  transition: color var(--quick), background var(--quick);
+}
+
+.gy-ledger-tab:hover {
+  color: var(--text);
+}
+
+.gy-ledger-tab.is-active {
+  color: var(--text);
+  background: var(--active);
+}
+
+.gy-ledger-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--s1) var(--s2) var(--s4);
+}
+
+.gy-ledger-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 6px 8px;
+  border-radius: 7px;
+  font-size: 11.5px;
+  color: var(--dim);
+}
+
+.gy-ledger-row.is-column {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.gy-ledger-row:hover {
+  background: var(--hover);
+}
+
+.gy-ledger-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.gy-ledger-delta {
+  display: flex;
+  gap: 6px;
+  flex: none;
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+.gy-ledger-delta .is-add {
+  color: var(--ok);
+}
+
+.gy-ledger-delta .is-del {
+  color: var(--err);
+}
+
+.gy-ledger-delta .is-err {
+  color: var(--warn);
+}
+
+.gy-ledger-row code {
+  display: block;
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  color: var(--dim);
+}
+
+.gy-ledger-row code.is-err {
+  color: var(--err);
+}
+
+.gy-ledger-kind {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.gy-ledger-ms {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.gy-ledger-text {
+  color: var(--dim);
+  overflow-wrap: anywhere;
+}
+
+/* ── status bar ───────────────────────────────────────────────────────── */
+/* The app runs here even though the agent does not. When the window feels
+   slow the first honest question is whether it is this machine, and a task
+   manager is a bad way to answer it. */
+
+.gy-statusbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  height: 26px;
+  padding: 0 var(--s3);
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 10.5px;
+  color: var(--faint);
+  user-select: none;
+}
+
+.gy-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.gy-stat + .gy-stat::before {
+  content: '';
+  width: 1px;
+  height: 11px;
+  margin-right: var(--s1);
+  background: var(--line-strong);
+}
+
+.gy-stat-k {
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.gy-stat-v {
+  font-family: var(--mono);
+  color: var(--dim);
+}
+
+.gy-stat--right {
+  margin-left: auto;
+}
+
+/* A meter, not a chart: the question is "is it busy", not "how busy exactly". */
+.gy-meter {
+  width: 34px;
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--active);
+  overflow: hidden;
+  flex: none;
+}
+
+.gy-meter i {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  transition: width var(--slow), background var(--slow);
+}
+
+.gy-meter.is-warn i {
+  background: var(--warn);
+}
+
+.gy-meter.is-hot i {
+  background: var(--err);
+}

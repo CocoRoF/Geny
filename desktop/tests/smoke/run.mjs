@@ -20,9 +20,11 @@ const env = { ...process.env }
 delete env.ELECTRON_RUN_AS_NODE
 
 // `--live` swaps the app's entry point: same window, real server behind it.
-const live = process.argv.includes('--live')
+// `--shot` writes a PNG of it, because a design cannot be reviewed by
+// reading its stylesheet.
 const args = [here, '--no-sandbox', ...process.argv.slice(2)]
-if (live) env.GENY_SMOKE_ENTRY = 'live'
+if (process.argv.includes('--live')) env.GENY_SMOKE_ENTRY = 'live'
+if (process.argv.includes('--shot')) env.GENY_SMOKE_ENTRY = 'shot'
 
 const child = spawn(electron, args, { stdio: 'inherit', env })
 child.on('exit', (code, signal) => process.exit(code ?? (signal ? 1 : 0)))

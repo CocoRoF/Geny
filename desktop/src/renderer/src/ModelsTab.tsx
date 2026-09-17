@@ -28,6 +28,17 @@ const SUBSCRIPTION: ReadonlySet<AccountKind> = new Set<AccountKind>(['claude_cod
 
 interface Family { id: string; label: string }
 
+/**
+ * A status colour is a claim. Green has to mean "this answered when we asked
+ * it", not "this row exists" — a page where every account is green says
+ * nothing, and says it loudly.
+ */
+function tone(account: LlmAccount): string {
+  if (account.status?.ok === true) return 'is-ok'
+  if (account.status?.ok === false) return 'is-err'
+  return ''
+}
+
 interface LoginState {
   account: LlmAccount
   jobId: string | null
@@ -235,7 +246,7 @@ export function ModelsTab({ t }: { t: T }): ReactNode {
         ) : (
           enabled.map((account, index) => (
             <div className="gy-row" key={account.id}>
-              <span className={`gy-pill grow ${account.status?.ok === false ? 'is-err' : 'is-ok'}`}>
+              <span className={`gy-pill grow ${tone(account)}`}>
                 <span className="gy-dot" />
                 <span className="gy-msg">
                   {index + 1}. {account.label}
@@ -259,10 +270,10 @@ export function ModelsTab({ t }: { t: T }): ReactNode {
             const mine = list.filter((a) => a.kind === kind)
             return (
               <section className="gy-card" key={kind}>
-                <div className="gy-card-h">
-                  {info.label}
+                <div className="gy-card-title">
+                  <span>{info.label}</span>
                   {mine.length > 0 && (
-                    <span style={{ marginLeft: 'auto', fontWeight: 400 }}>
+                    <span className="gy-card-note">
                       {t('models.accountCount', { n: mine.length })}
                     </span>
                   )}
@@ -273,7 +284,7 @@ export function ModelsTab({ t }: { t: T }): ReactNode {
                   <div key={account.id}>
                     <div className="gy-spacer" />
                     <div className="gy-row">
-                      <span className={`gy-pill grow ${account.enabled ? (account.status?.ok === false ? 'is-err' : 'is-ok') : ''}`}>
+                      <span className={`gy-pill grow ${account.enabled ? tone(account) : ''}`}>
                         <span className="gy-dot" />
                         <span className="gy-msg">
                           {account.label}

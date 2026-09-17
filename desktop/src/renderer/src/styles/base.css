@@ -1,0 +1,156 @@
+/* Reset, page, scrollbars, focus. Nothing decorative lives here. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--sans, sans-serif);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.gy {
+  font-family: var(--sans);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+  /* Korean text sits better with a hair of extra tracking at small sizes;
+     the browser default crowds 한글 next to Latin. */
+  letter-spacing: -0.003em;
+  font-variant-numeric: tabular-nums;
+}
+
+.gy h1,
+.gy h2,
+.gy h3,
+.gy h4 {
+  margin: 0;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.gy p {
+  margin: 0;
+}
+
+.gy button,
+.gy input,
+.gy textarea,
+.gy select {
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+
+.gy button {
+  cursor: pointer;
+}
+
+.gy button:disabled {
+  cursor: default;
+}
+
+/* One focus treatment everywhere. Keyboard only — a ring around every button
+   the mouse touches is noise, and no ring at all strands keyboard users. */
+.gy :focus {
+  outline: none;
+}
+
+.gy :focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-sm);
+}
+
+/* Scrollbars: present enough to grab, quiet enough to ignore. */
+.gy ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.gy ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.gy ::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: var(--r-pill);
+}
+
+.gy ::-webkit-scrollbar-thumb:hover {
+  background: var(--faint);
+  background-clip: content-box;
+}
+
+.gy ::selection {
+  background: var(--accent-wash);
+  color: var(--text);
+}
+
+/* Utilities used across panels. */
+.gy-spacer {
+  height: var(--s3);
+}
+
+.gy-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.gy-row .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.gy-muted {
+  color: var(--dim);
+}
+
+.gy-accent {
+  color: var(--accent);
+}
+
+.gy-danger,
+.gy-err {
+  color: var(--err);
+}
+
+.gy .mono,
+.gy-code,
+.gy-id,
+.gy-url {
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+
+@keyframes gy-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes gy-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

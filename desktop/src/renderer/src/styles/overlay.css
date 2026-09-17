@@ -1,0 +1,284 @@
+/* The always-on-top surfaces: the avatar overlay, its chip, and the
+   quick-chat bar. They composite onto the desktop rather than onto a page, so
+   they keep their own transparent-background rules and are not part of the
+   workspace's surface system.
+
+   Moved here whole from the old single stylesheet; the only edits are the
+   colour tokens, which now come from tokens.css like everything else. */
+
+/* Overlay must composite onto the desktop — never paint an opaque background. */
+:root {
+  color-scheme: dark;
+}
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ── overlay ──────────────────────────────────────────────────────────────── */
+.overlay-root {
+  position: relative;
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  overflow: hidden;
+}
+
+.avatar-stage {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Soft floor shadow lives here as a CSS layer (PLAN §6.1) once the avatar
+     mounts; in-canvas DropShadow is disabled for pixi-v7. */
+}
+
+.parity-card {
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: rgba(18, 18, 24, 0.72);
+  backdrop-filter: blur(8px);
+  color: #e8e8f0;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+.parity-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+.parity-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+.parity-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  opacity: 0.45;
+}
+
+/* Always-interactive dock handle (the only non-click-through region in Phase 0). */
+.dock-handle {
+  margin-bottom: 6px;
+  width: 56px;
+  height: 18px;
+  border: none;
+  border-radius: 9px;
+  background: rgba(120, 130, 255, 0.55);
+  box-shadow: 0 0 12px rgba(120, 130, 255, 0.6);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dock-handle:active {
+  cursor: grabbing;
+}
+.dock-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  opacity: 0.85;
+}
+
+/* ── quick-chat bar (floating Spotlight-style input) ────────────────────────── */
+.qc-root {
+  height: 100vh;
+  width: 100vw;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 14px;
+  background: transparent;
+  color: var(--text);
+  /* Belt & braces: the window tracks the card's height, so the page should
+     never overflow — but a transient frame between growth and the window
+     resize must not flash scrollbars. */
+  overflow: hidden;
+}
+.qc-card {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(16, 16, 22, 0.82);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  padding: 12px 14px 9px;
+  animation: qc-rise 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+  /* The card is the drag handle — grab anywhere except the input/send button to
+     move the bar; the spot is remembered between summons. */
+  -webkit-app-region: drag;
+  cursor: grab;
+}
+.qc-card:active {
+  cursor: grabbing;
+}
+.gy--light .qc-card {
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 60px rgba(31, 28, 52, 0.22), inset 0 0 0 1px rgba(15, 23, 42, 0.04);
+}
+@keyframes qc-rise {
+  from {
+    opacity: 0;
+    transform: translateY(-7px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.qc-bar {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.qc-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 17px;
+  line-height: 1.35;
+  resize: none;
+  max-height: 240px;
+  overflow-y: auto;
+  /* The window grows with content; past max-height the textarea scrolls but
+     the scrollbar itself stays invisible (caret-follow keeps UX intact). */
+  scrollbar-width: none;
+  padding: 4px 0;
+  /* Editing must work even though the window disables selection globally. */
+  -webkit-user-select: text;
+  user-select: text;
+  /* Not a drag region — typing/selection here must not move the window. */
+  -webkit-app-region: no-drag;
+  cursor: text;
+}
+.qc-input::placeholder {
+  color: var(--faint);
+}
+
+.qc-send {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent-deep);
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(79, 124, 255, 0.34);
+  transition: filter 0.15s ease, transform 0.08s ease, opacity 0.15s ease;
+  /* Clickable, not a drag region. */
+  -webkit-app-region: no-drag;
+}
+.qc-send svg {
+  width: 17px;
+  height: 17px;
+}
+.qc-send:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+.qc-send:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.qc-send:disabled {
+  opacity: 0.4;
+  cursor: default;
+  box-shadow: none;
+}
+
+.qc-foot {
+  margin-top: 8px;
+  padding: 0 2px 1px;
+  min-height: 16px;
+}
+.qc-hint {
+  font-size: 11px;
+  color: var(--faint);
+  line-height: 1.4;
+}
+.qc-hint.qc-ok {
+  color: var(--ok);
+}
+.qc-hint.qc-err {
+  color: var(--err);
+}
+.qc-hint kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 5px;
+  border: 1px solid var(--line-strong);
+  background: var(--hover);
+  color: var(--dim);
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', monospace;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+/* Quick-chat pasted-image thumbnails */
+.qc-thumbs {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px 0;
+  flex-wrap: wrap;
+}
+.qc-thumb {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--gy-border, rgba(255, 255, 255, 0.14));
+  flex: 0 0 auto;
+}
+.qc-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.qc-thumb-x {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.qc-thumb-x:hover { background: rgba(220, 60, 60, 0.9); }
+
+.qc-input::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
