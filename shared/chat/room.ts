@@ -75,10 +75,12 @@ export function foldRoomMessage(messages: Message[], raw: RoomMessage): Message[
     return at >= 0 ? replace(messages, at, next) : [...messages, next];
   }
 
-  // 'system' — the server telling the room something happened. Rare, and
-  // always worth showing, because it is how a failure reaches a person who
-  // is not watching the log.
-  const next: Message = { key, role: 'notice', text: String(raw.content ?? ''), ts };
+  // 'system' — the room's own bookkeeping ("1/1 sessions responded (7.1s)").
+  // Worth having on screen, and NOT a failure: drawing it as one, which is
+  // what happened when it was folded as a notice, told the user a turn had
+  // failed every single time one succeeded. The web has always drawn these as
+  // a quiet centred line; so does everything else now.
+  const next: Message = { key, role: 'system', text: String(raw.content ?? ''), ts };
   if (!next.text) return messages;
   return at >= 0 ? replace(messages, at, next) : [...messages, next];
 }

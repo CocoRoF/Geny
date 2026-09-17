@@ -501,6 +501,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The room's own bookkeeping, between turns. Centred, small and dim on
+   purpose: it is the sort of thing you want to be able to find and never
+   want to read. */
+.msg-status {
+  align-self: center;
+  padding: 2px 0;
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.55;
+  text-align: center;
+}
+
 .bubble {
   width: fit-content;
   max-width: 100%;

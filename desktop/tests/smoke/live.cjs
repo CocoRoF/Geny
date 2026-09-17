@@ -64,7 +64,10 @@ app.on('ready', async () => {
   await new Promise((resolve) => setTimeout(resolve, 6000))
 
   const probe = await win.webContents.executeJavaScript(`(() => {
-    const rail = [...document.querySelectorAll('.agent-list .agent-item')].map((el) => el.innerText.trim())
+    // Both groups: a running session sits in the live group, not in the list
+    // below it, so a rail read that looks only at the list reports zero
+    // sessions on a server where everything is running.
+    const rail = [...document.querySelectorAll('.sidebar .agent-item')].map((el) => el.innerText.trim())
     return {
       sessions: rail,
       railError: document.querySelector('.side-error')?.innerText ?? '',

@@ -205,6 +205,14 @@ function Steps({ calls, live, t }: { calls: ToolCall[]; live: boolean; t: T }): 
 }
 
 function Row({ message, t }: { message: Message; t: T }): ReactNode {
+  // The room's own bookkeeping — "1/1 sessions responded (7.1s)". A quiet
+  // centred line, the way the web has always drawn it. It is not a failure
+  // and must never look like one: it arrives after every broadcast, the
+  // successful ones included.
+  if (message.role === 'system') {
+    return <div className="msg-status">{message.text}</div>
+  }
+
   if (message.role === 'notice') {
     return (
       <div className="msg-row">

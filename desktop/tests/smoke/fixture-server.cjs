@@ -247,6 +247,59 @@ const ROUTES = {
   live: true,
 }
 
+// ── the conversation ─────────────────────────────────────────────────
+//
+// The room, not the log. The window reads this now — the same store the web
+// page and the phone read — so the fixture has to serve it or the screen is
+// empty for a reason that has nothing to do with the design.
+
+const ROOM = {
+  id: 'room-1',
+  name: '커넥터 리디자인 Chat',
+  session_ids: ['fixture-1'],
+  created_at: '2026-09-17T21:30:00+09:00',
+  updated_at: '2026-09-17T21:41:00+09:00',
+  message_count: 4,
+}
+
+const ROOM_MESSAGES = [
+  {
+    id: 'm1', type: 'user', session_id: 'fixture-1',
+    timestamp: '2026-09-17T21:30:00+09:00',
+    content: '접속기 스타일시트에서 안 쓰는 토큰이 있는지 확인하고 정리해줘.',
+  },
+  {
+    id: 'm2', type: 'agent', session_id: 'fixture-1',
+    timestamp: '2026-09-17T21:31:51+09:00', duration_ms: 11200,
+    content: `토큰은 전부 쓰이고 있었고, 안 쓰이는 건 \`--surface-2\` 하나였습니다.
+
+확인한 방법:
+
+1. 선언된 토큰 목록을 뽑고
+2. 나머지 네 파일에서 \`var(--이름)\` 을 세어
+3. 0 인 것만 남겼습니다.
+
+\`\`\`bash
+comm -23 <(declared) <(used)
+# --surface-2
+\`\`\`
+
+지웠습니다. \`stylelint\` 는 이 저장소에 설치돼 있지 않아서 건너뛰었습니다 — 필요하면 devDependency 로 넣어둘까요?`,
+  },
+  {
+    id: 'm3', type: 'user', session_id: 'fixture-1',
+    timestamp: '2026-09-17T21:38:00+09:00',
+    content: '좋아. 그럼 하단 바에 CPU 도 같이 보여줘.',
+  },
+  {
+    // A mood direction dropped mid-sentence. It is a direction to the avatar,
+    // not something anybody said, and a screen that prints it is the bug.
+    id: 'm4', type: 'agent', session_id: 'fixture-1',
+    timestamp: '2026-09-17T21:41:00+09:00', duration_ms: 4300,
+    content: '[calm:0.3] 넣었습니다. [curious:0.5] 메모리 옆에 같은 형식으로 붙였어요.',
+  },
+]
+
 const server = createServer((req, res) => {
   const url = new URL(req.url, 'http://x')
   const send = (body) => {
@@ -254,6 +307,35 @@ const server = createServer((req, res) => {
     res.end(JSON.stringify(body))
   }
   if (url.pathname === '/api/agents') return send(SESSIONS)
+  if (url.pathname === '/api/chat/rooms') return send({ rooms: [ROOM], total: 1 })
+  if (url.pathname.startsWith('/api/chat/rooms/for-session/')) {
+    const sid = decodeURIComponent(url.pathname.split('/for-session/')[1] || '')
+    // The server makes a room for a session that has none; a session that is
+    // not this fixture's simply has no conversation here.
+    if (sid !== 'fixture-1') {
+      res.writeHead(404, { 'Content-Type': 'application/json' })
+      return res.end(JSON.stringify({ detail: `No chat room for session: ${sid}` }))
+    }
+    return send(ROOM)
+  }
+  if (url.pathname.endsWith('/messages') && url.pathname.includes('/api/chat/rooms/')) {
+    return send({ room_id: ROOM.id, messages: ROOM_MESSAGES, total: ROOM_MESSAGES.length, has_more: false })
+  }
+  if (url.pathname.endsWith('/broadcast') && req.method === 'POST') {
+    let body = ''
+    req.on('data', (chunk) => { body += chunk })
+    req.on('end', () => {
+      let text = ''
+      try { text = JSON.parse(body).message } catch { /* the window sends JSON */ }
+      const message = {
+        id: `m${ROOM_MESSAGES.length + 1}`, type: 'user', session_id: 'fixture-1',
+        timestamp: new Date().toISOString(), content: text,
+      }
+      ROOM_MESSAGES.push(message)
+      send({ message })
+    })
+    return undefined
+  }
   if (url.pathname.startsWith('/api/command/logs/')) {
     // The endpoint answers newest-first; the window reverses it.
     return send({ entries: [...LOG].reverse(), total_entries: LOG.length })
@@ -281,8 +363,9 @@ const server = createServer((req, res) => {
   res.end('{}')
 })
 
-// The window opens an execute socket. Refusing the upgrade leaves it
-// reconnecting, which is its own (correct) design state — so leave it.
+// The window opens the room socket. Refusing the upgrade leaves it
+// reconnecting, which is its own (correct) design state and is what the unit
+// tests cover in detail — so leave it. The history above is what paints.
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`fixture on http://127.0.0.1:${PORT}`)
 })

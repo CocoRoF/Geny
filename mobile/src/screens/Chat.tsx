@@ -49,7 +49,17 @@ function Bubble({ message }: { message: Message }) {
       </View>
     );
   }
-  if (message.role === 'notice' || message.role === 'system') {
+  // The room's own bookkeeping — "1/1 sessions responded (7.1s)". It arrives
+  // after every broadcast, the successful ones included, so it must not look
+  // like a failure. Quiet and centred, the way the web draws it.
+  if (message.role === 'system') {
+    return (
+      <View style={{ paddingHorizontal: 14, paddingVertical: 3, alignItems: 'center' }}>
+        <Text style={{ color: T.muted, fontSize: 11, opacity: 0.6 }}>{message.text}</Text>
+      </View>
+    );
+  }
+  if (message.role === 'notice') {
     return (
       <View style={{
         marginHorizontal: 12, marginVertical: 4, padding: 10, borderRadius: 10,

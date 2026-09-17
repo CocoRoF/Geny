@@ -222,7 +222,11 @@ export function ChatApp(): ReactNode {
   }
 
   const current = list.find((s) => s.session_id === sessionId) ?? null
+  // Running sessions get their own group at the top. They are then left OUT
+  // of the list below it: showing the same session twice, in two identical
+  // rows, reads as a duplicate rather than as a shortcut.
   const running = list.filter((s) => s.status === 'running')
+  const idle = list.filter((s) => s.status !== 'running')
   const lamp = lampFor(live.state, live.running, t)
 
   const sessionRow = (session: AgentSummary): ReactNode => (
@@ -302,7 +306,7 @@ export function ChatApp(): ReactNode {
             )}
             <div className="agent-list">
               {listError && <div className="side-error">{listError}</div>}
-              {list.map(sessionRow)}
+              {idle.map(sessionRow)}
               {list.length === 0 && !listError && (
                 <div className="side-empty">{t('chat.noSessions')}</div>
               )}

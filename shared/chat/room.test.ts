@@ -87,3 +87,14 @@ test('a result with no id falls back to the open call of that name', () => {
 test('a result for a call nobody announced is dropped, not invented', () => {
   assert.deepEqual(foldCalls([{ level: 'TOOL_RES', tool_name: 'Ghost' }]), []);
 });
+
+test("the room's own bookkeeping is a status line, not a failed turn", () => {
+  // "1/1 sessions responded" arrives as a system message after EVERY
+  // broadcast, successful ones included. Folding it as a notice drew a red
+  // 실패 box under every answer the agent got right.
+  const folded = foldRoomMessage([], {
+    id: 'm9', type: 'system', content: '1/1 sessions responded (7.1s)', timestamp: 't9',
+  });
+  assert.equal(folded[0].role, 'system');
+  assert.equal(folded[0].text, '1/1 sessions responded (7.1s)');
+});
