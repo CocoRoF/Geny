@@ -116,20 +116,26 @@ export function ChatApp(): ReactNode {
   }, [refreshList])
 
   useEffect(() => {
-    if (sessionId) window.localStorage.setItem(LAST_SESSION_KEY, sessionId)
+    if (!sessionId) return
+    window.localStorage.setItem(LAST_SESSION_KEY, sessionId)
+    // Opening a session means wanting to type in it.
+    composer.current?.focus()
   }, [sessionId])
 
   // ── the quick-chat bar delivers here ────────────────────────────────
   // It used to relay into the web page's send box. Now it lands in the same
   // place a typed message does, so a hotkey message and a typed one are the
   // same event and cannot behave differently.
+  const sendLive = live.send
   useEffect(() => {
     const off = window.connector?.messaging.onQuickSend((payload) => {
       const text = (typeof payload === 'string' ? payload : payload?.text ?? '').trim()
-      if (text) live.send(text)
+      if (text) sendLive(text)
     })
     return () => { off?.() }
-  }, [live])
+    // `live` itself is a fresh object every render; depending on it would
+    // resubscribe on every keystroke.
+  }, [sendLive])
 
   // ── scrolling ───────────────────────────────────────────────────────
   // Follow the answer, unless the user scrolled up to read something. Yanking
@@ -151,6 +157,10 @@ export function ChatApp(): ReactNode {
     if (!text || !sessionId) return
     live.send(text)
     setDraft('')
+    // The box grew to fit what was typed; clearing the value does not shrink
+    // it back, so a long message leaves a tall empty box behind.
+    if (composer.current) composer.current.style.height = 'auto'
+    composer.current?.focus()
     pinned.current = true
   }
 
