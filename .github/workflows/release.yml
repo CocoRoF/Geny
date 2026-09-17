@@ -159,6 +159,12 @@ jobs:
       # `npm install`, not `npm ci`, and no npm cache: this repository does
       # not track lockfiles (see .gitignore), which is also why there is
       # nothing for setup-node's cache to key on. Same as the desktop job.
+      # No lockfile in this repository, so the key is the manifest. A miss
+      # just reinstalls.
+      - uses: actions/cache@v4
+        with:
+          path: mobile/node_modules
+          key: mobile-node-${{ runner.os }}-${{ hashFiles('mobile/package.json') }}
       - run: npm --prefix mobile install --no-audit --no-fund
 
       - name: Tests + types
@@ -193,9 +199,23 @@ jobs:
               -dname "CN=Geny, O=Geny"
           fi
 
+      # Ten and a half minutes of this job was this one command, and most of
+      # that was compiling the New Architecture's generated C++ four times —
+      # once per ABI. x86 and x86_64 exist for emulators; no phone this APK
+      # will ever be installed on runs them. gradle.properties keeps all four
+      # so a local emulator build still works, and the release overrides it
+      # here.
+      #
+      # `--build-cache` reads the cache setup-gradle restored, so the parts
+      # that did not change since the last release are not compiled again.
+      # The daemon stays (it was `--no-daemon`): the build cache and the
+      # parallel executor both live in it.
       - name: Build the APK
         working-directory: mobile/android
-        run: ./gradlew assembleRelease --no-daemon
+        run: |
+          ./gradlew assembleRelease \
+            -PreactNativeArchitectures=arm64-v8a,armeabi-v7a \
+            --build-cache
         env:
           ANDROID_KEYSTORE_FILE: /tmp/geny.keystore
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || 'geny-release' }}
@@ -242,6 +262,10 @@ jobs:
           [ -n "$XC" ] && sudo xcode-select -s "$XC"
           xcodebuild -version
 
+      - uses: actions/cache@v4
+        with:
+          path: mobile/node_modules
+          key: mobile-node-${{ runner.os }}-${{ hashFiles('mobile/package.json') }}
       - run: npm --prefix mobile install --no-audit --no-fund
 
       - uses: actions/cache@v4
@@ -256,12 +280,33 @@ jobs:
         working-directory: mobile/ios
         run: pod install
 
+      # Every run compiled every Pod from nothing, which was ten of this
+      # job's eleven minutes. DerivedData is the compiler's own output, so
+      # restoring it makes the build incremental across runs. The key carries
+      # the lockfile: new pods, new cache.
+      - name: Cache the compiler's output
+        uses: actions/cache@v4
+        with:
+          path: mobile/ios/build
+          key: ios-derived-${{ hashFiles('mobile/ios/Podfile.lock', 'mobile/package.json') }}
+          restore-keys: ios-derived-
+
+      # · dwarf, not dwarf-with-dsym — a debug-symbol bundle nobody
+      #   symbolicates costs minutes of linking.
+      # · the index store is for Xcode's editor, and there is no editor here.
+      # · one architecture: iphoneos has been arm64-only for years, and the
+      #   default would still ask for a universal slice.
       - name: Build (no signing)
         working-directory: mobile/ios
         run: |
           xcodebuild -workspace Geny.xcworkspace -scheme Geny \
             -configuration Release -sdk iphoneos -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+            -arch arm64 -quiet \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            DEBUG_INFORMATION_FORMAT=dwarf \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ONLY_ACTIVE_ARCH=YES \
+            build
 
       - name: Package an unsigned IPA
         run: |
@@ -283,7 +328,13 @@ jobs:
     needs: [version, desktop, android, ios]
     # `ios` may have failed (continue-on-error); publish what exists. The
     # desktop installers and the APK are what people actually install.
-    if: always() && needs.desktop.result == 'success' && needs.android.result == 'success'
+    #
+    # Only a tag publishes. A manual run is for checking that the build still
+    # works, and without this it would overwrite the assets of whatever
+    # version happens to be in the tree.
+    if: |
+      always() && github.ref_type == 'tag'
+      && needs.desktop.result == 'success' && needs.android.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
