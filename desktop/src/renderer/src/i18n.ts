@@ -390,6 +390,19 @@ export const messages: Record<string, Entry> = {
   'qc.imageTooLarge': { ko: '이미지가 너무 큽니다 (10MB 이하)', en: 'Image too large (max 10 MB)' },
   'qc.removeImage': { ko: '이미지 제거', en: 'Remove image' },
 
+  // ── models tab additions ──
+  'models.order': { ko: '응답 순서', en: 'Answering order' },
+  'models.orderHint': {
+    ko: '위에 있는 계정이 먼저 답합니다. 그 계정이 답할 수 없을 때만 다음으로 넘어갑니다.',
+    en: 'The account at the top answers. The next is tried only when it cannot.',
+  },
+  'models.orderEmpty': { ko: '켜 둔 계정이 없습니다', en: 'No account is switched on' },
+  'models.accountCount': { ko: '{n}개', en: '{n}' },
+  'models.addLogin': { ko: '로그인 추가', en: 'Add a login' },
+  'models.addKey': { ko: '계정 추가', en: 'Add an account' },
+  'models.addAndSignIn': { ko: '추가하고 로그인', en: 'Add and sign in' },
+  'models.label': { ko: '이름', en: 'Name' },
+
   // ── the chat window ──
   'chat.sessions': { ko: '세션', en: 'Sessions' },
   'chat.newSession': { ko: '새 세션', en: 'New session' },

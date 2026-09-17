@@ -1102,3 +1102,17 @@ html, body, #root { height: 100%; }
   padding: 15px 16px;
 }
 .gy-modal-list { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
+
+/* Provider family heading in the Models tab — the three different
+   conversations (sign in / paste a key / point at a machine) are separated so
+   the one you are looking for is not in a list of nine. */
+.gy-family {
+  margin: 16px 3px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gy-text-3);
+  border-bottom: 1px solid var(--gy-card-border);
+  padding-bottom: 5px;
+}

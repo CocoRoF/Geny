@@ -8,6 +8,14 @@
  * editable here and not buried in a dialog — it is the most consequential
  * setting on the page and the cheapest to get wrong.
  *
+ * Every provider is on this page whether or not you have set it up: Claude
+ * Code and ChatGPT under "sign in", the API keys under theirs, the endpoints
+ * you host yourself under theirs — each with its own add button and as many
+ * accounts as you want. A provider used to appear only after you had already
+ * added an account to it, hidden until then inside one dropdown in one form,
+ * which is how a server with a working Codex login reads as a server without
+ * one.
+ *
  * The provider grid that used to sit under this is gone. It listed eight
  * backends with keys and health, none of which a session uses any more — a
  * session asks the accounts above. Keeping it would have left two places
@@ -31,6 +39,7 @@ import {
   type ClaudeAuthMethod,
   type ClaudeRunMode,
   type CliInfo,
+  type KindFamily,
   type KindInfo,
   type LlmAccount,
 } from '@/lib/llmAccountsApi';
@@ -400,29 +409,25 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-// ── add ──────────────────────────────────────────────────────────────
+// ── adding one to a specific provider ────────────────────────────────
 
-function AddAccount({
-  kinds, onAdded,
+function AddToKind({
+  kind, info, onAdded, onCancel,
 }: {
-  kinds: Record<string, KindInfo>;
-  /** The account that was just created, so a subscription kind can go
-   *  straight into signing in — adding one and then hunting for a button is
-   *  how "there is no OAuth login" happens when there is. */
+  kind: AccountKind;
+  info: KindInfo;
   onAdded: (account: LlmAccount) => void;
+  onCancel: () => void;
 }) {
   const { t } = useI18n();
-  const [open, setOpen] = useState(false);
-  const [kind, setKind] = useState<AccountKind>('claude_code');
   const [label, setLabel] = useState('');
-  const [baseUrl, setBaseUrl] = useState('');
+  const [baseUrl, setBaseUrl] = useState(info.defaultBaseUrl ?? '');
   const [secret, setSecret] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const info = kinds[kind];
-
-  useEffect(() => { setBaseUrl(info?.defaultBaseUrl ?? ''); }, [info?.defaultBaseUrl]);
+  const needsKey = info.secret === 'api_key' || info.secret === 'optional_key';
+  const wantsBaseUrl = info.needsBaseUrl || Boolean(info.defaultBaseUrl);
 
   const submit = useCallback(async () => {
     setSaving(true);
@@ -434,9 +439,6 @@ function AddAccount({
         baseUrl: baseUrl || undefined,
         secret: secret || undefined,
       });
-      setOpen(false);
-      setLabel('');
-      setSecret('');
       onAdded(created.account);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -445,55 +447,30 @@ function AddAccount({
     }
   }, [kind, label, baseUrl, secret, onAdded]);
 
-  if (!open) {
-    return (
-      <button
-        type="button"
-        className="flex items-center justify-center gap-2 w-full py-3 rounded-[var(--border-radius)] border border-dashed border-[var(--border-color)] text-[0.8125rem] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
-        onClick={() => setOpen(true)}
-      >
-        <Plus size={14} /> {t('settings.models.add')}
-      </button>
-    );
-  }
-
   return (
-    <div className="flex flex-col gap-3 rounded-[var(--border-radius)] border border-[var(--border-color)] p-4">
-      <h4 className="text-[0.875rem] font-semibold">{t('settings.models.addTitle')}</h4>
-      <Field label={t('settings.models.kind')}>
-        <select
-          className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded px-3 py-2 text-[0.8125rem]"
-          value={kind}
-          onChange={(e) => setKind(e.target.value as AccountKind)}
-        >
-          {Object.entries(kinds).map(([id, k]) => (
-            <option key={id} value={id}>{k.label}</option>
-          ))}
-        </select>
-      </Field>
-      {info?.hint && <p className="text-[0.75rem] text-[var(--text-muted)]">{info.hint}</p>}
-
+    <div className="flex flex-col gap-3 rounded-[var(--border-radius)] border border-[var(--primary-color)]/40 bg-[var(--bg-tertiary)]/40 p-4">
       <Field label={t('settings.models.label')}>
         <input
           className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded px-3 py-2 text-[0.8125rem]"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-          placeholder={info?.short}
+          placeholder={info.short}
+          autoFocus
         />
       </Field>
 
-      {(info?.needsBaseUrl || info?.defaultBaseUrl) && (
+      {wantsBaseUrl && (
         <Field label={t('settings.models.baseUrl')}>
           <input
             className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded px-3 py-2 text-[0.8125rem] font-mono"
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder={info?.defaultBaseUrl}
+            placeholder={info.defaultBaseUrl}
           />
         </Field>
       )}
 
-      {(info?.secret === 'api_key' || info?.secret === 'optional_key') && (
+      {needsKey && (
         <Field label={t('settings.models.secret')}>
           <input
             type="password"
@@ -522,11 +499,162 @@ function AddAccount({
         <button
           type="button"
           className="px-3 py-2 rounded border border-[var(--border-color)] text-[0.8125rem] hover:bg-[var(--bg-hover)]"
-          onClick={() => setOpen(false)}
+          onClick={onCancel}
         >
           {t('settings.models.cancel')}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── one provider, and every account on it ────────────────────────────
+//
+// Each provider is on the page whether or not it has an account, with its own
+// add button. That is the whole point of this layout: a provider you have not
+// set up yet used to be invisible — one entry in a dropdown inside a form you
+// had to know to open — which is why "Codex has no OAuth login" was a
+// reasonable thing to conclude about a server that has had it all along.
+
+function ProviderGroup({
+  kind, info, accounts, kinds, cli, order, onChanged, onLogin, onMove,
+}: {
+  kind: AccountKind;
+  info: KindInfo;
+  accounts: LlmAccount[];
+  kinds: Record<string, KindInfo>;
+  cli: CliInfo | null;
+  /** Every account id in route order, so a row can show its own position. */
+  order: string[];
+  onChanged: () => void;
+  onLogin: (account: LlmAccount) => void;
+  onMove: (id: string, delta: number) => void;
+}) {
+  const { t } = useI18n();
+  const [adding, setAdding] = useState(false);
+
+  return (
+    <section className="flex flex-col gap-2.5">
+      <header className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h4 className="text-[0.875rem] font-semibold flex items-center gap-2">
+            {info.label}
+            {accounts.length > 0 && (
+              <span className="text-[0.7rem] font-normal text-[var(--text-muted)]">
+                {t('settings.models.accountCount', { n: accounts.length })}
+              </span>
+            )}
+          </h4>
+          {info.hint && (
+            <p className="text-[0.75rem] text-[var(--text-muted)] mt-0.5 leading-relaxed">{info.hint}</p>
+          )}
+        </div>
+        <button
+          type="button"
+          className="shrink-0 flex items-center gap-1.5 text-[0.75rem] px-2.5 py-1.5 rounded border border-[var(--border-color)] hover:bg-[var(--bg-hover)]"
+          onClick={() => setAdding((v) => !v)}
+        >
+          <Plus size={12} />
+          {SUBSCRIPTION_KINDS.has(kind)
+            ? t('settings.models.addLogin')
+            : t('settings.models.addKey')}
+        </button>
+      </header>
+
+      {accounts.map((account) => (
+        <AccountRow
+          key={account.id}
+          account={account}
+          kinds={kinds}
+          index={order.indexOf(account.id)}
+          total={order.length}
+          cli={cli}
+          onChanged={onChanged}
+          onLogin={onLogin}
+          onMove={onMove}
+        />
+      ))}
+
+      {adding && (
+        <AddToKind
+          kind={kind}
+          info={info}
+          onCancel={() => setAdding(false)}
+          onAdded={(account) => {
+            setAdding(false);
+            onChanged();
+            // A subscription account is useless until it is signed in, and
+            // the sign-in is the part people cannot find. Open it.
+            if (SUBSCRIPTION_KINDS.has(account.kind)) onLogin(account);
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+// ── the route, as an order ───────────────────────────────────────────
+
+function RouteOrder({
+  accounts, kinds, onMove,
+}: {
+  accounts: LlmAccount[];
+  kinds: Record<string, KindInfo>;
+  onMove: (id: string, delta: number) => void;
+}) {
+  const { t } = useI18n();
+  const enabled = accounts.filter((a) => a.enabled);
+  return (
+    <div className="rounded-[var(--border-radius)] border border-[var(--border-color)] p-4 flex flex-col gap-2">
+      <div>
+        <h4 className="text-[0.875rem] font-semibold">{t('settings.models.order')}</h4>
+        <p className="text-[0.75rem] text-[var(--text-muted)] mt-0.5 leading-relaxed">
+          {t('settings.models.orderHint')}
+        </p>
+      </div>
+      {enabled.length === 0 ? (
+        <p className="text-[0.8125rem] text-[var(--text-secondary)]">{t('settings.models.orderEmpty')}</p>
+      ) : (
+        <ol className="flex flex-col gap-1">
+          {enabled.map((account, index) => (
+            <li key={account.id} className="flex items-center gap-2 text-[0.8125rem]">
+              <span className="w-5 text-[var(--text-muted)] tabular-nums">{index + 1}.</span>
+              <span
+                className={
+                  account.status?.ok === false
+                    ? 'w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0'
+                    : 'w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0'
+                }
+              />
+              <span className="truncate">{account.label}</span>
+              <span className="text-[0.7rem] text-[var(--text-muted)] truncate">
+                {kinds[account.kind]?.short ?? account.kind}
+                {account.identity?.email ? ` · ${account.identity.email}` : ''}
+              </span>
+              <span className="ml-auto flex items-center">
+                <button
+                  type="button"
+                  className="p-1 rounded hover:bg-[var(--bg-hover)] text-[var(--text-muted)] disabled:opacity-30"
+                  disabled={index === 0}
+                  onClick={() => onMove(account.id, -1)}
+                  aria-label={t('settings.models.moveUp')}
+                >
+                  <ChevronUp size={13} />
+                </button>
+                <button
+                  type="button"
+                  className="p-1 rounded hover:bg-[var(--bg-hover)] text-[var(--text-muted)] disabled:opacity-30"
+                  disabled={index >= enabled.length - 1}
+                  onClick={() => onMove(account.id, 1)}
+                  aria-label={t('settings.models.moveDown')}
+                >
+                  <ChevronDown size={13} />
+                </button>
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }
@@ -537,12 +665,13 @@ export default function ModelAccountsPanel() {
   const { t } = useI18n();
   const [accounts, setAccounts] = useState<LlmAccount[]>([]);
   const [kinds, setKinds] = useState<Record<string, KindInfo>>({});
+  const [families, setFamilies] = useState<{ id: KindFamily; label: string }[]>([]);
   const [cli, setCli] = useState<CliInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loginFor, setLoginFor] = useState<LlmAccount | null>(null);
-  // Only for the embedding card's "is a key set" line — the grid it came
-  // from is gone.
+  // Only for the embedding card's "is a key set" line — the provider grid it
+  // came from is gone.
   const [health, setHealth] = useState<ProviderHealth[]>([]);
 
   const refresh = useCallback(async () => {
@@ -554,6 +683,7 @@ export default function ModelAccountsPanel() {
       ]);
       setAccounts(listed.accounts);
       setKinds(catalogue.kinds);
+      setFamilies(catalogue.families ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -575,10 +705,16 @@ export default function ModelAccountsPanel() {
   }, [accounts]);
 
   const move = useCallback(async (id: string, delta: number) => {
+    // Order is over ALL accounts (that is what the server stores), but the
+    // arrows move within the enabled ones — stepping over a disabled account
+    // would look like the button did nothing.
     const order = accounts.map((a) => a.id);
+    const enabled = accounts.filter((a) => a.enabled).map((a) => a.id);
+    const at = enabled.indexOf(id);
+    const neighbour = enabled[at + delta];
+    if (at < 0 || !neighbour) return;
     const from = order.indexOf(id);
-    const to = from + delta;
-    if (from < 0 || to < 0 || to >= order.length) return;
+    const to = order.indexOf(neighbour);
     order.splice(to, 0, ...order.splice(from, 1));
     // Optimistic: the list IS the route, so it should reorder under the
     // cursor rather than after a round trip.
@@ -592,8 +728,10 @@ export default function ModelAccountsPanel() {
     }
   }, [accounts, refresh]);
 
+  const order = accounts.map((a) => a.id);
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <h3 className="text-[1.0625rem] font-semibold">{t('settings.models.title')}</h3>
@@ -621,38 +759,38 @@ export default function ModelAccountsPanel() {
         <p className="flex items-center gap-2 text-[0.8125rem] text-[var(--text-muted)]">
           <Loader2 size={14} className="animate-spin" /> {t('settings.models.loading')}
         </p>
-      ) : accounts.length === 0 ? (
-        <div className="flex flex-col items-center gap-1 py-8">
-          <p className="text-[0.8125rem] text-[var(--text-secondary)]">{t('settings.models.empty')}</p>
-          <p className="text-[0.75rem] text-[var(--text-muted)]">{t('settings.models.emptyHint')}</p>
-        </div>
       ) : (
-        <div className="flex flex-col gap-3">
-          {accounts.map((account, index) => (
-            <AccountRow
-              key={account.id}
-              account={account}
-              kinds={kinds}
-              index={index}
-              total={accounts.length}
-              cli={cli}
-              onChanged={() => void refresh()}
-              onLogin={setLoginFor}
-              onMove={(id, delta) => void move(id, delta)}
-            />
-          ))}
-        </div>
-      )}
+        <>
+          <RouteOrder accounts={accounts} kinds={kinds} onMove={(id, d) => void move(id, d)} />
 
-      <AddAccount
-        kinds={kinds}
-        onAdded={(account) => {
-          void refresh();
-          // A Claude or ChatGPT account is useless until it is signed in, and
-          // the sign-in is the part people cannot find. Open it.
-          if (SUBSCRIPTION_KINDS.has(account.kind)) setLoginFor(account);
-        }}
-      />
+          {families.map((family) => {
+            const entries = Object.entries(kinds)
+              .filter(([, info]) => info.family === family.id) as [AccountKind, KindInfo][];
+            if (entries.length === 0) return null;
+            return (
+              <div key={family.id} className="flex flex-col gap-4">
+                <h4 className="text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)] border-b border-[var(--border-color)] pb-1.5">
+                  {family.label}
+                </h4>
+                {entries.map(([kind, info]) => (
+                  <ProviderGroup
+                    key={kind}
+                    kind={kind}
+                    info={info}
+                    kinds={kinds}
+                    accounts={accounts.filter((a) => a.kind === kind)}
+                    cli={cli}
+                    order={order}
+                    onChanged={() => void refresh()}
+                    onLogin={setLoginFor}
+                    onMove={(id, d) => void move(id, d)}
+                  />
+                ))}
+              </div>
+            );
+          })}
+        </>
+      )}
 
       {/* Not an account: one key per provider, used to embed documents. A
            session never touches it, which is exactly why it is down here and

@@ -6,8 +6,16 @@
  * the flow out (a URL, or a device code), the app opens it in the user's real
  * browser, and the code comes back through the same stream's job.
  *
- * The list IS the default route — first enabled account answers, the rest are
- * tried only when one cannot — so order is editable in place.
+ * Every provider is listed whether or not it has an account: the two
+ * subscriptions you sign into, the API keys you paste, the endpoints you host
+ * yourself — each with its own add button, each taking as many accounts as
+ * you want. A provider that only appeared after you had already added an
+ * account to it was a provider nobody could find; that is how a server with a
+ * working ChatGPT login reads as a server without one.
+ *
+ * The order of the accounts IS the default route — the first enabled one
+ * answers, the rest are tried only when one cannot — so it is editable at the
+ * top, where it can be read at a glance.
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
@@ -17,6 +25,8 @@ import { accounts, type AccountKind, type KindInfo, type LlmAccount } from './se
 type T = (key: string, vars?: Record<string, string | number>) => string
 
 const SUBSCRIPTION: ReadonlySet<AccountKind> = new Set<AccountKind>(['claude_code', 'codex'])
+
+interface Family { id: string; label: string }
 
 interface LoginState {
   account: LlmAccount
@@ -32,11 +42,13 @@ interface LoginState {
 export function ModelsTab({ t }: { t: T }): ReactNode {
   const [list, setList] = useState<LlmAccount[]>([])
   const [kinds, setKinds] = useState<Record<string, KindInfo>>({})
+  const [families, setFamilies] = useState<Family[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
-  const [adding, setAdding] = useState(false)
-  const [newKind, setNewKind] = useState<AccountKind>('claude_code')
+  /** Which provider's add form is open, if any. */
+  const [adding, setAdding] = useState<AccountKind | null>(null)
+  const [newLabel, setNewLabel] = useState('')
   const [newSecret, setNewSecret] = useState('')
   const [newBaseUrl, setNewBaseUrl] = useState('')
   const [login, setLogin] = useState<LoginState | null>(null)
@@ -47,6 +59,7 @@ export function ModelsTab({ t }: { t: T }): ReactNode {
       const [listed, catalogue] = await Promise.all([accounts.list(), accounts.kinds()])
       setList(listed.accounts)
       setKinds(catalogue.kinds)
+      setFamilies(catalogue.families ?? [])
       setError(null)
     } catch (e) {
       setError((e as Error).message)
@@ -69,26 +82,45 @@ export function ModelsTab({ t }: { t: T }): ReactNode {
     }
   }, [])
 
+  const enabled = list.filter((a) => a.enabled)
+
   const move = (id: string, delta: number) => run(`move:${id}`, async () => {
+    // The arrows move within the ENABLED accounts; stepping over a disabled
+    // one looks like the button did nothing.
     const order = list.map((a) => a.id)
+    const ids = enabled.map((a) => a.id)
+    const at = ids.indexOf(id)
+    const neighbour = ids[at + delta]
+    if (at < 0 || !neighbour) return
     const from = order.indexOf(id)
-    const to = from + delta
-    if (from < 0 || to < 0 || to >= order.length) return
+    const to = order.indexOf(neighbour)
     order.splice(to, 0, ...order.splice(from, 1))
     const res = await accounts.reorder(order)
     setList(res.accounts)
   })
 
-  const add = () => run('add', async () => {
-    await accounts.create({
-      kind: newKind,
+  const openAdd = (kind: AccountKind): void => {
+    setAdding(kind)
+    setNewLabel('')
+    setNewSecret('')
+    setNewBaseUrl(kinds[kind]?.defaultBaseUrl ?? '')
+  }
+
+  const add = (kind: AccountKind) => run('add', async () => {
+    const created = await accounts.create({
+      kind,
+      ...(newLabel ? { label: newLabel } : {}),
       ...(newSecret ? { secret: newSecret } : {}),
       ...(newBaseUrl ? { baseUrl: newBaseUrl } : {}),
     })
+    setAdding(null)
+    setNewLabel('')
     setNewSecret('')
     setNewBaseUrl('')
-    setAdding(false)
     await refresh()
+    // A subscription account does nothing until it is signed in, and the
+    // sign-in is the part people cannot find. Go straight there.
+    if (SUBSCRIPTION.has(kind) && created.account) void startLogin(created.account)
   })
 
   const remove = (account: LlmAccount) => run(`remove:${account.id}`, async () => {
@@ -174,7 +206,7 @@ export function ModelsTab({ t }: { t: T }): ReactNode {
     setLogin((prev) => prev && { ...prev, code: '' })
   })
 
-  const closeLogin = () => {
+  const closeLogin = (): void => {
     stopStream.current?.()
     stopStream.current = null
     if (login?.jobId && login.phase === 'waiting') void accounts.cancelLogin(login.jobId).catch(() => undefined)
@@ -182,115 +214,144 @@ export function ModelsTab({ t }: { t: T }): ReactNode {
     void refresh()
   }
 
+  const kindsIn = (family: string): [AccountKind, KindInfo][] =>
+    Object.entries(kinds).filter(([, info]) => info.family === family) as [AccountKind, KindInfo][]
+
   return (
     <>
       <section className="gy-card">
         <div className="gy-card-h">{t('models.title')}</div>
         <p className="gy-hint">{t('models.hint')}</p>
-        {error && <p className="gy-hint" style={{ color: 'var(--gy-err, #f87171)' }}>{error}</p>}
+        {error && <p className="gy-hint" style={{ color: 'var(--gy-err)' }}>{error}</p>}
         {note && <p className="gy-hint">{note}</p>}
       </section>
 
-      {list.length === 0 ? (
-        <section className="gy-card">
-          <p className="gy-hint">{t('models.empty')}</p>
-        </section>
-      ) : (
-        list.map((account, index) => (
-          <section className="gy-card" key={account.id}>
-            <div className="gy-card-h">
-              {account.label}
-              <span className="gy-hint" style={{ marginLeft: 8 }}>
-                {kinds[account.kind]?.short ?? account.kind}
-              </span>
-            </div>
-            <div className="gy-row">
-              <span className={`gy-pill grow ${account.enabled ? (account.status?.ok === false ? 'is-err' : 'is-ok') : ''}`}>
+      {/* the route, as an order */}
+      <section className="gy-card">
+        <div className="gy-card-h">{t('models.order')}</div>
+        <p className="gy-hint">{t('models.orderHint')}</p>
+        {enabled.length === 0 ? (
+          <p className="gy-hint">{t('models.orderEmpty')}</p>
+        ) : (
+          enabled.map((account, index) => (
+            <div className="gy-row" key={account.id}>
+              <span className={`gy-pill grow ${account.status?.ok === false ? 'is-err' : 'is-ok'}`}>
                 <span className="gy-dot" />
                 <span className="gy-msg">
-                  {!account.enabled
-                    ? t('models.off')
-                    : index === 0
-                      ? t('models.answersFirst')
-                      : t('models.fallback', { index })}
+                  {index + 1}. {account.label}
                   {account.identity?.email ? ` · ${account.identity.email}` : ''}
                 </span>
               </span>
               <button className="gy-btn gy-btn--ghost gy-btn--sm" disabled={index === 0 || !!busy}
                 onClick={() => void move(account.id, -1)}>↑</button>
-              <button className="gy-btn gy-btn--ghost gy-btn--sm" disabled={index === list.length - 1 || !!busy}
+              <button className="gy-btn gy-btn--ghost gy-btn--sm"
+                disabled={index === enabled.length - 1 || !!busy}
                 onClick={() => void move(account.id, 1)}>↓</button>
             </div>
-            <div className="gy-spacer" />
-            <div className="gy-row">
-              <button className="gy-btn gy-btn--ghost gy-btn--sm" disabled={!!busy}
-                onClick={() => void toggle(account)}>
-                {account.enabled ? t('models.turnOff') : t('models.turnOn')}
-              </button>
-              <button className="gy-btn gy-btn--ghost gy-btn--sm" disabled={!!busy}
-                onClick={() => void test(account)}>
-                {busy === `test:${account.id}` ? t('models.testing') : t('models.test')}
-              </button>
-              {SUBSCRIPTION.has(account.kind) && (
-                <button className="gy-btn gy-btn--primary gy-btn--sm" disabled={!!busy}
-                  onClick={() => void startLogin(account)}>
-                  {t('models.signIn')}
-                </button>
-              )}
-              <button className="gy-btn gy-btn--danger gy-btn--sm" disabled={!!busy}
-                onClick={() => void remove(account)}>
-                {t('models.remove')}
-              </button>
-            </div>
-          </section>
-        ))
-      )}
-
-      <section className="gy-card">
-        {adding ? (
-          <>
-            <div className="gy-card-h">{t('models.addTitle')}</div>
-            <label className="gy-field-label" htmlFor="gy-kind">{t('models.kind')}</label>
-            <select id="gy-kind" className="gy-input" value={newKind}
-              onChange={(e) => setNewKind(e.target.value as AccountKind)}>
-              {Object.entries(kinds).map(([id, info]) => (
-                <option key={id} value={id}>{info.label}</option>
-              ))}
-            </select>
-            {kinds[newKind]?.hint && <p className="gy-hint">{kinds[newKind].hint}</p>}
-            {(kinds[newKind]?.secret === 'api_key' || kinds[newKind]?.secret === 'optional_key') && (
-              <>
-                <div className="gy-spacer" />
-                <label className="gy-field-label" htmlFor="gy-secret">{t('models.apiKey')}</label>
-                <input id="gy-secret" className="gy-input mono" type="password" value={newSecret}
-                  onChange={(e) => setNewSecret(e.target.value)} />
-              </>
-            )}
-            {(kinds[newKind]?.needsBaseUrl || kinds[newKind]?.defaultBaseUrl) && (
-              <>
-                <div className="gy-spacer" />
-                <label className="gy-field-label" htmlFor="gy-base">{t('models.address')}</label>
-                <input id="gy-base" className="gy-input mono" value={newBaseUrl}
-                  placeholder={kinds[newKind]?.defaultBaseUrl}
-                  onChange={(e) => setNewBaseUrl(e.target.value)} />
-              </>
-            )}
-            <div className="gy-spacer" />
-            <div className="gy-row">
-              <button className="gy-btn gy-btn--primary gy-btn--sm" disabled={!!busy} onClick={() => void add()}>
-                {t('models.save')}
-              </button>
-              <button className="gy-btn gy-btn--ghost gy-btn--sm" onClick={() => setAdding(false)}>
-                {t('models.cancel')}
-              </button>
-            </div>
-          </>
-        ) : (
-          <button className="gy-btn gy-btn--ghost gy-btn--block gy-btn--sm" onClick={() => setAdding(true)}>
-            {t('models.add')}
-          </button>
+          ))
         )}
       </section>
+
+      {families.map((family) => (
+        <div key={family.id}>
+          <div className="gy-family">{family.label}</div>
+          {kindsIn(family.id).map(([kind, info]) => {
+            const mine = list.filter((a) => a.kind === kind)
+            return (
+              <section className="gy-card" key={kind}>
+                <div className="gy-card-h">
+                  {info.label}
+                  {mine.length > 0 && (
+                    <span style={{ marginLeft: 'auto', fontWeight: 400 }}>
+                      {t('models.accountCount', { n: mine.length })}
+                    </span>
+                  )}
+                </div>
+                {info.hint && <p className="gy-hint">{info.hint}</p>}
+
+                {mine.map((account) => (
+                  <div key={account.id}>
+                    <div className="gy-spacer" />
+                    <div className="gy-row">
+                      <span className={`gy-pill grow ${account.enabled ? (account.status?.ok === false ? 'is-err' : 'is-ok') : ''}`}>
+                        <span className="gy-dot" />
+                        <span className="gy-msg">
+                          {account.label}
+                          {account.identity?.email ? ` · ${account.identity.email}` : ''}
+                          {!account.enabled ? ` · ${t('models.off')}` : ''}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="gy-spacer" />
+                    <div className="gy-row">
+                      <button className="gy-btn gy-btn--ghost gy-btn--sm" disabled={!!busy}
+                        onClick={() => void toggle(account)}>
+                        {account.enabled ? t('models.turnOff') : t('models.turnOn')}
+                      </button>
+                      <button className="gy-btn gy-btn--ghost gy-btn--sm" disabled={!!busy}
+                        onClick={() => void test(account)}>
+                        {busy === `test:${account.id}` ? t('models.testing') : t('models.test')}
+                      </button>
+                      {SUBSCRIPTION.has(account.kind) && (
+                        <button className="gy-btn gy-btn--primary gy-btn--sm" disabled={!!busy}
+                          onClick={() => void startLogin(account)}>
+                          {t('models.signIn')}
+                        </button>
+                      )}
+                      <button className="gy-btn gy-btn--danger gy-btn--sm" disabled={!!busy}
+                        onClick={() => void remove(account)}>
+                        {t('models.remove')}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                <div className="gy-spacer" />
+                {adding === kind ? (
+                  <>
+                    <label className="gy-field-label" htmlFor={`gy-label-${kind}`}>{t('models.label')}</label>
+                    <input id={`gy-label-${kind}`} className="gy-input" value={newLabel}
+                      placeholder={info.short}
+                      onChange={(e) => setNewLabel(e.target.value)} />
+                    {(info.secret === 'api_key' || info.secret === 'optional_key') && (
+                      <>
+                        <div className="gy-spacer" />
+                        <label className="gy-field-label" htmlFor={`gy-secret-${kind}`}>{t('models.apiKey')}</label>
+                        <input id={`gy-secret-${kind}`} className="gy-input mono" type="password" value={newSecret}
+                          onChange={(e) => setNewSecret(e.target.value)} />
+                      </>
+                    )}
+                    {(info.needsBaseUrl || info.defaultBaseUrl) && (
+                      <>
+                        <div className="gy-spacer" />
+                        <label className="gy-field-label" htmlFor={`gy-base-${kind}`}>{t('models.address')}</label>
+                        <input id={`gy-base-${kind}`} className="gy-input mono" value={newBaseUrl}
+                          placeholder={info.defaultBaseUrl}
+                          onChange={(e) => setNewBaseUrl(e.target.value)} />
+                      </>
+                    )}
+                    <div className="gy-spacer" />
+                    <div className="gy-row">
+                      <button className="gy-btn gy-btn--primary gy-btn--sm" disabled={!!busy}
+                        onClick={() => void add(kind)}>
+                        {SUBSCRIPTION.has(kind) ? t('models.addAndSignIn') : t('models.save')}
+                      </button>
+                      <button className="gy-btn gy-btn--ghost gy-btn--sm" onClick={() => setAdding(null)}>
+                        {t('models.cancel')}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <button className="gy-btn gy-btn--ghost gy-btn--block gy-btn--sm"
+                    onClick={() => openAdd(kind)}>
+                    {SUBSCRIPTION.has(kind) ? t('models.addLogin') : t('models.addKey')}
+                  </button>
+                )}
+              </section>
+            )
+          })}
+        </div>
+      ))}
 
       {login && (
         <section className="gy-card">

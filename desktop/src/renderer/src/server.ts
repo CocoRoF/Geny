@@ -124,6 +124,8 @@ export interface KindInfo {
   label: string
   short: string
   engineProvider: string
+  /** subscription | api | self_hosted — how the settings page groups it. */
+  family: string
   secret: string
   hint: string
   models: ModelChoice[]
@@ -155,7 +157,11 @@ export interface LastRoute {
 }
 
 export const accounts = {
-  kinds: () => serverFetch<{ kinds: Record<string, KindInfo>; efforts: string[] }>('/api/llm-accounts/kinds'),
+  kinds: () => serverFetch<{
+    kinds: Record<string, KindInfo>
+    families: { id: string; label: string }[]
+    efforts: string[]
+  }>('/api/llm-accounts/kinds'),
   list: () => serverFetch<{ accounts: LlmAccount[]; defaultRoute: AgentRoute }>('/api/llm-accounts'),
   create: (input: Record<string, unknown>) =>
     serverFetch<{ account: LlmAccount }>('/api/llm-accounts', { method: 'POST', body: JSON.stringify(input) }),

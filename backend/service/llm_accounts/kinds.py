@@ -15,6 +15,7 @@ from typing import Dict, List, Optional, Tuple
 
 __all__ = [
     "ACCOUNT_KINDS",
+    "FAMILIES",
     "EFFORTS",
     "KINDS",
     "KindInfo",
@@ -38,11 +39,24 @@ class ModelChoice:
         return {"id": self.id, "label": self.label, "hint": self.hint}
 
 
+#: How a kind is reached, which is also how the settings page groups them.
+#: A subscription is signed into; an API kind takes a key; a self-hosted one
+#: is an address you run yourself. Three different conversations, and a page
+#: that mixes them is the page where nobody finds the Codex login.
+FAMILIES: Tuple[Tuple[str, str], ...] = (
+    ("subscription", "구독 로그인"),
+    ("api", "API 키"),
+    ("self_hosted", "직접 띄운 엔드포인트"),
+)
+
+
 @dataclass(frozen=True)
 class KindInfo:
     label: str
     short: str
     engine_provider: str
+    #: subscription | api | self_hosted — see FAMILIES.
+    family: str
     #: what the user has to supply: api_key | optional_key | none | oauth
     secret: str
     hint: str
@@ -57,6 +71,7 @@ class KindInfo:
             "label": self.label,
             "short": self.short,
             "engineProvider": self.engine_provider,
+            "family": self.family,
             "secret": self.secret,
             "hint": self.hint,
             "models": [m.to_dict() for m in self.models],
@@ -68,6 +83,7 @@ class KindInfo:
 
 KINDS: Dict[str, KindInfo] = {
     "claude_code": KindInfo(
+        family="subscription",
         label="Claude Code (구독 로그인)",
         short="Claude Code",
         engine_provider="geny_claude_code",
@@ -85,6 +101,7 @@ KINDS: Dict[str, KindInfo] = {
         ),
     ),
     "codex": KindInfo(
+        family="subscription",
         label="ChatGPT · Codex (구독 로그인)",
         short="Codex",
         engine_provider="geny_codex",
@@ -100,6 +117,7 @@ KINDS: Dict[str, KindInfo] = {
         ),
     ),
     "anthropic": KindInfo(
+        family="api",
         label="Anthropic API",
         short="Anthropic",
         engine_provider="anthropic",
@@ -113,6 +131,7 @@ KINDS: Dict[str, KindInfo] = {
         ),
     ),
     "openai": KindInfo(
+        family="api",
         label="OpenAI API",
         short="OpenAI",
         engine_provider="openai",
@@ -126,6 +145,7 @@ KINDS: Dict[str, KindInfo] = {
         ),
     ),
     "google": KindInfo(
+        family="api",
         label="Google Gemini API",
         short="Gemini",
         engine_provider="google",
@@ -137,6 +157,7 @@ KINDS: Dict[str, KindInfo] = {
         ),
     ),
     "openrouter": KindInfo(
+        family="api",
         label="OpenRouter",
         short="OpenRouter",
         engine_provider="custom",
@@ -149,6 +170,7 @@ KINDS: Dict[str, KindInfo] = {
         ),
     ),
     "ollama": KindInfo(
+        family="self_hosted",
         label="Ollama (로컬)",
         short="Ollama",
         engine_provider="ollama",
@@ -161,6 +183,7 @@ KINDS: Dict[str, KindInfo] = {
         ),
     ),
     "vllm": KindInfo(
+        family="self_hosted",
         label="vLLM",
         short="vLLM",
         engine_provider="vllm",
@@ -169,6 +192,7 @@ KINDS: Dict[str, KindInfo] = {
         hint="자체 호스팅한 vLLM 엔드포인트",
     ),
     "openai_compatible": KindInfo(
+        family="self_hosted",
         label="OpenAI 호환 엔드포인트",
         short="호환",
         engine_provider="custom",

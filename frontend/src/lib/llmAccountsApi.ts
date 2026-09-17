@@ -43,10 +43,15 @@ export interface ModelChoice {
   hint?: string;
 }
 
+/** Which conversation a kind is: one you sign into, one you paste a key
+ *  into, or one you point at a machine you run. */
+export type KindFamily = 'subscription' | 'api' | 'self_hosted';
+
 export interface KindInfo {
   label: string;
   short: string;
   engineProvider: string;
+  family: KindFamily;
   /** api_key | optional_key | none | oauth */
   secret: string;
   hint: string;
@@ -190,7 +195,11 @@ const BASE = '/api/llm-accounts';
 
 export const llmAccountsApi = {
   /** Every kind of account, what it needs, and the models it offers. */
-  kinds: () => call<{ kinds: Record<AccountKind, KindInfo>; efforts: string[] }>(`${BASE}/kinds`),
+  kinds: () => call<{
+    kinds: Record<AccountKind, KindInfo>;
+    families: { id: KindFamily; label: string }[];
+    efforts: string[];
+  }>(`${BASE}/kinds`),
 
   list: () => call<{ accounts: LlmAccount[]; defaultRoute: AgentRoute }>(BASE),
 

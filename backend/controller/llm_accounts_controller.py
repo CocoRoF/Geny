@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field
 
 from service.auth.auth_middleware import require_auth
 from service.llm_accounts import KINDS, get_account_service
-from service.llm_accounts.kinds import EFFORTS
+from service.llm_accounts.kinds import EFFORTS, FAMILIES
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +88,9 @@ async def list_kinds(_: Any = Depends(require_auth)) -> Dict[str, Any]:
     """Every kind of account, what it needs, and the models it offers."""
     return {
         "kinds": {name: info.to_dict() for name, info in KINDS.items()},
+        # The families, in the order a settings page should show them. Sent
+        # rather than hard-coded in each client, so adding a kind is one edit.
+        "families": [{"id": fid, "label": label} for fid, label in FAMILIES],
         "efforts": list(EFFORTS),
     }
 
