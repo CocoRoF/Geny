@@ -316,13 +316,22 @@ def db_add_messages_batch(db_manager, room_id: str,
     return results
 
 
+# A conversation is ordered by when things were said. The serial ``id`` is
+# insertion order, which is the same thing right up until it isn't: a message
+# moved here from another room, or restored from a backup, arrives with a new
+# serial and a two-month-old timestamp — and lands at the end of the
+# conversation. ``id`` stays as the tiebreak, so messages written in the same
+# microsecond keep a stable order.
+_MESSAGE_ORDER = "timestamp ASC, id ASC"
+_MESSAGE_ORDER_DESC = "timestamp DESC, id DESC"
+
+
 def db_get_messages(db_manager, room_id: str, *, limit: int = 0, before: str = "") -> List[Dict[str, Any]]:
-    """Load messages for a room, ordered by timestamp.
+    """Load messages for a room, oldest first.
 
     Args:
-        limit: Max messages to return. 0 = unlimited (all).
-        before: If given, return only messages with DB ``id`` less than the row
-                whose ``message_id`` matches this value (cursor-based paging).
+        limit: Max messages to return (the NEWEST that many). 0 = all.
+        before: A ``message_id`` cursor — return only messages older than it.
     """
     mgr = _get_db_manager(db_manager)
     if not _is_db_available(db_manager):
@@ -333,8 +342,10 @@ def db_get_messages(db_manager, room_id: str, *, limit: int = 0, before: str = "
         where_clause = f"WHERE room_id = %s"
 
         if before:
+            # Older than the cursor in the SAME order the rows come back in,
+            # so paging cannot skip a message or show one twice.
             where_clause += (
-                f" AND id < (SELECT id FROM {MESSAGES_TABLE}"
+                f" AND (timestamp, id) < (SELECT timestamp, id FROM {MESSAGES_TABLE}"
                 f" WHERE room_id = %s AND message_id = %s LIMIT 1)"
             )
             params.extend([room_id, before])
@@ -345,14 +356,14 @@ def db_get_messages(db_manager, room_id: str, *, limit: int = 0, before: str = "
             query = (
                 f"SELECT * FROM ("
                 f"  SELECT * FROM {MESSAGES_TABLE} {where_clause}"
-                f"  ORDER BY id DESC LIMIT %s"
-                f") sub ORDER BY id ASC"
+                f"  ORDER BY {_MESSAGE_ORDER_DESC} LIMIT %s"
+                f") sub ORDER BY {_MESSAGE_ORDER}"
             )
             params.append(limit)
         else:
             query = (
                 f"SELECT * FROM {MESSAGES_TABLE} {where_clause} "
-                f"ORDER BY id ASC"
+                f"ORDER BY {_MESSAGE_ORDER}"
             )
 
         rows = mgr.execute_query(query, tuple(params))
