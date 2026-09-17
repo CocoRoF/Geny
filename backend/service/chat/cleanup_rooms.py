@@ -67,6 +67,33 @@ class Plan:
         return "\n".join(lines)
 
 
+def attach_database() -> bool:
+    """Wire the stores to PostgreSQL, as ``main.py`` does at startup.
+
+    Run as a one-off process this matters more than it looks: sessions live
+    ONLY in the database, while rooms also have a JSON backup on disk. So an
+    unwired process sees every room and no sessions at all — and concludes
+    that every conversation on the server is an orphan. The first dry run of
+    this tool said exactly that: retire 325 rooms, 5,698 messages, including
+    the live one.
+    """
+    try:
+        from service.database import APPLICATION_MODELS, AppDatabaseManager
+
+        app_db = AppDatabaseManager()
+        app_db.register_models(APPLICATION_MODELS)
+    except Exception:  # noqa: BLE001
+        logger.error("[rooms] no database — refusing to judge what is orphaned", exc_info=True)
+        return False
+
+    from service.chat.conversation_store import get_chat_store
+    from service.sessions.store import get_session_store
+
+    get_session_store().set_database(app_db)
+    get_chat_store().set_database(app_db)
+    return True
+
+
 def _live_session_ids() -> set:
     from service.sessions.store import get_session_store
 
@@ -163,6 +190,16 @@ def clean(apply: bool = False, backup: Optional[Path] = None) -> Plan:
     if not apply:
         return plan
 
+    # "No sessions at all" is not a finding, it is a failed lookup — and it
+    # is the one that would delete every conversation on the server. A store
+    # that cannot see a single session cannot be trusted to say which rooms
+    # are orphans.
+    if plan.live_sessions == 0 and plan.total_rooms > 0:
+        raise RuntimeError(
+            f"{plan.total_rooms} rooms and 0 sessions — the session store is not "
+            "connected. Refusing to treat every conversation as an orphan."
+        )
+
     store = get_chat_store()
 
     for item in plan.merge:
@@ -207,6 +244,9 @@ def main() -> int:
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    if not attach_database():
+        print("database unavailable — nothing was touched")
+        return 2
     plan = clean(apply=args.apply, backup=Path(args.backup) if args.apply else None)
     print(plan.render())
     print("APPLIED" if args.apply else "DRY RUN — pass --apply to carry it out")

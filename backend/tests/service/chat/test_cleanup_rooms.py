@@ -96,7 +96,8 @@ def test_a_soft_deleted_session_keeps_its_conversation(wired):
 
 def test_it_refuses_to_delete_without_a_backup(wired):
     cleanup, chat, _, live, _, _tmp = wired
-    chat.rooms = [room("ghost", ["gone"], 5)]
+    live.append("alive")
+    chat.rooms = [room("mine", ["alive"], 2), room("ghost", ["gone"], 5)]
 
     with pytest.raises(ValueError):
         cleanup.clean(apply=True, backup=None)
@@ -127,3 +128,27 @@ def test_a_dry_run_touches_nothing(wired):
     assert len(plan.merge) == 1 and len(plan.retire) == 1
     assert chat.deleted == []
     assert "DRY" not in plan.render()  # the render is the finding, not the verdict
+
+
+def test_it_refuses_when_it_cannot_see_a_single_session(wired):
+    """The dry run that found this would have retired every room on the
+    production server — 325 of them, the live 2,457-message conversation
+    included — because a one-off process reads rooms from their JSON backup
+    but sessions only from the database. No sessions is a failed lookup, not
+    a server with nothing on it."""
+    cleanup, chat, _, live, _, tmp = wired
+    live.clear()
+    chat.rooms = [room("real", ["s1"], 2457), room("also", ["s2"], 3)]
+
+    with pytest.raises(RuntimeError, match="not connected"):
+        cleanup.clean(apply=True, backup=tmp / "b.json")
+    assert chat.deleted == []
+
+
+def test_an_empty_server_is_still_fine(wired):
+    cleanup, chat, _, live, _, tmp = wired
+    live.clear()
+    chat.rooms = []
+
+    plan = cleanup.clean(apply=True, backup=tmp / "b.json")
+    assert plan.retire == [] and chat.deleted == []
