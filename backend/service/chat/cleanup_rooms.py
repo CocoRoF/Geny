@@ -84,8 +84,9 @@ def attach_database() -> bool:
         app_db.register_models(APPLICATION_MODELS)
         # Registering models is not connecting. Without the pool every read
         # comes back empty and nothing raises — which is the same silence as
-        # "this server has no sessions".
-        if not app_db.connect():
+        # "this server has no sessions". Connection only: a janitor has no
+        # business creating tables or running schema migrations.
+        if not app_db.initialize_connection():
             logger.error("[rooms] could not connect to PostgreSQL")
             return False
     except Exception:  # noqa: BLE001
