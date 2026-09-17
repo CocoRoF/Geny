@@ -92,7 +92,9 @@ export function ActivityPanel({ sessionId, t }: { sessionId: string; t: T }): Re
         <div className="gy-ledger-body">
           {entries.map((entry) => (
             <div key={entry.seq} className="gy-ledger-row is-column">
-              <span className="gy-ledger-kind">{entry.kind}</span>
+              <span className="gy-ledger-kind">
+                {entry.role === 'trigger' ? t('chat.ledger.trigger') : entry.kind}
+              </span>
               <span className="gy-ledger-text">
                 {entry.text ?? entry.command ?? entry.path ?? entry.detail ?? entry.tool ?? ''}
               </span>

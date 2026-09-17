@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 logger = logging.getLogger(__name__)
@@ -190,6 +191,20 @@ def _kind_before_failure(target: Dict[str, Any]) -> str:
     return "tool"
 
 
+#: A turn the agent started by itself. The trigger text is prompt
+#: engineering, not something anybody said.
+_TRIGGER = re.compile(r"^\[(THINKING_TRIGGER|autonomous_signal)[:\]]")
+
+
+def _prompt_text(message: Any) -> str:
+    """Strip the log's own ``PROMPT:`` prefix.
+
+    It belongs to the log line, not to the message. Carried through, it ends
+    up on screen in front of every single thing the user said.
+    """
+    return re.sub(r"^PROMPT:\s*", "", str(message or ""))
+
+
 def build_activity(
     session_id: str,
     *,
@@ -240,9 +255,14 @@ def build_activity(
 
         if level == "COMMAND":
             seq += 1
+            text = _prompt_text(entry.get("message"))
             activity.append({
                 "seq": seq, "ts": entry.get("timestamp"), "kind": "turn",
-                "role": "user", "text": entry.get("message"),
+                # A scheduled thought comes down the same channel as something
+                # a person typed. The ledger is a record of what happened, and
+                # "the user asked" and "the clock asked" are different things.
+                "role": "trigger" if _TRIGGER.match(text) else "user",
+                "text": text,
             })
             continue
 

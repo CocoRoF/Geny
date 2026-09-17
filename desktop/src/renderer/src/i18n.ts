@@ -454,6 +454,7 @@ export const messages: Record<string, Entry> = {
   'chat.ledger.files': { ko: '파일', en: 'Files' },
   'chat.ledger.commands': { ko: '명령', en: 'Commands' },
   'chat.ledger.log': { ko: '전체', en: 'All' },
+  'chat.ledger.trigger': { ko: '스스로', en: 'self' },
   'chat.ledger.noFiles': { ko: '아직 건드린 파일이 없습니다', en: 'No files touched yet' },
   'chat.ledger.noCommands': { ko: '아직 실행한 명령이 없습니다', en: 'No commands run yet' },
   'chat.ledger.noLog': { ko: '아직 기록이 없습니다', en: 'Nothing recorded yet' },

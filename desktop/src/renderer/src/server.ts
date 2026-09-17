@@ -221,7 +221,8 @@ export interface ActivityEntry {
   ok?: boolean | null
   durationMs?: number | null
   error?: string | null
-  role?: 'user' | 'assistant'
+  /** `trigger` = the agent woke on a schedule; nobody asked. */
+  role?: 'user' | 'assistant' | 'trigger'
   text?: string
   label?: string
   model?: string

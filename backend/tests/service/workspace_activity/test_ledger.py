@@ -223,3 +223,29 @@ class TestMetadataShapes:
         assert build_activity("s1") == {
             "session_id": "s1", "entries": [], "total": 0, "scanned": 0, "truncated": False,
         }
+
+
+class TestWhatWasAsked:
+    """A turn row says what was asked. Both halves of that were wrong."""
+
+    def test_the_logs_own_prefix_is_not_part_of_the_message(self, log) -> None:
+        # The log writes `PROMPT: <text>`. That prefix belongs to the log line,
+        # and carried through it lands on screen in front of every single thing
+        # the user said.
+        log(_entry("COMMAND", "PROMPT: 테스트를 돌려줘", {}))
+        turns = [e for e in build_activity("s")["entries"] if e["kind"] == "turn"]
+        assert turns[0]["text"] == "테스트를 돌려줘"
+        assert turns[0]["role"] == "user"
+
+    def test_a_scheduled_thought_is_not_the_user_asking(self, log) -> None:
+        # An autonomous trigger arrives down the same channel as a typed
+        # message. Recorded as `user`, the ledger claims someone asked for it.
+        log(_entry("COMMAND", "PROMPT: [THINKING_TRIGGER:time_evening] The evening is here.", {}))
+        turns = [e for e in build_activity("s")["entries"] if e["kind"] == "turn"]
+        assert turns[0]["role"] == "trigger"
+        assert turns[0]["text"].startswith("[THINKING_TRIGGER:time_evening]")
+
+    def test_a_bare_prompt_is_left_alone(self, log) -> None:
+        log(_entry("COMMAND", "just this", {}))
+        turns = [e for e in build_activity("s")["entries"] if e["kind"] == "turn"]
+        assert turns[0]["text"] == "just this"
