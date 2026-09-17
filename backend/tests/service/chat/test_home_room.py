@@ -60,14 +60,30 @@ class FakeChatStore:
         return list(self.messages.get(room_id, []))
 
     def add_messages_batch(self, room_id, messages):
-        self.messages.setdefault(room_id, []).extend(messages)
+        # Like the real one: INSERT ... ON CONFLICT (message_id) DO NOTHING.
+        # A message whose id already exists ANYWHERE is silently skipped, which
+        # is what made copy-then-delete lose seven messages in production.
+        known = {m.get("id") for msgs in self.messages.values() for m in msgs}
+        fresh = [m for m in messages if m.get("id") not in known]
+        self.messages.setdefault(room_id, []).extend(fresh)
         room = self.get_room(room_id)
         if room:
             room["message_count"] = len(self.messages[room_id])
-        return messages
+        return fresh
 
     def resort_messages(self, room_id):
         self.messages.get(room_id, []).sort(key=lambda m: str(m.get("timestamp") or ""))
+
+    def move_messages(self, source_id, target_id):
+        moving = self.messages.pop(source_id, [])
+        target = self.messages.setdefault(target_id, [])
+        seen = {m.get("id") for m in target}
+        target.extend(m for m in moving if m.get("id") not in seen)
+        target.sort(key=lambda m: str(m.get("timestamp") or ""))
+        room = self.get_room(target_id)
+        if room:
+            room["message_count"] = len(target)
+        return len(moving)
 
 
 class FakeSessionStore:
@@ -208,3 +224,25 @@ def test_a_stale_claim_falls_through_instead_of_dead_ending(wired):
     chat.rooms = [room("real", ["s1"], 5)]
 
     assert home_room.resolve_home_room("s1")["id"] == "real"
+
+
+def test_a_merge_never_loses_a_message(wired):
+    """It did, on production, seven of them. Inserts are ON CONFLICT DO
+    NOTHING, so copying messages that still exist under the source room wrote
+    nothing at all — and the delete that followed took the only copy. The
+    merge moves them now, and this fake refuses duplicate ids exactly like
+    the database does."""
+    home_room, chat, _ = wired
+    chat.rooms = [room("home", ["s1"], 9), room("stray", ["s1"], 3)]
+    chat.messages["home"] = [{"id": "h1", "timestamp": "t5"}]
+    chat.messages["stray"] = [
+        {"id": "m1", "timestamp": "t1", "content": "내꺼 화면에서 네이버 보고"},
+        {"id": "m2", "timestamp": "t2", "content": "잠깐만, 화면 보고 직접 해볼게."},
+        {"id": "m3", "timestamp": "t3", "content": "1/1 sessions responded"},
+    ]
+
+    home_room.resolve_home_room("s1")
+
+    surviving = [m["id"] for m in chat.messages["home"]]
+    assert surviving == ["m1", "m2", "m3", "h1"], surviving
+    assert "stray" not in chat.messages

@@ -79,22 +79,24 @@ def merge_rooms(source_id: str, target_id: str) -> int:
     Returns how many messages moved. Ids and timestamps are preserved, so the
     merged history reads in the order it happened and a client that has
     already seen a message still recognises it.
+
+    The move happens in one statement and the room only goes afterwards — the
+    first version of this copied and then deleted, which loses everything the
+    target refuses as a duplicate id. It refused all of them, because the
+    originals were still there when they were offered.
     """
     from service.chat.conversation_store import get_chat_store
 
     if source_id == target_id:
         return 0
     store = get_chat_store()
-    messages = store.get_messages(source_id) or []
-    if messages:
-        store.add_messages_batch(target_id, messages)
-        store.resort_messages(target_id)
+    moved = store.move_messages(source_id, target_id)
     store.delete_room(source_id)
     logger.info(
         "[home-room] merged room %s into %s (%d messages)",
-        source_id, target_id, len(messages),
+        source_id, target_id, moved,
     )
-    return len(messages)
+    return moved
 
 
 def _record_on_session(session_id: str, room_id: str) -> None:

@@ -183,6 +183,33 @@ def db_update_room_name(db_manager, room_id: str, name: str) -> bool:
         return False
 
 
+def db_move_messages(db_manager, source_room_id: str, target_room_id: str) -> int:
+    """Move every message from one room to another. Returns how many moved.
+
+    A MOVE, not a copy. Copying and then deleting the source looks equivalent
+    and is not: ``db_add_message`` inserts ``ON CONFLICT (message_id) DO
+    NOTHING``, so re-inserting a message that still exists under the source
+    room silently does nothing — and the delete that follows then takes the
+    only copy. That cost seven real messages on the production server the
+    first time this ran.
+    """
+    mgr = _get_db_manager(db_manager)
+    if not _is_db_available(db_manager):
+        return 0
+    if source_room_id == target_room_id:
+        return 0
+
+    try:
+        moved = mgr.execute_update_delete(
+            f"UPDATE {MESSAGES_TABLE} SET room_id = %s WHERE room_id = %s",
+            (target_room_id, source_room_id),
+        )
+        return int(moved or 0)
+    except Exception as e:
+        logger.error(f"Failed to move messages {source_room_id} -> {target_room_id}: {e}")
+        raise
+
+
 def db_delete_room(db_manager, room_id: str) -> bool:
     """Delete a room and all its messages."""
     mgr = _get_db_manager(db_manager)

@@ -476,6 +476,58 @@ class ChatConversationStore:
 
         return message
 
+    def move_messages(self, source_room_id: str, target_room_id: str) -> int:
+        """Move a room's whole history into another room.
+
+        The reason this is not "read them, add them to the target, delete the
+        source" is that adding is ``ON CONFLICT (message_id) DO NOTHING``: the
+        messages still exist under the source at that moment, every insert is
+        a no-op, and the delete then takes the only copy. Seven messages went
+        that way on the production server before this existed.
+        """
+        if source_room_id == target_room_id:
+            return 0
+
+        moved = 0
+        if self._db_available:
+            from service.database.chat_db_helper import (
+                db_get_message_count,
+                db_move_messages,
+                db_update_room_metadata,
+            )
+            moved = db_move_messages(self._app_db, source_room_id, target_room_id)
+            try:
+                db_update_room_metadata(
+                    self._app_db, target_room_id,
+                    message_count=db_get_message_count(self._app_db, target_room_id),
+                )
+                db_update_room_metadata(
+                    self._app_db, source_room_id, message_count=0,
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"[ChatStore] room metadata after move: {e}")
+
+        # The JSON copy, kept in step: merge by id so a repeat run cannot
+        # double the history, and keep it in the order it happened.
+        with self._lock:
+            source = self._load_messages(source_room_id)
+            if source:
+                target = self._load_messages(target_room_id)
+                seen = {m.get("id") for m in target}
+                target.extend(m for m in source if m.get("id") not in seen)
+                target.sort(key=lambda m: str(m.get("timestamp") or ""))
+                self._save_messages(target_room_id, target)
+                self._save_messages(source_room_id, [])
+                moved = moved or len(source)
+            for r in self._rooms:
+                if r["id"] == target_room_id:
+                    r["message_count"] = len(self._load_messages(target_room_id))
+                elif r["id"] == source_room_id:
+                    r["message_count"] = 0
+            self._save_rooms()
+
+        return moved
+
     def reconcile_json_backup(self) -> Dict[str, int]:
         """Make the on-disk backup say what the database says.
 
@@ -496,11 +548,28 @@ class ChatConversationStore:
         live = db_list_rooms(self._app_db) or []
         live_ids = {str(r.get("room_id") or r.get("id")) for r in live}
 
+        from service.database.chat_db_helper import db_get_messages
+
         removed_rooms = 0
         removed_files = 0
+        refreshed = 0
         with self._lock:
-            kept = [r for r in self._rooms if str(r.get("id")) in live_ids]
-            removed_rooms = len(self._rooms) - len(kept)
+            by_id = {str(r.get("room_id") or r.get("id")): r for r in live}
+            kept = []
+            for room in self._rooms:
+                fresh = by_id.get(str(room.get("id")))
+                if fresh is None:
+                    removed_rooms += 1
+                    continue
+                room["name"] = fresh.get("name", room.get("name"))
+                room["session_ids"] = fresh.get("session_ids", room.get("session_ids"))
+                room["message_count"] = fresh.get("message_count", room.get("message_count"))
+                kept.append(room)
+            # A room the database has and the file does not (repaired by hand,
+            # say) belongs here too.
+            for room_id, fresh in by_id.items():
+                if not any(str(r.get("id")) == room_id for r in kept):
+                    kept.append({**fresh, "id": room_id})
             self._rooms = kept
             self._save_rooms()
 
@@ -514,11 +583,30 @@ class ChatConversationStore:
                     except OSError:
                         logger.warning("could not remove stale %s", path)
 
+            # And the histories themselves: the file copy drifts from the
+            # database whenever a message is written any other way, and a
+            # fallback that is missing messages is worse than no fallback,
+            # because nothing announces it.
+            for room_id in live_ids:
+                try:
+                    messages = db_get_messages(self._app_db, room_id) or []
+                except Exception:  # noqa: BLE001
+                    logger.warning("could not read %s for backup refresh", room_id)
+                    continue
+                if messages != self._load_messages(room_id):
+                    self._save_messages(room_id, messages)
+                    refreshed += 1
+
         logger.info(
-            "[ChatStore] JSON backup reconciled: %d stale rooms, %d message files removed",
-            removed_rooms, removed_files,
+            "[ChatStore] JSON backup reconciled: %d stale rooms, %d message files "
+            "removed, %d histories refreshed",
+            removed_rooms, removed_files, refreshed,
         )
-        return {"rooms_removed": removed_rooms, "message_files_removed": removed_files}
+        return {
+            "rooms_removed": removed_rooms,
+            "message_files_removed": removed_files,
+            "histories_refreshed": refreshed,
+        }
 
     def resort_messages(self, room_id: str) -> None:
         """Put the JSON backup back in timestamp order.
