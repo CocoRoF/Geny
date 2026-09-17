@@ -82,6 +82,12 @@ def attach_database() -> bool:
 
         app_db = AppDatabaseManager()
         app_db.register_models(APPLICATION_MODELS)
+        # Registering models is not connecting. Without the pool every read
+        # comes back empty and nothing raises — which is the same silence as
+        # "this server has no sessions".
+        if not app_db.connect():
+            logger.error("[rooms] could not connect to PostgreSQL")
+            return False
     except Exception:  # noqa: BLE001
         logger.error("[rooms] no database — refusing to judge what is orphaned", exc_info=True)
         return False
@@ -89,8 +95,17 @@ def attach_database() -> bool:
     from service.chat.conversation_store import get_chat_store
     from service.sessions.store import get_session_store
 
-    get_session_store().set_database(app_db)
+    sessions = get_session_store()
+    sessions.set_database(app_db)
     get_chat_store().set_database(app_db)
+
+    # `_db_available` is the exact predicate the store itself uses to decide
+    # whether a read goes to the database or falls back to the JSON copy on
+    # disk. If it says no, this tool is about to compare rooms it CAN see
+    # against sessions it cannot.
+    if not sessions._db_available:
+        logger.error("[rooms] the session store is not reading from the database")
+        return False
     return True
 
 
