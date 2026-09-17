@@ -8,7 +8,7 @@ name: Mobile Apps
 # regenerating them here would make the release depend on whatever the Expo
 # template looked like that morning.
 #
-Signing, as it stands today:
+# Signing, as it stands today:
 #
 # · iOS ships an UNSIGNED .ipa. Apple distribution needs a developer
 #   certificate and a provisioning profile, and there is no Apple Developer
