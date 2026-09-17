@@ -301,6 +301,13 @@ export interface AgentLogEntry {
   ts?: string | null;
   tool_name?: string;
   node_name?: string;
+  /** What the call was, so the timeline can describe it rather than print
+   *  the log line. Present on TOOL / TOOL_RES entries. */
+  tool_id?: string;
+  input_preview?: string;
+  result_preview?: string;
+  duration_ms?: number;
+  is_error?: boolean;
 }
 
 export interface AgentProgressEvent {

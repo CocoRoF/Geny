@@ -482,7 +482,10 @@
 
 .msg-row.user .msg-col {
   align-items: flex-end;
+  /* No avatar on this side — the side and the colour already say whose it
+     is, and a box reading "나" beside your own words says nothing. */
   max-width: 82%;
+  margin-left: auto;
 }
 
 .msg-time {
@@ -1684,4 +1687,97 @@
   color: var(--text-secondary);
   white-space: pre;
   tab-size: 2;
+}
+
+/* ── a tool's result, in the shape it has ─────────────────────────────── */
+
+.ptl-sum {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  white-space: normal;
+}
+
+.ptl-sum-result {
+  display: block;
+}
+
+.ptl-preview {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ptl-result-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.ptl-result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.ptl-result-meta i {
+  font-style: normal;
+  opacity: 0.75;
+}
+
+.ptl-result-meta .yes {
+  color: var(--success);
+}
+
+.ptl-result-meta .no {
+  color: var(--error);
+}
+
+.ptl-table-wrap {
+  overflow-x: auto;
+}
+
+.ptl-table {
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.ptl-table th,
+.ptl-table td {
+  padding: 2px 10px 2px 0;
+  text-align: left;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ptl-table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.ptl-table td {
+  color: var(--text-secondary);
+}
+
+.ptl-table-more {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+/* the kinds the shared model names */
+.ptl-kind-package .ptl-ico {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.ptl-kind-list .ptl-ico {
+  color: #7c3aed;
+  background: rgba(124, 58, 237, 0.11);
 }

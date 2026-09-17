@@ -7,6 +7,7 @@ import { useI18n } from '@/lib/i18n';
 import { Bot, User, Loader2, MessageCircle, Clock, ChevronDown, ChevronRight, XCircle, Paperclip } from 'lucide-react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import SelectionActionMenu from '@/components/chat/SelectionActionMenu';
+import ProcessTimeline, { type TimelineCall } from '@/components/chat/ProcessTimeline';
 import dynamic from 'next/dynamic';
 import type { ChatRoomMessage, AgentLogEntry, ChatAttachment } from '@/types';
 import { ChatMarkdown, FileChangeSummary, AgentBadge, ExecutionMeta, getRoleColor, formatTime, formatDate, apiPathOf, AuthedChatImage, openAuthedLink } from '@/components/chat';
@@ -266,50 +267,50 @@ function TypingIndicator({ name, role, sessionId, thinkingPreview, elapsedMs }: 
   );
 }
 
-// Inline execution log viewer for a single agent
-function AgentLogPanel({ logs, logCursor }: { logs: AgentLogEntry[]; logCursor?: number }) {
-  const [expanded, setExpanded] = useState(false);
-  if (!logs.length) return null;
+/**
+ * What an agent is doing, while it does it.
+ *
+ * This used to print the log: `TOOL Bash 🔧 Bash` in monospace behind an
+ * "N steps" toggle. It is the same process timeline the desktop app draws
+ * now, from the same model in `shared/chat/tool-view` — so a tool call is
+ * described identically in both, and neither recognises a vendor by name.
+ */
+function AgentLogPanel({ logs }: { logs: AgentLogEntry[]; logCursor?: number }) {
+  const calls = useMemo(() => foldCalls(logs), [logs]);
+  if (calls.length === 0) return null;
+  return <ProcessTimeline calls={calls} live />;
+}
 
-  const levelColor = (level: string) => {
-    switch (level) {
-      case 'GRAPH': return 'text-purple-500';
-      case 'TOOL': return 'text-blue-500';
-      case 'TOOL_RES': return 'text-cyan-500';
-      case 'INFO': return 'text-[var(--text-muted)]';
-      default: return 'text-[var(--text-secondary)]';
+/**
+ * TOOL / TOOL_RES log entries → one call each.
+ *
+ * Paired by `tool_id` where the server sent one, and otherwise by name onto
+ * the most recent call still waiting for its result — production carries both
+ * shapes, because a batch summary arrives with neither id nor name.
+ */
+function foldCalls(logs: AgentLogEntry[]): TimelineCall[] {
+  const calls: TimelineCall[] = [];
+  logs.forEach((log, i) => {
+    if (log.level === 'TOOL') {
+      calls.push({
+        key: log.tool_id ?? `${i}:${log.tool_name ?? 'tool'}`,
+        name: log.tool_name ?? 'tool',
+        input: log.input_preview,
+        ok: null,
+      });
+      return;
     }
-  };
-
-  return (
-    <div className="mt-1">
-      <button
-        className="flex items-center gap-1 text-[0.6875rem] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors bg-transparent border-none cursor-pointer p-0"
-        onClick={() => setExpanded(!expanded)}
-      >
-        {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        <span>{logCursor ?? logs.length} steps</span>
-      </button>
-      {expanded && (
-        <div className="mt-1 pl-1 border-l-2 border-[var(--border-color)] space-y-0.5 max-h-[200px] overflow-y-auto">
-          {logs.map((log, i) => (
-            <div key={i} className="flex items-start gap-1.5 text-[0.625rem] font-mono">
-              <span className={`shrink-0 font-semibold ${levelColor(log.level)}`}>
-                {log.level}
-              </span>
-              {log.node_name && (
-                <span className="text-purple-400 shrink-0">{log.node_name}</span>
-              )}
-              {log.tool_name && (
-                <span className="text-blue-400 shrink-0">{log.tool_name}</span>
-              )}
-              <span className="text-[var(--text-secondary)] truncate">{log.message}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+    if (log.level !== 'TOOL_RES') return;
+    const match = log.tool_id
+      ? calls.find((c) => c.key === log.tool_id)
+      : [...calls].reverse().find((c) =>
+        c.ok === null && (!log.tool_name || c.name === log.tool_name));
+    if (!match) return;
+    match.ok = !log.is_error;
+    match.result = log.result_preview;
+    match.durationMs = log.duration_ms;
+  });
+  return calls;
 }
 
 // Per-agent progress indicator during broadcast
@@ -334,7 +335,7 @@ function AgentProgressIndicator({ agents }: { agents: import('@/types').AgentPro
           />
           {agent.recent_logs && agent.recent_logs.length > 0 && (
             <div className="pl-[52px]">
-              <AgentLogPanel logs={agent.recent_logs} logCursor={agent.log_cursor} />
+              <AgentLogPanel logs={agent.recent_logs} />
             </div>
           )}
         </div>

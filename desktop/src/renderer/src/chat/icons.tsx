@@ -131,6 +131,17 @@ export const Icon = {
       <path d="m3 21 4-4" />
     </Svg>
   ),
+  package: (
+    <Svg size={14}>
+      <path d="m12 2 9 5v10l-9 5-9-5V7z" />
+      <path d="m3 7 9 5 9-5M12 12v10" />
+    </Svg>
+  ),
+  list: (
+    <Svg size={14}>
+      <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+    </Svg>
+  ),
 }
 
 /**
@@ -149,12 +160,15 @@ export function toolKind(name?: string): keyof typeof KIND_ICON {
   return 'tool'
 }
 
-export const KIND_ICON = {
+/** The badges the shared tool model names. */
+export const KIND_ICON: Record<string, ReactNode> = {
   terminal: Icon.terminal,
+  package: Icon.package,
   file: Icon.file,
   edit: Icon.edit,
   search: Icon.search,
   web: Icon.web,
+  list: Icon.list,
   external: Icon.tool,
   tool: Icon.tool,
 }

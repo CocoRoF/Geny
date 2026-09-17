@@ -300,3 +300,43 @@ test('a failed turn keeps its text even when it looks like a mood tag', () => {
   assert.equal(after.length, 1);
   assert.equal(after[0].role, 'notice');
 });
+
+// ── the sentence before the tools ────────────────────────────────────
+// An agent turn arrives as: a sentence saying what it is about to do, the
+// tool calls that do it, then the next sentence. Carrying that sentence onto
+// the step is what makes the timeline read like a plan instead of a list of
+// commands.
+
+const delta = (text: string, ts: string) =>
+  ({ level: 'STREAM', timestamp: ts, message: text, metadata: { type: 'text_delta' } });
+
+test('the text before a tool becomes that step title', () => {
+  let m = foldEntry([], delta('PDF에서 앞 5개 ', 't1'));
+  m = foldEntry(m, delta('제품 정보를 추출합니다.', 't2'));
+  assert.equal(m.length, 1);
+  assert.equal(m[0].role, 'draft', 'held, not shown');
+
+  m = foldEntry(m, {
+    level: 'TOOL', timestamp: 't3', message: '🔧 Glob',
+    metadata: { tool_name: 'Glob', tool_id: 'a', input_preview: '{"pattern":"**/*.pdf"}' },
+  });
+  assert.equal(m.length, 1, 'the draft became the step, not a second message');
+  assert.equal(m[0].role, 'activity');
+  assert.equal(m[0].step, 'PDF에서 앞 5개 제품 정보를 추출합니다.');
+});
+
+test('text with no tool after it is dropped by the answer', () => {
+  let m = foldEntry([], delta('거의 다 됐어', 't1'));
+  m = foldEntry(m, {
+    level: 'RESPONSE', timestamp: 't2', message: 'SUCCESS: 거의 다 됐어요.',
+    metadata: { success: true },
+  });
+  assert.equal(m.length, 1);
+  assert.equal(m[0].role, 'assistant');
+  assert.equal(m[0].text, '거의 다 됐어요.');
+});
+
+test('an empty delta changes nothing', () => {
+  const m = foldEntry([], delta('', 't1'));
+  assert.equal(m.length, 0);
+});

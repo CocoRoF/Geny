@@ -23,7 +23,25 @@
  * Pure — no React, no platform. Tested under `node:test`.
  */
 
-export type MessageRole = 'user' | 'assistant' | 'activity' | 'notice' | 'system';
+export type MessageRole =
+  | 'user'
+  | 'assistant'
+  | 'activity'
+  | 'notice'
+  | 'system'
+  /**
+   * The answer being typed, before the tools it leads into.
+   *
+   * The engine streams the model's text as it arrives, and in an agent turn
+   * that text comes in bursts: a sentence saying what it is about to do, then
+   * the tool calls that do it, then the next sentence. Held here until a tool
+   * claims it as that step's title — which is what makes the timeline read
+   * like a plan rather than a list of commands.
+   *
+   * Never rendered on its own. A renderer that meets one skips it: it is a
+   * buffer, and the turn's final answer arrives separately as `assistant`.
+   */
+  | 'draft';
 
 export interface Message {
   key: string;
@@ -45,6 +63,8 @@ export interface Message {
   durationMs?: number;
   /** assistant only: the mood tag the answer carried, if any. */
   mood?: string;
+  /** activity only: what the agent said it was doing when it called this. */
+  step?: string;
   /**
    * `system` only: what woke the agent, when nobody typed anything. Kept
    * short — the trigger's full text is prompt engineering, not conversation.
@@ -177,6 +197,7 @@ export function describeTool(entry: LogLike): { tool: string; text: string } {
  * something changed and not otherwise.
  */
 export function foldEntry(messages: Message[], entry: LogLike, index = 0): Message[] {
+  // eslint-disable-next-line no-param-reassign -- the RESPONSE branch drops a trailing draft
   const level = String(entry.level ?? '');
   const key = keyOf(entry, index);
   if (messages.some((m) => m.key === key)) return messages;  // replayed
@@ -207,6 +228,9 @@ export function foldEntry(messages: Message[], entry: LogLike, index = 0): Messa
     return [...messages, { key, role: 'user', text, ts }];
   }
   if (level === 'RESPONSE') {
+    // Whatever was mid-sentence is finished by the answer itself.
+    const tail = messages[messages.length - 1];
+    if (tail && tail.role === 'draft') messages = messages.slice(0, -1);
     // The log knows whether the turn succeeded; a failed one is not something
     // the agent said, it is something that went wrong. `success` is written
     // by the server, so believe it over the prefix when both are present.
@@ -220,11 +244,31 @@ export function foldEntry(messages: Message[], entry: LogLike, index = 0): Messa
     if (said.silent || !said.text) return messages;
     return [...messages, { key, role: 'assistant', text: said.text, ts, mood: said.mood }];
   }
+  // The model's text as it arrives. It is a buffer, not a message: the tool
+  // that follows takes it as its step title, and if none does, the turn's
+  // final answer carries the same words anyway.
+  if (level === 'STREAM' && m.type === 'text_delta') {
+    const delta = String(entry.message ?? '');
+    if (!delta) return messages;
+    const tail = messages[messages.length - 1];
+    if (tail && tail.role === 'draft') {
+      const next = messages.slice();
+      next[next.length - 1] = { ...tail, text: tail.text + delta };
+      return next;
+    }
+    return [...messages, { key, role: 'draft', text: delta, ts }];
+  }
+
   if (level === 'TOOL') {
     const { tool, text } = describeTool(entry);
     const args = typeof m.input_preview === 'string' ? m.input_preview : undefined;
     const toolId = typeof m.tool_id === 'string' ? m.tool_id : undefined;
-    return [...messages, { key, role: 'activity', text, tool, ts, ok: null, args, toolId }];
+    // A draft in front of a tool call is what the agent said it was about to
+    // do. It becomes this step's title and stops being a message.
+    const tail = messages[messages.length - 1];
+    const rest = tail && tail.role === 'draft' ? messages.slice(0, -1) : messages;
+    const step = tail && tail.role === 'draft' ? tail.text.trim() : undefined;
+    return [...rest, { key, role: 'activity', text, tool, ts, ok: null, args, toolId, step }];
   }
   if (level === 'TOOL_RES') {
     // The verdict belongs to the call that is already on screen: "ran a

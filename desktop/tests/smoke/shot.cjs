@@ -36,7 +36,10 @@ ipcMain.on('debug:log', () => undefined)
 
 app.on('ready', async () => {
   const win = new BrowserWindow({
-    show: false,
+    // Shown, on the virtual display. A hidden window stops compositing, so
+    // capturePage returns the frame from before the last interaction — which
+    // made every screenshot of an expanded panel show it collapsed.
+    show: true,
     width: Number(process.env.GENY_SHOT_W || 1280),
     height: Number(process.env.GENY_SHOT_H || 840),
     webPreferences: {

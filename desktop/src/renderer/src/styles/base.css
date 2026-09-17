@@ -50,7 +50,10 @@ button:disabled {
 }
 
 /* One focus treatment. Keyboard only — a ring on every button the mouse
-   touches is noise, and no ring at all strands keyboard users. */
+   touches is noise, and no ring at all strands keyboard users.
+   NOT on the composer's textarea: it fills its box, so the ring drew itself
+   around the whole composer and read as a violet outline on the chat. That
+   box shows focus by shading its own border instead. */
 :focus {
   outline: none;
 }
@@ -59,6 +62,11 @@ button:disabled {
   outline: none;
   box-shadow: 0 0 0 3px var(--violet-ring);
   border-radius: var(--radius-sm);
+}
+
+.composer-input:focus-visible,
+.composer-input:focus {
+  box-shadow: none;
 }
 
 ::-webkit-scrollbar {

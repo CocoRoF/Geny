@@ -296,8 +296,10 @@ services:
   # ── Frontend (Next.js) ────────────────────────────────────────────
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      # Root context: the page renders shared/chat, which lives beside
+      # frontend/ and must be in the image.
+      context: .
+      dockerfile: frontend/Dockerfile
       args:
         - API_URL=http://backend:8000
         - NEXT_PUBLIC_API_URL=

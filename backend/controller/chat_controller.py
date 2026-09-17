@@ -858,6 +858,17 @@ async def _run_broadcast(
                                     log_entry["tool_name"] = meta["tool_name"]
                                 if meta.get("node_name"):
                                     log_entry["node_name"] = meta["node_name"]
+                                # What the call WAS, not just that there was
+                                # one. The web renders the same timeline the
+                                # desktop app does (shared/chat/tool-view),
+                                # and without these it can only print the log
+                                # line — which is what it used to do.
+                                for key in ("tool_id", "input_preview",
+                                            "result_preview", "duration_ms"):
+                                    if meta.get(key) is not None:
+                                        log_entry[key] = meta[key]
+                                if level == "TOOL_RES":
+                                    log_entry["is_error"] = bool(meta.get("is_error"))
                                 agent_state.recent_logs.append(log_entry)
                                 if len(agent_state.recent_logs) > _MAX_RECENT_LOGS:
                                     agent_state.recent_logs = agent_state.recent_logs[-_MAX_RECENT_LOGS:]

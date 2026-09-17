@@ -16,7 +16,8 @@
 import { useState, type ReactNode } from 'react'
 
 import type { Message } from '../../../../../shared/chat/transcript'
-import { Icon, KIND_ICON, toolKind } from './icons'
+import { describeTool, resultView, type ResultView } from '../../../../../shared/chat/tool-view'
+import { Icon, KIND_ICON } from './icons'
 import Markdown from './markdown'
 
 type T = (key: string, vars?: Record<string, string | number>) => string
@@ -45,29 +46,81 @@ function pretty(args?: string): string {
   }
 }
 
+/** A tool's result, drawn by its shape rather than dumped as text. */
+function Result({ view }: { view: ResultView }): ReactNode {
+  if (view.table) {
+    return (
+      <div className="ptl-table-wrap">
+        <table className="ptl-table">
+          <thead>
+            <tr>{view.table.columns.map((c) => <th key={c}>{c}</th>)}</tr>
+          </thead>
+          <tbody>
+            {view.table.rows.map((row, i) => (
+              <tr key={i}>{row.map((cell, j) => <td key={j}>{cell}</td>)}</tr>
+            ))}
+          </tbody>
+        </table>
+        {view.table.more > 0 && <div className="ptl-table-more">외 {view.table.more}건</div>}
+      </div>
+    )
+  }
+  if (view.title || view.fields.length || view.flags.length) {
+    return (
+      <div className="ptl-result">
+        {view.title && <div className="ptl-result-title">{view.title}</div>}
+        {(view.fields.length > 0 || view.flags.length > 0) && (
+          <div className="ptl-result-meta">
+            {view.fields.map(([k, v]) => (
+              <span key={k}><i>{k}</i> {v}</span>
+            ))}
+            {view.flags.map(([k, v]) => (
+              <span key={k} className={v ? 'yes' : 'no'}>{v ? '✓' : '✗'} {k}</span>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+  return view.line ? <div className="ptl-preview">{view.line}</div> : null
+}
+
+/**
+ * One tool call.
+ *
+ * What it SAYS it did comes from the shared model, so the app and the web
+ * page describe a call identically and neither recognises a vendor by name.
+ * Under the summary sits the result in the shape it actually has — a table
+ * for a list, a card for a named object, the first line otherwise — because
+ * the useful half of a tool call is usually what came back.
+ */
 function ToolRow({ message, t }: { message: Message; t: T }): ReactNode {
   const [open, setOpen] = useState(false)
+  const { icon, text } = describeTool(message.tool ?? '', message.args)
+  const view = resultView(message.result)
   const detail = pretty(message.args)
   const openable = Boolean(detail || message.result)
-  const kind = toolKind(message.tool)
   const running = message.ok === null || message.ok === undefined
   const failed = message.ok === false
   const dur = seconds(message.durationMs)
+  const slow = (message.durationMs ?? 0) > 5000
   return (
     <div
       className={[
-        'ptl-tool',
-        `ptl-kind-${kind}`,
-        running ? 'run' : '',
-        failed ? 'err' : '',
-        open ? 'open' : '',
+        'ptl-tool', `ptl-kind-${icon}`,
+        running ? 'run' : '', failed ? 'err' : '', open ? 'open' : '',
       ].filter(Boolean).join(' ')}
     >
       <button type="button" className="ptl-tool-head" disabled={!openable}
         onClick={() => setOpen((v) => !v)}>
-        <span className="ptl-ico">{KIND_ICON[kind]}</span>
-        <span className="ptl-sum">{message.text || message.tool}</span>
-        {dur && <span className={`ptl-dur ${failed ? 'err' : (message.durationMs ?? 0) > 5000 ? 'slow' : ''}`}>{dur}</span>}
+        <span className="ptl-ico">{KIND_ICON[icon] ?? Icon.tool}</span>
+        <span className="ptl-sum">
+          {text}
+          {view && <span className="ptl-sum-result"><Result view={view} /></span>}
+        </span>
+        {dur && (
+          <span className={`ptl-dur ${failed ? 'err' : slow ? 'slow' : ''}`}>{dur}</span>
+        )}
       </button>
       {open && (
         <div className="ptl-body">
@@ -130,17 +183,18 @@ function Steps({ run, t }: { run: Message[]; t: T }): ReactNode {
 
       {open && (
         <div className="ptl-steps">
-          {run.map((message, index) => {
-            const running = message.ok === null || message.ok === undefined
-            const phase = running ? 'run' : message.ok === false ? 'err' : 'ok'
+          {intoSteps(run).map((step, index) => {
+            const phase = step.rows.some((r) => r.ok === null || r.ok === undefined) ? 'run'
+              : step.rows.some((r) => r.ok === false) ? 'err'
+                : 'ok'
             return (
-              <div className={`ptl-step ${phase}`} key={message.key}>
+              <div className={`ptl-step ${phase}`} key={step.rows[0].key}>
                 <span className="ptl-node">
                   {phase === 'ok' ? Icon.check : phase === 'err' ? '!' : index + 1}
                 </span>
-                <div className="ptl-title">{message.tool}</div>
+                {step.title && <div className="ptl-title">{step.title}</div>}
                 <div className="ptl-tools">
-                  <ToolRow message={message} t={t} />
+                  {step.rows.map((row) => <ToolRow key={row.key} message={row} t={t} />)}
                 </div>
               </div>
             )
@@ -149,6 +203,22 @@ function Steps({ run, t }: { run: Message[]; t: T }): ReactNode {
       )}
     </div>
   )
+}
+
+/**
+ * Tool calls → steps. A call that arrived with a sentence in front of it
+ * opens a new step and that sentence is its title; the calls after it belong
+ * to the same step until the agent says something else. With no narration at
+ * all this is one step, which is the honest shape of that turn.
+ */
+function intoSteps(run: Message[]): { title?: string; rows: Message[] }[] {
+  const steps: { title?: string; rows: Message[] }[] = []
+  for (const row of run) {
+    const last = steps[steps.length - 1]
+    if (row.step || !last) steps.push({ title: row.step, rows: [row] })
+    else last.rows.push(row)
+  }
+  return steps
 }
 
 function Row({ message, t, times = 1 }: { message: Message; t: T; times?: number }): ReactNode {
@@ -181,7 +251,6 @@ function Row({ message, t, times = 1 }: { message: Message; t: T; times?: number
   if (message.role === 'user') {
     return (
       <div className="msg-row user">
-        <span className="msg-avatar user">{t('chat.you')}</span>
         <div className="msg-col">
           <div className={`bubble user ${message.pending ? 'pending' : ''}`}>{message.text}</div>
           {clock(message.ts) && <span className="msg-time">{clock(message.ts)}</span>}
@@ -216,6 +285,8 @@ function Row({ message, t, times = 1 }: { message: Message; t: T; times?: number
 function group(messages: Message[]): Message[][] {
   const out: Message[][] = []
   for (const message of messages) {
+    // The fold's buffer for text that has not found its step yet.
+    if (message.role === 'draft') continue
     const last = out[out.length - 1]
     const lastIsTools = last && last[0].role === 'activity'
 

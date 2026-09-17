@@ -31,6 +31,10 @@ const LOG = [
     message: 'PROMPT: 접속기 스타일시트에서 안 쓰는 토큰이 있는지 확인하고 정리해줘.',
   },
   {
+    level: 'STREAM', timestamp: at(300), message: '스타일시트에서 선언된 토큰을 먼저 세어 보겠습니다.',
+    metadata: { type: 'text_delta' },
+  },
+  {
     level: 'TOOL', timestamp: at(1200), message: '🔧 Bash',
     metadata: {
       tool_name: 'Bash', tool_id: 'c1',
@@ -58,11 +62,15 @@ const LOG = [
     metadata: { tool_name: 'Read', tool_id: 'c2', is_error: false, duration_ms: 90, result_preview: '134 lines' },
   },
   {
+    level: 'STREAM', timestamp: at(200), message: '세어 봤으니 이제 린터로 확인합니다.',
+    metadata: { type: 'text_delta' },
+  },
+  {
     level: 'TOOL', timestamp: at(500), message: '🔧 Bash',
     metadata: {
       tool_name: 'Bash', tool_id: 'c3',
-      input_preview: '{"command": "npx stylelint src/renderer/src/styles"}',
-      command_data: { command: 'npx stylelint src/renderer/src/styles' },
+      input_preview: JSON.stringify({ command: 'python3 - <<EOF\nimport pdfplumber, json\nfrom re import sub\nprint(1)\nEOF' }),
+      command_data: { command: 'python3 …' },
     },
   },
   {
@@ -82,7 +90,10 @@ const LOG = [
   },
   {
     level: 'TOOL_RES', timestamp: at(300), message: 'TOOL_RESULT [OK]: Edit',
-    metadata: { tool_name: 'Edit', tool_id: 'c4', is_error: false, duration_ms: 40, result_preview: 'edited' },
+    metadata: {
+      tool_name: 'Edit', tool_id: 'c4', is_error: false, duration_ms: 40,
+      result_preview: JSON.stringify({ name: 'tokens.css', removed: 2, saved: true }),
+    },
   },
   {
     level: 'RESPONSE', timestamp: at(1500),

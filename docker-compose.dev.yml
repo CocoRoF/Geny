@@ -123,8 +123,10 @@ services:
   # ── Frontend (Next.js) — Dev Mode ─────────────────────────────────
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile.dev
+      # Root context: the page renders shared/chat, which lives beside
+      # frontend/ and must be in the image.
+      context: .
+      dockerfile: frontend/Dockerfile.dev
     container_name: geny-frontend-dev
     init: true
     restart: unless-stopped

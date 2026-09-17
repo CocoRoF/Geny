@@ -3,12 +3,19 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# The build context is the REPO ROOT, not frontend/: the chat model in
+# shared/ is rendered by this page and by the desktop app, and an image built
+# from frontend/ alone cannot see it.
 # Install deps first (layer cache)
-COPY package.json package-lock.json* ./
+COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install
 
 # Copy source
-COPY . .
+COPY frontend/ ./
+# src/shared is a symlink to ../../shared for local development; in the image
+# it is the real thing, copied in.
+RUN rm -rf src/shared
+COPY shared/ ./src/shared/
 
 # Set API_URL at build time so Next.js rewrites bake the correct target.
 # At runtime, docker-compose sets API_URL=http://backend:8000 which
