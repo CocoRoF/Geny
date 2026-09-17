@@ -23,7 +23,8 @@ import {
   agents, environments, sessions as sessionApi,
   type AgentSummary, type EnvironmentSummary,
 } from '../server'
-import Explorer from './Explorer'
+import Explorer, { type OpenedFile } from './Explorer'
+import FileView from './FileView'
 import { Icon } from './icons'
 import RouteBar from './RouteBar'
 import SystemMonitorFooter from './SystemMonitorFooter'
@@ -63,7 +64,29 @@ export function ChatApp(): ReactNode {
   /** Which sidebar view, or none. The activity bar switches it, and clicking
    *  the view you are already in closes the sidebar — the VS Code idiom. */
   const [side, setSide] = useState<'sessions' | 'files' | null>('sessions')
-  const [openFile, setOpenFile] = useState<{ path: string; name: string; content: string } | null>(null)
+  /** The tab strip: the conversation is always the first tab, and every file
+   *  the explorer opens becomes another. Dex's idiom, and the reason a file
+   *  is worth opening at all — you can leave it open while you keep talking. */
+  const [files, setFiles] = useState<OpenedFile[]>([])
+  const [tab, setTab] = useState<string>('chat')
+
+  const openFile = useCallback((file: OpenedFile) => {
+    setFiles((prev) => {
+      const at = prev.findIndex((f) => f.path === file.path)
+      if (at < 0) return [...prev, file]
+      // Reopening a file re-reads it: the agent has probably written to it
+      // since, which is the reason anyone reopens one.
+      const next = prev.slice()
+      next[at] = file
+      return next
+    })
+    setTab(file.path)
+  }, [])
+
+  const closeFile = useCallback((path: string) => {
+    setFiles((prev) => prev.filter((f) => f.path !== path))
+    setTab((current) => (current === path ? 'chat' : current))
+  }, [])
   const [draft, setDraft] = useState('')
   const scroller = useRef<HTMLDivElement>(null)
   const composer = useRef<HTMLTextAreaElement>(null)
@@ -268,7 +291,7 @@ export function ChatApp(): ReactNode {
         </div>
 
         {side === 'files' ? (
-          <Explorer sessionId={sessionId} running={live.running} t={t} onOpen={setOpenFile} />
+          <Explorer sessionId={sessionId} running={live.running} t={t} onOpen={openFile} />
         ) : (
           <>
             {running.length > 0 && (
@@ -288,19 +311,38 @@ export function ChatApp(): ReactNode {
         )}
       </aside>
 
-      <main className="main-pane" style={{ position: 'relative' }}>
-        {openFile && (
-          <div className="file-view">
-            <div className="file-view-head">
-              <span className="file-view-name" title={openFile.path}>{openFile.name}</span>
-              <button type="button" className="chat-hbtn" onClick={() => setOpenFile(null)}>
-                {Icon.close} {t('explorer.close')}
+      <main className="main-pane">
+        {files.length > 0 && (
+          <div className="tab-strip">
+            <div className="tab-strip-scroll">
+              <button type="button"
+                className={`tab-item ${tab === 'chat' ? 'active' : ''}`}
+                onClick={() => setTab('chat')}>
+                <span className="tab-icon">{Icon.chat}</span>
+                <span className="tab-label">{t('chat.tabChat')}</span>
               </button>
+              {files.map((file) => (
+                <button key={file.path} type="button"
+                  className={`tab-item ${tab === file.path ? 'active' : ''}`}
+                  onClick={() => setTab(file.path)}>
+                  <span className="tab-icon">{Icon.file}</span>
+                  <span className="tab-label" title={file.path}>{file.name}</span>
+                  <span className="tab-close" role="button" aria-label={t('explorer.close')}
+                    onClick={(e) => { e.stopPropagation(); closeFile(file.path) }}>
+                    {Icon.close}
+                  </span>
+                </button>
+              ))}
             </div>
-            <pre className="file-view-body">{openFile.content}</pre>
           </div>
         )}
-        <div className="chat">
+
+        {tab !== 'chat' && (() => {
+          const file = files.find((f) => f.path === tab)
+          return file ? <FileView {...file} t={t} /> : null
+        })()}
+
+        <div className="chat" hidden={tab !== 'chat'}>
           <header className="chat-header">
             <div className="chat-title">
               <span className="agent-mark">G</span>

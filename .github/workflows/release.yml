@@ -280,16 +280,48 @@ jobs:
         working-directory: mobile/ios
         run: pod install
 
-      # Every run compiled every Pod from nothing, which was ten of this
-      # job's eleven minutes. DerivedData is the compiler's own output, so
-      # restoring it makes the build incremental across runs. The key carries
-      # the lockfile: new pods, new cache.
-      - name: Cache the compiler's output
-        uses: actions/cache@v4
+      # Every run compiled every Pod from nothing, which was ten of this job's
+      # eleven minutes. ccache is what XGen Dex uses for the same build, and
+      # it is the right mechanism: content-addressed, so a stale entry is
+      # impossible rather than merely unlikely (a restored DerivedData tree
+      # is neither).
+      #
+      # Two things about it are learned, not obvious, and both were measured
+      # over there — getting either wrong leaves the cache silently empty:
+      #
+      #  · CCACHE_DIR does nothing here. xcodebuild compiles in a separate
+      #    build-service process that does not inherit this shell's
+      #    environment, so the default location is the only one it will use,
+      #    and that is the path cached below.
+      #  · React Native's own ccache wrapper keys off the CCACHE_BINARY BUILD
+      #    SETTING, which Xcode does not pass down to the compiler process
+      #    either — it falls back to plain clang without saying so. Absolute-
+      #    path wrappers forced through xcodebuild's CC/CXX arguments depend
+      #    on no environment at all.
+      - name: Install ccache
+        run: brew install ccache || true
+
+      - uses: actions/cache@v4
         with:
-          path: mobile/ios/build
-          key: ios-derived-${{ hashFiles('mobile/ios/Podfile.lock', 'mobile/package.json') }}
-          restore-keys: ios-derived-
+          path: ~/Library/Caches/ccache
+          key: ios-ccache-${{ hashFiles('mobile/package.json', 'mobile/ios/Podfile') }}
+          restore-keys: ios-ccache-
+
+      - name: Point the compiler at ccache
+        run: |
+          CCACHE=$(brew --prefix)/bin/ccache
+          CLANG=$(xcrun -f clang); CLANGXX=$(xcrun -f clang++)
+          printf '#!/bin/sh\nexec %s %s "$@"\n' "$CCACHE" "$CLANG"   > /tmp/ccache-clang.sh
+          printf '#!/bin/sh\nexec %s %s "$@"\n' "$CCACHE" "$CLANGXX" > /tmp/ccache-clang++.sh
+          chmod +x /tmp/ccache-clang.sh /tmp/ccache-clang++.sh
+          # React Native's recommended sloppiness: without it almost nothing
+          # hits, because every translation unit carries timestamps and
+          # module paths that differ run to run.
+          $CCACHE --set-config sloppiness=clang_index_store,file_stat_matches,include_file_ctime,include_file_mtime,ivfsoverlay,pch_defines,modules,system_headers,time_macros
+          $CCACHE --set-config file_clone=true
+          $CCACHE --set-config depend_mode=true
+          $CCACHE --set-config inode_cache=true
+          ccache -z
 
       # · dwarf, not dwarf-with-dsym — a debug-symbol bundle nobody
       #   symbolicates costs minutes of linking.
@@ -302,11 +334,18 @@ jobs:
           xcodebuild -workspace Geny.xcworkspace -scheme Geny \
             -configuration Release -sdk iphoneos -derivedDataPath build \
             -arch arm64 -quiet \
+            CC=/tmp/ccache-clang.sh CXX=/tmp/ccache-clang++.sh \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             DEBUG_INFORMATION_FORMAT=dwarf \
             COMPILER_INDEX_STORE_ENABLE=NO \
             ONLY_ACTIVE_ARCH=YES \
             build
+
+      # The hit rate is the whole point; print it so a run that cached
+      # nothing says so instead of just being slow.
+      - name: ccache stats
+        if: always()
+        run: ccache -s || true
 
       - name: Package an unsigned IPA
         run: |

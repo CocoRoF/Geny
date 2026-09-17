@@ -203,29 +203,27 @@ test('a prompt with no prefix still folds', () => {
   assert.equal(after[0].text, 'bare');
 });
 
-test('a scheduled thought is not the user speaking', () => {
-  // These arrive down the same channel as a typed message. Rendered as the
-  // user's own, the screen claims every evening that someone asked the agent
-  // to reflect on the evening.
+test('a scheduled thought puts nothing in the conversation', () => {
+  // It arrives down the same channel as a typed message, but nobody said it.
+  // What the agent then answers is the whole of what belongs on screen; that
+  // the clock asked is recorded in the ledger, not ruled across the chat.
   const after = foldEntry([], {
     level: 'COMMAND',
     timestamp: 't1',
     message: 'PROMPT: [THINKING_TRIGGER:time_evening] [time_context: 목요일 저녁] The evening is here.',
   });
-  assert.equal(after.length, 1);
-  assert.equal(after[0].role, 'system');
-  assert.equal(after[0].text, 'time_evening', 'the label, not the paragraph');
+  assert.equal(after.length, 0);
 });
 
-test('a trigger never adopts a pending user message', () => {
+test('a trigger never swallows a pending user message', () => {
   const pending = pendingUserMessage('[THINKING_TRIGGER:time_evening] something');
   const after = foldEntry([pending], {
     level: 'COMMAND',
     timestamp: 't1',
     message: 'PROMPT: [THINKING_TRIGGER:time_evening] something',
   });
-  assert.equal(after.length, 2, 'the typed one stays typed');
-  assert.equal(after[1].role, 'system');
+  assert.equal(after.length, 1, 'the typed one stays, still pending');
+  assert.equal(after[0].pending, true);
 });
 
 // ── the log's words are not the agent's words ────────────────────────

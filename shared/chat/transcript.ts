@@ -158,15 +158,6 @@ export function spoken(message: unknown): Spoken {
 /** A turn the agent started by itself, not one anybody asked for. */
 const TRIGGER = /^\[(THINKING_TRIGGER|autonomous_signal)[:\]]/;
 
-/**
- * A trigger's text is a paragraph of prompt engineering. What belongs on
- * screen is only that the agent spoke on its own, and roughly why.
- */
-function triggerLabel(text: string): string {
-  const named = /^\[THINKING_TRIGGER:([^\]]+)\]/.exec(text);
-  return named ? named[1] : 'autonomous';
-}
-
 function keyOf(entry: LogLike, index: number): string {
   return `${entry.level ?? '?'}:${entry.timestamp ?? index}:${(entry.message ?? '').slice(0, 48)}`;
 }
@@ -208,12 +199,13 @@ export function foldEntry(messages: Message[], entry: LogLike, index = 0): Messa
   if (level === 'COMMAND') {
     const text = promptText(entry.message);
 
-    // Not everything the agent is given was typed by someone. A scheduled
-    // thought arrives down the same channel, and rendering it as the user's
-    // own message is a lie the screen tells every evening.
-    if (TRIGGER.test(text)) {
-      return [...messages, { key, role: 'system', text: triggerLabel(text), ts }];
-    }
+    // Not everything the agent is given was typed by someone: a scheduled
+    // thought arrives down the same channel. It is not a message — nobody
+    // said it — and it is not worth a rule across the conversation either.
+    // What the agent then SAID is the whole of what belongs on screen; that
+    // the clock asked rather than a person is in the ledger, which is where
+    // a record belongs.
+    if (TRIGGER.test(text)) return messages;
 
     // The server's echo of a message this screen already drew. Adopt the
     // server's identity rather than appending a twin — and match only against

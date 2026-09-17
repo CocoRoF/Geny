@@ -1,25 +1,36 @@
 /**
  * The agent's workspace, in the sidebar.
  *
- * An agent that works on a server leaves its work there, and until now the
- * only way to see any of it was to read the transcript and believe it. This
- * is the files themselves: the tree the agent actually wrote into, and the
- * contents of whichever one you open.
+ * An agent that works on a server leaves its work there, and the only way to
+ * see any of it was to read the transcript and believe it.
  *
- * Rooted at `workspace/`, not at the session directory. The rest of that
- * directory is the engine's own state — the memory vault, the transcripts,
- * the database — which is neither the agent's work nor anybody's business
- * here.
+ * Two things about the endpoint decide how this is written, and getting
+ * either wrong is what made the first version show `docs` twice and then say
+ * "File not found" on everything it opened:
  *
- * It refreshes on a timer while a turn is running, because that is the whole
- * point: watching files appear as they are written.
+ *  · `GET …/storage?scope=workspace` is RECURSIVE — one call returns every
+ *    file at every depth, each path relative to `workspace/`. So this fetches
+ *    once and builds the tree itself; it never asks for a subdirectory.
+ *  · `GET …/storage/{path}` is NOT scoped — it resolves from the session
+ *    root. A path from the listing has to be read back with `workspace/` in
+ *    front of it.
+ *
+ * It refreshes while a turn is running, which is the point: watching files
+ * appear as they are written.
  */
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { workspace, type StorageEntry } from '../server'
 import { Icon } from './icons'
 
 type T = (key: string, vars?: Record<string, string | number>) => string
+
+export interface OpenedFile {
+  /** Workspace-relative, as the listing gives it. */
+  path: string
+  name: string
+  content: string
+}
 
 function size(bytes?: number | null): string {
   if (typeof bytes !== 'number') return ''
@@ -28,10 +39,46 @@ function size(bytes?: number | null): string {
   return `${(bytes / 1024 ** 2).toFixed(1)} MB`
 }
 
-/** Directories first, then by name — the order every file tree uses. */
-function ordered(entries: StorageEntry[]): StorageEntry[] {
-  return [...entries].sort((a, b) =>
-    a.is_dir === b.is_dir ? a.name.localeCompare(b.name) : a.is_dir ? -1 : 1)
+interface Row {
+  name: string
+  path: string
+  isDir: boolean
+  size?: number | null
+}
+
+/**
+ * The flat recursive listing → the immediate children of `prefix`.
+ *
+ * Directories are inferred from the paths as well as taken from the rows: a
+ * listing can omit an intermediate directory, and a child whose parent is
+ * missing would otherwise be invisible at every level.
+ */
+function childrenOf(entries: StorageEntry[], prefix: string): Row[] {
+  const base = prefix ? `${prefix}/` : ''
+  const dirs = new Map<string, Row>()
+  const files: Row[] = []
+
+  for (const entry of entries) {
+    const path = entry.path.replace(/^\/+/, '')
+    if (!path.startsWith(base)) continue
+    const rest = path.slice(base.length)
+    if (!rest) continue
+    const cut = rest.indexOf('/')
+    if (cut >= 0) {
+      const name = rest.slice(0, cut)
+      const dirPath = `${base}${name}`
+      if (!dirs.has(dirPath)) dirs.set(dirPath, { name, path: dirPath, isDir: true })
+      continue
+    }
+    if (entry.is_dir) {
+      if (!dirs.has(path)) dirs.set(path, { name: rest, path, isDir: true })
+    } else {
+      files.push({ name: rest, path, isDir: false, size: entry.size })
+    }
+  }
+
+  const byName = (a: Row, b: Row): number => a.name.localeCompare(b.name)
+  return [...[...dirs.values()].sort(byName), ...files.sort(byName)]
 }
 
 export function Explorer({ sessionId, running, t, onOpen }: {
@@ -39,18 +86,18 @@ export function Explorer({ sessionId, running, t, onOpen }: {
   /** A turn is in flight, so the tree is changing under us. */
   running: boolean
   t: T
-  onOpen: (file: { path: string; name: string; content: string }) => void
+  onOpen: (file: OpenedFile) => void
 }): ReactNode {
-  const [path, setPath] = useState('')
+  const [prefix, setPrefix] = useState('')
   const [entries, setEntries] = useState<StorageEntry[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const load = useCallback(async (next: string) => {
+  const load = useCallback(async () => {
     if (!sessionId) return
     setBusy(true)
     try {
-      const listed = await workspace.list(sessionId, next)
+      const listed = await workspace.list(sessionId)
       setEntries(listed.files ?? [])
       setError(null)
     } catch (e) {
@@ -61,36 +108,34 @@ export function Explorer({ sessionId, running, t, onOpen }: {
     }
   }, [sessionId])
 
-  useEffect(() => { setPath('') }, [sessionId])
-  useEffect(() => { void load(path) }, [load, path])
+  useEffect(() => { setPrefix('') }, [sessionId])
+  useEffect(() => { void load() }, [load])
 
-  // While a turn runs the tree is being written into; that is the one time
-  // this view is worth following rather than opening.
   useEffect(() => {
     if (!running) return
-    const timer = setInterval(() => { void load(path) }, 4_000)
+    const timer = setInterval(() => { void load() }, 4_000)
     return () => clearInterval(timer)
-  }, [running, load, path])
+  }, [running, load])
 
-  const open = async (entry: StorageEntry): Promise<void> => {
-    if (entry.is_dir) {
-      setPath(entry.path)
+  const rows = useMemo(() => childrenOf(entries, prefix), [entries, prefix])
+
+  const open = async (row: Row): Promise<void> => {
+    if (row.isDir) {
+      setPrefix(row.path)
       return
     }
     if (!sessionId) return
     try {
-      // The listing paths are relative to the session root, which is what the
-      // read endpoint wants — passing the workspace-relative name would miss.
-      const file = await workspace.read(sessionId, entry.path)
-      onOpen({ path: entry.path, name: entry.name, content: file.content })
+      const file = await workspace.read(sessionId, row.path)
+      onOpen({ path: row.path, name: row.name, content: file.content })
     } catch (e) {
       setError((e as Error).message)
     }
   }
 
   const up = (): void => {
-    const cut = path.lastIndexOf('/')
-    setPath(cut > 0 ? path.slice(0, cut) : '')
+    const cut = prefix.lastIndexOf('/')
+    setPrefix(cut > 0 ? prefix.slice(0, cut) : '')
   }
 
   if (!sessionId) {
@@ -100,28 +145,28 @@ export function Explorer({ sessionId, running, t, onOpen }: {
   return (
     <>
       <div className="explorer-path">
-        <button type="button" className="icon-btn" disabled={!path} onClick={up}
+        <button type="button" className="icon-btn" disabled={!prefix} onClick={up}
           title={t('explorer.up')}>↑</button>
-        <span className="explorer-crumb" title={path || 'workspace'}>
-          {path || 'workspace'}
+        <span className="explorer-crumb" title={prefix || 'workspace'}>
+          {prefix || 'workspace'}
         </span>
-        <button type="button" className="icon-btn" onClick={() => void load(path)}
+        <button type="button" className="icon-btn" onClick={() => void load()}
           title={t('chat.refresh')}>{Icon.refresh}</button>
       </div>
 
       <div className="agent-list">
         {error && <div className="side-error">{error}</div>}
-        {!error && entries.length === 0 && (
+        {!error && rows.length === 0 && (
           <div className="side-empty">{busy ? t('explorer.loading') : t('explorer.empty')}</div>
         )}
-        {ordered(entries).map((entry) => (
-          <button key={entry.path} type="button" className="explorer-row"
-            onClick={() => void open(entry)}>
-            <span className={`explorer-ico ${entry.is_dir ? 'dir' : ''}`}>
-              {entry.is_dir ? Icon.folder : Icon.file}
+        {rows.map((row) => (
+          <button key={row.path} type="button" className="explorer-row"
+            onClick={() => void open(row)}>
+            <span className={`explorer-ico ${row.isDir ? 'dir' : ''}`}>
+              {row.isDir ? Icon.folder : Icon.file}
             </span>
-            <span className="explorer-name">{entry.name}</span>
-            {!entry.is_dir && <span className="explorer-size">{size(entry.size)}</span>}
+            <span className="explorer-name">{row.name}</span>
+            {!row.isDir && <span className="explorer-size">{size(row.size)}</span>}
           </button>
         ))}
       </div>

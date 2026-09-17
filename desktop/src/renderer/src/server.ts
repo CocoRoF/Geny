@@ -316,11 +316,16 @@ export interface StorageEntry {
 }
 
 export const workspace = {
-  list: (sessionId: string, path = '') =>
+  /** Recursive: one call returns every file at every depth, each path
+   *  relative to `workspace/`. The caller builds the tree. */
+  list: (sessionId: string) =>
     serverFetch<{ files: StorageEntry[] }>(
-      `/api/agents/${encodeURIComponent(sessionId)}/storage`
-      + `?scope=workspace&path=${encodeURIComponent(path)}`),
-  read: (sessionId: string, filePath: string) =>
+      `/api/agents/${encodeURIComponent(sessionId)}/storage?scope=workspace`),
+
+  /** The read endpoint is NOT scoped — it resolves from the session root, so
+   *  a path that came from the workspace listing needs the prefix back. */
+  read: (sessionId: string, workspacePath: string) =>
     serverFetch<{ content: string; size: number; encoding: string }>(
-      `/api/agents/${encodeURIComponent(sessionId)}/storage/${filePath.split('/').map(encodeURIComponent).join('/')}`),
+      `/api/agents/${encodeURIComponent(sessionId)}/storage/`
+      + ['workspace', ...workspacePath.split('/')].map(encodeURIComponent).join('/')),
 }

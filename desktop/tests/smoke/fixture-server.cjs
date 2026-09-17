@@ -154,19 +154,22 @@ LOG.push(
   },
 )
 
-const FILES = {
-  '': [
-    { name: 'src', path: 'workspace/src', is_dir: true },
-    { name: 'docs', path: 'workspace/docs', is_dir: true },
-    { name: 'README.md', path: 'workspace/README.md', is_dir: false, size: 1841 },
-    { name: 'tokens.css', path: 'workspace/tokens.css', is_dir: false, size: 4096 },
-    { name: 'notes.txt', path: 'workspace/notes.txt', is_dir: false, size: 220 },
-  ],
-  'workspace/src': [
-    { name: 'index.ts', path: 'workspace/src/index.ts', is_dir: false, size: 980 },
-    { name: 'styles.css', path: 'workspace/src/styles.css', is_dir: false, size: 12400 },
-  ],
-}
+// RECURSIVE, and rooted at workspace/ — paths carry no `workspace/` prefix,
+// exactly as `GET …/storage?scope=workspace` returns them. Two `docs`
+// directories at different depths are deliberate: a flat render shows them
+// twice, which is how the first explorer was found to be wrong.
+const FILES = [
+  { name: 'src', path: 'src', is_dir: true },
+  { name: 'index.ts', path: 'src/index.ts', is_dir: false, size: 980 },
+  { name: 'styles.css', path: 'src/styles.css', is_dir: false, size: 12400 },
+  { name: 'docs', path: 'src/docs', is_dir: true },
+  { name: 'api.md', path: 'src/docs/api.md', is_dir: false, size: 640 },
+  { name: 'docs', path: 'docs', is_dir: true },
+  { name: 'note.md', path: 'docs/note.md', is_dir: false, size: 16 },
+  { name: 'README.md', path: 'README.md', is_dir: false, size: 1841 },
+  { name: 'tokens.css', path: 'tokens.css', is_dir: false, size: 4096 },
+  { name: 'rows.csv', path: 'rows.csv', is_dir: false, size: 220 },
+]
 
 const FILE_TEXT = `/* tokens.css — written by the agent */
 :root {
@@ -174,6 +177,23 @@ const FILE_TEXT = `/* tokens.css — written by the agent */
   --primary-end: #783ced;
   --panel: #ffffff;
 }
+`
+
+const MD_TEXT = `# 점검 결과
+
+85개 문서 중 **5개**를 뽑아 확인했습니다.
+
+- 제조국이 표기와 다른 것: 1건
+- 판매 중단된 것: 2건
+
+\`\`\`bash
+python3 check.py --limit 5
+\`\`\`
+`
+
+const CSV_TEXT = `상품명,제조국,판매여부
+포켓몬 피카츄 어린이 운동화,중국,판매중
+어린이 물놀이 튜브,베트남,중단
 `
 
 const ACCOUNTS = {
@@ -244,11 +264,18 @@ const server = createServer((req, res) => {
   if (url.pathname.endsWith('/workspace/summary')) return send(SUMMARY)
   if (url.pathname.includes('/workspace/activity')) return send(ACTIVITY)
   if (url.pathname === '/api/environments') return send({ environments: [] })
-  if (url.pathname.endsWith('/storage')) {
-    return send({ files: FILES[url.searchParams.get('path') || ''] ?? [] })
-  }
+  if (url.pathname.endsWith('/storage')) return send({ files: FILES })
   if (url.pathname.includes('/storage/')) {
-    return send({ content: FILE_TEXT, size: FILE_TEXT.length, encoding: 'utf-8' })
+    // Not scoped: the path arrives with `workspace/` in front of it, and a
+    // reader that forgets the prefix gets this 404 — which is the bug this
+    // fixture exists to keep fixed.
+    const rel = decodeURIComponent(url.pathname.split('/storage/')[1] || '')
+    if (!rel.startsWith('workspace/')) {
+      res.writeHead(404, { 'Content-Type': 'application/json' })
+      return res.end(JSON.stringify({ detail: `File not found: ${rel}` }))
+    }
+    const body = rel.endsWith('.csv') ? CSV_TEXT : rel.endsWith('.md') ? MD_TEXT : FILE_TEXT
+    return send({ content: body, size: body.length, encoding: 'utf-8' })
   }
   res.writeHead(404, { 'Content-Type': 'application/json' })
   res.end('{}')
