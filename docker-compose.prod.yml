@@ -149,6 +149,16 @@ services:
       - GENY_GAME_STATE_DB=/data/creature_state/geny_state.sqlite3
       - GENY_CONFIG_VARIABLES_DIR=/data/config_variables
       - GENY_MCP_CREDENTIALS=/data/mcp/credentials.json
+      # Model-account secrets: API keys, setup tokens, Codex OAuth token
+      # sets. Same named volume as the MCP store, for the same reason — the
+      # container's writable layer is discarded on every rebuild, and losing
+      # this file signs every Claude and Codex account out and erases every
+      # key, with no error until the next turn.
+      - GENY_LLM_SECRETS=/data/mcp/llm_accounts.json
+      # Per-account CLAUDE_CONFIG_DIRs. Each Claude Code login owns one, and
+      # it IS the login — on the container's writable layer every account
+      # would be signed out by a redeploy.
+      - GENY_LLM_ACCOUNTS_ROOT=/data/llm-accounts
       - GENY_VOICE_STUDIO_DATA_DIR=/data/voice_studio
       # ── GAPT integration (sandbox/project/deploy delegation) ────────
       # geny-backend calls the GAPT control plane over gapt-net and runs
@@ -212,6 +222,7 @@ services:
       - geny-creature-state-prod:/data/creature_state
       - geny-config-variables-prod:/data/config_variables
       - geny-mcp-credentials-prod:/data/mcp
+      - geny-llm-accounts-prod:/data/llm-accounts
       - geny-voice-studio-prod:/data/voice_studio
       # Baked puppet zips dropped here by avatar-editor. Backend reads + moves to
       # installed/ subdir after install (rw — was :ro before C.3 added install).
@@ -567,6 +578,9 @@ volumes:
     driver: local
   geny-config-variables-prod:
     driver: local
+  # Per-account Claude Code credential directories. This volume IS the set of
+  # logins — losing it means signing every account in again by hand.
+  geny-llm-accounts-prod:
   geny-mcp-credentials-prod:
   geny-voice-studio-prod:
     driver: local

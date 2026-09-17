@@ -146,14 +146,57 @@ class TestAdoption:
         assert adopt_legacy_credentials(service, config) == 0
         assert len(service.list_accounts()) == 2
 
-    def test_an_install_that_already_has_accounts_is_untouched(self, service: AccountService) -> None:
+    def test_an_account_the_user_already_has_is_not_duplicated(self, service: AccountService) -> None:
         service.create_account({"kind": "claude_code", "label": "mine"})
         config = _Config(creds(openai_api_key="sk-live"), cli(enabled=True))
+        assert adopt_legacy_credentials(service, config) == 1
+        kinds = sorted(a["kind"] for a in service.list_accounts())
+        assert kinds == ["claude_code", "openai"]
+        assert [a["label"] for a in service.list_accounts() if a["kind"] == "claude_code"] == ["mine"]
+
+    def test_a_partial_adoption_is_finished_on_the_next_boot(self, service: AccountService) -> None:
+        """The failure this was rewritten for: production created one account,
+        failed on the second, and an 'is the table empty' gate then blocked
+        the retry forever — a server permanently half-migrated."""
+        config = _Config(creds(openai_api_key="sk-live"), cli(enabled=True))
+        real_create = service.create_account
+        calls = {"n": 0}
+
+        def flaky(entry):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise RuntimeError("database hiccup")
+            return real_create(entry)
+
+        service.create_account = flaky  # type: ignore[method-assign]
+        assert adopt_legacy_credentials(service, config) == 1
+
+        service.create_account = real_create  # type: ignore[method-assign]
+        assert adopt_legacy_credentials(service, config) == 1
+        assert sorted(a["kind"] for a in service.list_accounts()) == ["claude_code", "openai"]
+
+    def test_a_completed_adoption_does_not_resurrect_a_deleted_account(
+        self, service: AccountService
+    ) -> None:
+        """A user who deletes an adopted account must not be handed it back on
+        the next restart — which is exactly what 'is the table empty' would
+        have done once they deleted the last one."""
+        config = _Config(creds(openai_api_key="sk-live"), cli(enabled=True))
+        adopt_legacy_credentials(service, config)
+        for account in service.list_accounts():
+            service.delete_account(account["id"])
         assert adopt_legacy_credentials(service, config) == 0
-        assert [a["label"] for a in service.list_accounts()] == ["mine"]
+        assert service.list_accounts() == []
 
     def test_a_fresh_install_adopts_nothing(self, service: AccountService) -> None:
         assert adopt_legacy_credentials(service, _Config(creds(), cli())) == 0
+
+    def test_a_fresh_install_is_not_asked_again(self, service: AccountService) -> None:
+        config = _Config(creds(), cli())
+        assert adopt_legacy_credentials(service, config) == 0
+        # Adding a legacy key later is not a migration — the product has
+        # accounts now, and that is where a new credential goes.
+        assert adopt_legacy_credentials(service, _Config(creds(openai_api_key="sk"), cli())) == 0
 
     def test_a_broken_config_does_not_stop_the_boot(self, service: AccountService) -> None:
         class _Exploding:

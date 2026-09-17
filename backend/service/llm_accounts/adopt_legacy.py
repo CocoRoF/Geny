@@ -9,10 +9,16 @@ route — which means an install that upgrades with credentials but no accounts
 can no longer start a session at all. It says "add a model account", to a user
 who already added one, years ago, in the place the product told them to.
 
-So on boot: if there are no accounts and legacy credentials exist, make the
-accounts they describe. Once. It never runs again (an account exists), it
-never overwrites anything (it only runs on an empty table), and it leaves the
-legacy config alone — document embedding still reads it.
+So on boot: make the accounts the legacy credentials describe, once, and
+leave the legacy config alone (document embedding still reads it).
+
+"Once" is a MARKER, not "the table is empty". The first version used the
+empty table, and the first production run proved why that is not the same
+thing: adoption created one account, failed on the second, and the empty-table
+gate then blocked the retry forever — a server permanently half-migrated,
+with no way to finish short of hand-editing the database. With a marker, a
+partial adoption is retried on the next boot and only a COMPLETE one is
+recorded as done.
 
 The Claude Code mapping is the subtle one. ``in_modal_login`` and
 ``host_mount`` both mean "the login sitting in this machine's own ~/.claude",
@@ -23,6 +29,7 @@ at a fresh, empty, per-account directory and report the account as signed out.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -88,12 +95,18 @@ def plan_legacy_accounts(creds: Any, claude_cli: Any) -> List[Dict[str, Any]]:
     return plan
 
 
-def adopt_legacy_credentials(service: Any = None, config_manager: Any = None) -> int:
-    """Create accounts from the legacy config when there are none.
+def _marker_path() -> "Path":
+    from service.llm_accounts.service import accounts_root
 
-    Returns how many were created — 0 whenever accounts already exist, which
-    is every boot after the first. Never raises: a failure here must not stop
-    the server, it just leaves the user to add an account by hand.
+    return accounts_root() / ".legacy-adopted"
+
+
+def adopt_legacy_credentials(service: Any = None, config_manager: Any = None) -> int:
+    """Create the accounts the legacy config describes. Returns how many.
+
+    Returns 0 once the migration has been recorded as complete, which is every
+    boot after it succeeds. Never raises: a failure here must not stop the
+    server, it only leaves the user to add an account by hand.
     """
     try:
         from service.config import get_config_manager
@@ -105,31 +118,63 @@ def adopt_legacy_credentials(service: Any = None, config_manager: Any = None) ->
         )
         from service.llm_accounts import get_account_service
 
-        account_service = service or get_account_service()
-        if account_service.list_accounts():
+        marker = _marker_path()
+        if marker.exists():
             return 0
 
+        account_service = service or get_account_service()
         cm = config_manager or get_config_manager()
         plan = plan_legacy_accounts(
             cm.load_config(LLMCredentialsConfig),
             cm.load_config(CLIBackendClaudeCodeConfig),
         )
         if not plan:
+            _record(marker)
             return 0
 
+        # An account of a kind that already exists is the user's, not ours —
+        # this is also what makes a retry after a partial adoption safe.
+        have = {a.get("kind") for a in account_service.list_accounts()}
         created = 0
+        failed: List[str] = []
         for entry in plan:
+            kind = str(entry.get("kind"))
+            if kind in have:
+                continue
             try:
                 account_service.create_account(entry)
                 created += 1
             except Exception as exc:  # noqa: BLE001 — one bad entry is not the rest
-                logger.warning("legacy adoption: %s skipped (%s)", entry.get("kind"), exc)
-        if created:
-            logger.info(
-                "legacy credentials adopted as %d model account(s): %s",
-                created, ", ".join(e["kind"] for e in plan),
+                failed.append(kind)
+                logger.error("legacy adoption: could not create the %s account (%s)", kind, exc)
+
+        if failed:
+            # No marker: the next boot retries what is still missing. Leaving
+            # a half-migrated server with no way to finish is worse than
+            # trying again.
+            logger.error(
+                "legacy adoption incomplete — %s still missing; will retry on next start",
+                ", ".join(failed),
             )
+        else:
+            _record(marker)
+        if created:
+            logger.info("legacy credentials adopted as %d model account(s)", created)
         return created
     except Exception as exc:  # noqa: BLE001 — never block boot
         logger.warning("legacy credential adoption skipped: %s", exc, exc_info=True)
         return 0
+
+
+def _record(marker: "Path") -> None:
+    """Remember that this install has been migrated.
+
+    Without it the only available signal is "are there accounts", and that
+    answers a different question: a user who deletes every account would be
+    handed the legacy ones back on the next restart.
+    """
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("adopted\n", encoding="utf-8")
+    except OSError as exc:
+        logger.warning("legacy adoption: could not record the marker (%s)", exc)
