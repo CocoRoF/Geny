@@ -521,6 +521,17 @@ async def lifespan(app: FastAPI):
         tool_loader=tool_loader,
     )
     logger.info(f"   - Environment templates installed: {env_templates_installed}")
+
+    # An install that predates accounts reaches its model through the legacy
+    # per-provider credentials. Environments now name ``geny_router``, so
+    # without this an upgrade leaves the server unable to start a session —
+    # telling a user to add the account they added years ago. Runs once: the
+    # moment one account exists it does nothing.
+    from service.llm_accounts import adopt_legacy_credentials
+
+    adopted = adopt_legacy_credentials()
+    if adopted:
+        logger.info(f"   - Legacy credentials adopted as accounts: {adopted}")
     logger.info(f"   - Total environments: {len(environment_service.list_all())}")
 
     # ── CreatureState (cycle 20260421_9 PR-X3-5, toggled by GameConfig) ──

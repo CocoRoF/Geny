@@ -5,6 +5,7 @@ route; :mod:`service.llm_accounts.kinds` for the catalogue of kinds and
 their models.
 """
 
+from service.llm_accounts.adopt_legacy import adopt_legacy_credentials
 from service.llm_accounts.kinds import (
     ACCOUNT_KINDS,
     EFFORTS,
@@ -17,6 +18,7 @@ from service.llm_accounts.service import AccountService, accounts_root, get_acco
 
 __all__ = [
     "ACCOUNT_KINDS",
+    "adopt_legacy_credentials",
     "AccountService",
     "EFFORTS",
     "KINDS",
