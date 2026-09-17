@@ -177,9 +177,10 @@ export const models = {
 
 // ── the conversation ─────────────────────────────────────────────────
 //
-// The room, not the session log. The phone, the desktop app and the web page
-// read and write this same store; anything else and the three show three
-// different conversations. See `shared/chat/room.ts`.
+// The room, not the session log. A room holds ONE agent, and the phone, the
+// desktop app and the web page all read and write the same one — anything
+// else and the three show three different conversations. Which room a session
+// talks in is the server's answer. See `shared/chat/room.ts`.
 
 export interface ChatRoom {
   id: string;
@@ -198,17 +199,15 @@ export interface RoomMessageDTO {
 }
 
 export const rooms = {
-  list: (creds: Credentials) => request<{ rooms: ChatRoom[] }>(creds, '/api/chat/rooms'),
-
   messages: (creds: Credentials, roomId: string, limit = 200) =>
     request<{ messages: RoomMessageDTO[] }>(
       creds, `/api/chat/rooms/${encodeURIComponent(roomId)}/messages?limit=${limit}`),
 
-  /** Sends to every session in the room — the same path the web and the
+  /** Says it to the room's agent — the same door the web page and the
    *  desktop app use, so the three cannot diverge. */
   send: (creds: Credentials, roomId: string, message: string) =>
     request<{ message?: RoomMessageDTO }>(
-      creds, `/api/chat/rooms/${encodeURIComponent(roomId)}/broadcast`,
+      creds, `/api/chat/rooms/${encodeURIComponent(roomId)}/message`,
       { method: 'POST', body: JSON.stringify({ message }) }),
 
   /**

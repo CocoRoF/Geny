@@ -1,9 +1,10 @@
-"""Where a session's conversation lives — one rule, held down.
+"""One session, one room.
 
-These are the cases that produced three different conversations for one
-session: a client scanning the room list with its own tie-break, a session
-with no room at all, and a session record still pointing at a room it was
-taken out of.
+A room is where you talk to ONE agent, and the only reason it is a thing
+separate from the session is so every screen can open the same conversation.
+These are the cases that broke that: a client picking a room by its own rule,
+a session with several rooms, a session with none, and a session record still
+pointing at a room it was taken out of.
 """
 
 import sys
@@ -15,7 +16,10 @@ import pytest
 class FakeChatStore:
     def __init__(self, rooms=None):
         self.rooms = list(rooms or [])
+        self.messages = {}
         self.created = []
+        self.deleted = []
+        self.renamed = []
 
     def list_rooms(self):
         return list(self.rooms)
@@ -38,6 +42,32 @@ class FakeChatStore:
         self.rooms.append(room)
         self.created.append(room)
         return room
+
+    def update_room_name(self, room_id, name):
+        self.renamed.append((room_id, name))
+        room = self.get_room(room_id)
+        if room:
+            room["name"] = name
+        return room
+
+    def delete_room(self, room_id):
+        self.deleted.append(room_id)
+        self.rooms = [r for r in self.rooms if r["id"] != room_id]
+        self.messages.pop(room_id, None)
+        return True
+
+    def get_messages(self, room_id, **_):
+        return list(self.messages.get(room_id, []))
+
+    def add_messages_batch(self, room_id, messages):
+        self.messages.setdefault(room_id, []).extend(messages)
+        room = self.get_room(room_id)
+        if room:
+            room["message_count"] = len(self.messages[room_id])
+        return messages
+
+    def resort_messages(self, room_id):
+        self.messages.get(room_id, []).sort(key=lambda m: str(m.get("timestamp") or ""))
 
 
 class FakeSessionStore:
@@ -83,17 +113,22 @@ def wired(monkeypatch):
     return module, chat, sessions
 
 
+def room(rid, sids, count, updated="2026-09-18T10:00:00Z", name="r"):
+    return {"id": rid, "name": name, "session_ids": sids,
+            "updated_at": updated, "message_count": count}
+
+
 def test_creates_and_records_a_room_for_a_session_that_never_spoke(wired):
     home_room, chat, sessions = wired
     sessions.records["s1"] = {"session_name": "Worker"}
 
-    room = home_room.resolve_home_room("s1")
+    made = home_room.resolve_home_room("s1")
 
-    assert room["session_ids"] == ["s1"]
-    assert room["name"] == "Worker Chat"
+    assert made["session_ids"] == ["s1"]
+    assert made["name"] == "Worker"
     # Recorded, so every later caller gets the same answer without searching.
-    assert ("s1", {"chat_room_id": room["id"]}) in sessions.updates
-    assert home_room.resolve_home_room("s1")["id"] == room["id"]
+    assert ("s1", {"chat_room_id": made["id"]}) in sessions.updates
+    assert home_room.resolve_home_room("s1")["id"] == made["id"]
     assert len(chat.created) == 1
 
 
@@ -103,27 +138,54 @@ def test_never_creates_when_asked_not_to(wired):
     assert chat.created == []
 
 
-def test_adopts_the_busiest_existing_room_rather_than_opening_a_new_one(wired):
-    """The bug this file exists for: a session that already has a conversation
-    must not be handed an empty room because nobody wrote it down."""
+def test_a_second_room_is_folded_into_the_first(wired):
+    """The heart of it. Two rooms for one session is two conversations for one
+    agent, and whichever one a screen picked was the one the other screens
+    could not see."""
     home_room, chat, sessions = wired
-    chat.rooms = [
-        {"id": "quiet", "name": "q", "session_ids": ["s1"],
-         "updated_at": "2026-09-18T10:00:00Z", "message_count": 0},
-        {"id": "busy", "name": "b", "session_ids": ["s1", "s2"],
-         "updated_at": "2026-09-17T09:00:00Z", "message_count": 42},
-    ]
+    chat.rooms = [room("busy", ["s1"], 42), room("stray", ["s1"], 2, "2026-09-18T11:00:00Z")]
+    chat.messages["busy"] = [{"id": "a", "timestamp": "t2"}]
+    chat.messages["stray"] = [{"id": "b", "timestamp": "t1"}, {"id": "c", "timestamp": "t3"}]
 
-    room = home_room.resolve_home_room("s1")
+    resolved = home_room.resolve_home_room("s1")
 
-    assert room["id"] == "busy"
+    assert resolved["id"] == "busy"
+    assert chat.deleted == ["stray"], "the stray room must not survive the merge"
+    # Its messages moved, keeping their ids, and the history reads in order.
+    assert [m["id"] for m in chat.messages["busy"]] == ["b", "a", "c"]
     assert chat.created == []
-    assert ("s1", {"chat_room_id": "busy"}) in sessions.updates
+
+
+def test_merging_keeps_going_when_one_stray_fails(wired):
+    home_room, chat, _ = wired
+    chat.rooms = [room("busy", ["s1"], 9), room("bad", ["s1"], 1), room("ok", ["s1"], 0)]
+
+    original = chat.delete_room
+
+    def explode(room_id):
+        if room_id == "bad":
+            raise RuntimeError("DB said no")
+        return original(room_id)
+
+    chat.delete_room = explode
+    resolved = home_room.resolve_home_room("s1")
+
+    assert resolved["id"] == "busy"
+    assert "ok" in chat.deleted, "one bad room must not strand the others"
+
+
+def test_the_room_wears_the_session_name(wired):
+    home_room, chat, sessions = wired
+    sessions.records["s1"] = {"session_name": "엘렌"}
+    chat.rooms = [room("r1", ["s1"], 5, name="ellen_new Chat")]
+
+    assert home_room.resolve_home_room("s1")["name"] == "엘렌"
+    assert chat.renamed == [("r1", "엘렌")]
 
 
 def test_session_ids_stored_as_json_text_still_match(wired):
-    """DB rows carry session_ids as a JSON string; a client-side rule that
-    only understood lists silently found no room at all."""
+    """DB rows carry session_ids as a JSON string; a rule that only understood
+    lists silently found no room at all."""
     home_room, chat, _ = wired
     chat.rooms = [{"id": "r1", "name": "r", "session_ids": '["s1"]',
                    "updated_at": "2026-09-18T10:00:00Z", "message_count": 3}]
@@ -131,25 +193,18 @@ def test_session_ids_stored_as_json_text_still_match(wired):
     assert home_room.resolve_home_room("s1")["id"] == "r1"
 
 
+def test_a_session_that_left_a_room_is_not_pinned_to_it(wired):
+    home_room, chat, sessions = wired
+    sessions.records["s1"] = {"chat_room_id": "old"}
+    chat.rooms = [room("old", ["s2"], 9), room("mine", ["s1"], 1)]
+
+    assert home_room.resolve_home_room("s1")["id"] == "mine"
+    assert ("s1", {"chat_room_id": "mine"}) in sessions.updates
+
+
 def test_a_stale_claim_falls_through_instead_of_dead_ending(wired):
     home_room, chat, sessions = wired
     sessions.records["s1"] = {"chat_room_id": "deleted-room"}
-    chat.rooms = [{"id": "real", "name": "r", "session_ids": ["s1"],
-                   "updated_at": "2026-09-18T10:00:00Z", "message_count": 5}]
+    chat.rooms = [room("real", ["s1"], 5)]
 
     assert home_room.resolve_home_room("s1")["id"] == "real"
-
-
-def test_a_claim_on_a_room_the_session_left_is_not_honoured(wired):
-    """The room editor can take a session out of a room. Staying pinned to it
-    would show the user a conversation they are no longer part of."""
-    home_room, chat, sessions = wired
-    sessions.records["s1"] = {"chat_room_id": "old"}
-    chat.rooms = [
-        {"id": "old", "name": "o", "session_ids": ["s2"],
-         "updated_at": "2026-09-18T10:00:00Z", "message_count": 9},
-        {"id": "mine", "name": "m", "session_ids": ["s1"],
-         "updated_at": "2026-09-18T11:00:00Z", "message_count": 1},
-    ]
-
-    assert home_room.resolve_home_room("s1")["id"] == "mine"

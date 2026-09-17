@@ -59,7 +59,7 @@ export default function RealtimeVoiceDriver({
   const bargeIn = useCallback(() => {
     const st = useVTuberStore.getState();
     st.stopSpeaking(sessionId);
-    if (roomId) chatApi.cancelBroadcast(roomId).catch(() => {});
+    if (roomId) chatApi.cancelTurn(roomId).catch(() => {});
   }, [sessionId, roomId]);
 
   // ── send a finished transcript into the VISIBLE chat (like typing) ──
@@ -80,7 +80,7 @@ export default function RealtimeVoiceDriver({
         const screen = st.screenObservationEnabled
           ? await grabCurrentScreenAttachment()
           : null;
-        await chatApi.broadcastToRoom(roomId, {
+        await chatApi.sendMessage(roomId, {
           message: msg,
           attachments: screen ? [screen] : undefined,
         });

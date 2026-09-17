@@ -173,22 +173,48 @@ class AgentExecutionState:
 
 
 @dataclass
-class BroadcastState:
-    """Tracks a single in-flight broadcast."""
-    broadcast_id: str
+class TurnState:
+    """The turn running in a room right now.
+
+    One room holds one agent, so this holds one agent state. It stays a dict
+    keyed by session id because that is the shape the wire has always carried
+    (``agent_progress`` sends a list), and a client installed before this
+    change still reads it.
+    """
+    turn_id: str
     room_id: str
-    total: int
-    completed: int = 0
-    responded: int = 0
     finished: bool = False
     cancelled: bool = False
     started_at: float = field(default_factory=time.time)
-    # NEW: per-agent execution states
     agent_states: Dict[str, AgentExecutionState] = field(default_factory=dict)
 
+    # ── the wire's older vocabulary ──
+    @property
+    def broadcast_id(self) -> str:
+        return self.turn_id
 
-# room_id -> BroadcastState for the currently active broadcast
-_active_broadcasts: Dict[str, BroadcastState] = {}
+    @property
+    def total(self) -> int:
+        return len(self.agent_states)
+
+    @property
+    def completed(self) -> int:
+        return sum(
+            1 for a in self.agent_states.values()
+            if a.status in ("completed", "failed", "cancelled")
+        )
+
+    @property
+    def responded(self) -> int:
+        return sum(1 for a in self.agent_states.values() if a.status == "completed")
+
+
+# The name the rest of the file used while a room was a group chat.
+BroadcastState = TurnState
+
+# room_id -> the turn running in it
+_active_turns: Dict[str, TurnState] = {}
+_active_broadcasts = _active_turns  # ws/chat_stream.py still says this
 # room_id -> asyncio.Event signalling "new message was saved"
 _room_new_msg_events: Dict[str, asyncio.Event] = {}
 
@@ -314,16 +340,6 @@ def _get_room_event(room_id: str) -> asyncio.Event:
 
 # -- Room models --
 
-class CreateRoomRequest(BaseModel):
-    name: str = Field(..., description="Chat room display name")
-    session_ids: List[str] = Field(..., description="Session IDs to include")
-
-
-class UpdateRoomRequest(BaseModel):
-    name: Optional[str] = None
-    session_ids: Optional[List[str]] = None
-
-
 class RoomResponse(BaseModel):
     id: str
     name: str
@@ -393,12 +409,17 @@ class BroadcastAttachment(BaseModel):
     source: Optional[str] = None
 
 
-class RoomBroadcastRequest(BaseModel):
+class RoomMessageRequest(BaseModel):
     message: str = Field("", description="Chat message to send (may be empty if attachments present)")
     attachments: Optional[List[BroadcastAttachment]] = Field(
         default=None,
         description="Optional list of image/file references uploaded via /api/uploads.",
     )
+
+
+# The room used to be a group chat and this used to be a broadcast. It is one
+# agent now; the old name stays only so nothing that imports it breaks.
+RoomBroadcastRequest = RoomMessageRequest
 
 
 # ============================================================================
@@ -407,21 +428,19 @@ class RoomBroadcastRequest(BaseModel):
 
 @router.get("/rooms", response_model=RoomListResponse)
 async def list_rooms():
-    """List all chat rooms (sorted by last activity)."""
+    """Every room, newest activity first.
+
+    Diagnostics only. A room belongs to one session and is reached through it
+    (``GET /rooms/for-session/{id}``); browsing the list and picking one is
+    what the messenger did, and it is how three screens came to disagree about
+    which conversation a session was having.
+    """
     store = get_chat_store()
     rooms = store.list_rooms()
     return RoomListResponse(
         rooms=[RoomResponse(**r) for r in rooms],
         total=len(rooms),
     )
-
-
-@router.post("/rooms", response_model=RoomResponse)
-async def create_room(request: CreateRoomRequest, auth: dict = Depends(require_auth)):
-    """Create a new chat room with selected sessions."""
-    store = get_chat_store()
-    room = store.create_room(name=request.name, session_ids=request.session_ids)
-    return RoomResponse(**room)
 
 
 @router.get("/rooms/for-session/{session_id}", response_model=RoomResponse)
@@ -456,36 +475,47 @@ async def get_room(room_id: str):
     return RoomResponse(**room)
 
 
-@router.patch("/rooms/{room_id}", response_model=RoomResponse)
-async def update_room(
-    room_id: str, request: UpdateRoomRequest, auth: dict = Depends(require_auth)
-):
-    """Update a chat room (name and/or sessions).
+@router.delete("/rooms/{room_id}")
+async def delete_room(room_id: str, auth: dict = Depends(require_auth)):
+    """Throw this conversation away, history and all.
 
-    Auth-gated (audit S2): create_room / delete_room already require auth,
-    but this mutating PATCH (room name + membership) did not.
+    The session keeps going and gets a fresh room the next time it speaks —
+    so this is "start over", not "delete the agent". The link on the session
+    record is cleared here rather than left pointing at a room that is gone.
     """
+    from service.chat.home_room import session_ids_of
+
     store = get_chat_store()
     room = store.get_room(room_id)
     if not room:
         raise HTTPException(status_code=404, detail=f"Room not found: {room_id}")
+    owners = session_ids_of(room)
 
-    if request.name is not None:
-        store.update_room_name(room_id, request.name)
-    if request.session_ids is not None:
-        store.update_room_sessions(room_id, request.session_ids)
-
-    updated = store.get_room(room_id)
-    return RoomResponse(**updated)
-
-
-@router.delete("/rooms/{room_id}")
-async def delete_room(room_id: str, auth: dict = Depends(require_auth)):
-    """Delete a chat room and all its history."""
-    store = get_chat_store()
     deleted = store.delete_room(room_id)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Room not found: {room_id}")
+
+    try:
+        from service.sessions.store import get_session_store
+
+        sessions = get_session_store()
+        for sid in owners:
+            record = sessions.get(sid) or {}
+            if record.get("chat_room_id") == room_id:
+                sessions.update(sid, {"chat_room_id": None})
+    except Exception:  # noqa: BLE001
+        logger.debug("Could not clear chat_room_id after deleting %s", room_id, exc_info=True)
+    try:
+        from service.executor import get_agent_session_manager
+
+        manager = get_agent_session_manager()
+        for sid in owners:
+            agent = manager.get_agent(sid)
+            if agent is not None and getattr(agent, "_chat_room_id", None) == room_id:
+                agent._chat_room_id = None
+    except Exception:  # noqa: BLE001
+        pass
+
     return {"success": True, "room_id": room_id}
 
 
@@ -550,33 +580,31 @@ async def cleanup_old_messages(auth: dict = Depends(require_auth)):
 # Room-Scoped Broadcast Endpoint (Fire-and-Forget)
 # ============================================================================
 
-@router.post("/rooms/{room_id}/broadcast")
-async def broadcast_to_room(
+@router.post("/rooms/{room_id}/message")
+async def send_to_room(
     room_id: str,
-    request: RoomBroadcastRequest,
+    request: RoomMessageRequest,
     auth: dict = Depends(require_auth),
 ):
-    """
-    Send a message to all sessions in a chat room.
+    """Say something to the agent whose room this is.
 
-    Core philosophy: a chat room is just multi-command.
-    Each agent in the room receives the same message and executes it
-    through the exact same execute_command path used by the command tab.
-    This guarantees identical session logging, cost tracking,
-    auto-revival, and double-execution prevention.
+    One room, one agent, one conversation. The message goes through the same
+    ``execute_command`` path every other entry point uses, so the turn is
+    logged, costed, revived and de-duplicated exactly like any other — the
+    room adds nowhere for a turn to behave differently.
 
-    Processing is fire-and-forget. Agent results are persisted in the
-    background regardless of whether any client is connected.  Clients
-    subscribe to live updates via GET /rooms/{room_id}/events.
-
-    Returns the saved user message immediately.
+    Processing is fire-and-forget: the answer is persisted into the room
+    whether or not anybody is still connected, and clients watch the room over
+    ``WS /ws/chat/rooms/{room_id}``. The saved user message comes back
+    immediately so the screen that sent it can adopt its own bubble.
     """
     store = get_chat_store()
     room = store.get_room(room_id)
     if not room:
         raise HTTPException(status_code=404, detail=f"Room not found: {room_id}")
 
-    # Reject empty broadcasts: must have either text or at least one attachment.
+    # A message must say something. Empty text with no attachment is a
+    # mis-click, not a turn.
     has_attachments = bool(request.attachments)
     if not request.message.strip() and not has_attachments:
         raise HTTPException(status_code=400, detail="Message or attachments required")
@@ -628,119 +656,123 @@ async def broadcast_to_room(
 
     _notify_room(room_id)
 
-    # 2. Resolve target session IDs and display info
-    #    Auto-revival & execution are handled by execute_command -- no need here.
-    room_session_ids = list(room["session_ids"])
-    if not room_session_ids:
+    # 2. Whose room is this? Exactly one session — the invariant lives in
+    #    service/chat/home_room.py, and a room that has lost its session can
+    #    only be an artefact of the messenger this used to be.
+    from service.chat.home_room import session_ids_of
+
+    room_sessions = session_ids_of(room)
+    if not room_sessions:
         store.add_message(room_id, {
             "type": "system",
-            "content": "No sessions in this room.",
+            "content": "이 대화방에 연결된 에이전트가 없습니다.",
         })
         _notify_room(room_id)
-        return {
-            "user_message": user_msg,
-            "broadcast_id": None,
-            "target_count": 0,
-        }
+        return {"user_message": user_msg, "broadcast_id": None, "target_count": 0}
+    session_id = room_sessions[0]
 
-    # Collect display metadata (best-effort; executor handles the real work)
-    all_agents = agent_manager.list_agents()
-    agent_info: Dict[str, Dict[str, str]] = {}
-    for a in all_agents:
-        if a.session_id in set(room_session_ids):
-            agent_info[a.session_id] = {
+    # Display metadata, best-effort — the executor does the real work.
+    info: Dict[str, str] = {}
+    for a in agent_manager.list_agents():
+        if a.session_id == session_id:
+            info = {
                 "session_name": a.session_name,
                 "role": a.role.value if hasattr(a.role, "value") else str(a.role),
             }
+            break
 
-    # 3. Cancel any in-flight broadcast for this room before starting a new one.
-    #    Without this, _active_broadcasts[room_id] would be silently overwritten,
-    #    causing the old broadcast's state to be lost and its broadcast_done event
-    #    to never reach clients.
-    existing_broadcast = _active_broadcasts.get(room_id)
-    if existing_broadcast and not existing_broadcast.finished:
+    # 3. One turn at a time in a room. A second message while the first is
+    #    still running would overwrite the tracked state, and the first turn's
+    #    completion would never reach the screen.
+    running = _active_turns.get(room_id)
+    if running and not running.finished:
         logger.warning(
-            "Room %s: cancelling previous broadcast %s (still in-flight) before starting new one",
-            room_id[:8], existing_broadcast.broadcast_id[:8],
+            "Room %s: cancelling turn %s (still in flight) before starting a new one",
+            room_id[:8], running.turn_id[:8],
         )
-        existing_broadcast.cancelled = True
-        # Best-effort stop of executing agents from the old broadcast
-        for sid, astate in existing_broadcast.agent_states.items():
+        running.cancelled = True
+        for sid, astate in running.agent_states.items():
             if astate.status == "executing":
                 try:
-                    stopped = await stop_execution(sid)
-                    if stopped:
+                    if await stop_execution(sid):
                         astate.status = "cancelled"
-                except Exception as cancel_err:
+                except Exception as cancel_err:  # noqa: BLE001
                     logger.debug(
-                        "Room %s: failed to stop agent %s during auto-cancel: %s",
-                        room_id[:8], sid[:8], cancel_err,
+                        "Room %s: could not stop %s: %s", room_id[:8], sid[:8], cancel_err,
                     )
             elif astate.status in ("pending", "queued"):
                 astate.status = "cancelled"
-        existing_broadcast.finished = True
+        running.finished = True
         _notify_room(room_id)
 
-    # Create broadcast state and launch background processing
-    broadcast_id = str(uuid.uuid4())
-
-    # Initialize per-agent states
-    initial_agent_states: Dict[str, AgentExecutionState] = {}
-    for sid in room_session_ids:
-        info = agent_info.get(sid, {})
-        initial_agent_states[sid] = AgentExecutionState(
-            session_id=sid,
-            session_name=info.get("session_name", sid[:8]),
-            role=info.get("role", "worker"),
-            status="pending",
-        )
-
-    broadcast_state = BroadcastState(
-        broadcast_id=broadcast_id,
+    turn_id = str(uuid.uuid4())
+    state = TurnState(
+        turn_id=turn_id,
         room_id=room_id,
-        total=len(room_session_ids),
-        agent_states=initial_agent_states,
+        agent_states={
+            session_id: AgentExecutionState(
+                session_id=session_id,
+                session_name=info.get("session_name", session_id[:8]),
+                role=info.get("role", "worker"),
+                status="pending",
+            )
+        },
     )
-    _active_broadcasts[room_id] = broadcast_state
+    _active_turns[room_id] = state
 
-    # Notify SSE clients so they immediately see initial agent states
+    # Say so before the work starts, so a client that just connected sees the
+    # agent as busy rather than as silent.
     _notify_room(room_id)
 
     logger.info(
-        "Room %s: broadcast %s -> %d sessions: %s",
-        room_id, broadcast_id, len(room_session_ids), request.message[:80],
+        "Room %s: turn %s -> session %s: %s",
+        room_id[:8], turn_id[:8], session_id[:8], request.message[:80],
     )
 
-    # Detached: the HTTP response returns immediately, the fan-out runs on.
+    # Detached: the HTTP response returns now, the turn runs on.
     spawn_background(
-        _run_broadcast(
-            room_id, broadcast_id, broadcast_state,
-            room_session_ids, agent_info, request.message, store,
+        _run_turn(
+            room_id, state, session_id, info, request.message, store,
             attachments=attachments_payload,
         ),
-        name=f"chat.broadcast:{room_id}",
+        name=f"chat.turn:{room_id}",
     )
 
     return {
         "user_message": user_msg,
-        "broadcast_id": broadcast_id,
-        "target_count": len(room_session_ids),
+        # Named for the wire, which older phones still speak.
+        "broadcast_id": turn_id,
+        "target_count": 1,
     }
 
 
-@router.post("/rooms/{room_id}/broadcast/cancel")
-async def cancel_broadcast(room_id: str, auth: dict = Depends(require_auth)):
-    """Cancel an active broadcast, stopping pending and running agents."""
-    bstate = _active_broadcasts.get(room_id)
+@router.post("/rooms/{room_id}/broadcast")
+async def broadcast_to_room(
+    room_id: str,
+    request: RoomMessageRequest,
+    auth: dict = Depends(require_auth),
+):
+    """Deprecated name for :func:`send_to_room`.
+
+    A room held several sessions once and this fanned out to all of them.
+    Kept as a door, not as a second implementation, because a phone installed
+    before the rename still knocks on it.
+    """
+    return await send_to_room(room_id, request, auth)
+
+
+@router.post("/rooms/{room_id}/cancel")
+async def cancel_turn(room_id: str, auth: dict = Depends(require_auth)):
+    """Stop the turn running in this room."""
+    bstate = _active_turns.get(room_id)
     if not bstate or bstate.finished:
-        raise HTTPException(status_code=404, detail="No active broadcast for this room")
+        raise HTTPException(status_code=404, detail="No turn is running in this room")
 
     if bstate.cancelled:
-        return {"status": "already_cancelled", "broadcast_id": bstate.broadcast_id}
+        return {"status": "already_cancelled", "broadcast_id": bstate.turn_id}
 
     bstate.cancelled = True
 
-    # Stop agents that are currently executing
     cancelled_count = 0
     for sid, astate in bstate.agent_states.items():
         if astate.status == "executing":
@@ -759,40 +791,38 @@ async def cancel_broadcast(room_id: str, auth: dict = Depends(require_auth)):
 
     return {
         "status": "cancelled",
-        "broadcast_id": bstate.broadcast_id,
+        "broadcast_id": bstate.turn_id,
         "cancelled_agents": cancelled_count,
     }
 
 
-async def _run_broadcast(
+@router.post("/rooms/{room_id}/broadcast/cancel")
+async def cancel_broadcast(room_id: str, auth: dict = Depends(require_auth)):
+    """Deprecated name for :func:`cancel_turn`."""
+    return await cancel_turn(room_id, auth)
+
+
+async def _run_turn(
     room_id: str,
-    broadcast_id: str,
-    state: BroadcastState,
-    session_ids: List[str],
-    agent_info: Dict[str, Dict[str, str]],
+    state: TurnState,
+    session_id: str,
+    agent_info: Dict[str, str],
     message: str,
     store,
     *,
     attachments: Optional[List[Dict[str, Any]]] = None,
 ):
-    """
-    Background task: runs one command per agent and persists results.
+    """Background task: run the turn and persist what it said.
 
-    This is the concrete expression of "chat room = multi-command".
-    Each agent goes through the exact same execute_command path
-    as the command tab, inheriting:
-      - session logging  (log_command / log_response)
-      - cost persistence (increment_cost)
-      - auto-revival     (agent.revive)
-      - double-execution prevention
-      - timeout handling
+    The agent goes through the exact same ``execute_command`` path as every
+    other entry point, inheriting session logging, cost persistence,
+    auto-revival, double-execution prevention and timeout handling. The room
+    is a place to watch a turn from, never a second way to run one.
     """
     from service.logging.session_logger import get_session_logger
 
-    start_time = time.time()
-
     async def _invoke_one(session_id: str):
-        info = agent_info.get(session_id, {})
+        info = agent_info
         sname = info.get("session_name", session_id[:8])
         role = info.get("role", "unknown")
 
@@ -809,7 +839,6 @@ async def _run_broadcast(
             logger.info("[Broadcast:%s] session=%s skipped (broadcast cancelled)", room_id[:8], session_id[:8])
             if agent_state:
                 agent_state.status = "cancelled"
-            state.completed += 1
             _notify_room(room_id)
             return
 
@@ -1004,12 +1033,11 @@ async def _run_broadcast(
                             getattr(agent, "_memory_events_cursor", None) if agent else None,
                         )
                 store.add_message(room_id, msg_data)
-                state.responded += 1
                 if agent_state:
                     agent_state.status = "completed"
                 logger.info(
-                    "[Broadcast:%s] session=%s: agent message saved (responded=%d/%d)",
-                    room_id[:8], session_id[:8], state.responded, state.total,
+                    "[Turn:%s] session=%s: the agent's answer is saved",
+                    room_id[:8], session_id[:8],
                 )
                 _notify_room(room_id)
             elif not result.success:
@@ -1020,7 +1048,7 @@ async def _run_broadcast(
                 )
                 store.add_message(room_id, {
                     "type": "system",
-                    "content": f"{sname}: {result.error or 'Unknown error'}",
+                    "content": result.error or "실행에 실패했습니다",
                 })
                 if agent_state:
                     agent_state.status = "failed"
@@ -1048,7 +1076,7 @@ async def _run_broadcast(
                 )
                 store.add_message(room_id, {
                     "type": "system",
-                    "content": f"{sname}: \ud604\uc7ac \uc791\uc5c5 \uc644\ub8cc \ud6c4 \ucc98\ub9ac\ud569\ub2c8\ub2e4\u2026",
+                    "content": "\ud604\uc7ac \uc791\uc5c5 \uc644\ub8cc \ud6c4 \ucc98\ub9ac\ud569\ub2c8\ub2e4\u2026",
                     "meta": {"busy_reason": "executing", "queued": True},
                 })
                 if agent_state:
@@ -1071,7 +1099,7 @@ async def _run_broadcast(
                     logger.error("DLQ fallback also failed for %s", session_id, exc_info=True)
                 store.add_message(room_id, {
                     "type": "system",
-                    "content": f"{sname}: \ud604\uc7ac \ub2e4\ub978 \uc791\uc5c5 \uc911\uc774\uba70, \uba54\uc2dc\uc9c0 \ub300\uae30\uc5f4 \uc800\uc7a5\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4",
+                    "content": "\ud604\uc7ac \ub2e4\ub978 \uc791\uc5c5 \uc911\uc774\uba70, \uba54\uc2dc\uc9c0 \ub300\uae30\uc5f4 \uc800\uc7a5\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4",
                 })
                 if agent_state:
                     agent_state.status = "failed"
@@ -1080,7 +1108,7 @@ async def _run_broadcast(
         except AgentNotFoundError:
             store.add_message(room_id, {
                 "type": "system",
-                "content": f"{sname}: Session not found",
+                "content": "세션을 찾을 수 없습니다",
             })
             if agent_state:
                 agent_state.status = "failed"
@@ -1090,7 +1118,7 @@ async def _run_broadcast(
             logger.warning("Agent not alive for session %s: %s", session_id, e)
             store.add_message(room_id, {
                 "type": "system",
-                "content": f"{sname}: \uc5d0\uc774\uc804\ud2b8\ub97c \uc2e4\ud589\ud560 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4 (\uc138\uc158\uc774 \ube44\ud65c\uc131 \uc0c1\ud0dc)",
+                "content": "\uc5d0\uc774\uc804\ud2b8\ub97c \uc2e4\ud589\ud560 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4 (\uc138\uc158\uc774 \ube44\ud65c\uc131 \uc0c1\ud0dc)",
             })
             if agent_state:
                 agent_state.status = "failed"
@@ -1100,14 +1128,13 @@ async def _run_broadcast(
             logger.error("Broadcast error for session %s: %s", session_id, e, exc_info=True)
             store.add_message(room_id, {
                 "type": "system",
-                "content": f"{sname}: \uc2e4\ud589 \uc911 \uc624\ub958\uac00 \ubc1c\uc0dd\ud588\uc2b5\ub2c8\ub2e4",
+                "content": "\uc2e4\ud589 \uc911 \uc624\ub958\uac00 \ubc1c\uc0dd\ud588\uc2b5\ub2c8\ub2e4",
             })
             if agent_state:
                 agent_state.status = "failed"
             _notify_room(room_id)
 
         finally:
-            state.completed += 1
             # Cancel log polling
             if log_poll_task:
                 log_poll_task.cancel()
@@ -1116,36 +1143,30 @@ async def _run_broadcast(
                 except asyncio.CancelledError:
                     pass
 
-    # Launch all concurrently -- each is an independent command execution
-    tasks = [asyncio.create_task(_invoke_one(sid)) for sid in session_ids]
-    await asyncio.gather(*tasks, return_exceptions=True)
+    await _invoke_one(session_id)
 
-    # Summary
-    total_duration_ms = int((time.time() - start_time) * 1000)
-    try:
-        store.add_message(room_id, {
-            "type": "system",
-            "content": f"{state.responded}/{state.total} sessions responded ({total_duration_ms / 1000:.1f}s)",
-        })
-        _notify_room(room_id)
-    except Exception as e:
-        logger.error("Failed to save broadcast summary: %s", e)
-
+    # No summary line. "1/1 sessions responded (7.1s)" was a scoreboard for a
+    # fan-out that no longer exists, and it landed in the conversation after
+    # every successful answer — a receipt nobody asked for, printed under
+    # every reply.
     state.finished = True
 
     logger.info(
-        "Room %s: broadcast %s complete: %d/%d responded (%dms)",
-        room_id, broadcast_id, state.responded, state.total, total_duration_ms,
+        "Room %s: turn %s finished in %dms (%s)",
+        room_id[:8], state.turn_id[:8],
+        int((time.time() - state.started_at) * 1000),
+        "answered" if state.responded else "no answer",
     )
 
-    # Cleanup broadcast state after a delay (allow clients to read final state).
-    # Uses broadcast_id guard to prevent accidentally deleting a newer broadcast's state.
+    # Hold the finished state briefly so a client that connects right after
+    # the turn still learns how it ended, then drop it. The id guard stops a
+    # newer turn's state being deleted by an older turn's timer.
     from service.config.sub_config.general.chat_config import ChatConfig
     _chat_cfg = ChatConfig.get_default_instance()
     await asyncio.sleep(_chat_cfg.broadcast_cleanup_delay_s)
-    current_state = _active_broadcasts.get(room_id)
-    if current_state is not None and current_state.broadcast_id == broadcast_id:
-        del _active_broadcasts[room_id]
+    current = _active_turns.get(room_id)
+    if current is not None and current.turn_id == state.turn_id:
+        del _active_turns[room_id]
 
 
 

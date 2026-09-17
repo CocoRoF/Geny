@@ -134,18 +134,18 @@ export default function ConnectorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-select a VTuber session AND correct a stale/invalid selection so the
-  // panel + overlay self-heal onto a real VTuber. Crucially, prefer the BOUND
-  // session (?session = overlaySession) over "first VTuber" — landing on a
-  // different VTuber would overwrite overlaySession (pickSession syncs it) and
-  // lose the user's session+model across restarts.
+  // Land on a session and correct a stale selection, so the panel + overlay
+  // self-heal onto one that exists. Prefer the BOUND session (?session =
+  // overlaySession) over "the first one" — landing elsewhere would overwrite
+  // overlaySession (pickSession syncs it) and lose the user's session across
+  // restarts. A VTuber is preferred only because this window can also drive an
+  // avatar; any session can be talked to.
   useEffect(() => {
     if (!booted) return;
-    const cur = sessions.find((s) => s.session_id === selectedSessionId);
-    if (cur?.role === 'vtuber') return; // already on a valid VTuber
+    if (sessions.some((s) => s.session_id === selectedSessionId)) return;
     const want = wantSessionRef.current;
-    const bound = want ? sessions.find((s) => s.session_id === want && s.role === 'vtuber') : undefined;
-    const target = bound ?? sessions.find((s) => s.role === 'vtuber');
+    const bound = want ? sessions.find((s) => s.session_id === want) : undefined;
+    const target = bound ?? sessions.find((s) => s.role === 'vtuber') ?? sessions[0];
     if (target) pickSession(target.session_id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [booted, sessions, selectedSessionId]);
@@ -158,9 +158,12 @@ export default function ConnectorPage() {
 
   const current = sessions.find((s) => s.session_id === selectedSessionId);
   const isVTuber = current?.role === 'vtuber';
-  const vtuberSessions = sessions.filter((s) => s.role === 'vtuber');
   const sid = selectedSessionId ?? '';
-  const ready = isVTuber && !!current?.chat_room_id;
+  // Every session has a conversation — the panel asks the server which room
+  // it is and the server makes one if this session has never spoken. Waiting
+  // for a `chat_room_id` on the session row meant only VTubers could be
+  // talked to here, which is not what a room is for.
+  const ready = Boolean(current);
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)]">
@@ -176,7 +179,7 @@ export default function ConnectorPage() {
           <div className="relative">
             <select className={TOOLBAR_SELECT} value={sid} onChange={(e) => pickSession(e.target.value)}>
               <option value="" disabled>세션 선택…</option>
-              {vtuberSessions.map((s) => (
+              {sessions.map((s) => (
                 <option key={s.session_id} value={s.session_id}>{s.session_name || s.session_id.slice(0, 8)}</option>
               ))}
             </select>
@@ -227,7 +230,7 @@ export default function ConnectorPage() {
       {/* Chat */}
       <div className="flex-1 min-h-0 bg-[var(--bg-secondary)]">
         {ready ? (
-          <VTuberChatPanel sessionId={sid} roomId={current!.chat_room_id!} />
+          <VTuberChatPanel sessionId={sid} />
         ) : (
           <div className="flex h-full items-center justify-center p-8">
             <div className="flex flex-col items-center gap-3 text-center max-w-[280px]">
@@ -242,12 +245,12 @@ export default function ConnectorPage() {
                     <MonitorIcon className="w-7 h-7" />
                   </div>
                   <div className="text-sm font-semibold text-[var(--text-primary)]">
-                    {vtuberSessions.length === 0 ? 'VTuber 세션이 없습니다' : 'VTuber 세션을 선택하세요'}
+                    {sessions.length === 0 ? '세션이 없습니다' : '세션을 선택하세요'}
                   </div>
                   <div className="text-xs text-[var(--text-muted)] leading-relaxed">
-                    {vtuberSessions.length === 0
-                      ? '서버에서 VTuber 세션을 만든 뒤 위의 ↻ 로 새로고침하세요.'
-                      : '위 세션 메뉴에서 대화할 VTuber를 고르면 채팅이 열립니다.'}
+                    {sessions.length === 0
+                      ? '서버에서 세션을 만든 뒤 위의 ↻ 로 새로고침하세요.'
+                      : '위 세션 메뉴에서 대화할 에이전트를 고르면 채팅이 열립니다.'}
                   </div>
                 </>
               )}

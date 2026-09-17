@@ -145,16 +145,6 @@ export interface ChatRoom {
   message_count: number;
 }
 
-export interface CreateChatRoomRequest {
-  name: string;
-  session_ids: string[];
-}
-
-export interface UpdateChatRoomRequest {
-  name?: string;
-  session_ids?: string[];
-}
-
 export interface ChatRoomListResponse {
   rooms: ChatRoom[];
   total: number;

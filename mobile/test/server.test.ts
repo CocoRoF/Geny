@@ -90,9 +90,16 @@ test("the room for a session is asked of the server, not worked out here", async
       { status: 200, headers: { 'Content-Type': 'application/json' } });
   }) as unknown as typeof fetch;
   try {
-    const room = await rooms.forSession({ baseUrl: 'https://g.example', token: 't' }, 's 1');
+    const creds = { baseUrl: 'https://g.example', token: 't' };
+    const room = await rooms.forSession(creds, 's 1');
     assert.equal(room.id, 'r1');
-    assert.deepEqual(seen, ['https://g.example/api/chat/rooms/for-session/s%201']);
+    await rooms.send(creds, 'r1', '안녕');
+    assert.deepEqual(seen, [
+      'https://g.example/api/chat/rooms/for-session/s%201',
+      // One agent in the room, so the door is "message" — not "broadcast",
+      // which is what it was called when a room held several.
+      'https://g.example/api/chat/rooms/r1/message',
+    ]);
   } finally {
     globalThis.fetch = original;
   }

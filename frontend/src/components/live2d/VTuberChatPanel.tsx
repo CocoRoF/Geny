@@ -107,18 +107,36 @@ function VTuberProgressPanel({ agents }: { agents: AgentProgressState[] }) {
  *
  * Uses the Chat Room system for DB-backed persistence:
  *  - Loads history on mount via getRoomMessages()
- *  - Sends messages via broadcastToRoom()
+ *  - Sends messages via sendMessage()
  *  - Receives responses in real-time via SSE subscription
  *
  * Messages survive tab switches because they are stored in DB.
  */
 export default function VTuberChatPanel({
   sessionId,
-  roomId,
+  roomId: givenRoomId,
 }: {
   sessionId: string;
+  /** Optional. Left out, the panel asks the server which room this session
+   *  talks in — the same answer the desktop app and the phone get. */
   roomId?: string | null;
 }) {
+  // Where this session's conversation lives. The SERVER decides: one session,
+  // one room, and every screen that asks gets the same one. A caller may pass
+  // a room it already knows (the session list carries it), but nothing here
+  // picks one by its own rule — that is what gave one session three
+  // conversations, one per screen.
+  const [resolvedRoomId, setResolvedRoomId] = useState<string | null>(givenRoomId ?? null);
+  const roomId = givenRoomId ?? resolvedRoomId;
+  useEffect(() => {
+    if (givenRoomId || !sessionId) return;
+    let cancelled = false;
+    chatApi.roomForSession(sessionId)
+      .then((room) => { if (!cancelled) setResolvedRoomId(room.id); })
+      .catch(() => { if (!cancelled) setResolvedRoomId(null); });
+    return () => { cancelled = true; };
+  }, [givenRoomId, sessionId]);
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -480,7 +498,7 @@ export default function VTuberChatPanel({
         if (screen) attachmentsToSend.push(screen);
       }
 
-      const resp = await chatApi.broadcastToRoom(roomId, {
+      const resp = await chatApi.sendMessage(roomId, {
         message: text,
         attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
       });
@@ -648,7 +666,7 @@ export default function VTuberChatPanel({
   const handleCancelBroadcast = useCallback(async () => {
     if (!roomId) return;
     try {
-      await chatApi.cancelBroadcast(roomId);
+      await chatApi.cancelTurn(roomId);
     } catch (e) {
       console.error('[VTuberChatPanel] Failed to cancel broadcast:', e);
     }
@@ -873,7 +891,7 @@ export default function VTuberChatPanel({
               onClick={handleCancelBroadcast}
             >
               <XCircle size={14} />
-              <span>{t('messenger.cancelBroadcast')}</span>
+              <span>{t('vtuberChat.cancelTurn')}</span>
             </button>
           </div>
         )}

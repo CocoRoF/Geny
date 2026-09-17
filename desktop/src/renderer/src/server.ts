@@ -290,9 +290,10 @@ export const sessions = {
 
 // ── the conversation ─────────────────────────────────────────────────
 //
-// The room, not the session log. Every surface — this app, the web page, the
-// phone — reads and writes the same store, which is the only way they can
-// show the same conversation. See `shared/chat/room.ts`.
+// The room, not the session log. A room holds ONE agent, and every surface —
+// this app, the web page, the phone — reads and writes the same one, which is
+// the only way the three can show the same conversation. Which room a session
+// talks in is the server's answer, never ours. See `shared/chat/room.ts`.
 
 export interface ChatRoom {
   id: string
@@ -303,17 +304,15 @@ export interface ChatRoom {
 }
 
 export const rooms = {
-  list: () => serverFetch<{ rooms: ChatRoom[] }>('/api/chat/rooms'),
-
   messages: (roomId: string, limit = 200) =>
     serverFetch<{ messages: RoomMessageDTO[] }>(
       `/api/chat/rooms/${encodeURIComponent(roomId)}/messages?limit=${limit}`),
 
-  /** Sends to every session in the room — the same path the web uses, so a
-   *  message typed here reaches the same place a message typed there does. */
+  /** Says it to the room's agent — the same door the web page and the phone
+   *  use, so a message typed here lands where one typed there does. */
   send: (roomId: string, message: string) =>
     serverFetch<{ message?: RoomMessageDTO }>(
-      `/api/chat/rooms/${encodeURIComponent(roomId)}/broadcast`,
+      `/api/chat/rooms/${encodeURIComponent(roomId)}/message`,
       { method: 'POST', body: JSON.stringify({ message }) }),
 
   /**

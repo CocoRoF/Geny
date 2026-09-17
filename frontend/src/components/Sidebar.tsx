@@ -6,7 +6,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { twMerge } from 'tailwind-merge';
 import { useI18n } from '@/lib/i18n';
 import type { SessionInfo } from '@/types';
-import { PanelLeftClose, PanelLeftOpen, Plus, Trash2, RotateCcw, ChevronDown, ChevronRight, X, MessageCircle } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, Plus, Trash2, RotateCcw, ChevronDown, ChevronRight, X } from 'lucide-react';
 
 function cn(...classes: (string | boolean | undefined | null)[]) {
   return twMerge(classes.filter(Boolean).join(' '));
@@ -14,7 +14,6 @@ function cn(...classes: (string | boolean | undefined | null)[]) {
 import CreateSessionModal from '@/components/modals/CreateSessionModal';
 import DeleteSessionModal from '@/components/modals/DeleteSessionModal';
 import ConfirmModal from '@/components/modals/ConfirmModal';
-import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
 function SessionItem({ session, isSelected, onSelect }: {
@@ -298,17 +297,6 @@ function SidebarContent({ onSessionSelect }: { onSessionSelect?: () => void }) {
           onClose={() => setPurgeConfirmOpen(false)}
         />
       )}
-
-      {/* Messenger Link */}
-      <div className="shrink-0 border-t border-[var(--border-color)] p-3">
-        <Link
-          href="/messenger"
-          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--bg-hover)] hover:bg-[var(--primary-subtle)] text-[var(--text-secondary)] hover:text-[var(--primary-color)] transition-all text-[0.75rem] font-medium no-underline"
-        >
-          <MessageCircle size={14} />
-          {t('messenger.openMessenger')}
-        </Link>
-      </div>
     </>
   );
 }

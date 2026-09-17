@@ -376,7 +376,7 @@ function AvatarOverlay() {
       const st = useVTuberStore.getState();
       if (st.ttsSpeaking[resolved.sid]) {
         st.stopSpeaking(resolved.sid);
-        if (resolved.rid) chatApi.cancelBroadcast(resolved.rid).catch(() => undefined);
+        if (resolved.rid) chatApi.cancelTurn(resolved.rid).catch(() => undefined);
       }
       setPttActive((v) => !v);
     };

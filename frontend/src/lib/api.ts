@@ -176,8 +176,6 @@ import type {
   GraphStructure,
   StorageListResponse,
   StorageFileContent,
-  CreateChatRoomRequest,
-  UpdateChatRoomRequest,
   ChatRoom,
   ChatRoomListResponse,
   ChatRoomMessageListResponse,
@@ -2185,27 +2183,25 @@ export const llmBackendsApi = {
 // ==================== Chat API ====================
 
 export const chatApi = {
-  /** GET /api/chat/rooms — list all chat rooms */
+  /**
+   * GET /api/chat/rooms/for-session/:id — where this session's conversation
+   * lives.
+   *
+   * One session, one room, and the SERVER says which. Every surface asks this
+   * — this page, the desktop app, the phone — so all three open the same
+   * conversation. Picking a room from the list by a rule of one's own is what
+   * gave a single session three different conversations.
+   */
+  roomForSession: (sessionId: string) =>
+    apiCall<ChatRoom>(`/api/chat/rooms/for-session/${encodeURIComponent(sessionId)}`),
+
+  /** GET /api/chat/rooms — every room, for diagnostics. Not a way in. */
   listRooms: () =>
     apiCall<ChatRoomListResponse>('/api/chat/rooms'),
-
-  /** POST /api/chat/rooms — create a new chat room */
-  createRoom: (data: CreateChatRoomRequest) =>
-    apiCall<ChatRoom>('/api/chat/rooms', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
 
   /** GET /api/chat/rooms/:id — get a single room */
   getRoom: (roomId: string) =>
     apiCall<ChatRoom>(`/api/chat/rooms/${roomId}`),
-
-  /** PATCH /api/chat/rooms/:id — update room name/sessions */
-  updateRoom: (roomId: string, data: UpdateChatRoomRequest) =>
-    apiCall<ChatRoom>(`/api/chat/rooms/${roomId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    }),
 
   /** DELETE /api/chat/rooms/:id — delete room & history */
   deleteRoom: (roomId: string) =>
@@ -2225,20 +2221,22 @@ export const chatApi = {
   },
 
   /**
-   * POST /api/chat/rooms/:id/broadcast — fire-and-forget broadcast.
-   * Returns the saved user message and broadcast info immediately.
-   * Agent processing continues in the background.
+   * POST /api/chat/rooms/:id/message — say something to the room's agent.
+   *
+   * Fire-and-forget: the saved user message comes back at once and the turn
+   * runs on the server, whether or not this page is still open. The answer
+   * arrives over the room's WebSocket.
    */
-  broadcastToRoom: (roomId: string, data: ChatRoomBroadcastRequest) =>
-    apiCall<ChatRoomBroadcastResponse>(`/api/chat/rooms/${roomId}/broadcast`, {
+  sendMessage: (roomId: string, data: ChatRoomBroadcastRequest) =>
+    apiCall<ChatRoomBroadcastResponse>(`/api/chat/rooms/${roomId}/message`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  /** POST /api/chat/rooms/:id/broadcast/cancel — cancel active broadcast */
-  cancelBroadcast: (roomId: string) =>
+  /** POST /api/chat/rooms/:id/cancel — stop the turn running in this room */
+  cancelTurn: (roomId: string) =>
     apiCall<{ status: string; broadcast_id: string; cancelled_agents: number }>(
-      `/api/chat/rooms/${roomId}/broadcast/cancel`,
+      `/api/chat/rooms/${roomId}/cancel`,
       { method: 'POST' },
     ),
 
@@ -2246,7 +2244,7 @@ export const chatApi = {
    * POST /api/uploads — multipart upload of one or more files.
    *
    * Returns ``ChatAttachment`` references that the caller embeds in a
-   * subsequent ``broadcastToRoom`` request via the ``attachments``
+   * subsequent ``sendMessage`` request via the ``attachments``
    * field. Files are content-addressed (sha256) on the server, so
    * uploading the same image twice is idempotent.
    */

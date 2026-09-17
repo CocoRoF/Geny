@@ -476,6 +476,19 @@ class ChatConversationStore:
 
         return message
 
+    def resort_messages(self, room_id: str) -> None:
+        """Put the JSON backup back in timestamp order.
+
+        The DB reads ordered by timestamp, so it never needs this. The JSON
+        copy is append-ordered, and merging one room's history into another
+        appends old messages after new ones — which is the order a client
+        would see if the DB were ever unavailable.
+        """
+        with self._lock:
+            messages = self._load_messages(room_id)
+            messages.sort(key=lambda m: str(m.get("timestamp") or ""))
+            self._save_messages(room_id, messages)
+
     def add_messages_batch(
         self, room_id: str, messages_to_add: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:

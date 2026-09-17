@@ -45,7 +45,7 @@ export default function PushToTalkDriver({
         const screen = useVTuberStore.getState().screenObservationEnabled
           ? await grabCurrentScreenAttachment()
           : null;
-        await chatApi.broadcastToRoom(roomId, {
+        await chatApi.sendMessage(roomId, {
           message: msg,
           attachments: screen ? [screen] : undefined,
         });

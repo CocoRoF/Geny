@@ -321,7 +321,7 @@ const server = createServer((req, res) => {
   if (url.pathname.endsWith('/messages') && url.pathname.includes('/api/chat/rooms/')) {
     return send({ room_id: ROOM.id, messages: ROOM_MESSAGES, total: ROOM_MESSAGES.length, has_more: false })
   }
-  if (url.pathname.endsWith('/broadcast') && req.method === 'POST') {
+  if (url.pathname.endsWith('/message') && req.method === 'POST') {
     let body = ''
     req.on('data', (chunk) => { body += chunk })
     req.on('end', () => {
