@@ -1,13 +1,22 @@
 # Geny Connector (desktop)
 
-The desktop **접속기** for Geny: a thin, always-on-top, click-through overlay that
-renders the live VTuber avatar at the bottom of your desktop. The Geny **server**
-stays the brain (agent pipeline, memory, TTS/STT synthesis, avatar-state); this
-app is just the face + native I/O (rendering, audio, screen, hotkeys).
+The desktop app for Geny. Two surfaces, one process:
 
-> Status: **Phase 0** — runnable transparent-overlay shell + native bridge +
-> server login. The avatar renderer (ported from the browser app) mounts next.
-> See [`../dev_docs/vtuber-desktop/PLAN.md`](../dev_docs/vtuber-desktop/PLAN.md).
+- **The workspace** — sessions on the left, the conversation in the middle with
+  each tool call as a line you can open, and the ledger of what the agent
+  actually did to your files on the right. The model picker in the header
+  switches the live session's route mid-conversation, and says when a fallback
+  answered instead of the account you pointed at.
+- **The avatar** — an always-on-top, click-through overlay that renders the live
+  VTuber at the bottom of your desktop, with a quick-chat bar on a global hotkey.
+
+The Geny **server** stays the brain (agent pipeline, memory, TTS/STT synthesis,
+avatar state). This app is where you watch it work and tell it what to do.
+
+The workspace used to be the server's `/connector` web page in a frame. It is
+the connector's own renderer now, over the same execute socket the phone uses —
+`shared/chat/` holds the socket and the log→conversation fold, and both apps
+import it, so the desktop cannot drift from the phone about what happened.
 
 ## Download & run (git-clonable)
 
@@ -15,11 +24,11 @@ app is just the face + native I/O (rendering, audio, screen, hotkeys).
 git clone https://github.com/CocoRoF/Geny.git
 cd Geny/desktop
 npm install            # pulls electron + electron-vite + react
-npm run dev            # launches the overlay + (hidden) control window
+npm run dev            # launches the workspace + the avatar overlay
 ```
 
 The overlay floats at the bottom-right; **drag the glowing handle** to move it,
-**double-click** it to toggle the control window. In the control window enter
+**double-click** it to toggle the workspace. In the settings window enter
 your Geny **server URL**, click **연결 확인**, then **로그인** — the account JWT is
 stored in the OS keychain (Keychain / Credential Manager / libsecret) and used as
 `Authorization: Bearer` for the (now-authenticated) server API.
@@ -64,18 +73,32 @@ src/main/index.ts      Electron main: overlay (transparent/frameless/always-on-t
 src/preload/index.ts   contextBridge → window.connector (serverConfig, secureStore,
                        windowControl). The renderer NEVER imports electron directly,
                        so a Tauri backend could swap in behind the same shape.
-src/renderer/          React 19 app; ?window=overlay|control selects the tree.
+src/renderer/          React 19 app; ?window= selects the tree:
+                         control   → chat/ChatApp (the workspace, main window)
+                         settings  → ControlApp (server, account, models, MCP…)
+                         overlay   → the avatar (loads the server's /overlay)
+                         quickchat → the floating hotkey input
+                         chip      → the locked avatar's tiny control
+../shared/chat/        The socket + the fold, shared with mobile/. Both test
+                       runners run its tests.
 ```
 
 ### Reusing the browser renderer
 
-`electron.vite.config.ts` aliases `@geny → ../frontend/src`, so the overlay can
-import the existing `Live2DCanvas` / `SpineCanvas` / `AvatarCanvas`, the audio
-engine (`audioManager`, `ttsChunkStream`), the WS transport (`api.ts`,
-`chatWsManager`), and the zustand stores directly — they are pure React + Pixi
-with only `'use client'` / `next/dynamic` SSR guards. The Phase 0 parity spike
-(next) mounts `<AvatarCanvas backgroundAlpha={0}>` into `#avatar-stage` and
-shims the handful of Next-specific imports (`next/dynamic`, `next/image`).
+`electron.vite.config.ts` aliases `@geny → ../frontend/src`, so the avatar
+surface can import the existing canvases, the audio engine and the stores
+directly. The workspace deliberately does NOT: it is native React over the
+server's REST + WS, because a chat window that is a web page in a frame cannot
+answer the questions you have while an agent is working.
+
+### Tests
+
+    npm test     typecheck-adjacent suites + the shared chat core
+    npm run smoke   opens the real window headless and checks it painted
+
+`npm run smoke -- --live` (via `node tests/smoke/run.mjs --live`) points that
+same window at a real server with a real token; `--send` also sends a message
+and waits for the answer. Manual — it needs a server and a secret.
 
 ## Connector API v1 (server contract)
 
