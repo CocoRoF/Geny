@@ -9,13 +9,25 @@ Protocol:
   Client -> {"type": "execute", "prompt": "...", "timeout": null, "system_prompt": null, "max_turns": null}
   Client -> {"type": "stop"}
   Client -> {"type": "reconnect"}
+  Client -> {"type": "ping"}
 
   Server -> {"type": "log", "data": {...}}
   Server -> {"type": "status", "data": {"status": "...", "message": "..."}}
   Server -> {"type": "result", "data": {...}}
   Server -> {"type": "heartbeat", "data": {...}}
+  Server -> {"type": "pong", "data": {"ts": ..., "running": bool}}
   Server -> {"type": "error", "data": {"error": "..."}}
   Server -> {"type": "done", "data": {}}
+
+A turn belongs to the SESSION, not to this socket: closing the connection
+does not stop it, and ``reconnect`` rejoins one in flight and replays it from
+the start (the holder's cursor is fixed at execution start, so a client that
+was away misses nothing). That is what lets a phone lock its screen mid-turn.
+
+``ping`` exists for the same client. Heartbeats only flow while a turn runs,
+so an idle socket is silent — and a silent socket is indistinguishable from
+one a carrier NAT dropped an hour ago. ``pong`` also answers "is a turn
+running", which is the first thing a phone waking up needs to know.
 """
 
 from __future__ import annotations
@@ -417,6 +429,18 @@ async def ws_execute_stream(websocket: WebSocket, session_id: str):
                     {
                         "status": "stopped" if stopped else "idle",
                         "message": "Execution stopped" if stopped else "No active execution",
+                    },
+                    session_id,
+                )
+
+            elif msg_type == "ping":
+                holder = get_execution_holder(session_id)
+                await _send_event(
+                    websocket,
+                    "pong",
+                    {
+                        "ts": time.time(),
+                        "running": bool(holder and not holder.get("done", True)),
                     },
                     session_id,
                 )

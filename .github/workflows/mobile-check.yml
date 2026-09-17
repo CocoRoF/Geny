@@ -1,0 +1,35 @@
+name: Mobile Check
+
+# The mobile app's pure logic — the connection discipline, the transcript
+# fold, the server client — on every change that touches it. These are the
+# parts a broken build would not catch: an app that compiles and reconnects
+# wrongly looks fine until someone's phone locks mid-turn.
+
+on:
+  push:
+    branches: [main]
+    paths: ['mobile/**', '.github/workflows/mobile-*.yml']
+  pull_request:
+    paths: ['mobile/**', '.github/workflows/mobile-*.yml']
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm --prefix mobile ci --no-audit --no-fund
+      - run: npm --prefix mobile test
+      - run: npm --prefix mobile run typecheck
+      # The two Android edits prebuild cannot express. Re-running the patch
+      # must be a no-op — if it is not, someone regenerated the native project
+      # and lost the release signing or the version derivation.
+      - name: Android patches are in place
+        run: |
+          cd mobile
+          node scripts/patch-android.mjs
+          git diff --exit-code android/app/build.gradle

@@ -1,0 +1,36 @@
+{
+  "name": "geny-mobile",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Geny Mobile — 서버의 에이전트와 대화하는 Android/iOS 앱. 채팅과 설정만; 아바타는 데스크톱 접속기의 몫이다.",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "tsx --test test/exec-ws.test.ts test/transcript.test.ts test/server.test.ts",
+    "start": "expo start",
+    "prebuild": "expo prebuild --clean && node scripts/patch-android.mjs",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "apk": "cd android && ./gradlew assembleRelease",
+    "postinstall": "node scripts/patch-android.mjs || true"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.1.2",
+    "expo": "~53.0.0",
+    "expo-build-properties": "^57.0.20",
+    "expo-constants": "~17.1.6",
+    "expo-keep-awake": "~14.1.4",
+    "expo-network": "~7.1.5",
+    "expo-secure-store": "~14.2.4",
+    "expo-status-bar": "~2.2.3",
+    "react": "19.0.0",
+    "react-native": "0.79.5",
+    "react-native-safe-area-context": "5.4.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.0.10",
+    "tsx": "^4.19.0",
+    "typescript": "~5.8.3"
+  }
+}
