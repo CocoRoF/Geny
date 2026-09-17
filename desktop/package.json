@@ -1,7 +1,7 @@
 {
   "name": "geny-connector",
-  "version": "0.24.0",
-  "description": "Geny desktop connector \u2014 the always-on-top avatar, plus the controls for work running on the server: which model accounts it can reach, which one each agent uses, and the exact record of what each agent did.",
+  "version": "0.25.0",
+  "description": "Geny desktop connector — the always-on-top avatar, plus the controls for work running on the server: which model accounts it can reach, which one each agent uses, and the exact record of what each agent did.",
   "type": "module",
   "author": {
     "name": "Geny",
