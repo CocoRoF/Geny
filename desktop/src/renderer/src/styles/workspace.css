@@ -1595,34 +1595,14 @@
 
 /* ── explorer ─────────────────────────────────────────────────────────── */
 
-.explorer-path {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--border);
-}
-
-.explorer-crumb {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  direction: rtl;
-  text-align: left;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--muted);
-}
-
+/* One row per node, at every depth. The indent is inline (depth × 13px) so
+   a tree of any shape lines up without a rule per level. */
 .explorer-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
-  padding: 6px 8px;
+  padding: 5px 8px;
   border: none;
   border-radius: var(--radius-sm);
   background: none;
@@ -1631,6 +1611,50 @@
   font-size: 12.5px;
   text-align: left;
   cursor: pointer;
+}
+
+/* An agent is a root, and reads like one. */
+.explorer-row.agent {
+  gap: 6px;
+  padding-left: 4px;
+  font-weight: 600;
+}
+
+.explorer-row.agent.current {
+  color: var(--primary);
+}
+
+.explorer-twisty {
+  flex: none;
+  display: flex;
+  color: var(--muted);
+  transition: transform 120ms ease;
+}
+
+.explorer-twisty.open {
+  transform: rotate(90deg);
+}
+
+/* Where the files are. Small, quiet, and always true: an agent's work lives
+   on the server, not on this machine. */
+.explorer-badge {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.explorer-note {
+  padding: 4px 8px 8px 30px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.explorer-agent + .explorer-agent {
+  margin-top: 2px;
 }
 
 .explorer-row:hover {

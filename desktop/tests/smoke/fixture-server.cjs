@@ -346,7 +346,12 @@ const server = createServer((req, res) => {
   if (url.pathname.endsWith('/workspace/summary')) return send(SUMMARY)
   if (url.pathname.includes('/workspace/activity')) return send(ACTIVITY)
   if (url.pathname === '/api/environments') return send({ environments: [] })
-  if (url.pathname.endsWith('/storage')) return send({ files: FILES })
+  if (url.pathname.endsWith('/storage')) {
+    // The second agent has written nothing yet — the explorer has to say so
+    // per agent, not hide the agent.
+    const sid = decodeURIComponent(url.pathname.split('/api/agents/')[1] || '').split('/')[0]
+    return send({ files: sid === 'fixture-2' ? [] : FILES })
+  }
   if (url.pathname.includes('/storage/')) {
     // Not scoped: the path arrives with `workspace/` in front of it, and a
     // reader that forgets the prefix gets this 404 — which is the bug this

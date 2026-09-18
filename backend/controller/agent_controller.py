@@ -375,6 +375,17 @@ async def purge_deleted_sessions(auth: dict = Depends(require_auth)):
                         await rmtree_async(sp)
                     except Exception as e:  # noqa: BLE001 — best effort
                         logger.warning(f"Failed to cleanup storage {storage_path}: {e}")
+            # The agent itself, not just its row. `/api/agents` lists what the
+            # MANAGER holds, so an agent left in memory keeps appearing in the
+            # app — a session you can click, with no record behind it, which
+            # then resolves a brand new chat room. Tear it down first, while
+            # the record still exists to tear down against.
+            try:
+                if agent_manager.has_agent(sid):
+                    await agent_manager.delete_session(sid, cleanup_storage=False)
+            except Exception as e:  # noqa: BLE001 — the record still goes
+                logger.warning(f"Failed to unload agent {sid} during purge: {e}")
+
             if store.permanent_delete(sid):
                 purged += 1
         except Exception as e:  # noqa: BLE001 — never let one bad record abort the purge

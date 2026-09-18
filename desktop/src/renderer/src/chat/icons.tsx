@@ -79,6 +79,23 @@ export const Icon = {
       <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
     </Svg>
   ),
+  chevron: (
+    <Svg size={12}>
+      <path d="m9 18 6-6-6-6" />
+    </Svg>
+  ),
+  bot: (
+    <Svg size={14}>
+      <rect x="4" y="8" width="16" height="12" rx="2" />
+      <path d="M12 8V4M9 13h.01M15 13h.01M9.5 17h5" />
+    </Svg>
+  ),
+  folderOpen: (
+    <Svg size={14}>
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1" />
+      <path d="M3 9h18l-2 9a2 2 0 0 1-2 1.6H6.6A2 2 0 0 1 4.6 18z" />
+    </Svg>
+  ),
   folder: (
     <Svg size={14}>
       <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />

@@ -72,7 +72,9 @@ export function ChatApp(): ReactNode {
 
   const openFile = useCallback((file: OpenedFile) => {
     setFiles((prev) => {
-      const at = prev.findIndex((f) => f.path === file.path)
+      // Keyed by agent AND path: two agents can both have `artifacts/report.md`
+      // and they are not the same file.
+      const at = prev.findIndex((f) => f.key === file.key)
       if (at < 0) return [...prev, file]
       // Reopening a file re-reads it: the agent has probably written to it
       // since, which is the reason anyone reopens one.
@@ -80,12 +82,12 @@ export function ChatApp(): ReactNode {
       next[at] = file
       return next
     })
-    setTab(file.path)
+    setTab(file.key)
   }, [])
 
-  const closeFile = useCallback((path: string) => {
-    setFiles((prev) => prev.filter((f) => f.path !== path))
-    setTab((current) => (current === path ? 'chat' : current))
+  const closeFile = useCallback((key: string) => {
+    setFiles((prev) => prev.filter((f) => f.key !== key))
+    setTab((current) => (current === key ? 'chat' : current))
   }, [])
   const [draft, setDraft] = useState('')
   const scroller = useRef<HTMLDivElement>(null)
@@ -295,7 +297,8 @@ export function ChatApp(): ReactNode {
         </div>
 
         {side === 'files' ? (
-          <Explorer sessionId={sessionId} running={live.running} t={t} onOpen={openFile} />
+          <Explorer sessions={list} sessionId={sessionId} running={live.running}
+            t={t} onOpen={openFile} />
         ) : (
           <>
             {running.length > 0 && (
@@ -316,34 +319,40 @@ export function ChatApp(): ReactNode {
       </aside>
 
       <main className="main-pane">
-        {files.length > 0 && (
-          <div className="tab-strip">
-            <div className="tab-strip-scroll">
-              <button type="button"
-                className={`tab-item ${tab === 'chat' ? 'active' : ''}`}
-                onClick={() => setTab('chat')}>
-                <span className="tab-icon">{Icon.chat}</span>
-                <span className="tab-label">{t('chat.tabChat')}</span>
+        {/* Always here, even with nothing open but the conversation. The strip
+            is where you are, not a thing that appears once you have two of
+            them — a window whose top bar comes and goes moves everything
+            below it by 38px and makes the app feel unreliable. The chat is
+            the first tab and cannot be closed; files open beside it. */}
+        <div className="tab-strip">
+          <div className="tab-strip-scroll">
+            <button type="button"
+              className={`tab-item ${tab === 'chat' ? 'active' : ''}`}
+              onClick={() => setTab('chat')}>
+              <span className="tab-icon">{Icon.chat}</span>
+              <span className="tab-label" title={current?.session_name || t('chat.tabChat')}>
+                {current?.session_name || t('chat.tabChat')}
+              </span>
+            </button>
+            {files.map((file) => (
+              <button key={file.key} type="button"
+                className={`tab-item ${tab === file.key ? 'active' : ''}`}
+                onClick={() => setTab(file.key)}>
+                <span className="tab-icon">{Icon.file}</span>
+                <span className="tab-label" title={file.path}>{file.name}</span>
+                <span className="tab-close" role="button" aria-label={t('explorer.close')}
+                  onClick={(e) => { e.stopPropagation(); closeFile(file.key) }}>
+                  {Icon.close}
+                </span>
               </button>
-              {files.map((file) => (
-                <button key={file.path} type="button"
-                  className={`tab-item ${tab === file.path ? 'active' : ''}`}
-                  onClick={() => setTab(file.path)}>
-                  <span className="tab-icon">{Icon.file}</span>
-                  <span className="tab-label" title={file.path}>{file.name}</span>
-                  <span className="tab-close" role="button" aria-label={t('explorer.close')}
-                    onClick={(e) => { e.stopPropagation(); closeFile(file.path) }}>
-                    {Icon.close}
-                  </span>
-                </button>
-              ))}
-            </div>
+            ))}
           </div>
-        )}
+        </div>
 
         {tab !== 'chat' && (() => {
-          const file = files.find((f) => f.path === tab)
-          return file ? <FileView {...file} t={t} /> : null
+          const file = files.find((f) => f.key === tab)
+          return file ? <FileView name={file.name} path={file.path}
+            content={file.content} t={t} /> : null
         })()}
 
         <div className="chat" hidden={tab !== 'chat'}>

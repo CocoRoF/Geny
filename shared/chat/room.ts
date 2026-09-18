@@ -38,6 +38,16 @@ export interface RoomMessage {
 }
 
 /**
+ * A stored turn that was really a failure.
+ *
+ * Anchored, single-paragraph, and the whole message: `Error: CLI '/usr/bin/
+ * claude' exited with code 1`. Anything with a blank line in it is prose that
+ * happens to start with the word, and prose is the agent talking.
+ */
+const FAILED_TURN = /^\s*Error:\s+\S[^]*$/;
+const PROSE = /\n\s*\n/;
+
+/**
  * One room message → the conversation.
  *
  * Idempotent by id: the socket replays from a cursor on every reconnect, and
@@ -61,6 +71,19 @@ export function foldRoomMessage(messages: Message[], raw: RoomMessage): Message[
   }
 
   if (raw.type === 'agent') {
+    // A turn that died, stored before the server learned to tell the
+    // difference (it does now — see service/execution/agent_executor.py).
+    // The whole message is the error and nothing else, which is why this can
+    // recognise it without reading agent messages that merely discuss one:
+    // a real answer about an error has a sentence around it.
+    const body = String(raw.content ?? '');
+    if (FAILED_TURN.test(body) && !PROSE.test(body)) {
+      const next: Message = {
+        key, role: 'notice', text: body.replace(/^\s*Error:\s*/, ''), ts,
+      };
+      return at >= 0 ? replace(messages, at, next) : [...messages, next];
+    }
+
     const said = spoken(raw.content);
     // Silence is an answer the agent asked us not to deliver.
     if (said.silent || !said.text) return at >= 0 ? drop(messages, at) : messages;

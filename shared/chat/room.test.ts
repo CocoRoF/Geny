@@ -98,3 +98,24 @@ test("the room's own bookkeeping is a status line, not a failed turn", () => {
   assert.equal(folded[0].role, 'system');
   assert.equal(folded[0].text, '1/1 sessions responded (7.1s)');
 });
+
+test('a turn that failed does not read as the agent talking', () => {
+  // Stored before the server could tell the difference. Three of these sat in
+  // a row in ellen_new's room, as ordinary bubbles, the agent calmly saying
+  // it had hit its session limit.
+  const folded = foldRoomMessage([], {
+    id: 'm10', type: 'agent', timestamp: 't1',
+    content: "Error: CLI '/usr/bin/claude' exited with code 1: [cli_version=2.1.220]",
+  });
+  assert.equal(folded[0].role, 'notice');
+  assert.ok(!folded[0].text.startsWith('Error:'), 'the label is the renderer\'s job');
+  assert.match(folded[0].text, /exited with code 1/);
+});
+
+test('an answer that merely talks about an error is still an answer', () => {
+  const folded = foldRoomMessage([], {
+    id: 'm11', type: 'agent', timestamp: 't1',
+    content: 'Error: 이 메시지로 시작했지만\n\n실제로는 설명이 이어지는 답변입니다.',
+  });
+  assert.equal(folded[0].role, 'assistant');
+});
