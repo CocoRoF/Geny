@@ -17,13 +17,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ArrowLeft, Save, Wand2, Drama, Trash2, Copy, Lock } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
-import RegistryPageShell from '@/components/env_management/registry/RegistryPageShell';
-import RegistryGrid from '@/components/env_management/registry/RegistryGrid';
+import RegistryPageShell from '@/components/registry/RegistryPageShell';
+import RegistryGrid from '@/components/registry/RegistryGrid';
 import RegistryCard, {
   type RegistryCardBadge,
-} from '@/components/env_management/registry/RegistryCard';
-import RegistryActionButton from '@/components/env_management/registry/RegistryActionButton';
-import RegistryEmptyState from '@/components/env_management/registry/RegistryEmptyState';
+} from '@/components/registry/RegistryCard';
+import RegistryActionButton from '@/components/registry/RegistryActionButton';
+import RegistryEmptyState from '@/components/registry/RegistryEmptyState';
 import {
   personaPresetsApi,
   type PersonaPresetSummary,

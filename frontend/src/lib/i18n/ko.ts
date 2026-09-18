@@ -985,6 +985,8 @@ const ko: Translations = {
   // ─── Info Tab ───
   info: {
     persona: {
+      manage: '만들기 · 편집',
+      manageHint: '페르소나를 만들거나 고칩니다. 만든 뒤 바로 위에서 고를 수 있습니다.',
       title: '페르소나',
       followEnv: '환경 설정을 따름',
       fromSession: '이 세션 전용',
@@ -3365,6 +3367,9 @@ const ko: Translations = {
   },
 
   // ─── Create Session Modal ───
+  personaStudio: {
+    title: '페르소나',
+  },
   createSession: {
     kind: '에이전트 종류',
     kindHelp: '페르소나는 성격·아바타·목소리와 곁에서 돕는 동료를 함께 받습니다. 도구와 트리거는 만든 뒤에 붙이면 됩니다.',

@@ -52,7 +52,7 @@ const GLOBAL_TAB_IDS = ['main', 'cloud', 'settings'] as const;
 // command / vtuber are the SAME slot — the session's primary surface, styled
 // identically (accent). A general agent shows only `command`; a VTuber agent
 // shows only `vtuber`. The rest follow in a fixed order:
-// Tasks · Cron · Storage · Memory · Logs · Environment.
+// Tasks · Hooks · Canvas · Storage · Memory · Logs.
 const SESSION_TAB_DEFS = [
   { id: 'command', accent: true },
   { id: 'vtuber', accent: true },
@@ -68,7 +68,6 @@ const SESSION_TAB_DEFS = [
         : '/opsidian',
   },
   { id: 'logs' },
-  { id: 'sessionEnvironment' },  // "Environment" — per-session env view (last)
 ] as const;
 
 type SessionTabDef = (typeof SESSION_TAB_DEFS)[number];

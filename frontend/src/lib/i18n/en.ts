@@ -994,6 +994,8 @@ const en = {
   // ─── Info Tab ───
   info: {
     persona: {
+      manage: 'New · Edit',
+      manageHint: 'Make a persona or change one. It is selectable above as soon as you close this.',
       title: 'Persona',
       followEnv: 'Follow the environment',
       fromSession: 'This session only',
@@ -3325,6 +3327,9 @@ const en = {
   },
 
   // ─── Create Session Modal ───
+  personaStudio: {
+    title: 'Personas',
+  },
   createSession: {
     kind: 'Kind of agent',
     kindHelp: 'A persona comes with a character, an avatar, a voice and a companion to hand work to. Tools and triggers attach afterwards.',

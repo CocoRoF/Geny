@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { useCreatureStateStore } from '@/store/useCreatureStateStore';
 import { agentApi, personaPresetsApi } from '@/lib/api';
+import PersonaStudioModal from '@/components/modals/PersonaStudioModal';
 import { twMerge } from 'tailwind-merge';
 import { useI18n } from '@/lib/i18n';
 import { RotateCcw, Trash2, Pencil, Save, X, FileText, Eraser, Link2, Terminal, Brain, ExternalLink, Info, Power, Pin, PinOff, Drama, RefreshCw } from 'lucide-react';
@@ -121,15 +122,16 @@ export default function InfoTab() {
   const [presets, setPresets] = useState<PersonaPresetSummary[]>([]);
   const [personaBusy, setPersonaBusy] = useState(false);
   const [personaNote, setPersonaNote] = useState('');
+  const [personaStudio, setPersonaStudio] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadPresets = useCallback(() => {
     personaPresetsApi
       .list()
-      .then((r) => { if (!cancelled) setPresets(r.presets || []); })
-      .catch(() => { if (!cancelled) setPresets([]); });
-    return () => { cancelled = true; };
+      .then((r) => setPresets(r.presets || []))
+      .catch(() => setPresets([]));
   }, []);
+
+  useEffect(() => { loadPresets(); }, [loadPresets]);
 
   const handlePersonaChange = useCallback(async (value: string) => {
     if (!selectedSessionId) return;
@@ -416,6 +418,13 @@ export default function InfoTab() {
               ))}
             </select>
             <ActionButton
+              icon={Drama}
+              onClick={() => setPersonaStudio(true)}
+              title={t('info.persona.manageHint') ?? '페르소나를 만들거나 고칩니다. 만든 뒤 바로 위에서 고를 수 있습니다.'}
+            >
+              {t('info.persona.manage') ?? '만들기 · 편집'}
+            </ActionButton>
+            <ActionButton
               icon={RefreshCw}
               spinIcon={restarting}
               disabled={restarting}
@@ -626,6 +635,16 @@ export default function InfoTab() {
             {t('info.permanentDelete')}
           </ActionButton>
         </div>
+      )}
+      {personaStudio && (
+        <PersonaStudioModal
+          onClose={() => {
+            setPersonaStudio(false);
+            // A persona made in there has to be selectable out here, now.
+            loadPresets();
+            void fetchDetail();
+          }}
+        />
       )}
       {showPermanentDeleteModal && data && (
         <ConfirmModal
