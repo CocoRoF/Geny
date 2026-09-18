@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useAppStore } from '@/store/useAppStore';
-import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 import { ttsApi, type VoiceProfile } from '@/lib/api';
 import InfoTooltip from '@/components/ui/InfoTooltip';
 import Selector from '@/components/ui/Selector';
@@ -14,17 +13,13 @@ import type { CreateAgentRequest } from '@/types';
 
 interface Props { onClose: () => void; }
 
-// Seeded env IDs from backend/service/environment/templates.py. The
-// modal default-selects the built-in agent env (template-worker-env)
-// when no better candidate is found — mirrors the backend default
-// session pipeline.
-const DEFAULT_WORKER_ENV_ID = 'template-worker-env';
-
-// The Environment is now the single source of truth for role, prompt,
-// tools, model, and execution settings. This dialog only picks an env
-// + names the session; everything else is derived from the selected
-// env's ``kind`` (see deriveRole/deriveWorkflow below) or left to the
-// server defaults. To change behaviour, edit the environment.
+// This used to ask which ENVIRONMENT to build the agent from, and derived
+// the role from whichever one you picked. There is one environment now — the
+// pipeline every agent runs — so it asks the thing it was really asking:
+// what KIND of agent this is. A persona gets its character, its companion
+// sub-agent and (below) an avatar and a voice; a worker gets none of that and
+// every tool. Everything else is attached to the session afterwards, and can
+// be changed without rebuilding anything.
 
 
 export default function CreateSessionModal({ onClose }: Props) {
@@ -34,12 +29,7 @@ export default function CreateSessionModal({ onClose }: Props) {
   const [sessionName, setSessionName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [selectedEnvId, setSelectedEnvId] = useState('');
-  const {
-    environments,
-    isLoading: environmentsLoading,
-    loadEnvironments,
-  } = useEnvironmentStore();
+  const [role, setRole] = useState<'developer' | 'vtuber'>('developer');
   const [selectedAvatar, setSelectedAvatar] = useState('');
   const [selectedTtsProfile, setSelectedTtsProfile] = useState('');
   const [ttsProfiles, setTtsProfiles] = useState<VoiceProfile[]>([]);
@@ -47,29 +37,12 @@ export default function CreateSessionModal({ onClose }: Props) {
   const [ttsEnabled, setTtsEnabled] = useState(false);
   const { models: avatarModels, modelsLoaded: avatarsLoaded, fetchModels: fetchAvatarModels, assignModel: assignAvatar } = useVTuberStore();
 
-  // Load environments for the (now required) env selector.
-  useEffect(() => {
-    loadEnvironments();
-  }, [loadEnvironments]);
-
-  // Default-select a sensible env once the list arrives: the first
-  // built-in agent env, falling back to ``template-worker-env``, then
-  // the first env. Only set when nothing is selected yet so we don't
-  // clobber a manual choice on re-render.
-  useEffect(() => {
-    if (selectedEnvId || environments.length === 0) return;
-    const builtInAgent = environments.find(e => e.kind === 'agent' && e.built_in);
-    const worker = environments.find(e => e.id === DEFAULT_WORKER_ENV_ID);
-    setSelectedEnvId((builtInAgent ?? worker ?? environments[0]).id);
-  }, [environments, selectedEnvId]);
-
-  const selectedEnv = environments.find(e => e.id === selectedEnvId);
-  const isVtuberEnv = selectedEnv?.kind === 'vtuber';
+  const isPersona = role === 'vtuber';
 
   // Lazy-load avatar models + TTS profiles only when a VTuber env is
   // selected (they drive the VTuber-only quick-assign selectors).
   useEffect(() => {
-    if (!isVtuberEnv) return;
+    if (!isPersona) return;
     if (!avatarsLoaded) fetchAvatarModels();
     if (!ttsProfilesLoaded) {
       Promise.all([
@@ -82,29 +55,25 @@ export default function CreateSessionModal({ onClose }: Props) {
         setTtsProfilesLoaded(true);
       });
     }
-  }, [isVtuberEnv, avatarsLoaded, fetchAvatarModels, ttsProfilesLoaded]);
+  }, [isPersona, avatarsLoaded, fetchAvatarModels, ttsProfilesLoaded]);
 
   const handleSubmit = async () => {
-    if (!selectedEnvId) return;
+
     setSubmitting(true);
     setError('');
     try {
-      // Derive role + workflow from the env's kind — the env owns the
-      // rest (prompt/tools/model/timeout/...); the server fills the
-      // defaults for everything we no longer send.
-      const role = isVtuberEnv ? 'vtuber' : 'developer';
-      const workflowId = isVtuberEnv ? 'template-vtuber' : 'template-optimized-autonomous';
+      // The role is the whole choice. The server attaches what follows from
+      // it — a persona and a companion for a VTuber, every tool for a worker
+      // — and fills in every default we no longer send.
       const payload: CreateAgentRequest = {
         session_name: sessionName,
-        env_id: selectedEnvId,
         role,
-        workflow_id: workflowId,
       };
       const session = await createSession(payload);
       // Post-create VTuber quick-assign — avatar + TTS profile. Both
       // are best-effort: the session is already created, so failures
       // just defer assignment to the session UI.
-      if (isVtuberEnv && session?.session_id) {
+      if (isPersona && session?.session_id) {
         if (selectedAvatar) {
           try {
             await assignAvatar(session.session_id, selectedAvatar);
@@ -150,31 +119,30 @@ export default function CreateSessionModal({ onClose }: Props) {
               value={sessionName} onChange={e => setSessionName(e.target.value)} />
           </div>
 
-          {/* Environment (required) — the single source of truth for
-              role, prompt, tools, model, and execution settings. */}
+          {/* What kind of agent. The only choice that has to be made now —
+              everything else attaches to the session afterwards. */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">
-              {t('createSession.environment')}
-              <InfoTooltip text={t('createSession.environmentHelp')} />
+              {t('createSession.kind')}
+              <InfoTooltip text={t('createSession.kindHelp')} />
             </label>
             <Selector
               variant="field"
-              ariaLabel={t('createSession.environment')}
-              value={selectedEnvId}
-              onChange={setSelectedEnvId}
-              items={
-                environmentsLoading && environments.length === 0
-                  ? [{ id: '', label: t('createSession.environmentLoading') }]
-                  : environments.map(env => ({ id: env.id, label: env.name }))
-              }
+              ariaLabel={t('createSession.kind')}
+              value={role}
+              onChange={(next) => setRole(next as 'developer' | 'vtuber')}
+              items={[
+                { id: 'developer', label: t('createSession.kindWorker') },
+                { id: 'vtuber', label: t('createSession.kindPersona') },
+              ]}
             />
             <small className="text-[0.75rem] text-[var(--text-muted)] mt-0.5">
-              {t('createSession.environmentRequiredHelp')}
+              {t('createSession.kindHelp')}
             </small>
           </div>
 
           {/* Avatar (VTuber env only) */}
-          {isVtuberEnv && (
+          {isPersona && (
             <div className="flex flex-col gap-1.5">
               <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">{t('createSession.avatar')} <InfoTooltip text={t('createSession.avatarHelp')} /></label>
               <Selector
@@ -191,7 +159,7 @@ export default function CreateSessionModal({ onClose }: Props) {
           )}
 
           {/* TTS Voice Profile (VTuber env only) */}
-          {isVtuberEnv && (
+          {isPersona && (
             <div className="flex flex-col gap-1.5">
               <label className="text-[0.8125rem] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">{t('createSession.ttsProfile')} <InfoTooltip text={t('createSession.ttsProfileHelp')} /></label>
               {ttsProfilesLoaded && !ttsEnabled ? (
@@ -217,7 +185,7 @@ export default function CreateSessionModal({ onClose }: Props) {
         {/* Footer */}
         <div className="flex justify-end items-center gap-3 py-3 md:py-4 px-4 md:px-6 border-t border-[var(--border-color)]">
           <button className="py-2 px-4 bg-transparent hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border border-[var(--border-color)]" onClick={onClose}>{t('common.cancel')}</button>
-          <button className="py-2 px-4 bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border-none disabled:opacity-50 disabled:cursor-not-allowed" onClick={handleSubmit} disabled={submitting || !selectedEnvId}>
+          <button className="py-2 px-4 bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-white text-[0.8125rem] font-medium rounded-[var(--border-radius)] cursor-pointer transition-all duration-150 border-none disabled:opacity-50 disabled:cursor-not-allowed" onClick={handleSubmit} disabled={submitting}>
             {submitting ? t('createSession.creating') : t('createSession.createSession')}
           </button>
         </div>

@@ -27,12 +27,15 @@ __all__ = [
 ]
 
 
+#: Kept so nothing that imports it breaks; every role runs the one
+#: environment now, and what used to differ between them — persona, tools,
+#: sub-agents — is attached to the session instead.
 ROLE_DEFAULT_ENV_ID: dict[str, str] = {
     SessionRole.WORKER.value: WORKER_ENV_ID,
     SessionRole.DEVELOPER.value: WORKER_ENV_ID,
     SessionRole.RESEARCHER.value: WORKER_ENV_ID,
     SessionRole.PLANNER.value: WORKER_ENV_ID,
-    SessionRole.VTUBER.value: VTUBER_ENV_ID,
+    SessionRole.VTUBER.value: WORKER_ENV_ID,
 }
 
 
@@ -40,17 +43,17 @@ def resolve_env_id(
     role: Union[SessionRole, str, None],
     explicit: Optional[str],
 ) -> str:
-    """Resolve the env_id a session should use.
+    """The environment a session runs. There is one.
 
-    An explicit value (the caller's ``request.env_id``) always wins.
-    When no explicit value is given, the role's default from
-    :data:`ROLE_DEFAULT_ENV_ID` is returned. Unknown roles fall back
-    to :data:`WORKER_ENV_ID` — mirrors how unknown roles fall back to
-    ``template-all-tools`` in tool_preset land today.
+    It used to be a choice — three seeds and any number of custom copies —
+    and the choice was never really about the pipeline: it was about the
+    persona, the tool roster and the sub-agents, all of which a session now
+    carries itself. So whatever is asked for, this answers with the one
+    environment there is, including for sessions created before it was the
+    only one.
     """
-    if explicit:
-        return explicit
-    if role is None:
-        return WORKER_ENV_ID
-    role_value = role.value if hasattr(role, "value") else str(role)
-    return ROLE_DEFAULT_ENV_ID.get(role_value.lower(), WORKER_ENV_ID)
+    # There is one environment. An `explicit` id is still accepted — sessions
+    # created before this change carry ids of environments that no longer
+    # exist, and pointing them at the one that does is what keeps them
+    # working — but it never selects anything different.
+    return WORKER_ENV_ID

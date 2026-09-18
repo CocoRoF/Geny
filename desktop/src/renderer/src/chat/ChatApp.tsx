@@ -20,8 +20,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import genyIcon from '../assets/geny_character.png'
 import { makeT, type Lang } from '../i18n'
 import {
-  agents, environments, sessions as sessionApi,
-  type AgentSummary, type EnvironmentSummary,
+  agents, sessions as sessionApi,
+  type AgentSummary,
 } from '../server'
 import Explorer, { type OpenedFile } from './Explorer'
 import FileView from './FileView'
@@ -51,6 +51,25 @@ function lampFor(state: string, running: boolean, t: (k: string) => string):
   return { tone: 'busy', label: t('chat.state.reconnecting') }
 }
 
+/**
+ * The first free "세션 N".
+ *
+ * It used to be `list.length + 1`, which repeats the moment anything is
+ * deleted or the list is stale — twelve agents on the production server are
+ * all called "세션 3" for exactly that reason.
+ */
+function nextSessionName(
+  list: AgentSummary[],
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): string {
+  const taken = new Set(list.map((s) => (s.session_name ?? '').trim()))
+  for (let n = 1; n <= taken.size + 1; n += 1) {
+    const name = t('chat.newSessionName', { n })
+    if (!taken.has(name)) return name
+  }
+  return t('chat.newSessionName', { n: taken.size + 1 })
+}
+
 export function ChatApp(): ReactNode {
   const [lang, setLang] = useState<Lang>('ko')
   const t = useMemo(() => makeT(lang), [lang])
@@ -58,8 +77,9 @@ export function ChatApp(): ReactNode {
   const [list, setList] = useState<AgentSummary[]>([])
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [listError, setListError] = useState<string | null>(null)
-  const [creating, setCreating] = useState(false)
-  const [envs, setEnvs] = useState<EnvironmentSummary[]>([])
+  /** One creation at a time — the server takes seconds and the button must
+   *  not turn that into a queue of identical agents. */
+  const [starting, setStarting] = useState(false)
   const [showWork, setShowWork] = useState(false)
   /** Which sidebar view, or none. The activity bar switches it, and clicking
    *  the view you are already in closes the sidebar — the VS Code idiom. */
@@ -199,29 +219,32 @@ export function ChatApp(): ReactNode {
     }
   }
 
-  const startSession = async (envId: string): Promise<void> => {
+  /**
+   * A new agent.
+   *
+   * Making one takes the server several seconds — it builds a pipeline, loads
+   * tools, opens MCP connections — and this used to do it behind a modal that
+   * showed nothing and stayed open, so the obvious response was to click
+   * again. On the production server that produced TWELVE agents in thirty-two
+   * seconds, all called "세션 3", because the name was derived from a list
+   * that had not refreshed either. So: one at a time, say it is happening,
+   * and name it after what is actually there.
+   */
+  const startSession = useCallback(async (): Promise<void> => {
+    if (starting) return
+    setStarting(true)
+    setListError(null)
     try {
-      const created = await sessionApi.create({
-        session_name: t('chat.newSessionName', { n: list.length + 1 }),
-        ...(envId ? { env_id: envId } : {}),
-      })
-      setCreating(false)
-      await refreshList()
+      const created = await sessionApi.create({ session_name: nextSessionName(list, t) })
+      const listed = await agents.list()
+      setList(listed)
       setSessionId(created.session_id)
     } catch (e) {
       setListError((e as Error).message)
+    } finally {
+      setStarting(false)
     }
-  }
-
-  const openCreate = async (): Promise<void> => {
-    setCreating(true)
-    try {
-      const listed = await environments.list()
-      setEnvs(listed.environments ?? [])
-    } catch {
-      setEnvs([])
-    }
-  }
+  }, [starting, list, t])
 
   const current = list.find((s) => s.session_id === sessionId) ?? null
   // Running sessions get their own group at the top. They are then left OUT
@@ -290,8 +313,9 @@ export function ChatApp(): ReactNode {
             <span style={{ display: 'flex', gap: 2 }}>
               <button type="button" className="icon-btn" title={t('chat.refresh')}
                 onClick={() => void refreshList()}>{Icon.refresh}</button>
-              <button type="button" className="icon-btn" title={t('chat.newSession')}
-                onClick={() => void openCreate()}>{Icon.plus}</button>
+              <button type="button" className="icon-btn" disabled={starting}
+                title={starting ? t('chat.creating') : t('chat.newSession')}
+                onClick={() => void startSession()}>{Icon.plus}</button>
             </span>
           )}
         </div>
@@ -435,30 +459,7 @@ export function ChatApp(): ReactNode {
 
       <SystemMonitorFooter t={t} state={lamp} />
 
-      {creating && (
-        <div className="modal-backdrop" role="dialog">
-          <div className="modal-card">
-            <div className="modal-title">{t('chat.newSession')}</div>
-            <p className="modal-hint">{t('chat.newSessionHint')}</p>
-            <div className="modal-list">
-              <button type="button" className="route-item" onClick={() => void startSession('')}>
-                {t('chat.envDefault')}
-              </button>
-              {envs.map((env) => (
-                <button key={env.id} type="button" className="route-item"
-                  onClick={() => void startSession(env.id)}>
-                  {env.name}
-                </button>
-              ))}
-            </div>
-            <div className="gy-spacer" />
-            <button type="button" className="chat-hbtn" style={{ width: '100%' }}
-              onClick={() => setCreating(false)}>
-              {t('chat.cancel')}
-            </button>
-          </div>
-        </div>
-      )}
+
     </div>
   )
 }

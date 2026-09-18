@@ -3326,6 +3326,10 @@ const en = {
 
   // ─── Create Session Modal ───
   createSession: {
+    kind: 'Kind of agent',
+    kindHelp: 'A persona comes with a character, an avatar, a voice and a companion to hand work to. Tools and triggers attach afterwards.',
+    kindWorker: 'Worker',
+    kindPersona: 'Persona',
     title: 'Create New Session',
     sessionName: 'Session Name',
     sessionNamePlaceholder: 'e.g. my-developer-1',

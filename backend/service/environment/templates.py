@@ -634,30 +634,30 @@ def install_environment_templates(
     land in ``manifest.tools.external`` will never reach the
     session's tool registry.
 
-    The three seeds are rewritten every boot from the canonical
-    :func:`geny_executor.build_manifest` output. Custom envs — any id other
-    than the seeds — are never touched. This keeps the seeds in lockstep
-    with manifest-builder changes (a new stage in the chain, say) without a
-    migration framework.
+    There is ONE environment, rewritten every boot from the canonical
+    :func:`geny_executor.build_manifest` output, so it stays in lockstep with
+    the builder (a new stage in the chain, say) without a migration framework.
 
-    They no longer differ by backend: which model answers is the session's
-    route, not the environment. A user changing model keeps the tool roster,
-    persona and permission policy they built.
+    It used to be three, and before that eleven. Each round of shrinking
+    removed something that turned out not to belong to an environment at all:
+    the model became the session's route, the pipeline became the one harness,
+    and now the persona, the tool roster and the sub-agents have become things
+    a SESSION carries. What is left is the pipeline every agent runs — which
+    is not a choice anybody should have to make, and is the whole reason it is
+    no longer presented as one.
 
-    Returns the number of environment files written (always equal to
-    the seed count after the write loop completes).
+    Returns the number of environment files written: one.
     """
     all_names = list(external_tool_names or [])
-    seeds: List[EnvironmentManifest] = [
-        create_worker_env(external_tool_names=all_names),
-        create_vtuber_env(all_tool_names=all_names, tool_loader=tool_loader),
-        create_vscode_env(),
-    ]
-    for manifest in seeds:
-        _seed_system_prompt(manifest)
-        env_id = manifest.metadata.id
-        service._write_manifest(env_id, manifest)
-    return len(seeds)
+    manifest = create_worker_env(external_tool_names=all_names)
+    manifest.metadata.name = "Geny"
+    manifest.metadata.description = (
+        "하나의 파이프라인 — 21단계, 모든 도구. 페르소나·도구 묶음·트리거는 "
+        "세션에 붙입니다."
+    )
+    _seed_system_prompt(manifest)
+    service._write_manifest(manifest.metadata.id, manifest)
+    return 1
 
 
 def _seed_system_prompt(manifest: "EnvironmentManifest") -> None:

@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import type { SessionInfo, PromptInfo } from '@/types';
 import { agentApi, commandApi, healthApi, configApi } from '@/lib/api';
-import { useEnvironmentStore } from '@/store/useEnvironmentStore';
 
 // Sessions with an in-flight resume() — dedupes rapid opens so selecting the
 // same dormant session repeatedly can't storm re-hydration.
@@ -191,7 +190,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     const session = await agentApi.create(data);
     await get().loadSessions();
     if (session.env_id) {
-      useEnvironmentStore.getState().invalidateDrawerSessionsForEnv(session.env_id);
     }
     return session;
   },
@@ -210,7 +208,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     await state.loadSessions();
     await state.loadDeletedSessions();
     if (priorEnvId) {
-      useEnvironmentStore.getState().invalidateDrawerSessionsForEnv(priorEnvId);
     }
   },
 

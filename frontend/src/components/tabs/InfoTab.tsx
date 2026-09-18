@@ -10,7 +10,6 @@ import { RotateCcw, Trash2, Pencil, Save, X, FileText, Eraser, Link2, Terminal, 
 import type { SessionInfo } from '@/types';
 import type { PersonaPresetSummary } from '@/lib/api';
 import ConfirmModal from '@/components/modals/ConfirmModal';
-import EnvironmentDetailDrawer from '@/components/EnvironmentDetailDrawer';
 import { TabShell, EmptyState, ActionButton } from '@/components/common/layout';
 import CreatureStatePanel from '@/components/info/CreatureStatePanel';
 
@@ -37,7 +36,6 @@ export default function InfoTab() {
   const [thinkingTriggerInfo, setThinkingTriggerInfo] = useState<{ consecutive_triggers: number; current_threshold_seconds: number } | null>(null);
   const [thinkingTriggerLoading, setThinkingTriggerLoading] = useState(false);
   const [thinkingTriggerMsg, setThinkingTriggerMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
-  const [envDrawerId, setEnvDrawerId] = useState<string | null>(null);
 
   // Sub-tab navigation: VTuber / Status
   type SubTab = 'vtuber' | 'status';
@@ -309,7 +307,7 @@ export default function InfoTab() {
       label: t('info.fields.environment'),
       // Human name first; the id stays reachable through the drawer link.
       value: data.env_name || data.env_id || t('info.environmentNone'),
-      onClick: data.env_id ? () => setEnvDrawerId(data.env_id) : undefined,
+      onClick: data.env_id ? () => undefined : undefined,
     },
     { label: t('info.fields.memoryProvider'), value: formatMemoryConfig(data.memory_config) },
     ...(data.session_type ? [{ label: t('info.fields.sessionType'), value: data.session_type }] : []),
@@ -636,12 +634,6 @@ export default function InfoTab() {
           note={t('confirmModal.permanentDeleteNote')}
           onConfirm={() => permanentDeleteSession(data.session_id)}
           onClose={() => setShowPermanentDeleteModal(false)}
-        />
-      )}
-      {envDrawerId && (
-        <EnvironmentDetailDrawer
-          envId={envDrawerId}
-          onClose={() => setEnvDrawerId(null)}
         />
       )}
     </div>

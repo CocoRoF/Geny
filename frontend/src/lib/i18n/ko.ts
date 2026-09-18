@@ -3366,6 +3366,10 @@ const ko: Translations = {
 
   // ─── Create Session Modal ───
   createSession: {
+    kind: '에이전트 종류',
+    kindHelp: '페르소나는 성격·아바타·목소리와 곁에서 돕는 동료를 함께 받습니다. 도구와 트리거는 만든 뒤에 붙이면 됩니다.',
+    kindWorker: '작업 에이전트',
+    kindPersona: '페르소나',
     title: '새 세션 만들기',
     sessionName: '세션 이름',
     sessionNamePlaceholder: '예: my-developer-1',

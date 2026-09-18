@@ -12,7 +12,6 @@ const CommandTab = dynamic(() => import('@/components/tabs/CommandTab'));
 const LogsTab = dynamic(() => import('@/components/tabs/LogsTab'));
 const StorageTab = dynamic(() => import('@/components/tabs/StorageTab'));
 const CloudTab = dynamic(() => import('@/components/tabs/CloudTab'), { ssr: false });
-const SessionEnvironmentTab = dynamic(() => import('@/components/tabs/SessionEnvironmentTab'), { ssr: false });
 const InfoTab = dynamic(() => import('@/components/tabs/InfoTab'));
 const SettingsTab = dynamic(() => import('@/components/tabs/SettingsTab'));
 const SessionToolsTab = dynamic(() => import('@/components/tabs/SessionToolsTab'));
@@ -33,7 +32,6 @@ const CanvasTab = dynamic(() => import('@/components/tabs/CanvasTab'));
 // dedicated /environments route owns both surfaces now. Legacy
 // activeTab values for those ids redirect to /environments?tab=...
 // in useAppStore.setActiveTab.
-const SessionEnvironmentRootTab = dynamic(() => import('@/components/tabs/SessionEnvironmentRootTab'));
 
 const TAB_MAP: Record<string, React.ComponentType> = {
   cloud: CloudTab,
@@ -42,8 +40,6 @@ const TAB_MAP: Record<string, React.ComponentType> = {
   command: CommandTab,
   logs: LogsTab,
   storage: StorageTab,
-  sessionEnvironment: SessionEnvironmentRootTab,
-  graph: SessionEnvironmentTab,
   info: InfoTab,
   settings: SettingsTab,
   sessionTools: SessionToolsTab,

@@ -1,15 +1,16 @@
-"""A persona belongs to a session, not only to its environment.
+"""A persona belongs to a session.
 
-Until now the only place a persona could be attached was
-``host_selections.extras.persona_preset_id`` on an ENVIRONMENT. So giving
-one session a different character meant building it another environment,
-and changing one meant editing an environment every session on it shares.
-There was also no way to say "apply it now" — every rebuild was a side
-effect of changing something else.
+It used to belong to an ENVIRONMENT
+(``host_selections.extras.persona_preset_id``), so giving one session a
+different character meant building it another environment, and changing one
+meant editing something every session on it shared. There is one environment
+now and it holds no persona: a session names its own, and a session that
+names none gets whatever its ROLE starts with — a VTuber is a persona, a
+worker is not.
 
-These pin the resolution order, the persistence that makes an override
-mean anything past the next reload, and the two ways a change lands
-(immediately when idle, between turns when busy — never mid-answer).
+These pin the resolution order, the persistence that makes a choice mean
+anything past the next reload, and the two ways a change lands (immediately
+when idle, between turns when busy — never mid-answer).
 """
 
 from __future__ import annotations
@@ -34,11 +35,13 @@ class _Store:
         self.rec.update(patch)
 
 
-def _mgr(rec=None, env_preset=None, busy=False, live=True):
+def _mgr(rec=None, role=None, busy=False, live=True):
     m = object.__new__(AgentSessionManager)
-    m._store = _Store(rec if rec is not None else {"env_id": "env-1"})
+    base = rec if rec is not None else {"env_id": "env-1"}
+    if role is not None:
+        base = {**base, "role": role}
+    m._store = _Store(base)
     m._local_agents = {"s1": SimpleNamespace(_needs_manifest_reload=False)} if live else {}
-    m._env_persona_preset_id = lambda _env: env_preset
     m._session_busy = lambda *_a, **_k: busy
     m.reloaded = []
 
@@ -52,39 +55,44 @@ def _mgr(rec=None, env_preset=None, busy=False, live=True):
 
 # ── resolution order ─────────────────────────────────────────────────
 
-def test_the_environment_supplies_the_persona_when_the_session_has_none():
-    m = _mgr(env_preset="env-persona")
-    assert m.resolve_persona_preset_id("s1", "env-1") == ("env-persona", "environment")
+def test_the_role_supplies_the_persona_when_the_session_has_none():
+    """A VTuber is a persona — it starts as the default character rather than
+    as nobody. That default used to live on the VTuber environment."""
+    from service.persona_presets.templates import VTUBER_DEFAULT_PERSONA_ID
+
+    m = _mgr(role="vtuber")
+    assert m.resolve_persona_preset_id("s1", "env-1") == (VTUBER_DEFAULT_PERSONA_ID, "role")
 
 
 def test_the_sessions_own_choice_wins():
-    m = _mgr(rec={"env_id": "env-1", "persona_preset_id": "mine"},
-             env_preset="env-persona")
+    m = _mgr(rec={"env_id": "env-1", "persona_preset_id": "mine"}, role="vtuber")
     assert m.resolve_persona_preset_id("s1", "env-1") == ("mine", "session")
 
 
-def test_nothing_anywhere_is_reported_as_such():
-    """'none' is a real answer — the caller needs to distinguish "no
-    persona" from "could not tell"."""
-    m = _mgr(env_preset=None)
+def test_a_worker_has_no_persona_and_that_is_reported_as_such():
+    """'none' is a real answer — the caller needs to distinguish "no persona"
+    from "could not tell"."""
+    m = _mgr(role="worker")
     assert m.resolve_persona_preset_id("s1", "env-1") == (None, "none")
 
 
 def test_a_blank_override_is_not_an_override():
-    m = _mgr(rec={"env_id": "env-1", "persona_preset_id": "   "},
-             env_preset="env-persona")
-    assert m.resolve_persona_preset_id("s1", "env-1") == ("env-persona", "environment")
+    from service.persona_presets.templates import VTUBER_DEFAULT_PERSONA_ID
+
+    m = _mgr(rec={"env_id": "env-1", "persona_preset_id": "   "}, role="vtuber")
+    assert m.resolve_persona_preset_id("s1", "env-1") == (VTUBER_DEFAULT_PERSONA_ID, "role")
 
 
-def test_an_unreadable_store_falls_back_to_the_environment():
-    """A broken store must not silently strip a session's persona."""
-    m = _mgr(env_preset="env-persona")
+def test_an_unreadable_store_does_not_invent_a_persona():
+    """A broken store cannot tell us the role either, so the honest answer is
+    none — not somebody else's character."""
+    m = _mgr(role="vtuber")
 
     def _boom(_sid):
         raise RuntimeError("store down")
 
     m._store.get = _boom
-    assert m.resolve_persona_preset_id("s1", "env-1") == ("env-persona", "environment")
+    assert m.resolve_persona_preset_id("s1", "env-1") == (None, "none")
 
 
 # ── setting it ───────────────────────────────────────────────────────
@@ -121,13 +129,16 @@ async def test_a_busy_session_is_flagged_not_torn_down(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_clearing_hands_the_session_back_to_its_environment():
-    m = _mgr(rec={"env_id": "env-1", "persona_preset_id": "mine"},
-             env_preset="env-persona")
+async def test_clearing_hands_the_session_back_to_its_role():
+    """Clearing a VTuber's persona does not leave it as nobody: it returns to
+    the default character its role starts with."""
+    from service.persona_presets.templates import VTUBER_DEFAULT_PERSONA_ID
+
+    m = _mgr(rec={"env_id": "env-1", "persona_preset_id": "mine"}, role="vtuber")
     out = await m.set_session_persona("s1", None)
     assert out["persona_preset_id"] is None
-    assert out["effective_preset_id"] == "env-persona"
-    assert out["persona_source"] == "environment"
+    assert out["effective_preset_id"] == VTUBER_DEFAULT_PERSONA_ID
+    assert out["persona_source"] == "role"
 
 
 @pytest.mark.asyncio
@@ -204,8 +215,8 @@ class _StateProvider:
         self.patches.append((cid, patch))
 
 
-def _mgr_with_state(rec=None, env_preset=None, mood="joy"):
-    m = _mgr(rec=rec, env_preset=env_preset)
+def _mgr_with_state(rec=None, role=None, mood="joy"):
+    m = _mgr(rec=rec, role=role)
     m._state_provider = _StateProvider()
     m._preset_emotion = mood
     return m

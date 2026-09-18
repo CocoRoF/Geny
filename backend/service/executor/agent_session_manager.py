@@ -419,46 +419,55 @@ class AgentSessionManager:
         except Exception:  # noqa: BLE001
             return None
 
-    def _env_owned_subagent(self, env_id: Optional[str]) -> Optional[Dict[str, Any]]:
-        """The persistent sub-agent an env declares its agent OWNS, or None.
+    def _owned_subagent(
+        self, session_id: Optional[str], role: Any = None,
+    ) -> Optional[Dict[str, Any]]:
+        """The persistent companion this session OWNS, or None.
 
-        Stored in the manifest's generic ``host_selections.extras`` map under
-        ``owned_subagent`` (e.g. ``{"type": "worker"}``) — the env-driven
-        replacement for the old ``role==VTUBER`` hardcode. The vtuber env
-        templates declare it; any env may. ``None`` → the agent owns no
-        persistent sub-agent (it can still use one-shot sub-workers)."""
-        if not env_id or self._environment_service is None:
-            return None
-        try:
-            manifest = self._environment_service.load_manifest(env_id)
-            if manifest is None:
-                return None
-            extras = getattr(manifest.host_selections, "extras", None) or {}
-            val = extras.get("owned_subagent")
-            return dict(val) if isinstance(val, dict) else None
-        except Exception:  # noqa: BLE001
-            return None
+        The session's own choice first, then the default for its role (a
+        VTuber owns one; that is what lets the persona hand work off and keep
+        talking). It used to be declared by the environment, which meant
+        "give this one a companion" required building a whole environment.
+        """
+        if session_id:
+            try:
+                rec = self._store.get(session_id) or {}
+                val = rec.get("owned_subagent")
+                if isinstance(val, dict):
+                    return dict(val) if val.get("enabled") is not False else None
+                if role is None:
+                    role = rec.get("role")
+            except Exception:  # noqa: BLE001 — never block a build on the store
+                logger.debug("owned sub-agent lookup failed", exc_info=True)
+        from service.sessions.attachments import default_owned_subagent
 
-    def _env_subworker_types(self, env_id: Optional[str]) -> List[Dict[str, Any]]:
-        """The env's precise one-shot Sub-Worker roster, or ``[]``.
+        return default_owned_subagent(role)
 
-        Stored in ``host_selections.extras.subworker_types`` — a list of
-        per-type config dicts (``{agent_type, enabled?, description?, provider?,
-        model?, system_prompt?, allowed_tools?}``) the env editor's Sub-Worker
-        panel writes. :class:`SubagentRegistryBuilder` overlays these on the
-        seed so the Agent tool's sub-workers run with exactly this config. An
-        empty list → the agent uses the default seed roster unchanged."""
-        if not env_id or self._environment_service is None:
-            return []
-        try:
-            manifest = self._environment_service.load_manifest(env_id)
-            if manifest is None:
-                return []
-            extras = getattr(manifest.host_selections, "extras", None) or {}
-            val = extras.get("subworker_types")
-            return [c for c in val if isinstance(c, dict)] if isinstance(val, list) else []
-        except Exception:  # noqa: BLE001
-            return []
+    def _subworker_types(
+        self, session_id: Optional[str], role: Any = None,
+    ) -> List[Dict[str, Any]]:
+        """This session's one-shot Sub-Worker roster, or ``[]``.
+
+        Per-type config dicts (``{agent_type, enabled?, description?,
+        provider?, model?, system_prompt?, allowed_tools?}``) that
+        :class:`SubagentRegistryBuilder` overlays on the seed. The session's
+        own list first, then the default for its role — a persona agent gets
+        the GAPT sub-worker so it can delegate that work instead of carrying
+        nine tool schemas it rarely uses.
+        """
+        if session_id:
+            try:
+                rec = self._store.get(session_id) or {}
+                val = rec.get("subworker_types")
+                if isinstance(val, list):
+                    return [c for c in val if isinstance(c, dict)]
+                if role is None:
+                    role = rec.get("role")
+            except Exception:  # noqa: BLE001
+                logger.debug("sub-worker roster lookup failed", exc_info=True)
+        from service.sessions.attachments import default_subworker_types
+
+        return default_subworker_types(role)
 
     def _env_sandbox_tool_pack_ids(self, env_id: Optional[str]) -> List[str]:
         """The env's opt-in Sandbox Tool Pack ids, or ``[]``.
@@ -590,8 +599,8 @@ class AgentSessionManager:
         change one was to edit an environment shared by every session on it.
 
         Returns ``(preset_id, source)`` with source in
-        ``{"session", "environment", "none"}`` so callers can SAY which
-        one is in force rather than leaving the operator to guess.
+        ``{"session", "role", "none"}`` so callers can SAY which one is in
+        force rather than leaving the operator to guess.
         """
         if session_id:
             try:
@@ -601,8 +610,20 @@ class AgentSessionManager:
                     return own.strip(), "session"
             except Exception:  # noqa: BLE001 — never block a build on the store
                 logger.debug("persona: session override lookup failed", exc_info=True)
-        from_env = self._env_persona_preset_id(env_id)
-        return (from_env, "environment") if from_env else (None, "none")
+        # No session choice: what this ROLE starts with. A VTuber is a
+        # persona, so it has one; a worker does not. This used to come from
+        # the environment, which is why giving one agent a different persona
+        # meant building it a whole environment — sessions carry it now, and
+        # `migrate_session_attachments` wrote the environment's choice onto
+        # every session that had one before the link was cut.
+        from service.sessions.attachments import default_persona_preset_id
+
+        try:
+            role = (self._store.get(session_id) or {}).get("role") if session_id else None
+        except Exception:  # noqa: BLE001
+            role = None
+        from_role = default_persona_preset_id(role)
+        return (from_role, "role") if from_role else (None, "none")
 
     def _compile_persona(
         self, session_id: Optional[str], env_id: Optional[str],
@@ -1564,7 +1585,7 @@ class AgentSessionManager:
         # to a sub-worker carrying the gapt_* tools while the main session stays
         # lean (no gapt_* in its own roster).
         subagent_registry = SubagentRegistryBuilder(
-            env_overrides=self._env_subworker_types(env_id),
+            env_overrides=self._subworker_types(session_id, request.role),
             adhoc_providers=adhoc_providers,
             extra_external_tools=computer_use_tools,
             # Lazy: resolved at DELEGATION time so the sub-agent picks up the
@@ -1890,13 +1911,13 @@ class AgentSessionManager:
         # ── Owned persistent sub-agent — ENV-DRIVEN (any role) ────────────
         # Owning a geny-executor persistent sub-agent is now an ENVIRONMENT
         # capability, not a VTuber hardcode: any env that declares
-        # ``host_selections.extras['owned_subagent']`` makes its agent own one
-        # (the vtuber env templates declare it). A VTuber is then just "an
-        # agent on a vtuber env + an avatar/persona". Spawn no-ops when no
-        # manager is wired.
+        # A session that owns a companion spawns it here. A VTuber owns one by
+        # default — it is what lets the persona hand work off and keep talking
+        # — and any session can be given or denied one on its own record.
+        # Spawn no-ops when no manager is wired.
         from service.execution.agent_executor import get_app_state as _get_app_state
         _vt_app_state = _get_app_state()
-        _owned = self._env_owned_subagent(env_id)
+        _owned = self._owned_subagent(session_id, request.role)
         if (
             _owned is not None
             and request.session_type != "sub"

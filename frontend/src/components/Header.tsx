@@ -147,15 +147,6 @@ export default function Header() {
           <Palette size={14} />
         </a>
 
-        {/* ── Environment Management Page — hidden on mobile ── */}
-        <Link
-          href="/environments"
-          className="hidden sm:flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-all duration-150 no-underline"
-          title={t('header.envManagement')}
-        >
-          <Layers size={14} />
-        </Link>
-
         {/* Sandbox Tool Packs → moved into the environment editor; Sandbox Logs
             (snapshot activity/diff) → superseded by the in-app 작업(Tasks) tab.
             Both standalone header links are removed. */}

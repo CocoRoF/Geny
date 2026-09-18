@@ -410,6 +410,7 @@ export const messages: Record<string, Entry> = {
     ko: '어느 환경으로 시작할지 고르세요. 모델은 환경이 아니라 위쪽 모델 선택이 정합니다.',
     en: 'Pick the environment to start in. The model is chosen in the header, not by the environment.',
   },
+  'chat.creating': { ko: '만드는 중…', en: 'Creating…' },
   'chat.newSessionName': { ko: '세션 {n}', en: 'Session {n}' },
   'chat.envDefault': { ko: '기본 환경', en: 'Default environment' },
   'chat.noSessions': { ko: '아직 세션이 없습니다', en: 'No sessions yet' },

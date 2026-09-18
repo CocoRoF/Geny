@@ -551,6 +551,21 @@ async def lifespan(app: FastAPI):
             env_migration["rebound"],
         )
 
+    # The environment used to carry the persona, so an agent given a custom
+    # one had it on a copied environment rather than on itself. There is one
+    # environment now and it carries no persona: this writes each session's
+    # inherited choice onto the session, before the link is cut. Runs once;
+    # the second boot finds nothing to do.
+    from service.sessions.migrate_attachments import migrate_session_attachments
+    from service.sessions.store import get_session_store as _get_session_store
+
+    attachments = migrate_session_attachments(_get_session_store(), environment_service)
+    if attachments["moved"]:
+        logger.info(
+            "   - Sessions given their own persona: %d/%d",
+            attachments["moved"], attachments["checked"],
+        )
+
     # An install that predates accounts reaches its model through the legacy
     # per-provider credentials. Environments now name ``geny_router``, so
     # without this an upgrade leaves the server unable to start a session —

@@ -240,13 +240,17 @@ def test_vtuber_env_includes_memory_inspect_tools() -> None:
         )
 
 
-def test_install_templates_propagates_to_vtuber(tmp_path) -> None:
-    """``install_environment_templates`` must pipe *external_tool_names*
-    into the VTuber factory as well. Before PR #2 the VTuber got
-    its hardcoded 3-tuple regardless of what the boot path knew."""
+def test_install_writes_exactly_one_environment(tmp_path) -> None:
+    """There is one environment: the pipeline every agent runs.
+
+    It used to install three, and before that eleven. Each round of shrinking
+    removed something that was never really an environment — the model became
+    the session's route, the pipeline became the one harness, and the persona,
+    tool roster and sub-agents became things a session carries.
+    """
     from service.environment.service import EnvironmentService
     from service.environment.templates import (
-        VTUBER_ENV_ID,
+        WORKER_ENV_ID,
         install_environment_templates,
     )
 
@@ -259,20 +263,37 @@ def test_install_templates_propagates_to_vtuber(tmp_path) -> None:
         "browser_navigate",
     ]
     loader = _loader_for({"send_direct_message_internal", "read_inbox", "memory_read"})
-    install_environment_templates(
-        service,
-        external_tool_names=all_names,
-        tool_loader=loader,
+
+    written = install_environment_templates(
+        service, external_tool_names=all_names, tool_loader=loader,
     )
 
-    vtuber = service.load_manifest(VTUBER_ENV_ID)
-    assert vtuber is not None
-    assert "send_direct_message_internal" in vtuber.tools.external
-    assert "read_inbox" in vtuber.tools.external
-    assert "memory_read" in vtuber.tools.external
-    assert "web_search" in vtuber.tools.external
-    # All-tools: browser_navigate is now included too (no filtering).
-    assert "browser_navigate" in vtuber.tools.external
+    assert written == 1
+    assert [e["id"] for e in service.list_all()] == [WORKER_ENV_ID]
+
+    only = service.load_manifest(WORKER_ENV_ID)
+    assert only is not None
+    # Every tool the boot path knew about reaches it — narrowing is a tool
+    # preset on the session, not a second environment.
+    for name in all_names:
+        assert name in only.tools.external, name
+    assert list(only.tools.built_in) == ["*"]
+    # And nothing in it declares a persona: that is the session's to attach.
+    assert not (only.host_selections.extras or {}).get("persona_preset_id")
+
+
+def test_every_role_resolves_to_the_one_environment() -> None:
+    """A role used to pick an environment. Now it picks nothing — the VTuber
+    persona is attached to the session, so a VTuber and a worker run the same
+    pipeline with different things hanging off them."""
+    from service.environment.role_defaults import resolve_env_id
+    from service.environment.templates import WORKER_ENV_ID
+
+    for role in ("worker", "developer", "researcher", "planner", "vtuber", None):
+        assert resolve_env_id(role, None) == WORKER_ENV_ID, role
+    # Even an id from before the change — the environment it names is gone,
+    # and the session keeps working.
+    assert resolve_env_id("vtuber", "52a7eb77f2bb") == WORKER_ENV_ID
 
 
 def test_vtuber_env_includes_full_address_primitives_set() -> None:
@@ -373,15 +394,11 @@ def test_vtuber_env_declares_all_built_ins() -> None:
     )
 
 
-def test_install_templates_persists_role_built_in_choices(tmp_path) -> None:
-    """The ``.built_in`` field is serialized to disk by
-    ``install_environment_templates``. All-tools principle: BOTH the
-    worker and the VTuber seed persist ``["*"]`` — verifies the
-    roundtrip, so a boot-time edit of the seed env and a read-back
-    don't silently drop the selection."""
+def test_install_templates_persists_built_in_choices(tmp_path) -> None:
+    """``.built_in`` survives the write/read roundtrip, so a boot-time edit of
+    the environment and a read-back don't silently drop the selection."""
     from service.environment.service import EnvironmentService
     from service.environment.templates import (
-        VTUBER_ENV_ID,
         WORKER_ENV_ID,
         install_environment_templates,
     )
@@ -392,12 +409,9 @@ def test_install_templates_persists_role_built_in_choices(tmp_path) -> None:
         external_tool_names=["memory_read", "web_search"],
     )
 
-    worker = service.load_manifest(WORKER_ENV_ID)
-    vtuber = service.load_manifest(VTUBER_ENV_ID)
-    assert worker is not None and vtuber is not None
-    assert list(worker.tools.built_in) == ["*"]
-    # All-tools: vtuber now opts into every built-in too.
-    assert list(vtuber.tools.built_in) == ["*"]
+    only = service.load_manifest(WORKER_ENV_ID)
+    assert only is not None
+    assert list(only.tools.built_in) == ["*"]
 
 
 def test_install_environment_templates_passes_all_names(tmp_path) -> None:
