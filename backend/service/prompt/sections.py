@@ -216,9 +216,14 @@ class SectionLibrary:
 
     @staticmethod
     def files_workspace(
-        storage_path: str, cloud_linked: str = ""
+        workspace_addr: str, cloud_linked: str = ""
     ) -> PromptSection:
-        """Short manifest of the session's FILES WORKSPACE (host storage).
+        """Short manifest of the session's FILES WORKSPACE.
+
+        *workspace_addr* must be the address the session's TOOLS resolve
+        against — ``/workspace`` when a sandbox is bound, the host path when
+        one is not. An agent that is told a second address uses it, and half
+        its files land somewhere the user never looks.
 
         Deliberately terse (workspace-canvas plan): the prompt states only the
         non-discoverable facts — where the space is, what it is FOR, and that
@@ -228,8 +233,16 @@ class SectionLibrary:
         SandboxFetch bridge.
         """
         content = (
+            # ONE address, and it is the one the TOOLS accept — `/workspace`
+            # for a sandbox-bound session, the host path otherwise. This used
+            # to print the host path unconditionally while the sandbox tools
+            # only understood /workspace, so the prompt held two equally
+            # absolute answers to "where am I". Two providers, same
+            # instruction, two different places: OpenAI wrote
+            # /workspace/x.txt and Claude Code wrote <host>/workspace/x.txt,
+            # which the container mapper re-rooted into workspace/workspace/.
             f"Files workspace (host storage, not an execution environment): "
-            f"{storage_path}/workspace — uploads/ (files the user sent), "
+            f"{workspace_addr} — uploads/ (files the user sent), "
             f"drafts/ (in-progress document edits), outputs/ (artifacts "
             f"delivered to the user). This space serves the built-in file & "
             f"document tools; never install software or run services against "
@@ -776,7 +789,9 @@ def build_agent_prompt(
             _where = owning_storage(storage_path)[1]
         except Exception:  # noqa: BLE001 — prompt must build regardless
             _where = ""
-        builder.add_section(SectionLibrary.files_workspace(storage_path, _where))
+        # The address the tools answer to, not the address on disk.
+        workspace_addr = "/workspace" if in_gapt_workspace else f"{storage_path}/workspace"
+        builder.add_section(SectionLibrary.files_workspace(workspace_addr, _where))
 
     # §4 DateTime (FULL only)
     if mode == PromptMode.FULL:
