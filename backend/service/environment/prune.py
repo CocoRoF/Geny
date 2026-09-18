@@ -116,27 +116,37 @@ def main() -> int:
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    from service.chat.cleanup_rooms import attach_database
-
-    if not attach_database():
-        print("database unavailable — nothing was touched")
-        return 2
-
+    from service.database import APPLICATION_MODELS, AppDatabaseManager
     from service.environment.service import EnvironmentService
     from service.sessions.store import get_session_store
 
-    service = EnvironmentService()
+    # Environments live in PostgreSQL with a JSON copy on disk, and the
+    # running server reads the database. A service that was never handed one
+    # deletes the files and leaves the rows — the same trap the room janitor
+    # fell into, and it looks exactly like a prune that did nothing.
     try:
-        from service.database import APPLICATION_MODELS, AppDatabaseManager  # noqa: F401
-        from service.database.database_manager import DatabaseManager  # noqa: F401
+        app_db = AppDatabaseManager()
+        app_db.register_models(APPLICATION_MODELS)
+        if not app_db.initialize_connection():
+            print("could not connect to PostgreSQL — nothing was touched")
+            return 2
     except Exception:  # noqa: BLE001
-        pass
+        logger.error("no database", exc_info=True)
+        return 2
+
+    service = EnvironmentService()
+    service.set_database(app_db)
+    sessions = get_session_store()
+    sessions.set_database(app_db)
+    if not service._db_available:
+        print("the environment store is not reading from the database")
+        return 2
 
     result = prune(
         service,
         apply=args.apply,
         backup=Path(args.backup) if args.apply else None,
-        session_store=get_session_store(),
+        session_store=sessions,
     )
     print("keep   :", result["kept"])
     print("remove :", len(result["dropped"]), result["dropped"])

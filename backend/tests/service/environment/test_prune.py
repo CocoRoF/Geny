@@ -89,3 +89,26 @@ def test_a_dry_run_touches_nothing():
     assert survey(service)["drop"][0]["id"] == "custom"
     prune(service, apply=False)
     assert "custom" in service._store
+
+
+def test_the_tool_refuses_when_it_cannot_reach_the_database(monkeypatch, capsys):
+    """Environments live in PostgreSQL with a JSON copy beside them. A prune
+    that deletes the files and leaves the rows looks like a prune that did
+    nothing — the listing is still five long afterwards."""
+    from service.environment import prune as prune_mod
+
+    class Unreachable:
+        def register_models(self, _models):
+            return None
+
+        def initialize_connection(self):
+            return False
+
+    monkeypatch.setattr(prune_mod, "__name__", prune_mod.__name__)
+    monkeypatch.setattr(
+        "service.database.AppDatabaseManager", lambda *a, **k: Unreachable(),
+    )
+    monkeypatch.setattr("sys.argv", ["prune"])
+
+    assert prune_mod.main() == 2
+    assert "could not connect" in capsys.readouterr().out
