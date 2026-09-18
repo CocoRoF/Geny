@@ -1967,16 +1967,19 @@ class AgentSessionManager:
         ):
             agent._session_type = "vtuber"
             self._store.update(session_id, {"session_type": "vtuber"})
+            # Through the one rule, never around it. Creating the room here
+            # directly is how a session ended up with several: this runs again
+            # on every rehydrate, and a listing that came back empty (the chat
+            # store's database not attached yet, say) made another one.
             try:
-                from service.chat.conversation_store import get_chat_store
-                chat_store = get_chat_store()
-                room = chat_store.create_room(
-                    f"{request.session_name or 'VTuber'} Chat", [session_id]
+                from service.chat.home_room import resolve_home_room
+
+                room = resolve_home_room(
+                    session_id, name_hint=request.session_name or "",
                 )
-                room_id = room.get("id") or room.get("room_id")
+                room_id = (room or {}).get("id")
                 if room_id:
                     agent._chat_room_id = room_id
-                    self._store.update(session_id, {"chat_room_id": room_id})
             except Exception as e:  # noqa: BLE001
                 logger.error(
                     f"[{session_id}] VTuber chat room failed: {e}", exc_info=True
@@ -2261,23 +2264,15 @@ class AgentSessionManager:
         )
         if is_vtuber:
             try:
-                from service.chat.conversation_store import get_chat_store
+                from service.chat.home_room import resolve_home_room
 
-                chat_store = get_chat_store()
-                best = self._best_chat_room_for(session_id)
-                if best:
-                    if best != getattr(agent, "_chat_room_id", None):
-                        agent._chat_room_id = best
-                        self._store.update(session_id, {"chat_room_id": best})
-                        logger.info(f"[{session_id}] 💬 Reattached existing chat room: {best}")
-                elif not getattr(agent, "_chat_room_id", None):
-                    room_name = f"{params.get('session_name') or 'VTuber'} Chat"
-                    room = chat_store.create_room(room_name, [session_id])
-                    room_id = room.get("id") or room.get("room_id")
-                    if room_id:
-                        agent._chat_room_id = room_id
-                        self._store.update(session_id, {"chat_room_id": room_id})
-                        logger.info(f"[{session_id}] 💬 Chat room created on reload: {room_id}")
+                room = resolve_home_room(
+                    session_id, name_hint=params.get("session_name") or "",
+                )
+                room_id = (room or {}).get("id")
+                if room_id and room_id != getattr(agent, "_chat_room_id", None):
+                    agent._chat_room_id = room_id
+                    logger.info(f"[{session_id}] 💬 Chat room: {room_id}")
             except Exception as e:  # noqa: BLE001 — chat room is best-effort
                 logger.warning(f"[{session_id}] Failed to ensure chat room on reload: {e}")
 
