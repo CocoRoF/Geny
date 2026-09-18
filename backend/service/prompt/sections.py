@@ -275,7 +275,7 @@ class SectionLibrary:
             name="files_workspace",
             content=content,
             priority=41,
-            condition=lambda: bool(storage_path),
+            condition=lambda: bool(workspace_addr),
             modes={PromptMode.FULL, PromptMode.MINIMAL},
         )
 
