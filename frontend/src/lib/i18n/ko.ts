@@ -1125,6 +1125,8 @@ const ko: Translations = {
       notFound: '서브 워커 세션을 로드할 수 없습니다',
     },
     thinkingTrigger: {
+      edit: '언제 말할지',
+      editHint: '언제 무슨 말을 먼저 꺼낼지 고칩니다. 이 에이전트에만 적용됩니다.',
       title: '자율 사고 (Thinking Trigger)',
       enabled: '활성화됨',
       disabled: '비활성화됨',
@@ -3367,6 +3369,33 @@ const ko: Translations = {
   },
 
   // ─── Create Session Modal ───
+  triggerStudio: {
+    title: '먼저 말 걸기',
+    subtitle: '조용할 때 이 에이전트가 스스로 꺼내는 말입니다.',
+    waitTitle: '얼마나 기다렸다가',
+    waitHelp: '이만큼 말이 없으면 먼저 말을 겁니다. 혼잣말이 이어지면 간격은 스스로 늘어납니다.',
+    seconds: '{n}초',
+    minutes: '{n}분',
+    situations: '어떤 때 무슨 말을',
+    kindActivity: '행동',
+    addSentence: '할 말 추가',
+    sentencePlaceholder: '이 상황에서 할 말',
+    level: { off: '끄기', rare: '가끔', normal: '보통', often: '자주' },
+    when: {
+      any: '조용할 때 언제든',
+      first: '대화가 끊긴 직후',
+      between: '혼잣말이 {a}~{b}번 이어졌을 때',
+      after: '혼잣말이 {a}번 넘게 이어졌을 때',
+      screen: '화면을 공유하는 동안',
+      helperBusy: '동료가 일하는 중일 때',
+      helperIdle: '동료가 쉬고 있을 때',
+      morning: '아침',
+      afternoon: '낮',
+      evening: '저녁',
+      night: '밤',
+      cooldown: '{n}초에 한 번까지',
+    },
+  },
   personaStudio: {
     title: '페르소나',
   },

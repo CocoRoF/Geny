@@ -1132,6 +1132,8 @@ const en = {
       notFound: 'Sub-Worker session could not be loaded',
     },
     thinkingTrigger: {
+      edit: 'When it speaks',
+      editHint: 'Change when and what it says first. Applies to this agent only.',
       title: 'Autonomous Thinking (Thinking Trigger)',
       enabled: 'Enabled',
       disabled: 'Disabled',
@@ -3327,6 +3329,33 @@ const en = {
   },
 
   // ─── Create Session Modal ───
+  triggerStudio: {
+    title: 'Speaking first',
+    subtitle: 'What this agent says on its own when things go quiet.',
+    waitTitle: 'After this much silence',
+    waitHelp: 'It speaks first after this long without a word. If it keeps talking to itself, the gap widens on its own.',
+    seconds: '{n}s',
+    minutes: '{n} min',
+    situations: 'When, and what',
+    kindActivity: 'acts',
+    addSentence: 'Add a line',
+    sentencePlaceholder: 'What it might say here',
+    level: { off: 'Off', rare: 'Rarely', normal: 'Normal', often: 'Often' },
+    when: {
+      any: 'any quiet moment',
+      first: 'right after the conversation stops',
+      between: 'after {a}–{b} unanswered lines',
+      after: 'after more than {a} unanswered lines',
+      screen: 'while the screen is shared',
+      helperBusy: 'while its companion is working',
+      helperIdle: 'while its companion is idle',
+      morning: 'morning',
+      afternoon: 'afternoon',
+      evening: 'evening',
+      night: 'night',
+      cooldown: 'at most once every {n}s',
+    },
+  },
   personaStudio: {
     title: 'Personas',
   },

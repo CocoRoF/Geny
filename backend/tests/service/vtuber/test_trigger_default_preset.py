@@ -144,31 +144,19 @@ def test_resolve_manifest_uses_designated_default(tmp_path, _clear_preset_single
     assert any(c.id == "marker_cat" for c in m.categories)
 
 
-def test_env_trigger_preset_id_reads_manifest_extras() -> None:
-    """The session manager resolves an env's mapped trigger from
-    host_selections.extras['trigger_preset_id'] (geny-executor 2.6.0)."""
-    from service.executor.agent_session_manager import AgentSessionManager
-    from geny_executor.core.environment import EnvironmentManifest
+def test_a_session_keeps_its_own_trigger_preset() -> None:
+    """A trigger ladder used to be mapped on an ENVIRONMENT, so changing when
+    one agent speaks meant editing something every agent on that environment
+    shared. It is the session's now: its own id, or none — in which case the
+    runtime uses the designated default ladder."""
+    from service.vtuber.thinking_trigger import ThinkingTriggerService
 
-    mgr = object.__new__(AgentSessionManager)
+    trig = ThinkingTriggerService()
+    trig.attach_preset("sid-with-own", "preset-abc")
+    assert trig.get_attached_preset("sid-with-own") == "preset-abc"
 
-    m = EnvironmentManifest.blank_manifest("env-with-trigger")
-    m.host_selections.extras["trigger_preset_id"] = "preset-abc"
-
-    class _EnvSvc:
-        def load_manifest(self, _eid):
-            return m
-
-    mgr._environment_service = _EnvSvc()
-    assert mgr._env_trigger_preset_id("env-with-trigger") == "preset-abc"
-    # No mapping → None
-    m.host_selections.extras.clear()
-    assert mgr._env_trigger_preset_id("env-with-trigger") is None
-    # No env service / no id → None
-    mgr._environment_service = None
-    assert mgr._env_trigger_preset_id("x") is None
-
-
+    trig.attach_preset("sid-with-own", None)
+    assert trig.get_attached_preset("sid-with-own") is None
 def test_summary_marks_bundled_default(tmp_path) -> None:
     """The bundled default is flagged is_bundled=True; user presets are
     not — the UI groups them into a separate "기본 프리셋" section."""

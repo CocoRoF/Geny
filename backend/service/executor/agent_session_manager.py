@@ -399,26 +399,6 @@ class AgentSessionManager:
     # Provider Resolution (Phase E2)
     # ========================================================================
 
-    def _env_trigger_preset_id(self, env_id: Optional[str]) -> Optional[str]:
-        """The trigger preset mapped on an environment, or ``None``.
-
-        Stored in the manifest's generic ``host_selections.extras`` map
-        (geny-executor 2.6.0) under ``trigger_preset_id`` — the env editor's
-        trigger picker writes it there. ``None`` means "no env mapping" →
-        the session falls back to the designated default preset."""
-        if not env_id or self._environment_service is None:
-            return None
-        try:
-            manifest = self._environment_service.load_manifest(env_id)
-            if manifest is None:
-                return None
-            extras = getattr(manifest.host_selections, "extras", None) or {}
-            val = extras.get("trigger_preset_id")
-            val = str(val).strip() if val else ""
-            return val or None
-        except Exception:  # noqa: BLE001
-            return None
-
     def _owned_subagent(
         self, session_id: Optional[str], role: Any = None,
     ) -> Optional[Dict[str, Any]]:
@@ -1988,7 +1968,9 @@ class AgentSessionManager:
                 from service.vtuber.thinking_trigger import get_thinking_trigger_service
                 trigger_svc = get_thinking_trigger_service()
                 trigger_svc.record_activity(session_id)
-                effective_trigger = trigger_preset_id or self._env_trigger_preset_id(env_id)
+                # The session's own, or none — in which case the runtime uses the
+                # designated default ladder. It used to be mapped on an environment.
+                effective_trigger = trigger_preset_id
                 if effective_trigger:
                     trigger_svc.attach_preset(session_id, effective_trigger)
                     self._store.update(

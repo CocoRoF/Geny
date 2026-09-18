@@ -647,6 +647,60 @@ async def update_thinking_trigger(
     return {"success": True, "session_id": session_id, **service.get_status(session_id)}
 
 
+@router.post("/{session_id}/trigger-preset/own")
+async def make_own_trigger_preset(
+    session_id: str = Path(..., description="Session ID"),
+    auth: dict = Depends(require_auth),
+):
+    """Give this agent a ladder of its own, and return it.
+
+    Editing when an agent speaks used to mean editing a preset every agent
+    sharing it would feel — or building another environment to hold a
+    different one. So the editor calls this first: if the session already has
+    its own ladder it comes back unchanged, and if it is running the shared
+    default it gets a private copy of exactly what it is running now, attached.
+    Idempotent: asking twice changes nothing.
+    """
+    _enforce_session_owner(session_id, auth)
+
+    from service.trigger_preset import get_trigger_preset_service
+    from service.vtuber.thinking_trigger import get_thinking_trigger_service
+
+    presets = get_trigger_preset_service()
+    if presets is None:
+        raise HTTPException(status_code=503, detail="Trigger presets unavailable")
+    triggers = get_thinking_trigger_service()
+
+    record = None
+    own_id = triggers.get_attached_preset(session_id)
+    if own_id:
+        record = presets.get(own_id)
+    if record is None:
+        store = get_session_store()
+        name = (store.get(session_id) or {}).get("session_name") or session_id[:8]
+        source = presets.get_default()
+        # Copy what it is running right now, so "edit" starts from what the
+        # user has been hearing rather than from a blank ladder.
+        own_id = presets.create(
+            name=f"{name} 트리거",
+            description="이 에이전트 전용",
+            clone_from=source.id if source else None,
+        )
+        record = presets.get(own_id)
+        triggers.attach_preset(session_id, own_id)
+        try:
+            get_session_store().update(session_id, {"trigger_preset_id": own_id})
+        except Exception:  # noqa: BLE001
+            logger.debug("[%s] could not persist trigger_preset_id", session_id, exc_info=True)
+
+    return {
+        "session_id": session_id,
+        "trigger_preset_id": record.id,
+        "name": record.name,
+        "manifest": record.manifest.model_dump(mode="json"),
+    }
+
+
 @router.put("/{session_id}/trigger-preset")
 async def attach_trigger_preset(
     request: AttachTriggerPresetRequest,

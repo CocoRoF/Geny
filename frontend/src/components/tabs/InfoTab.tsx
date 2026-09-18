@@ -5,6 +5,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { useCreatureStateStore } from '@/store/useCreatureStateStore';
 import { agentApi, personaPresetsApi } from '@/lib/api';
 import PersonaStudioModal from '@/components/modals/PersonaStudioModal';
+import TriggerStudioModal from '@/components/modals/TriggerStudioModal';
 import { twMerge } from 'tailwind-merge';
 import { useI18n } from '@/lib/i18n';
 import { RotateCcw, Trash2, Pencil, Save, X, FileText, Eraser, Link2, Terminal, Brain, ExternalLink, Info, Power, Pin, PinOff, Drama, RefreshCw } from 'lucide-react';
@@ -123,6 +124,7 @@ export default function InfoTab() {
   const [personaBusy, setPersonaBusy] = useState(false);
   const [personaNote, setPersonaNote] = useState('');
   const [personaStudio, setPersonaStudio] = useState(false);
+  const [triggerStudio, setTriggerStudio] = useState(false);
 
   const loadPresets = useCallback(() => {
     personaPresetsApi
@@ -478,6 +480,15 @@ export default function InfoTab() {
             </button>
           </div>
           <p className="text-[11px] text-[var(--text-muted)] mt-1.5">{t('info.thinkingTrigger.description')}</p>
+          <div className="mt-2">
+            <ActionButton
+              icon={Brain}
+              onClick={() => setTriggerStudio(true)}
+              title={t('info.thinkingTrigger.editHint') ?? '언제 무슨 말을 먼저 꺼낼지 고칩니다. 이 에이전트에만 적용됩니다.'}
+            >
+              {t('info.thinkingTrigger.edit') ?? '언제 말할지'}
+            </ActionButton>
+          </div>
           {thinkingTriggerInfo && thinkingTriggerInfo.consecutive_triggers > 0 && (
             <p className="text-[10px] text-[var(--text-muted)] mt-1">
               {t('info.thinkingTrigger.adaptiveInfo', {
@@ -629,6 +640,12 @@ export default function InfoTab() {
             {t('info.permanentDelete')}
           </ActionButton>
         </div>
+      )}
+      {triggerStudio && data && (
+        <TriggerStudioModal
+          sessionId={data.session_id}
+          onClose={() => { setTriggerStudio(false); void fetchDetail(); }}
+        />
       )}
       {personaStudio && (
         <PersonaStudioModal

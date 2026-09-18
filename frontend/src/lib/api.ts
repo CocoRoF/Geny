@@ -630,6 +630,21 @@ export const agentApi = {
       max_threshold_seconds: number;
     }>(`/api/agents/${id}/thinking-trigger`),
 
+  /**
+   * POST /api/agents/{id}/trigger-preset/own — this agent's own ladder.
+   *
+   * Returns the session's own trigger preset, making one (a copy of what it
+   * is already running) the first time. Editing a shared ladder would change
+   * when every agent on it speaks.
+   */
+  makeOwnTriggerPreset: (id: string) =>
+    apiCall<{
+      session_id: string;
+      trigger_preset_id: string;
+      name: string;
+      manifest: unknown;
+    }>(`/api/agents/${id}/trigger-preset/own`, { method: 'POST' }),
+
   /** PUT /api/agents/{id}/thinking-trigger — enable/disable thinking trigger */
   updateThinkingTrigger: (id: string, enabled: boolean) =>
     apiCall<{ success: boolean; enabled: boolean }>(`/api/agents/${id}/thinking-trigger`, {
