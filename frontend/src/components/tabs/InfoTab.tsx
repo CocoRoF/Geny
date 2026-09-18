@@ -291,8 +291,8 @@ export default function InfoTab() {
     },
     { label: t('info.fields.role'), value: data.role || t('info.worker') },
     // For env-backed sessions graph_name is the redundant "env:<id>" — the
-    // 환경 row below already carries that (with the readable name). Keep the
-    // row only for legacy/preset graphs where it says something real.
+    // A graph named `env:…` is the pipeline, which every agent runs and
+    // nobody chooses. Shown only when it names something else.
     ...(data.graph_name && !data.graph_name.startsWith('env:')
       ? [{ label: t('info.fields.graphName'), value: data.graph_name }]
       : []),
@@ -305,12 +305,6 @@ export default function InfoTab() {
     { label: t('info.fields.pid'), value: data.pid || '—' },
     { label: t('info.fields.pod'), value: data.pod_name || '—' },
     { label: t('info.fields.totalCost'), value: data.total_cost != null && data.total_cost > 0 ? `$${data.total_cost.toFixed(6)}` : '$0.000000' },
-    {
-      label: t('info.fields.environment'),
-      // Human name first; the id stays reachable through the drawer link.
-      value: data.env_name || data.env_id || t('info.environmentNone'),
-      onClick: data.env_id ? () => undefined : undefined,
-    },
     { label: t('info.fields.memoryProvider'), value: formatMemoryConfig(data.memory_config) },
     ...(data.session_type ? [{ label: t('info.fields.sessionType'), value: data.session_type }] : []),
     ...(data.linked_session_id ? [{ label: t('info.fields.linkedSession'), value: data.linked_session_id }] : []),
@@ -409,7 +403,7 @@ export default function InfoTab() {
               className="flex-1 min-w-0 h-8 px-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[12.5px] text-[var(--text-primary)] disabled:opacity-60"
             >
               <option value="">
-                {t('info.persona.followEnv') ?? '환경 설정을 따름'}
+                {t('info.persona.followRole') ?? '역할 기본값을 따름'}
               </option>
               {presets.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -437,8 +431,8 @@ export default function InfoTab() {
           <p className="mt-1.5 text-[11.5px] text-[var(--text-muted)] leading-relaxed">
             {data.persona_source === 'session'
               ? `${t('info.persona.fromSession') ?? '이 세션 전용'}: ${data.persona_name || data.effective_persona_preset_id}`
-              : data.persona_source === 'environment'
-                ? `${t('info.persona.fromEnv') ?? '환경에서 상속'}: ${data.persona_name || data.effective_persona_preset_id}`
+              : data.persona_source === 'role'
+                ? `${t('info.persona.fromRole') ?? '역할 기본값'}: ${data.persona_name || data.effective_persona_preset_id}`
                 : (t('info.persona.none') ?? '적용된 페르소나가 없습니다.')}
           </p>
           {personaNote && (

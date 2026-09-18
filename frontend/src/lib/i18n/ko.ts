@@ -988,9 +988,9 @@ const ko: Translations = {
       manage: '만들기 · 편집',
       manageHint: '페르소나를 만들거나 고칩니다. 만든 뒤 바로 위에서 고를 수 있습니다.',
       title: '페르소나',
-      followEnv: '환경 설정을 따름',
+      followRole: '역할 기본값을 따름',
       fromSession: '이 세션 전용',
-      fromEnv: '환경에서 상속',
+      fromRole: '역할 기본값',
       none: '적용된 페르소나가 없습니다.',
       restart: '다시 시작',
       restartHint: '지금 세션을 다시 구성합니다. 대화와 기억은 그대로입니다.',
@@ -1444,7 +1444,7 @@ const ko: Translations = {
   // ─── Sandbox Tool Packs (샌드박스 도구 팩) ───
   personaPresets: {
     title: '페르소나',
-    subtitle: 'MBTI·에니어그램·캐릭터 아키타입 + 성격(OCEAN)·표현 슬라이더 + 말투·감정으로 캐릭터 성격을 만듭니다. 기본 제공 프리셋은 그대로 쓰거나 복사해서 커스텀할 수 있고, 환경 편집기 「페르소나」에서 환경에 적용하면 시스템 프롬프트로 주입됩니다.',
+    subtitle: 'MBTI·에니어그램·캐릭터 아키타입 + 성격(OCEAN)·표현 슬라이더 + 말투·감정으로 캐릭터 성격을 만듭니다. 기본 제공 프리셋은 그대로 쓰거나 복사해서 커스텀할 수 있습니다. 만든 페르소나는 에이전트의 [페르소나]에서 골라 붙이면 시스템 프롬프트로 들어갑니다.',
     new: '새 페르소나',
     loading: '불러오는 중…',
     failed: '실패: {error}',
@@ -1508,7 +1508,7 @@ const ko: Translations = {
   },
   sandboxPacks: {
     title: 'Sandbox Tool Packs',
-    subtitle: '각 팩은 스냅샷된 샌드박스 워크스페이스 + 그 안에서 실행되는 도구 + 사용법 스킬을 묶습니다. 팩을 활성화한 뒤 환경 편집기에서 환경에 포함하세요.',
+    subtitle: '각 팩은 스냅샷된 샌드박스 워크스페이스 + 그 안에서 실행되는 도구 + 사용법 스킬을 묶습니다. 팩을 활성화하면 에이전트가 쓸 수 있습니다.',
     refresh: '새로고침',
     loading: '불러오는 중…',
     empty: {
@@ -1618,7 +1618,7 @@ const ko: Translations = {
       sandbox_packs: 'Sandbox Tool Packs',
       sandbox_packsHint: '샌드박스에서 만든 도구 팩(환경+도구+스킬) — 환경에 포함',
       persona: '페르소나',
-      personaHint: 'MBTI·성격 슬라이더로 캐릭터 성격 만들기 — 환경에 적용',
+      personaHint: 'MBTI·성격 슬라이더로 캐릭터 성격 만들기 — 에이전트에 붙입니다',
       hooks: 'HOOK',
       hooksHint: '호스트에 등록된 훅 — 새 env 기본 포함 여부 선택',
       permissions: '권한',
