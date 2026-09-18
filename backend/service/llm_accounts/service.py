@@ -295,6 +295,30 @@ class AccountService:
     def codex_tokens(self, account_id: str) -> Dict[str, Any]:
         return self._secrets.get_dict(account_id)
 
+    def claude_options(self, account_id: str, *, label: str = "") -> Dict[str, Any]:
+        """Everything ``geny_claude_code`` needs to drive THIS account.
+
+        Synchronous on purpose, and shared with :meth:`resolve_hop` so
+        there is one definition of what a Claude Code account is. The
+        sync half matters: offline work (memory curation) needs these
+        options but must not drive an async hop — every caller there
+        sits inside a running event loop.
+        """
+        row = self._row(account_id) or {}
+        method = row.get("claude_auth_method") or "login"
+        options: Dict[str, Any] = {
+            "binary_path": claude_auth.claude_binary(),
+            "auth_method": method,
+            "config_dir": self.claude_config_dir(account_id),
+            "scratch_dir": self.claude_scratch_dir(account_id),
+            "account_label": label or row.get("label") or "",
+        }
+        if method == "token":
+            options["oauth_token"] = self._secrets.get_str(account_id)
+        elif method == "api_key":
+            options["anthropic_api_key"] = self._secrets.get_str(account_id)
+        return options
+
     def claude_env(self, row: Dict[str, Any]) -> Dict[str, str]:
         account_id = row.get("account_id") or ""
         method = row.get("claude_auth_method") or "login"
@@ -357,7 +381,6 @@ class AccountService:
             target["options"]["effort"] = effort
 
         if kind == "claude_code":
-            method = row.get("claude_auth_method") or "login"
             # There is no second mode. A Claude Code account generates
             # tokens; this harness runs the tools. The "agent" mode that
             # handed the loop back to the CLI is gone (2026-09-19) — an
@@ -365,17 +388,9 @@ class AccountService:
             # cannot share a conversation, a permission ladder or a
             # memory with the rest of them. Rows that still say "agent"
             # are simply read as token accounts.
-            target["options"].update({
-                "binary_path": claude_auth.claude_binary(),
-                "auth_method": method,
-                "config_dir": self.claude_config_dir(account_id),
-                "scratch_dir": self.claude_scratch_dir(account_id),
-                "account_label": target["label"],
-            })
-            if method == "token":
-                target["options"]["oauth_token"] = self._secrets.get_str(account_id)
-            elif method == "api_key":
-                target["options"]["anthropic_api_key"] = self._secrets.get_str(account_id)
+            target["options"].update(
+                self.claude_options(account_id, label=target["label"])
+            )
         elif kind == "codex":
             tokens = self._secrets.get_dict(account_id)
             if tokens:

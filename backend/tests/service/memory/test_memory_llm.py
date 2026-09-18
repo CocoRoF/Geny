@@ -138,3 +138,45 @@ async def test_memory_llm_complete_returns_response_text():
     assert call_kwargs["model_config"].model == "claude-haiku-4-5-20251001"
     assert call_kwargs["messages"] == [{"role": "user", "content": "test prompt"}]
     assert call_kwargs["purpose"] == "memory.curation.analyze"
+
+
+# ─────────────────────────────────────────────────────────────────
+# provider ↔ model pairing
+# ─────────────────────────────────────────────────────────────────
+
+
+def test_a_provider_is_never_handed_a_model_it_cannot_serve():
+    """The 2026-09-19 regression: the provider came from a credential
+    heuristic and the model from APIConfig, so when the legacy
+    claude_code_cli entry left the bundle the pair became
+    (openai, claude-haiku-*) and every curation call 404'd."""
+    from service.memory.memory_llm import _serves
+
+    assert _serves("openai", "claude-haiku-4-5-20251001") is False
+    assert _serves("anthropic", "gpt-4.1") is False
+    assert _serves("geny_codex", "claude-sonnet-5") is False
+
+    assert _serves("anthropic", "claude-sonnet-5") is True
+    assert _serves("geny_claude_code", "sonnet") is True
+    assert _serves("openai", "gpt-5.6-terra") is True
+    assert _serves("geny_codex", "gpt-5.6-terra") is True
+
+
+def test_an_unknown_provider_is_trusted_with_any_model():
+    """vllm / ollama / a host-registered backend serves whatever it is
+    told — only families we KNOW are wrong get refused."""
+    from service.memory.memory_llm import _serves
+
+    assert _serves("vllm", "some-local-model") is True
+    assert _serves("geny_router", "anything") is True
+    assert _serves("", "anything") is True
+
+
+def test_a_mismatched_pair_yields_no_adapter(monkeypatch, tmp_path):
+    """Better no LLM curation (callers degrade to rules) than a model id
+    the provider will 404 on."""
+    _reset_config_manager(monkeypatch, tmp_path)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("MEMORY_MODEL", "claude-haiku-4-5-20251001")
+
+    assert build_memory_llm() is None
