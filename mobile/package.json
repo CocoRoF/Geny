@@ -1,7 +1,7 @@
 {
   "name": "geny-mobile",
   "private": true,
-  "version": "0.28.3",
+  "version": "0.28.4",
   "description": "Geny Mobile — 서버의 에이전트와 대화하는 Android/iOS 앱. 채팅과 설정만; 아바타는 데스크톱 접속기의 몫이다.",
   "license": "Apache-2.0",
   "main": "index.js",
