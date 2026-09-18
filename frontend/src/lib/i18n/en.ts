@@ -3342,6 +3342,7 @@ const en = {
     sentencePlaceholder: 'What it might say here',
     level: { off: 'Off', rare: 'Rarely', normal: 'Normal', often: 'Often' },
     when: {
+      hours: '{a}:00–{b}:00',
       any: 'any quiet moment',
       first: 'right after the conversation stops',
       between: 'after {a}–{b} unanswered lines',

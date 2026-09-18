@@ -241,7 +241,7 @@ def default_manifest() -> TriggerPresetManifest:
         ),
         TriggerCategory(
             id="sub_worker_working",
-            label="Sub-Worker 작업 중",
+            label="동료가 일하는 중",
             kind="thinking",
             weight=1000.0,
             requires_sub_worker_busy=True,
@@ -257,7 +257,7 @@ def default_manifest() -> TriggerPresetManifest:
         # voice during a screen-share session.
         TriggerCategory(
             id="screen_observation",
-            label="화면 관찰",
+            label="화면을 보며",
             kind="thinking",
             weight=800.0,
             requires_screen_active=True,
@@ -317,7 +317,7 @@ def default_manifest() -> TriggerPresetManifest:
         ),
         TriggerCategory(
             id="fun_what_if",
-            label="만약에",
+            label="만약에 이런 일이",
             kind="thinking",
             weight=5.0,
             prompt_refs=refs("fun_what_if"),

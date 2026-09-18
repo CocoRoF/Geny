@@ -140,7 +140,21 @@ export default function TriggerStudioModal({
     if (c.requires_screen_active) parts.push(t('triggerStudio.when.screen') ?? '화면을 공유하는 동안');
     if (c.requires_sub_worker_busy) parts.push(t('triggerStudio.when.helperBusy') ?? '동료가 일하는 중일 때');
     if (c.requires_sub_worker_idle) parts.push(t('triggerStudio.when.helperIdle') ?? '동료가 쉬고 있을 때');
-    if (c.time_window) parts.push(t(`triggerStudio.when.${c.time_window}`) ?? c.time_window);
+    if (c.time_window) {
+      // The hours it actually means, from this ladder's own boundaries — the
+      // bare word repeats the situation's name and says nothing.
+      const b = manifest?.time_boundaries;
+      const from = b?.[`${c.time_window}_start` as keyof typeof b] as number | undefined;
+      const order = ['morning', 'afternoon', 'evening', 'night'] as const;
+      const nextKey = order[(order.indexOf(c.time_window) + 1) % order.length];
+      const to = b?.[`${nextKey}_start` as keyof typeof b] as number | undefined;
+      parts.push(
+        from != null && to != null
+          ? (t('triggerStudio.when.hours') ?? '{a}시~{b}시')
+            .replace('{a}', String(from)).replace('{b}', String(to))
+          : (t(`triggerStudio.when.${c.time_window}`) ?? c.time_window),
+      );
+    }
     if (c.consec_max === 0) parts.push(t('triggerStudio.when.first') ?? '대화가 끊긴 직후');
     else if (c.consec_min > 0 && c.consec_max) {
       parts.push((t('triggerStudio.when.between') ?? '혼잣말이 {a}~{b}번 이어졌을 때')

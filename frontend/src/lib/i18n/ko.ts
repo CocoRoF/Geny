@@ -3382,6 +3382,7 @@ const ko: Translations = {
     sentencePlaceholder: '이 상황에서 할 말',
     level: { off: '끄기', rare: '가끔', normal: '보통', often: '자주' },
     when: {
+      hours: '{a}시~{b}시',
       any: '조용할 때 언제든',
       first: '대화가 끊긴 직후',
       between: '혼잣말이 {a}~{b}번 이어졌을 때',
