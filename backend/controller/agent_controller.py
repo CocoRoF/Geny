@@ -1568,19 +1568,14 @@ async def _sync_touch(notify_key: str, storage_path: str) -> int:
 def _within_scope(root: "Path", target: "Path") -> bool:
     """Is *target* inside this scope, counting its workspace wherever it lives?
 
-    An adopted agent's ``workspace`` is a symlink into the cloud, so a resolved
-    path under it is NOT under the session root — reads and downloads answered
-    403 for every file such an agent produced, including the images the chat
-    renderer points at. The workspace is part of the scope no matter which
-    directory physically holds it.
+    One rule, in ``service.utils.file_storage`` — the JSON reader had its own
+    and it was the plain ``relative_to`` check, so an adopted agent (whose
+    ``workspace`` is a symlink into the cloud) could list every file it had
+    ever written and open none of them.
     """
-    for base in (root, (root / "workspace").resolve()):
-        try:
-            target.relative_to(base)
-            return True
-        except (ValueError, OSError):
-            continue
-    return False
+    from service.utils.file_storage import within_scope
+
+    return within_scope(root, target)
 
 
 def _ws_path(ws: "Path", target: "Path") -> str:

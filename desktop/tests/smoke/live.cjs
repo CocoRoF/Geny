@@ -53,6 +53,10 @@ app.on('ready', async () => {
       preload: join(root, 'out/preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      // Same as the shipped control window: Chromium's PDF viewer, which is
+      // what renders a PDF in the file viewer. Without it a screenshot of one
+      // is a blank rectangle that says nothing about the app.
+      plugins: true,
     },
   })
   win.webContents.on('console-message', (_e, level, message) => {

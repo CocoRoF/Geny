@@ -318,6 +318,32 @@ def list_storage_files(
     return files
 
 
+def within_scope(root: Path, target: Path) -> bool:
+    """Is *target* inside this scope, counting its workspace wherever it lives?
+
+    An agent's ``workspace`` is usually a SYMLINK into the user's cloud tree,
+    so a resolved path under it is not under the session directory at all.
+    A plain ``relative_to`` check therefore rejects every file the agent has
+    ever written — which is what "File not found: workspace/…/note.md" was,
+    on every file in the explorer, while the listing next to it showed them
+    all. Directory traversal still fails both bases.
+    """
+    for base in (root, (root / "workspace")):
+        try:
+            target.relative_to(base.resolve())
+            return True
+        except (ValueError, OSError):
+            continue
+    return False
+
+
+def resolve_in_scope(storage_path: str, file_path: str) -> Optional[Path]:
+    """The real path of *file_path* inside this scope, or None if it escapes."""
+    root = Path(storage_path)
+    target = (root / file_path).resolve()
+    return target if within_scope(root, target) else None
+
+
 def read_storage_file(
     storage_path: str,
     file_path: str,
@@ -327,6 +353,11 @@ def read_storage_file(
     """
     Read storage file content.
 
+    Bytes that are not text in this encoding come back as ``binary: True``
+    with the size, rather than as a 404 — "this is a PNG" and "there is no
+    such file" are different answers, and a viewer that can show the PNG
+    needs to be told which one it got.
+
     Args:
         storage_path: Path to the storage directory.
         file_path: File path (relative to storage root).
@@ -334,15 +365,12 @@ def read_storage_file(
         session_id: Session ID for logging (optional).
 
     Returns:
-        File content dictionary or None.
+        File content dictionary or None when there is no such file.
     """
-    target_path = Path(storage_path) / file_path
     log_prefix = f"[{session_id}] " if session_id else ""
 
-    # Path validation (prevent directory traversal)
-    try:
-        target_path.resolve().relative_to(Path(storage_path).resolve())
-    except ValueError:
+    target_path = resolve_in_scope(storage_path, file_path)
+    if target_path is None:
         logger.warning(f"{log_prefix}Invalid file path: {file_path}")
         return None
 
@@ -355,7 +383,22 @@ def read_storage_file(
             "file_path": file_path,
             "content": content,
             "size": len(content),
-            "encoding": encoding
+            "encoding": encoding,
+            "binary": False,
+        }
+    except (UnicodeDecodeError, ValueError):
+        # A real file that simply is not text. The client fetches the bytes
+        # from ``storage-raw`` and renders it as what it is.
+        try:
+            size = target_path.stat().st_size
+        except OSError:
+            size = 0
+        return {
+            "file_path": file_path,
+            "content": "",
+            "size": size,
+            "encoding": encoding,
+            "binary": True,
         }
     except Exception as e:
         logger.error(f"{log_prefix}Failed to read file: {e}")

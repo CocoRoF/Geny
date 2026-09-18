@@ -592,3 +592,6 @@ class StorageFileContent(BaseModel):
     content: str
     size: int
     encoding: str = "utf-8"
+    # Not text in this encoding — a PNG, a PDF, a zip. The bytes come from
+    # ``GET /{session_id}/storage-raw/{path}`` instead.
+    binary: bool = False

@@ -29,6 +29,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { workspace, type AgentSummary, type StorageEntry } from '../server'
+import { kindOf, NEEDS_BYTES } from './file-kind'
 import { Icon } from './icons'
 
 type T = (key: string, vars?: Record<string, string | number>) => string
@@ -40,7 +41,10 @@ export interface OpenedFile {
   /** Workspace-relative, as the listing gives it. */
   path: string
   name: string
+  /** Empty when the bytes are not text — the viewer fetches those itself. */
   content: string
+  binary?: boolean
+  size?: number
 }
 
 export const fileKey = (sessionId: string, path: string): string => `${sessionId}:${path}`
@@ -177,16 +181,28 @@ export function Explorer({ sessions, sessionId, running, t, onOpen }: {
   }
 
   const openPath = async (sid: string, node: Node): Promise<void> => {
-    try {
-      const file = await workspace.read(sid, node.path)
+    const open = (content: string, binary: boolean, size?: number): void => {
       onOpen({
         key: fileKey(sid, node.path),
         sessionId: sid,
         path: node.path,
         name: node.name,
-        content: file.content,
+        content,
+        binary,
+        size: size ?? node.size ?? undefined,
       })
       setError(null)
+    }
+    // Anything that is not text is opened on its listed size alone — asking
+    // the text reader for a 2 MB PNG only to be told it is not text is a
+    // round trip that answers nothing.
+    if (NEEDS_BYTES.has(kindOf(node.name))) {
+      open('', true)
+      return
+    }
+    try {
+      const file = await workspace.read(sid, node.path)
+      open(file.content, Boolean(file.binary), file.size)
     } catch (e) {
       setError((e as Error).message)
     }

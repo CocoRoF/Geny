@@ -364,6 +364,28 @@ export interface StorageEntry {
   modified_at?: string | null
 }
 
+/** `a/b.md` → `workspace/a/b.md`, encoded segment by segment.
+ *  The file endpoints resolve from the SESSION root, so a path that came from
+ *  the workspace listing needs the prefix put back. */
+const scoped = (workspacePath: string): string =>
+  ['workspace', ...workspacePath.split('/')].map(encodeURIComponent).join('/')
+
+export interface StorageFile {
+  content: string
+  size: number
+  encoding: string
+  /** Not text: a PNG, a PDF, a zip. Fetch `raw()` and render it as what it is. */
+  binary?: boolean
+}
+
+export interface DocPreview {
+  /** 'svg' for slides, 'png' for pages, 'unsupported' for anything else. */
+  kind: string
+  count: number
+  /** Storage-root-relative paths; load each through `rawUrl`. */
+  pages: string[]
+}
+
 export const workspace = {
   /** Recursive: one call returns every file at every depth, each path
    *  relative to `workspace/`. The caller builds the tree. */
@@ -371,10 +393,40 @@ export const workspace = {
     serverFetch<{ files: StorageEntry[] }>(
       `/api/agents/${encodeURIComponent(sessionId)}/storage?scope=workspace`),
 
-  /** The read endpoint is NOT scoped — it resolves from the session root, so
-   *  a path that came from the workspace listing needs the prefix back. */
   read: (sessionId: string, workspacePath: string) =>
-    serverFetch<{ content: string; size: number; encoding: string }>(
-      `/api/agents/${encodeURIComponent(sessionId)}/storage/`
-      + ['workspace', ...workspacePath.split('/')].map(encodeURIComponent).join('/')),
+    serverFetch<StorageFile>(
+      `/api/agents/${encodeURIComponent(sessionId)}/storage/${scoped(workspacePath)}`),
+
+  /**
+   * The bytes, as a blob URL the page can point an <img>/<video>/<embed> at.
+   *
+   * It has to be fetched rather than linked: the endpoint wants an
+   * Authorization header, and an <img src> cannot carry one. The caller owns
+   * the URL and must revoke it.
+   */
+  raw: async (sessionId: string, storagePath: string): Promise<{ url: string; type: string }> => {
+    const [root, token] = await Promise.all([base(), window.connector?.secureStore.get(TOKEN_KEY)])
+    const res = await fetch(
+      `${root}/api/agents/${encodeURIComponent(sessionId)}/storage-raw/`
+      + storagePath.split('/').map(encodeURIComponent).join('/'),
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    )
+    if (!res.ok) throw new ServerError(`HTTP ${res.status}`, res.status)
+    const blob = await res.blob()
+    return { url: URL.createObjectURL(blob), type: blob.type }
+  },
+
+  /** Same, for a file addressed inside the agent's workspace. */
+  rawWorkspace: (sessionId: string, workspacePath: string) =>
+    workspace.raw(sessionId, `workspace/${workspacePath}`),
+
+  /**
+   * Office documents and PDFs, rendered to pages by the server (pptx → one
+   * SVG a slide, docx/xlsx/pdf → a PNG a page). Cached on the source's mtime,
+   * so asking again is instant and an edited document re-renders itself.
+   */
+  docPreview: (sessionId: string, workspacePath: string) =>
+    serverFetch<DocPreview>(
+      `/api/agents/${encodeURIComponent(sessionId)}/doc-preview`
+      + `?path=${encodeURIComponent(`workspace/${workspacePath}`)}`),
 }

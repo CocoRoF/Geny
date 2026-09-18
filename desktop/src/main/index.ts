@@ -821,6 +821,12 @@ function createControl(): void {
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      // Chromium's own PDF viewer, which is what renders a PDF the agent
+      // wrote when you open it from the explorer. It is off by default and
+      // an <embed> of a PDF is then a blank rectangle. Nothing else is
+      // enabled by this, and the window still has no node and no shared
+      // context with the page.
+      plugins: true,
     },
   })
   control.webContents.setWindowOpenHandler(({ url }) => {
