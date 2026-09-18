@@ -353,7 +353,7 @@ export function ChatApp(): ReactNode {
           const file = files.find((f) => f.key === tab)
           return file ? <FileView sessionId={file.sessionId} name={file.name}
             path={file.path} content={file.content} binary={file.binary}
-            size={file.size} t={t} /> : null
+            size={file.size} truncated={file.truncated} t={t} /> : null
         })()}
 
         <div className="chat" hidden={tab !== 'chat'}>

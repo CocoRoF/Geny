@@ -372,10 +372,13 @@ const scoped = (workspacePath: string): string =>
 
 export interface StorageFile {
   content: string
+  /** The whole file's size, even when only its head came back. */
   size: number
   encoding: string
   /** Not text: a PNG, a PDF, a zip. Fetch `raw()` and render it as what it is. */
   binary?: boolean
+  /** Only the head of a large file. The rest is on the server. */
+  truncated?: boolean
 }
 
 export interface DocPreview {

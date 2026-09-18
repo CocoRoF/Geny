@@ -36,9 +36,22 @@ export interface FileViewProps {
   name: string
   content: string
   binary?: boolean
+  /** The whole file's size, even when only its head arrived. */
   size?: number
+  /** The server sent the head of a large file, not all of it. */
+  truncated?: boolean
   t: T
 }
+
+/**
+ * How many lines are drawn.
+ *
+ * One DOM node a line is what makes the numbers line up and the highlighting
+ * land, and it is also what makes a 200,000-line log freeze the window for
+ * half a minute. Nobody reads past this; the banner says what is being held
+ * back so nobody wonders.
+ */
+const MAX_LINES = 20_000
 
 function bytes(n?: number): string {
   if (typeof n !== 'number') return ''
@@ -157,7 +170,7 @@ function Notebook({ content }: { content: string }): ReactNode {
 }
 
 export function FileView({
-  sessionId, path, name, content, binary, size, t,
+  sessionId, path, name, content, binary, size, truncated, t,
 }: FileViewProps): ReactNode {
   const [wrap, setWrap] = useState(false)
   const [fit, setFit] = useState(true)
@@ -235,7 +248,16 @@ export function FileView({
 
   useEffect(() => release, [])
 
-  const lines = useMemo(() => content.split('\n'), [content])
+  const allLines = useMemo(() => content.split('\n'), [content])
+  const lines = useMemo(
+    () => (allLines.length > MAX_LINES ? allLines.slice(0, MAX_LINES) : allLines),
+    [allLines],
+  )
+  const clipped = allLines.length > MAX_LINES
+  const shownText = useMemo(
+    () => (clipped ? lines.join('\n') : content),
+    [clipped, lines, content],
+  )
   const shown = size ?? (binary ? undefined : content.length)
 
   const meta = (): string => {
@@ -245,7 +267,7 @@ export function FileView({
     }
     else if (!binary && (kind === 'code' || kind === 'text' || kind === 'markdown'
       || kind === 'json' || kind === 'table' || kind === 'svg')) {
-      parts.push(t('file.lines', { n: lines.length }))
+      parts.push(t('file.lines', { n: allLines.length }))
     }
     if (typeof shown === 'number') parts.push(bytes(shown))
     return parts.join(' · ')
@@ -277,6 +299,14 @@ export function FileView({
           </button>
         )}
       </div>
+
+      {(truncated || clipped) && (
+        <div className="fv-note">
+          {truncated
+            ? t('file.truncated', { shown: bytes(content.length), total: bytes(size) })
+            : t('file.clipped', { n: MAX_LINES, total: allLines.length })}
+        </div>
+      )}
 
       {error && <div className="fv-empty">{error}</div>}
       {busy && !error && <div className="fv-empty">{t('explorer.loading')}</div>}
@@ -344,7 +374,7 @@ export function FileView({
       )}
 
       {!error && (kind === 'code' || kind === 'json') && (
-        <Code text={content} language={kind === 'json' ? 'json' : language} wrap={wrap} />
+        <Code text={shownText} language={kind === 'json' ? 'json' : language} wrap={wrap} />
       )}
 
       {!error && kind === 'text' && (

@@ -318,6 +318,17 @@ def list_storage_files(
     return files
 
 
+# How much of a text file the JSON reader will hand over.
+#
+# Agents write logs, and a log grows without anyone deciding it should. The
+# whole file used to be read into memory, serialised into a JSON response and
+# then turned into one DOM node per line: a single click on a 200 MB training
+# log took the backend's memory and the app's main thread with it. Two
+# megabytes is far more than anyone reads and small enough that being wrong
+# about it costs nothing.
+TEXT_READ_LIMIT = 2 * 1024 * 1024
+
+
 def within_scope(root: Path, target: Path) -> bool:
     """Is *target* inside this scope, counting its workspace wherever it lives?
 
@@ -378,13 +389,19 @@ def read_storage_file(
         return None
 
     try:
-        content = target_path.read_text(encoding=encoding)
+        total = target_path.stat().st_size
+        with target_path.open("r", encoding=encoding) as handle:
+            content = handle.read(TEXT_READ_LIMIT)
+            truncated = handle.read(1) != ""
         return {
             "file_path": file_path,
             "content": content,
-            "size": len(content),
+            # The file's size, not the slice's — a viewer that says "2 MB" of
+            # a 40 MB log is lying about the file.
+            "size": total,
             "encoding": encoding,
             "binary": False,
+            "truncated": truncated,
         }
     except (UnicodeDecodeError, ValueError):
         # A real file that simply is not text. The client fetches the bytes

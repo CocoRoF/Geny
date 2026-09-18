@@ -45,6 +45,8 @@ export interface OpenedFile {
   content: string
   binary?: boolean
   size?: number
+  /** Only the head of a large file came back. */
+  truncated?: boolean
 }
 
 export const fileKey = (sessionId: string, path: string): string => `${sessionId}:${path}`
@@ -181,7 +183,9 @@ export function Explorer({ sessions, sessionId, running, t, onOpen }: {
   }
 
   const openPath = async (sid: string, node: Node): Promise<void> => {
-    const open = (content: string, binary: boolean, size?: number): void => {
+    const open = (
+      content: string, binary: boolean, size?: number, truncated?: boolean,
+    ): void => {
       onOpen({
         key: fileKey(sid, node.path),
         sessionId: sid,
@@ -190,6 +194,7 @@ export function Explorer({ sessions, sessionId, running, t, onOpen }: {
         content,
         binary,
         size: size ?? node.size ?? undefined,
+        truncated,
       })
       setError(null)
     }
@@ -202,7 +207,7 @@ export function Explorer({ sessions, sessionId, running, t, onOpen }: {
     }
     try {
       const file = await workspace.read(sid, node.path)
-      open(file.content, Boolean(file.binary), file.size)
+      open(file.content, Boolean(file.binary), file.size, file.truncated)
     } catch (e) {
       setError((e as Error).message)
     }

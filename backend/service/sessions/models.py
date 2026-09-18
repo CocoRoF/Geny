@@ -595,3 +595,5 @@ class StorageFileContent(BaseModel):
     # Not text in this encoding — a PNG, a PDF, a zip. The bytes come from
     # ``GET /{session_id}/storage-raw/{path}`` instead.
     binary: bool = False
+    # Only the head of the file came back; ``size`` is still the whole of it.
+    truncated: bool = False

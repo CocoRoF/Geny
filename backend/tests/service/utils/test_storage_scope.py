@@ -67,3 +67,33 @@ def test_bytes_that_are_not_text_say_so_instead_of_vanishing(tmp_path):
 def test_a_missing_file_is_still_missing(tmp_path):
     session = _session_with_linked_workspace(tmp_path)
     assert read_storage_file(str(session), "workspace/nope.md") is None
+
+
+def test_a_huge_log_comes_back_in_one_readable_piece(tmp_path, monkeypatch):
+    """Agents write logs, and a log grows without anyone deciding it should.
+    Reading the whole of one into a JSON response and then into a DOM node per
+    line is a single click that takes the backend's memory and the app's main
+    thread with it."""
+    from service.utils import file_storage
+
+    monkeypatch.setattr(file_storage, "TEXT_READ_LIMIT", 1000)
+    session = tmp_path / "s"
+    (session / "workspace").mkdir(parents=True)
+    log = session / "workspace" / "train.log"
+    log.write_text("x" * 5000, encoding="utf-8")
+
+    got = file_storage.read_storage_file(str(session), "workspace/train.log")
+
+    assert got["truncated"] is True
+    assert len(got["content"]) == 1000
+    assert got["size"] == 5000, "the size is the file's, not the slice's"
+
+
+def test_a_small_file_is_not_marked_truncated(tmp_path):
+    session = tmp_path / "s"
+    (session / "workspace").mkdir(parents=True)
+    (session / "workspace" / "a.txt").write_text("짧다", encoding="utf-8")
+
+    got = read_storage_file(str(session), "workspace/a.txt")
+    assert got["truncated"] is False
+    assert got["content"] == "짧다"

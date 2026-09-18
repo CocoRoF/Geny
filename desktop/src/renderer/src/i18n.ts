@@ -444,6 +444,8 @@ export const messages: Record<string, Entry> = {
   'file.archive': { ko: '압축 파일입니다', en: 'An archive' },
   'file.asPdf': { ko: '원본으로 보기', en: 'Open as PDF' },
   'file.asPages': { ko: '페이지로 보기', en: 'Show pages' },
+  'file.truncated': { ko: '앞부분 {shown}만 표시합니다 (전체 {total})', en: 'Showing the first {shown} of {total}' },
+  'file.clipped': { ko: '{total}줄 중 앞 {n}줄만 표시합니다', en: 'Showing the first {n} of {total} lines' },
   'file.noPreview': { ko: '이 문서는 미리 보기를 만들지 못했습니다', en: 'No preview could be made' },
   'file.kind.image': { ko: '이미지', en: 'image' },
   'file.kind.svg': { ko: '벡터 이미지', en: 'vector image' },
