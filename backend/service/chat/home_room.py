@@ -151,6 +151,15 @@ def resolve_home_room(
     if not mine:
         if not create:
             return None
+        if not record:
+            # No session, no conversation. A deleted session left an agent in
+            # memory once, and the first client that asked where its chat was
+            # got a brand new room made for a session that no longer existed —
+            # a conversation nobody can ever open again.
+            logger.warning(
+                "[home-room] refusing to create a room for unknown session %s", session_id,
+            )
+            return None
         label = _session_label(session_id, record, name_hint)
         room = store.create_room(label, [session_id])
         room_id = room.get("id") or room.get("room_id")

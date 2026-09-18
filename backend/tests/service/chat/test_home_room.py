@@ -246,3 +246,21 @@ def test_a_merge_never_loses_a_message(wired):
     surviving = [m["id"] for m in chat.messages["home"]]
     assert surviving == ["m1", "m2", "m3", "h1"], surviving
     assert "stray" not in chat.messages
+
+
+def test_a_session_that_does_not_exist_gets_no_room(wired):
+    """A deleted session left its agent in memory, and the first client to ask
+    where its chat was got a brand new room built for a session that no longer
+    existed — a conversation nobody can ever open again."""
+    home_room, chat, _ = wired
+
+    assert home_room.resolve_home_room("ghost") is None
+    assert chat.created == []
+
+
+def test_a_real_session_still_gets_one(wired):
+    home_room, chat, sessions = wired
+    sessions.records["s1"] = {"session_name": "Worker"}
+
+    assert home_room.resolve_home_room("s1") is not None
+    assert len(chat.created) == 1
