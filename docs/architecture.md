@@ -72,7 +72,7 @@ A single user message flows through these layers:
 1. **HTTP/WebSocket ingress** — FastAPI route in [backend/api/](../backend/api/) receives the message, validates auth, attaches it to a session.
 2. **Execution dispatch** — [service/execution/agent_executor.py](../backend/service/execution/agent_executor.py) picks the session, resolves the manifest, calls `AgentSession.astream()`.
 3. **Executor pipeline** — geny-executor runs the 21 stages. Tool calls hit the MCP bridge or local registry.
-4. **Logging tap** — every stage emits events into [service/logging/session_logger.py](../backend/service/logging/session_logger.py). For `claude_code_cli` sessions, an additional observability ContextVar captures CLI-handled tool calls.
+4. **Logging tap** — every stage emits events into [service/logging/session_logger.py](../backend/service/logging/session_logger.py). Every tool call is dispatched by Stage 10 whichever provider answers, so one tap covers them all.
 5. **SSE fan-out** — the session logger streams structured events to the frontend over SSE.
 6. **Frontend render** — [frontend/src/components/execution/LogEntryCard.tsx](../frontend/src/components/execution/LogEntryCard.tsx) maps each event to a card. Errors look up `executor.<code>` translations for human-friendly text.
 
@@ -86,7 +86,9 @@ Five LLM providers are supported through executor's `CredentialBundle` API:
 | openai            | yes       | yes          | via bridge | OpenAI + Azure-compatible            |
 | google            | yes       | yes          | via bridge | Gemini API                           |
 | vllm              | yes       | partial      | via bridge | Self-hosted OpenAI-compatible        |
-| claude_code_cli   | yes       | host-managed | yes (Phase I) | Spawns Claude Code CLI subprocess |
+| geny_router       | yes       | yes          | via bridge | The session's account route — picks which of the below answers |
+| geny_claude_code  | yes       | yes          | via bridge | `claude -p --tools ""` — the binary as a pure token generator |
+| geny_codex        | yes       | yes          | via bridge | A ChatGPT plan over the Responses API |
 
 Credentials flow:
 - User enters keys in the Settings UI → [service/settings/](../backend/service/settings/)
@@ -113,7 +115,7 @@ Two tool kinds, unified through MCP:
 - **Native MCP servers** — registered through [service/mcp_loader.py](../backend/service/mcp_loader.py). Loaded per-session; tools become `mcp__<server>__<tool>` in the LLM's tool list.
 - **In-process Python tools** — declared via [service/tool_loader.py](../backend/service/tool_loader.py). Wrapped as a virtual MCP server (`mcp__geny`) so the LLM sees them through the same surface.
 
-For `claude_code_cli`, an additional bridge spawns a per-session MCP HTTP server so the CLI's internal LLM sees the same `mcp__geny__*` tool list its host would. See [providers.md#claude-code-cli](providers.md#claude-code-cli).
+There is one tool surface and one dispatcher. A provider is a model: it asks for a tool, Stage 10 runs it. The per-session MCP bridge that used to hand this registry to a CLI running its own loop was removed with that provider (executor 2.68.0).
 
 ## Persistence
 

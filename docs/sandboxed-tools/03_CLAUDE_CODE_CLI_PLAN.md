@@ -1,5 +1,13 @@
 # claude_code_cli ⇄ GAPT tools — the complete fix
 
+> **HISTORY (2026-09-19).** Everything below describes the `claude_code_cli`
+> provider, which was removed in geny-executor 2.68.0 along with
+> `containerize_cli` and the MCP bridge. The problem it solved no longer
+> exists: no backend runs its own tool loop, so every session's tools
+> execute in its sandbox through Stage 10, whichever provider answers.
+> Kept as the record of why that arrangement was a dead end.
+
+
 ## Diagnosis (code-verified)
 
 Why claude_code_cli sessions can't use GAPT/forge/env tools:

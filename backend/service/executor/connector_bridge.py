@@ -131,9 +131,8 @@ class DesktopScreenshotTool(ConnectorCapabilityTool):
     captures at native resolution (``full_res``) so the image's pixel coordinates
     match the screen, letting desktop_click target what the model sees.
 
-    Requires a vision-capable path: on claude_code_cli the mcp__geny__ bridge
-    forwards the image content part to the model. Returns image content blocks
-    (see mcp_bridge_controller._to_mcp_content)."""
+    Requires a vision-capable model — the image rides as a canonical image
+    content block on the tool result, which every provider path renders."""
 
     async def execute(self, input: Dict[str, Any], context: ToolContext) -> ToolResult:
         reg = get_connector_registry()
@@ -168,9 +167,8 @@ class DesktopScreenshotTool(ConnectorCapabilityTool):
         )
         # Canonical content blocks: a text note + a canonical image block
         # ({type:image, source:{type:base64, media_type, data}}). This is the
-        # SAME shape the executor uses for message images, so it renders natively
-        # on the Anthropic API, and Geny's mcp bridge (_to_mcp_content) maps it to
-        # an MCP image part for claude_code_cli. See docs/connector-local-bridge-plan.
+        # SAME shape the executor uses for message images, so it renders
+        # natively on every provider path. See docs/connector-local-bridge-plan.
         return ToolResult(content=[
             {"type": "text", "text": note},
             {"type": "image", "source": {"type": "base64", "media_type": mime, "data": data}},

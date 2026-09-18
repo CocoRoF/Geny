@@ -847,7 +847,6 @@ class AgentSessionManager:
         session_id: Optional[str] = None,
         in_gapt_workspace: bool = False,
         gapt_workspace_id: Optional[str] = None,
-        gapt_cli_on_host: bool = False,
         role_protocol_override: Optional[str] = None,
         computer_use_enabled: bool = False,
     ) -> str:
@@ -940,7 +939,6 @@ class AgentSessionManager:
             extra_system_prompt=request.system_prompt,
             in_gapt_workspace=in_gapt_workspace,
             gapt_workspace_id=gapt_workspace_id,
-            gapt_cli_on_host=gapt_cli_on_host,
             role_protocol_override=role_protocol_override,
             storage_path=_storage_path,
             computer_use_enabled=computer_use_enabled,
@@ -1125,14 +1123,14 @@ class AgentSessionManager:
         # Every session gets its own persistent GAPT workspace. The executor's
         # attach_runtime(sandbox=) gives tools (forge_tool / SandboxExecTool /
         # gapt_* via the MCP bridge) ``ctx.sandbox`` so they run in the workspace
-        # (docker exec) — for ALL backends, INCLUDING claude_code_cli.
+        # (docker exec) — for EVERY backend, without exception.
         #
-        # Crucially we attach with ``containerize_cli=False`` (see AgentSession):
-        # the claude_code_cli CLIENT stays on the HOST. That keeps rotating
-        # subscription OAuth (host_mount / in_modal_login) working — the CLI never
-        # runs inside a container, so the refreshToken-rotation 401 can't happen —
-        # while its GAPT/forge tools still execute sandboxed in the backend. So a
-        # setup token is NO LONGER required just to use GAPT tools.
+        # The sandbox is a TOOL surface only: the LLM is always called from the
+        # HOST with the credentials Geny configured. That keeps rotating
+        # subscription OAuth (host_mount / in_modal_login) working — nothing
+        # authenticates inside a container, so the refreshToken-rotation 401
+        # can't happen — while GAPT/forge tools still execute sandboxed. So a
+        # setup token is NOT required just to use GAPT tools.
         # See feedback_claude_oauth_no_share + docs/sandboxed-tools/03_*.
         # Default ON; set GENY_GAPT_WORKSPACES=0 to force pure host execution.
         gapt_sandbox = None
@@ -1256,16 +1254,15 @@ class AgentSessionManager:
             or self._env_computer_use_enabled(env_id)
         )
 
-        # Prepare system prompt. With sandbox fs-isolation (claude_code_cli) the
-        # CLI's native host tools are disallowed and it uses the bridged executor
-        # tools that run IN /workspace — so EVERY sandboxed session (SDK or CLI)
-        # gets the unified "your file/shell tools operate in /workspace" message.
+        # Prepare system prompt. Every sandboxed session gets the same
+        # message — "your file/shell tools operate in /workspace" — because
+        # every session's tools really do run there, whichever provider
+        # answers. There is no second arrangement to describe.
         system_prompt = self._build_system_prompt(
             request,
             session_id=session_id,
             in_gapt_workspace=gapt_sandbox is not None,
             gapt_workspace_id=(getattr(gapt_sandbox, "workspace_id", None) if gapt_sandbox else None),
-            gapt_cli_on_host=False,
             # env = single source: the env's stored Stage-3 prompt overrides the
             # on-disk prompts/{role}.md (which becomes just the seed/fallback).
             role_protocol_override=self._env_role_prompt(env_id),
@@ -1316,40 +1313,10 @@ class AgentSessionManager:
         # single channel; the legacy ``api_key`` kwarg is gone from
         # this code path.
         #
-        # Phase I — for sessions that will resolve to ``claude_code_cli``
-        # as their Stage 6 provider, we mint a per-session MCP bridge
-        # token and synthesize an MCP config pointing at the spawned
-        # ``geny_mcp_bridge.py`` subprocess. The bridge proxies the
-        # CLI's MCP tool calls back to ``/api/internal/mcp/.../rpc``
-        # so Geny's tool registry is exposed to the CLI's LLM. The
-        # token is later attached to the AgentSession instance so
-        # ``mcp_bridge_controller.require_mcp_bridge_auth`` can
-        # validate incoming bridge requests.
-        from service.executor.credentials import (
-            CredentialBundleBuilder,
-            McpBridgeContext,
-        )
-        from controller.mcp_bridge_controller import mint_bridge_token
+        from service.executor.credentials import CredentialBundleBuilder
 
-        # Pre-generate the session_id here so the bridge context can
-        # reference it (the existing pre-gen below at line ~621 stays
-        # — this is symbolically harmless because Python re-binds).
         if not session_id:
             session_id = str(uuid.uuid4())
-        mcp_bridge_token = mint_bridge_token()
-        mcp_bridge_ctx = McpBridgeContext(
-            session_id=session_id, token=mcp_bridge_token,
-        )
-
-        # When this claude_code_cli session has a GAPT sandbox, isolate it at the
-        # tool layer: disallow the CLI's native host fs/shell tools so it uses the
-        # bridged executor tools (which run IN the workspace). Eliminates the
-        # host/workspace split-brain for OAuth sessions without containerizing the
-        # CLI. (SDK providers are already sandboxed via Stage-10 ctx.sandbox.)
-        _fs_isolate = (
-            gapt_sandbox is not None
-            and self._extract_primary_provider(env_id) == "claude_code_cli"
-        )
         # The session's route — which model accounts it talks to, in order.
         # Explicit on the request wins; otherwise a restored session keeps the
         # route it had; otherwise every enabled account, arranged as the user
@@ -1360,8 +1327,6 @@ class AgentSessionManager:
         route_targets = await self._route_targets(route)
 
         credentials = CredentialBundleBuilder(
-            mcp_bridge=mcp_bridge_ctx,
-            sandbox_fs_isolation=_fs_isolate,
             route_targets=route_targets,
             route_notify=self._route_notifier(session_id),
             session_id=session_id,
@@ -1390,7 +1355,7 @@ class AgentSessionManager:
         # provider supports live discovery and the configured model isn't in the
         # real list, log a warning — never block creation (runtime model_fallback
         # covers genuine failures). Skips aliases and providers that can't be
-        # enumerated (e.g. claude_code_cli).
+        # enumerated (e.g. geny_claude_code — the CLI has no model list).
         try:
             spawn_background(
                 self._warn_if_model_unavailable(
@@ -1800,19 +1765,6 @@ class AgentSessionManager:
                 logger.info(f"[{session_id}] Memory DB backend enabled")
             except Exception as e:
                 logger.warning(f"[{session_id}] Failed to wire memory DB: {e}")
-
-        # Phase I — attach the MCP bridge token to the agent so
-        # ``mcp_bridge_controller.require_mcp_bridge_auth`` can
-        # validate incoming bridge requests for this session. The
-        # token is only meaningful when the env's Stage 6 provider
-        # is ``claude_code_cli`` (the executor only reads
-        # extras["mcp_config"] for that provider); for other
-        # providers the attachment is a harmless ~96 bytes that
-        # never gets used.
-        try:
-            agent._mcp_bridge_token = mcp_bridge_token
-        except Exception:
-            pass
 
         # Create SessionInfo
         session_info = agent.get_session_info()

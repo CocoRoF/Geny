@@ -37,7 +37,6 @@ import {
   llmAccountsApi,
   type AccountKind,
   type ClaudeAuthMethod,
-  type ClaudeRunMode,
   type CliInfo,
   type KindFamily,
   type KindInfo,
@@ -82,7 +81,6 @@ function AccountRow({ account, kinds, index, total, cli, onChanged, onLogin, onM
   const [secret, setSecret] = useState('');
   const [effort, setEffort] = useState(account.effort);
   const [authMethod, setAuthMethod] = useState<ClaudeAuthMethod>(account.claude?.authMethod ?? 'login');
-  const [mode, setMode] = useState<ClaudeRunMode>(account.claude?.mode ?? 'token');
 
   const info = kinds[account.kind];
   const needsKey = info?.secret === 'api_key' || info?.secret === 'optional_key';
@@ -105,7 +103,7 @@ function AccountRow({ account, kinds, index, total, cli, onChanged, onLogin, onM
       baseUrl,
       effort,
       ...(secret ? { secret } : {}),
-      ...(account.kind === 'claude_code' ? { claude: { authMethod, mode } } : {}),
+      ...(account.kind === 'claude_code' ? { claude: { authMethod } } : {}),
     });
     setSecret('');
     onChanged();
@@ -170,9 +168,6 @@ function AccountRow({ account, kinds, index, total, cli, onChanged, onLogin, onM
         <span className="flex items-center gap-2 flex-wrap">
           <span>{account.enabled ? position : t('settings.models.disabled')}</span>
           {who && <span className="text-[var(--text-muted)]">· {who}</span>}
-          {account.kind === 'claude_code' && account.claude?.mode === 'agent' && (
-            <span className="text-amber-400">· {t('settings.models.claude.modeAgent')}</span>
-          )}
         </span>
       }
       status={{ tone: toneOf(account), label: account.status?.detail || '' }}
@@ -333,21 +328,6 @@ function AccountRow({ account, kinds, index, total, cli, onChanged, onLogin, onM
                   />
                 </Field>
               )}
-              <Field label={t('settings.models.claude.mode')}>
-                <select
-                  className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded px-3 py-2 text-[0.8125rem]"
-                  value={mode}
-                  onChange={(e) => setMode(e.target.value as ClaudeRunMode)}
-                >
-                  <option value="token">{t('settings.models.claude.modeToken')}</option>
-                  <option value="agent">{t('settings.models.claude.modeAgent')}</option>
-                </select>
-                <p className="text-[0.7rem] text-[var(--text-muted)] mt-1">
-                  {mode === 'token'
-                    ? t('settings.models.claude.modeTokenHint')
-                    : t('settings.models.claude.modeAgentHint')}
-                </p>
-              </Field>
             </>
           )}
 

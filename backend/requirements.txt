@@ -44,10 +44,21 @@ ddgs==9.11.4
 # turns now go to the Responses API, which carries tools and reasoning
 # together, over the same wire the Codex subscription already used.
 #
+# geny-executor 2.68.0 — the backend that owned the loop is gone.
+#
+# BREAKING for us, and we made the matching changes: attach_runtime no
+# longer takes ``containerize_cli`` (an attached sandbox is a TOOL
+# surface and nothing else), ``ClientCapabilities`` lost
+# ``is_subprocess`` / ``supports_mcp_passthrough``, and the
+# ``api.cli_tool_call`` event can no longer fire. The ``claude_code_cli``
+# provider is unregistered — every environment already names
+# ``geny_router`` (migrate_to_router, at boot), and the same binary is
+# driven as a pure LLM by ``geny_claude_code``.
+#
 # Must match the version pin in backend/pyproject.toml — out-of-sync
 # pins are what caused the prod Docker build to install 1.21.0 and
 # blow up on `from geny_executor import CredentialBundle`.
-geny-executor[qdrant,ssh]>=2.67.0,<3.0.0
+geny-executor[qdrant,ssh]>=2.68.0,<3.0.0
 geny-memory-adaptor>=1.11.1
 contextifier[pdf]>=0.5.0
 # Knowledge connectors — cron schedules + DB sources (postgres/mysql/sqlite)

@@ -1,5 +1,10 @@
 # Geny ⇄ GAPT Integration & Sandbox-Ownership Plan
 
+> **HISTORY (2026-09-19).** The `claude_code_cli` paths described below were
+> removed in geny-executor 2.68.0, along with `containerize_cli` and the MCP
+> bridge. Every session's tools now run in its sandbox through Stage 10,
+> whichever provider answers — the split this document works around is gone.
+
 > Status: **design report (Phase 0)** — review before implementation.
 > Scope: make `geny-adapted-project-toolkit` (GAPT) a Geny sub-repo; route Geny's
 > project/sandbox/working-directory logic through GAPT; decide whether and how the

@@ -320,12 +320,12 @@ const en = {
     exec_api_stream_incomplete: 'The provider stream ended without a final response. Usually a vendor / network issue — retry.',
     exec_api_retry_exhausted: 'Hit the retry limit after a recoverable error. See logs for the original failure.',
 
-    // exec.cli.* — CLI-driven backends (claude_code_cli)
-    exec_cli_binary_not_found: 'The CLI binary (e.g. `claude`) is not on PATH. Install the CLI or set the binary path in Settings → LLM.',
-    exec_cli_auth_failed: 'Claude Code CLI is not authenticated. Open Settings → LLM → Claude Code (CLI) and sign in (or paste an `ANTHROPIC_API_KEY`).',
+    // exec.cli.* — backends that spawn a CLI (geny_claude_code)
+    exec_cli_binary_not_found: 'The `claude` binary is not on PATH. Install Claude Code, or set the binary path in Settings → LLM.',
+    exec_cli_auth_failed: 'This Claude Code account is not signed in. Open Settings → Models and sign in on that account.',
     exec_cli_timeout: 'The CLI did not return within the configured timeout. Retry, and consider raising the timeout for long tasks.',
     exec_cli_protocol_error: 'The CLI emitted malformed stream output. The executor will retry; report if it persists.',
-    exec_cli_permission_denied: 'The CLI\'s permission system blocked the call. Adjust the `permissions.allow` list in the spawned settings.',
+    exec_cli_permission_denied: 'The CLI refused the call. It is driven with tools off, so this is unexpected — please report it.',
     exec_cli_exited: 'The CLI exited with a non-zero return code. Inspect the chained cause in the logs.',
 
     // exec.pipeline.* / exec.stage.*
@@ -486,11 +486,6 @@ const en = {
         methodToken: 'setup-token',
         methodApiKey: 'Console API key',
         methodSystem: "This server's own claude",
-        mode: 'How it runs',
-        modeToken: 'Geny runs the tools (recommended)',
-        modeTokenHint: 'Claude Code only generates text; every tool call runs through Geny, with its permissions and its memory.',
-        modeAgent: 'Claude Code runs its own tools',
-        modeAgentHint: 'The CLI runs its own loop — Geny sees only what it reports afterwards.',
         login: 'Sign in',
         logout: 'Sign out',
         loggedInAs: 'Signed in as {who}',
@@ -1525,7 +1520,7 @@ const en = {
     empty: {
       title: 'No packs saved yet',
       desc: 'They appear here when an agent builds tools in a workspace and runs env save_pack from chat.',
-      warn: '⚠ Building tools requires a session WITH a sandbox. A claude_code_cli subscription-OAuth session has none, so building is impossible (the agent may claim it built one, but nothing is saved). Use an API-key backend or a setup-token. Check what actually happened in the build log.',
+      warn: '⚠ Building tools requires a session WITH a sandbox. Without one the agent may claim it built a tool, but nothing is saved — check the build log for what actually happened.',
     },
     enabled: 'enabled',
     disabled: 'disabled',

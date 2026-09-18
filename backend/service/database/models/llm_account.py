@@ -28,6 +28,9 @@ class LLMAccountModel(BaseModel):
         # merely generates tokens (the harness runs the tools) or runs its
         # own agent loop.
         claude_auth_method: str = "login",
+        # Legacy: used to select the CLI-owns-the-loop mode. Read by
+        # nothing since 2026-09-19 (a provider is a model, not an agent);
+        # the column stays so existing rows load unchanged.
         claude_mode: str = "token",
         effort: str = "",
         # JSON blobs — identity (email / plan / org) as last observed, the

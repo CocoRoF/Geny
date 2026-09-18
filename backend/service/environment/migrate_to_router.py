@@ -9,7 +9,7 @@ The effect was worse than cosmetic. A session bound to one of those runs its
 turns through that provider directly — so it never reaches the route, never
 fails over, and when that backend is out of quota every single turn fails
 with the raw CLI error. That is exactly what production did: the live VTuber
-session was on an env pinned to ``claude_code_cli``, the subscription had hit
+session was on an env pinned to the old ``claude_code_cli``, the subscription had hit
 its spend cap, and a working OpenAI account sat unused in the route.
 
 So:

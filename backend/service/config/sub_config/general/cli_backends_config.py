@@ -1,19 +1,16 @@
-"""CLI-backend (Claude Code) settings.
+"""CLI-backend (Claude Code) settings — LEGACY, read once at boot.
 
-Phase E1 of the LLM backend upgrade cycle added CLI-driven LLM providers
-to geny-executor — currently only ``claude_code_cli`` (a Stage-6 provider
-that spawns the Claude Code CLI subprocess and wraps Geny's tool registry
-through an MCP bridge per Phase I, ``docs/llm-backend-upgrade-plan/12_phase_i_claude_code_mcp_wrap.md``).
+This was the global "Claude Code backend" a pre-accounts Geny reached its
+model through: one binary, one login, one toggle. Model **accounts**
+replaced it (``service/llm_accounts``) — each account owns its own
+``CLAUDE_CONFIG_DIR``, so any number of logins sit side by side and a
+session's route picks between them.
 
-The ``copilot_cli`` provider was removed in cycle 20260520 — ``gh copilot``
-fundamentally does not support streaming, tool round-trip, or MCP, so it
-could only ever be a one-shot text-completion backend incompatible with
-the Sub-Worker delegation / Stage 10 dispatch pipeline. See the same plan
-doc + commit message for the full rationale.
-
-``CLIBackendClaudeCodeConfig`` is a no-op until the user flips
-``enabled=True``; until then the ``CredentialBundleBuilder`` does not
-include it in the bundle.
+Nothing builds credentials from this any more. It is kept for exactly one
+reader: ``service/llm_accounts/adopt_legacy.py``, which on first boot
+turns whatever this config describes into a real account, so an install
+that upgrades with credentials but no accounts can still start a session.
+Do not add new readers; add an account kind instead.
 """
 
 from __future__ import annotations

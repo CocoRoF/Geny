@@ -321,12 +321,12 @@ const ko: Translations = {
     exec_api_stream_incomplete: '응답 스트림이 최종 응답 없이 종료됐어요. 보통 벤더/네트워크 문제 — 재시도해 주세요.',
     exec_api_retry_exhausted: '복구 가능한 에러였지만 재시도 한도를 초과했어요. 원인은 로그를 확인해 주세요.',
 
-    // exec.cli.* — CLI 기반 backend (claude_code_cli)
-    exec_cli_binary_not_found: 'CLI 바이너리(예: `claude`)가 PATH 에 없어요. CLI 를 설치하거나 설정 → LLM에서 바이너리 경로를 지정해 주세요.',
-    exec_cli_auth_failed: 'Claude Code CLI 인증이 만료됐어요. 설정 → LLM → Claude Code (CLI) 카드의 ‘다시 로그인’을 누르거나 `ANTHROPIC_API_KEY` 를 붙여넣어 주세요.',
+    // exec.cli.* — CLI 를 띄우는 backend (geny_claude_code)
+    exec_cli_binary_not_found: '`claude` 바이너리가 PATH 에 없어요. Claude Code 를 설치하거나 설정 → LLM 에서 바이너리 경로를 지정해 주세요.',
+    exec_cli_auth_failed: '이 Claude Code 계정이 로그인되어 있지 않아요. 설정 → 모델 에서 해당 계정으로 로그인해 주세요.',
     exec_cli_timeout: 'CLI 가 설정된 시간 내에 응답하지 않았어요. 재시도하시거나 긴 작업이라면 timeout 값을 늘려주세요.',
     exec_cli_protocol_error: 'CLI 가 잘못된 stream 출력을 내보냈어요. 자동 재시도합니다. 계속되면 제보해 주세요.',
-    exec_cli_permission_denied: 'CLI 의 권한 시스템이 호출을 차단했어요. spawned settings 의 `permissions.allow` 목록을 조정해 주세요.',
+    exec_cli_permission_denied: 'CLI 가 호출을 거부했어요. 도구를 끈 채로 띄우므로 나오지 않아야 하는 오류입니다. 제보해 주세요.',
     exec_cli_exited: 'CLI 가 비정상 종료 코드로 종료됐어요. 원인은 로그의 cause chain 확인.',
 
     // exec.pipeline.* / exec.stage.*
@@ -486,11 +486,6 @@ const ko: Translations = {
         methodToken: 'setup-token',
         methodApiKey: 'Console API 키',
         methodSystem: '이 서버의 claude 그대로',
-        mode: '실행 방식',
-        modeToken: 'Geny가 도구를 실행합니다 (권장)',
-        modeTokenHint: 'Claude Code는 글만 만들고, 도구는 전부 Geny를 거쳐 Geny의 권한과 기억 위에서 실행됩니다.',
-        modeAgent: 'Claude Code가 자기 도구를 씁니다',
-        modeAgentHint: 'CLI가 자기 루프를 돌고, Geny는 끝난 뒤 보고만 받습니다.',
         login: '로그인',
         logout: '로그아웃',
         loggedInAs: '{who} 로 로그인됨',
@@ -1516,7 +1511,7 @@ const ko: Translations = {
     empty: {
       title: '아직 저장된 팩이 없습니다',
       desc: '채팅에서 에이전트가 워크스페이스에 도구를 만들고 env save_pack 하면 여기에 나타납니다.',
-      warn: '⚠ 도구 제작에는 샌드박스가 붙는 세션이 필요합니다. claude_code_cli 구독 OAuth 세션은 샌드박스가 없어 제작이 불가합니다(에이전트가 "만들었다"고 해도 실제로는 저장되지 않음). API키 백엔드나 setup-token을 쓰세요. 실제 동작은 빌드 로그에서 확인하세요.',
+      warn: '⚠ 도구 제작에는 샌드박스가 붙는 세션이 필요합니다. 샌드박스가 없으면 에이전트가 "만들었다"고 해도 실제로는 저장되지 않으니, 빌드 로그에서 실제 동작을 확인하세요.',
     },
     enabled: '활성화됨',
     disabled: '비활성화됨',

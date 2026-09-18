@@ -74,9 +74,7 @@ def _default_storage_path() -> str:
 # environment — including custom envs that predate the seed-template promotion
 # (`templates._promote_core_tools`). The memory family is Geny's always-on base
 # toolkit; the agent should be able to store/recall from turn 1 without a
-# ToolSearch round-trip. This is the runtime guarantee that backs the
-# claude_code_cli bridge's exposed-only advertisement (a deferred memory tool
-# would not be advertised, forcing a search). knowledge_* / hook_* stay deferred.
+# ToolSearch round-trip. knowledge_* / hook_* stay deferred.
 _RUNTIME_CORE_PROMOTIONS = {"memory_*": True}
 
 

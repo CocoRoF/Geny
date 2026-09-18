@@ -2133,10 +2133,6 @@ export const llmBackendsApi = {
       `/api/llm-backends/health${revalidate ? '?revalidate=true' : ''}`,
     ),
 
-  /** POST /api/llm-backends/cli/claude-code/recheck */
-  recheckClaudeCode: () =>
-    apiCall<ProviderHealth>('/api/llm-backends/cli/claude-code/recheck', { method: 'POST' }),
-
   /** GET /api/llm-backends/subagents */
   subagents: () => apiCall<SubagentsResponse>('/api/llm-backends/subagents'),
 

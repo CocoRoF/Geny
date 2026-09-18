@@ -259,16 +259,13 @@ def _extract_executor_error_meta(exc: BaseException) -> Tuple[Optional[str], str
     return code_str, exc_type
 
 
-# ── 2.2.0 events-tap bridge (replaces service.llm_patches) ──────────
+# ── provider error-envelope bridge ──────────────────────────────────
 #
-# geny-executor 2.2.0 publishes CLI-handled tool calls and structured
-# error envelopes as first-class pipeline events (``api.cli_tool_call``
-# / ``api.tool_result`` / ``api.error``), so the old
-# ``StreamJsonAccumulator.feed`` monkey-patch and the contextvar that
-# routed the SessionLogger into it are gone. The helpers below
-# reproduce exactly what the patch logged: TOOL_USE / TOOL_RESULT
-# entries (with tool_name metadata + duration) for CLI built-ins, and
-# the Korean-friendly auth-expired message the assembler patch raised.
+# A provider failure arrives as a first-class ``api.error`` event
+# carrying a code, a category and the vendor's own message. The helper
+# below turns it into the sentence the user sees in the session log —
+# most importantly the Korean auth-expired message, which names the
+# next step instead of printing a 401.
 
 
 # Human-readable message shown to the end user when the Claude CLI
@@ -302,7 +299,7 @@ def _friendly_api_error_message(data: Dict[str, Any]) -> str:
         suffix = f" (원본: {message})" if message else ""
         return _AUTH_EXPIRED_MESSAGE + suffix
     provider = str(data.get("provider") or "")
-    label = "Claude Code" if provider == "claude_code_cli" else (provider or "LLM")
+    label = "Claude Code" if provider == "geny_claude_code" else (provider or "LLM")
     return f"{label} API 에러 [{code or category or 'unknown'}]: {message or 'unknown'}"
 
 
@@ -334,52 +331,24 @@ def _bridge_cli_stream_event(
     session_logger: Any,
     event_type: str,
     event_data: Dict[str, Any],
-    cli_tools_in_progress: Dict[str, Tuple[str, float]],
 ) -> None:
-    """Bridge one 2.2.0 CLI-observability event to the SessionLogger.
+    """Bridge one ``api.error`` envelope to the SessionLogger.
 
-    Handles ``api.cli_tool_call`` / ``api.tool_result`` (CLI source
-    only) / ``api.error``. ``mcp__*`` tool names are skipped — the MCP
-    bridge controller already logs those with real dispatch outcomes;
-    duplicating would double-render in the UI. API-source tool events
-    are skipped too: Stage 10 dispatch already logs them through
-    ``tool.call_start`` / ``tool.call_complete``.
+    This used to bridge tool events too — ``api.cli_tool_call`` and
+    ``api.tool_result {source: "cli"}`` — because a CLI backend ran its
+    own loop and its tool calls never reached Stage 10. No backend does
+    that any more (executor 2.68.0): every tool call goes through Stage
+    10, which already logs it via ``tool.call_start`` /
+    ``tool.call_complete``, so bridging would double-render it.
+
+    What is left is the error envelope, which is provider-shaped and has
+    no Stage-10 equivalent: a CLI auth failure has to become a sentence
+    the user can act on.
 
     Best-effort by contract — observability must never break the turn.
     """
     try:
-        if event_type == "api.cli_tool_call":
-            tu_id = str(event_data.get("id") or "")
-            tu_name = str(event_data.get("name") or "")
-            tu_input = event_data.get("input") or {}
-            if not tu_id or not tu_name:
-                return
-            if tu_name.startswith("mcp__"):
-                return
-            if tu_id in cli_tools_in_progress:
-                return  # duplicate envelope
-            cli_tools_in_progress[tu_id] = (tu_name, time.monotonic())
-            session_logger.log_tool_use(
-                tool_name=tu_name,
-                tool_input=tu_input if isinstance(tu_input, dict) else {},
-                tool_id=tu_id,
-            )
-        elif event_type == "api.tool_result":
-            if str(event_data.get("source") or "") != "cli":
-                return  # Stage-10 dispatch path logs api-source results
-            tu_id = str(event_data.get("tool_use_id") or "")
-            entry = cli_tools_in_progress.pop(tu_id, None) if tu_id else None
-            if entry is None:
-                return  # unmatched (e.g. mcp__ skipped above)
-            tu_name, start_time = entry
-            session_logger.log_tool_result(
-                tool_name=tu_name,
-                tool_id=tu_id,
-                result=_tool_result_text(event_data.get("content")),
-                is_error=bool(event_data.get("is_error", False)),
-                duration_ms=int((time.monotonic() - start_time) * 1000),
-            )
-        elif event_type == "api.error":
+        if event_type == "api.error":
             session_logger.log(
                 level=LogLevel.ERROR,
                 message=_friendly_api_error_message(event_data),
@@ -393,7 +362,7 @@ def _bridge_cli_stream_event(
             )
     except Exception:  # noqa: BLE001 — observability must never break execution
         logger.debug(
-            "CLI stream-event bridge failed for %s (continuing)",
+            "API error-envelope bridge failed for %s (continuing)",
             event_type, exc_info=True,
         )
 
@@ -579,8 +548,8 @@ class AgentSession:
         # Execution settings
         self._working_dir = working_dir
         # Optional GAPT workspace sandbox (executor SandboxHandle). When set,
-        # _build_pipeline passes it to attach_runtime(sandbox=) so the
-        # claude_code_cli client runs inside the workspace container.
+        # _build_pipeline passes it to attach_runtime(sandbox=) so this
+        # session's TOOLS execute inside the workspace container.
         self._gapt_sandbox = gapt_sandbox
         # The owner's resolved Stage-6 credential bundle + primary provider, kept
         # so (a) ToolContext.extras can carry them for ad-hoc SubAgentSpawn /
@@ -921,7 +890,7 @@ class AgentSession:
         Originally — cycle 20260421_4 — this client was *also* injected
         into ``state.llm_client`` via ``Pipeline.attach_runtime``. That
         path pre-empted the per-Environment Stage-6 provider choice:
-        the manifest could say ``claude_code_cli`` but every session
+        the manifest could say ``geny_router`` but every session
         would hit ``api.anthropic.com`` because the executor's
         ``_resolve_llm_client`` honours the attach-time client first.
         The injection was removed (see ``_build_pipeline``); this
@@ -2896,7 +2865,7 @@ class AgentSession:
         # that explicitly reach for ``session.llm_client``.
         #
         # Phase H: this is now OPTIONAL. If the user runs a
-        # claude_code_cli / openai / google / vllm-only
+        # geny_router / openai / google / vllm-only
         # environment without an Anthropic key, we leave the handle as
         # None. The hard ``raise`` here used to block such sessions at
         # build time even though their main path doesn't need an
@@ -3284,8 +3253,8 @@ class AgentSession:
             # llm_client *first* and only falls back to the manifest's
             # Stage-6 provider when that's None. So an Anthropic
             # fallback client passed here pre-empted the per-Environment
-            # ``claude_code_cli`` choice for *every* session — manifest
-            # said claude_code_cli, state.llm_client said AnthropicClient,
+            # provider choice for *every* session — the manifest named
+            # one provider, state.llm_client said AnthropicClient,
             # Stage 6 hit api.anthropic.com with a stale key, 401.
             #
             # The fallback Anthropic SDK client we build above is only
@@ -3451,15 +3420,14 @@ class AgentSession:
         # the executor the SandboxHandle so tools (forge_tool / SandboxExecTool /
         # gapt_* via the MCP bridge) execute IN the workspace (docker exec).
         #
-        # containerize_cli=False (executor >=2.33.0): do NOT wrap the
-        # claude_code_cli client in a ContainerCLIRunner — the CLI keeps running
-        # on the HOST. This is what lets rotating-OAuth claude_code_cli sessions
-        # use sandboxed GAPT/forge tools without the in-container token-rotation
-        # 401 (the CLI's own auth stays on the host where it already works). No-op
-        # for SDK providers (they never spawn a CLI).
+        # The sandbox is a TOOL surface and nothing else (executor 2.68.0):
+        # no provider is ever spawned into it. The LLM — Claude Code, Codex,
+        # any of them — is called from the HOST with the credentials Geny
+        # configured, which is what keeps rotating subscription OAuth working
+        # (a provider running inside the container hit the refreshToken
+        # rotation 401; that path is gone).
         if getattr(self, "_gapt_sandbox", None) is not None:
             attach_kwargs["sandbox"] = self._gapt_sandbox
-            attach_kwargs["containerize_cli"] = False
             # save_pack (executor >=2.32.0): let the agent persist
             # [this workspace + the tools it forged + skills it authored] as a
             # reusable Sandbox Tool Pack via env(action="save_pack").
@@ -4173,7 +4141,6 @@ class AgentSession:
         # / Edit / …) keyed by tool_use_id while in flight so the paired
         # ``api.tool_result`` can be timed. Replaces the per-accumulator
         # side table the llm_patches monkey-patch kept.
-        cli_tools_in_progress: Dict[str, Tuple[str, float]] = {}
 
         # Create PipelineState with session context.
         #
@@ -4553,16 +4520,12 @@ class AgentSession:
                         data=dict(event_data),
                     )
 
-                # ── 2.2.0 events tap (replaces llm_patches) ──
-                # CLI-handled tool calls + structured error envelopes
-                # arrive as first-class events now; bridge them to the
-                # same SessionLogger entries the monkey-patch emitted.
-                elif event_type in (
-                    "api.cli_tool_call", "api.tool_result", "api.error",
-                ):
+                # Structured provider-error envelopes reach the session
+                # log as a sentence the user can act on. Tool events are
+                # NOT bridged — Stage 10 logs every dispatch itself.
+                elif event_type == "api.error":
                     _bridge_cli_stream_event(
                         session_logger, event_type, event_data,
-                        cli_tools_in_progress,
                     )
 
             # Accumulate output + log to session_logger for streaming
@@ -4747,7 +4710,6 @@ class AgentSession:
         accumulated_output = ""
         # 2.2.0 events tap — see _invoke_pipeline (same per-turn table
         # for CLI-handled tool call timing).
-        cli_tools_in_progress: Dict[str, Tuple[str, float]] = {}
         total_cost = 0.0
         iterations = 0
         success = True
@@ -4925,16 +4887,11 @@ class AgentSession:
                             except Exception:  # noqa: BLE001
                                 pass
 
-                # ── 2.2.0 events tap (replaces llm_patches) ──
-                # Mirror of the _invoke_pipeline bridge: CLI-handled
-                # tool calls + structured error envelopes to the
-                # SessionLogger.
-                elif event_type in (
-                    "api.cli_tool_call", "api.tool_result", "api.error",
-                ):
+                # Mirror of the _invoke_pipeline bridge: structured
+                # provider-error envelopes to the SessionLogger.
+                elif event_type == "api.error":
                     _bridge_cli_stream_event(
                         session_logger, event_type, event_data,
-                        cli_tools_in_progress,
                     )
 
             # ── Yield events to caller ──
@@ -5119,11 +5076,6 @@ class AgentSession:
                     f"[{self._session_id}] Pipeline not initialized. "
                     f"Call initialize() before invoke()."
                 )
-            # CLI-handled tool calls (Bash / Read / Write / Edit / …)
-            # surface as first-class ``api.cli_tool_call`` /
-            # ``api.tool_result`` events since geny-executor 2.2.0 —
-            # bridged to the SessionLogger inside ``_invoke_pipeline``'s
-            # event switch (the llm_patches contextvar is gone).
             try:
                 return await self._invoke_pipeline(
                     input_text, start_time, session_logger, **kwargs

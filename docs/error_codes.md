@@ -41,7 +41,7 @@ Examples:
 | `exec.api.stream_incomplete`    | Stream ended without final response                  |
 | `exec.api.retry_exhausted`      | Retry limit hit after recoverable error              |
 
-### `exec.cli.*` — CLI backends (claude_code_cli)
+### `exec.cli.*` — backends that spawn a CLI (`geny_claude_code`)
 
 | Code                            | Meaning                                              |
 | ------------------------------- | ---------------------------------------------------- |

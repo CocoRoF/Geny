@@ -1,6 +1,8 @@
 # Providers
 
-Geny supports five LLM backends. This page covers what each one needs, how to wire it up from the Settings UI, and the trade-offs.
+Geny reaches its models through **accounts**. An account is one login or one key; a session's **route** is an ordered list of them, and `geny_router` is the provider every environment names. Which account answers a turn is the route's business, not the environment's — so changing model never costs a session its tools, persona or permission policy.
+
+This page covers what each backend needs and the trade-offs.
 
 | Provider          | Best for                                | Streaming | Native tools | MCP            | Key requirement                            |
 | ----------------- | --------------------------------------- | --------- | ------------ | -------------- | ------------------------------------------ |
@@ -8,9 +10,10 @@ Geny supports five LLM backends. This page covers what each one needs, how to wi
 | openai            | OpenAI / Azure / OpenAI-compatible APIs | yes       | yes          | via bridge     | `OPENAI_API_KEY` (+ optional base URL)     |
 | google            | Gemini family                           | yes       | yes          | via bridge     | `GOOGLE_API_KEY`                           |
 | vllm              | Self-hosted OSS models                  | yes       | partial      | via bridge     | OpenAI-compatible endpoint URL             |
-| claude_code_cli   | Local Claude Code CLI w/ host MCP       | yes       | host-managed  | yes (Phase I) | `claude` CLI installed and logged in       |
+| geny_claude_code  | A Claude Code login (Pro/Max, setup-token, key) | yes | yes | host-attached | `claude` installed; sign in per account |
+| geny_codex        | A ChatGPT plan (Plus/Pro/Business)      | yes       | yes          | host-attached  | sign in per account (no `codex` binary)    |
 
-Switch providers per session — the VTuber can be Claude API while a Sub-Worker runs claude_code_cli, or vice versa.
+Every one of them is a **model** and nothing more. Claude Code and Codex ship their own agent loops; Geny does not use them. It drives both as pure token generators and runs the tools itself — same 21 stages, same permission ladder, same memory, same workspace, whichever account answers. That is what lets one conversation move between a Claude subscription, a second Claude login and a ChatGPT plan without losing anything.
 
 ## Where to configure
 
@@ -79,36 +82,41 @@ Self-hosted OpenAI-compatible inference server.
 - Tool calling depends on the served model's training. Some OSS models emit malformed JSON for tool calls — executor's parser tolerates common variants but not all.
 - Streaming JSON parsing assumes OpenAI-format SSE chunks.
 
-## claude_code_cli
+## geny_claude_code
 
-Drives the locally installed [Claude Code](https://claude.com/claude-code) CLI as a backend. Lets the VTuber or Sub-Worker borrow the CLI's full agent loop — including its built-in `Bash`, `Edit`, `Read`, etc. — while still exposing Geny's tool registry through MCP.
+Drives the locally installed [Claude Code](https://claude.com/claude-code) binary as a **token generator**, not as an agent.
 
 **Required**
-- `claude` CLI installed and authenticated (`claude /login` once on the host)
-- The host process must have access to the CLI binary on PATH
+- `claude` installed and on PATH (the image installs it; Settings → LLM keeps it updated)
+- Each account signs in separately — Settings → Models → add a Claude Code account
 
 **How it works**
-- Executor spawns `claude` as a subprocess per turn with `--output-format stream-json`
-- A per-session MCP HTTP bridge is spun up at startup; the CLI is launched with `--mcp-config` pointing at it
-- The bridge exposes Geny's tool registry as `mcp__geny__<tool_name>`
-- An observability tap (`cli_stream_logger_ctx` ContextVar) routes CLI-handled tool calls into Geny's `SessionLogger` so the audience-facing UI shows everything
-
-**Permissions**
-- Default config: `--settings '{"permissions":{"allow":["mcp__geny"]}}'` — auto-allows Geny tools while still prompting for CLI-internal tools
-- For headless prod, you can extend the allowlist; see [backend/service/executor/](../backend/service/executor/) for the spawn config
+- `claude -p --tools "" --strict-mcp-config --mcp-config {} --max-turns 1 --system-prompt-file …`: no built-in tools, no MCP of its own, one generation, never an agent loop
+- Geny's tool catalogue rides in the system prompt; the model asks for a tool as a `<tool_call>` block, which becomes a canonical `tool_use` and is dispatched by Stage 10
+- Each account owns a private `CLAUDE_CONFIG_DIR`, so any number of logins coexist without touching the host's own `~/.claude`
 
 **Caveats**
-- Subprocess overhead — slower first-token latency than direct API
-- The CLI's own permission system runs in addition to Geny's; both must allow a tool
-- Cannot use `--dangerously-skip-permissions` when the backend runs as root (use the `--settings` JSON form instead)
+- Subprocess overhead — slower first-token latency than a direct API
+- `temperature`, `top_p`, `top_k`, `stop_sequences`, `max_tokens` and `tool_choice` are declared drops: `claude -p` takes none of them, and you get an `llm_client.field_dropped` event rather than a setting that silently does nothing
 
-## Picking a provider per session
+## geny_codex
 
-Per-session model and provider is part of the manifest. In the UI:
+A ChatGPT plan over the Responses API — there is no `codex` binary to install.
 
-1. Open the session (VTuber or Sub-Worker)
-2. Environment → Provider → pick from the dropdown
-3. Save — the manifest is updated and the next turn uses the new provider
+**Required**
+- Sign in per account (Settings → Models → add a Codex account, then the device flow)
+
+**Caveats**
+- The refresh token is single-use. Geny persists each rotation; an out-of-band copy of the tokens will lock the account out
+- Usage limits are the plan's, and a 429 is what the route fails over from
+
+## Picking a model per session
+
+A session's route is its own. In the UI:
+
+1. Open the agent
+2. Model → pick an account (or reorder the route)
+3. The next turn uses it — mid-conversation, with no restart
 
 For programmatic control, see the request body in [backend/api/agent_session.py](../backend/api/agent_session.py).
 
@@ -122,8 +130,8 @@ Each provider raises distinct executor error codes. Common ones:
 | `exec.api.rate_limited`    | all          | 429 from upstream                        |
 | `exec.api.timeout`         | all          | Upstream request timed out               |
 | `exec.api.retry_exhausted` | all          | All retries failed                       |
-| `exec.cli.spawn_failed`    | claude_code_cli | `claude` binary missing or crashed       |
-| `exec.cli.auth_failed`     | claude_code_cli | CLI not logged in                       |
-| `exec.cli.mcp_handshake_failed` | claude_code_cli | MCP bridge could not be reached    |
+| `exec.cli.binary_not_found`| geny_claude_code | `claude` not on PATH                    |
+| `exec.cli.auth_failed`     | geny_claude_code | That account is not signed in           |
+| `exec.cli.timeout`         | geny_claude_code | The binary did not answer in time       |
 
 See [error_codes.md](error_codes.md) for the full list.

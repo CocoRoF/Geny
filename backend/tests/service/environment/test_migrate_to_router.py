@@ -57,7 +57,25 @@ class _Service:
 
 
 def _env(provider: str) -> Any:
-    return build_manifest("default", provider=provider)
+    """A stored environment naming *provider* at Stage 6.
+
+    Built through the factory when the factory still accepts the name,
+    and by hand when it doesn't: ``claude_code_cli`` is unregistered as
+    of executor 2.68.0, so ``build_manifest`` now refuses it — which is
+    precisely why this migration exists. An environment written to disk
+    years ago is not re-validated on read, so the one that still names
+    the retired provider has to be repointed, not rebuilt.
+    """
+    try:
+        return build_manifest("default", provider=provider)
+    except ValueError:
+        from geny_executor import EnvironmentManifest
+
+        raw = build_manifest("default", provider="geny_router").to_dict()
+        for stage in raw["stages"]:
+            if stage.get("name") == "api":
+                stage["config"]["provider"] = provider
+        return EnvironmentManifest.from_dict(raw)
 
 
 class TestSupersededSeeds:

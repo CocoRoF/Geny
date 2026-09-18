@@ -39,9 +39,6 @@ from pydantic import BaseModel
 
 from service.auth.auth_middleware import require_auth
 from service.config import get_config_manager
-from service.config.sub_config.general.cli_backends_config import (
-    CLIBackendClaudeCodeConfig,
-)
 from service.executor.credentials import CredentialBundleBuilder
 
 
@@ -100,7 +97,6 @@ PROVIDER_LABELS: Dict[str, str] = {
     "openai": "OpenAI",
     "google": "Google Gemini",
     "vllm": "vLLM (self-host)",
-    "claude_code_cli": "Claude Code (CLI)",
     # Branded local (OpenAI-compatible) backends — executor 2.9.0.
     "ollama": "Ollama (local)",
     "lmstudio": "LM Studio (local)",
@@ -139,15 +135,6 @@ async def _run_cmd(argv: List[str], timeout: float = 5.0) -> tuple[int, str, str
         stdout.decode("utf-8", errors="replace").strip(),
         stderr.decode("utf-8", errors="replace").strip(),
     )
-
-
-def _detect(name: str, override: Optional[str]) -> Optional[str]:
-    if override:
-        p = override
-        if os.path.exists(p) and os.access(p, os.X_OK):
-            return p
-        return None
-    return shutil.which(name)
 
 
 # ---------------------------------------------------------------------------
@@ -361,204 +348,6 @@ async def _check_local(provider: str, bundle) -> ProviderHealth:
     )
 
 
-def _read_claude_oauth_expires_at_ms() -> Optional[int]:
-    """Return the OAuth ``expiresAt`` (ms epoch) from the credential
-    file the CLI maintains, or ``None`` when the file is missing /
-    malformed / uses a different auth method.
-
-    The file lives at ``~/.claude/.credentials.json``. Schema
-    (subscription path)::
-
-        {"claudeAiOauth": {
-            "accessToken": "...",
-            "refreshToken": "...",
-            "expiresAt": 1779107407695,
-            "subscriptionType": "max",
-            ...
-        }}
-    """
-    import json as _json
-    from pathlib import Path as _Path
-    try:
-        creds_path = _Path(os.path.expanduser("~/.claude/.credentials.json"))
-        if not creds_path.exists():
-            return None
-        data = _json.loads(creds_path.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001
-        return None
-    oauth = (data or {}).get("claudeAiOauth") or {}
-    raw = oauth.get("expiresAt")
-    try:
-        return int(raw)
-    except (TypeError, ValueError):
-        return None
-
-
-async def _check_claude_code(bundle, claude_cfg: CLIBackendClaudeCodeConfig) -> ProviderHealth:
-    """Probe the Claude Code CLI: binary, --version, and a non-mutating
-    'auth' inspection. Auth methods:
-      - api_key   : ANTHROPIC_API_KEY in the env (or in the config)
-      - subscription : ``claude auth status`` reports an active session
-      - none      : neither path is available; user must log in or paste a key
-
-    Subscription path further validates the OAuth ``expiresAt`` from
-    ``~/.claude/.credentials.json``. An expired token gets flagged
-    as ``auth_ok=False`` with a Korean re-login hint so the card
-    doesn't show "준비됨" (ready) on a stale credential.
-    """
-    label = PROVIDER_LABELS["claude_code_cli"]
-    install_help = (
-        "Install Claude Code (https://docs.anthropic.com/claude/code/) and ensure "
-        "`claude` is on PATH. Then either paste ANTHROPIC_API_KEY through this "
-        "card or run `claude auth login` in the in-modal terminal."
-    )
-    if not claude_cfg.enabled:
-        return ProviderHealth(
-            provider="claude_code_cli",
-            label=label,
-            kind="cli",
-            available=False,
-            detail="Claude Code backend disabled. Open this card to enable it.",
-            detail_code="claude_code.disabled",
-            install_help=install_help,
-            install_help_code="claude_code.install_help",
-        )
-    binary = _detect("claude", claude_cfg.binary_path or os.environ.get("CLAUDE_CODE_BINARY", ""))
-    if not binary:
-        return ProviderHealth(
-            provider="claude_code_cli",
-            label=label,
-            kind="cli",
-            available=False,
-            detail="`claude` binary not found on PATH.",
-            detail_code="claude_code.binary_missing",
-            install_help=install_help,
-            install_help_code="claude_code.install_help",
-        )
-
-    # --version is fast and side-effect-free.
-    version = None
-    rc, out, _err = await _run_cmd([binary, "--version"], timeout=4.0)
-    if rc == 0 and out:
-        version = out.splitlines()[0].strip()
-
-    # Auth detection — strictly honour the mode the user picked in the
-    # LLM Backends → Claude Code (CLI) modal (persisted as
-    # ``claude_cli.auth_mode``). No heuristics, no "guess from what's
-    # available": if the user picked OAuth login, the card reflects
-    # OAuth even with an API key configured elsewhere; if the user
-    # picked api_key, the card reflects api_key even with a logged-in
-    # OAuth session present. The previous heuristic-based detection
-    # caused the card to disagree with the modal — see PR history
-    # (#863 / #864) for the dead ends.
-    auth_method: Optional[str] = None
-    auth_ok: Optional[bool] = None
-    auth_expired = False
-    auth_expires_at_ms: Optional[int] = None
-
-    mode = (getattr(claude_cfg, "auth_mode", "") or "host_mount").strip()
-
-    if mode == "api_key":
-        # User chose API key explicitly. Only this path forwards
-        # ``ANTHROPIC_API_KEY`` to the spawned subprocess.
-        api_key = claude_cfg.api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-        auth_method = "api_key"
-        auth_ok = bool(api_key)
-    else:
-        # All three subscription-style modes (host_mount /
-        # in_modal_login / setup_token) read auth state from the CLI's
-        # own credential persistence. Probe + expiry cross-check.
-        for probe in (["auth", "status"], ["auth", "whoami"], ["--auth-status"]):
-            rc, _o, _e = await _run_cmd([binary, *probe], timeout=3.0)
-            if rc == 0:
-                auth_method = "subscription"
-                auth_ok = True
-                break
-        if auth_method is None:
-            # Mode says "subscription" but the CLI reports nothing.
-            # Don't silently fall through to api_key — surface the
-            # mismatch so the user knows they need to (re-)login.
-            auth_method = "subscription"
-            auth_ok = False
-
-        # CLI returns ``loggedIn: true`` whenever the credential file
-        # is present, even with an expired access token whose refresh
-        # has been failing (the case the user hit on 2026-05-18 —
-        # card said "준비됨", every session crashed with stream-json
-        # 401). Cross-check ``expiresAt`` against the wall clock.
-        if auth_ok:
-            auth_expires_at_ms = _read_claude_oauth_expires_at_ms()
-            if auth_expires_at_ms is not None:
-                now_ms = int(time.time() * 1000)
-                if now_ms >= auth_expires_at_ms:
-                    auth_ok = False
-                    auth_expired = True
-
-    if auth_expired:
-        # Render a Korean message identifying the precise next step
-        # — point at this very card so the user can re-login without
-        # leaving the page.
-        from datetime import datetime, timezone
-        try:
-            expired_at = datetime.fromtimestamp(
-                (auth_expires_at_ms or 0) / 1000, timezone.utc,
-            ).strftime("%Y-%m-%d %H:%M UTC")
-        except Exception:  # noqa: BLE001
-            expired_at = "(unknown)"
-        detail = (
-            f"OAuth 토큰이 만료됐어요 (만료: {expired_at}). "
-            f"이 카드의 ‘다시 로그인 / Sign in’ 버튼으로 인증을 갱신해주세요. "
-            f"binary={binary}, version={version or 'unknown'}."
-        )
-        detail_code = "claude_code.auth_expired"
-        login_hint = (
-            "Subscription token expired. Press this card's "
-            "‘Sign in’ button to refresh the OAuth credential."
-        )
-    elif not auth_ok:
-        detail = (
-            f"binary at {binary}; version={version or 'unknown'}; "
-            f"auth={auth_method or 'unauthenticated'}."
-        )
-        detail_code = "claude_code.unauthenticated"
-        login_hint = install_help
-    else:
-        detail = (
-            f"binary at {binary}; version={version or 'unknown'}; "
-            f"auth={auth_method or 'unauthenticated'}."
-        )
-        detail_code = "claude_code.ready"
-        login_hint = None
-
-    return ProviderHealth(
-        provider="claude_code_cli",
-        label=label,
-        kind="cli",
-        available=bool(auth_ok),
-        detail=detail,
-        detail_code=detail_code,
-        detail_params={
-            "path": binary,
-            "version": version or "unknown",
-            "auth": auth_method or "unauthenticated",
-            # ``detail_params`` is typed as ``Dict[str, str]`` for
-            # i18n placeholder substitution; stringify both new
-            # entries so pydantic accepts the model.
-            "expired": "true" if auth_expired else "false",
-            "expires_at_ms": str(auth_expires_at_ms) if auth_expires_at_ms is not None else "",
-        },
-        binary_path=binary,
-        binary_version=version,
-        auth_method=auth_method,
-        auth_ok=auth_ok,
-        install_help=login_hint,
-        install_help_code=(
-            "claude_code.auth_expired" if auth_expired
-            else ("claude_code.install_help" if login_hint else None)
-        ),
-    )
-
-
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -573,34 +362,17 @@ async def get_backends_health(revalidate: bool = False) -> BackendsHealthRespons
     keys against their providers instead of using the cached verdict."""
     cm = get_config_manager()
     bundle = CredentialBundleBuilder(cm).build()
-    claude_cfg = cm.load_config(CLIBackendClaudeCodeConfig)
 
     results = await asyncio.gather(
         _check_anthropic(bundle, revalidate),
         _check_openai(bundle, revalidate),
         _check_google(bundle, revalidate),
         _check_vllm(bundle),
-        _check_claude_code(bundle, claude_cfg),
         _check_local("ollama", bundle),
         _check_local("lmstudio", bundle),
         _check_local("custom", bundle),
     )
     return BackendsHealthResponse(providers=list(results))
-
-
-@router.post(
-    "/cli/claude-code/recheck",
-    response_model=ProviderHealth,
-    dependencies=[Depends(require_auth)],
-)
-async def recheck_claude_code() -> ProviderHealth:
-    """Re-run only the Claude Code CLI health check (cheap; the UI
-    calls this after a settings save or after the user reports
-    completing ``claude auth login``)."""
-    cm = get_config_manager()
-    bundle = CredentialBundleBuilder(cm).build()
-    cfg = cm.load_config(CLIBackendClaudeCodeConfig)
-    return await _check_claude_code(bundle, cfg)
 
 
 class LocalModelsResponse(BaseModel):
@@ -654,9 +426,9 @@ async def list_local_models(
 # discover_models (geny-executor >=2.9.0): cloud providers authenticate with
 # their configured key; local providers probe their endpoint. source="live"
 # means the list is real; "unavailable" means the caller should fall back to
-# its static catalogue (the FE keeps MODEL_CATALOG for that). claude_code_cli
-# is always "unavailable" — the CLI has no model-list command; its
-# version-robust aliases (sonnet/opus/haiku) are the correct fallback.
+# its static catalogue (the FE keeps MODEL_CATALOG for that).
+# ``geny_claude_code`` is always "unavailable" — the CLI has no model-list
+# command; its version-robust aliases (sonnet/opus/haiku) are the fallback.
 
 _LOCAL_DISCOVERY_PROVIDERS = {"ollama", "lmstudio", "vllm", "custom", "local"}
 
@@ -824,7 +596,7 @@ async def list_subagents() -> SubagentsResponse:
 
 # ── Claude Code CLI version management (keep-latest + rollback) ───────
 #
-# The ``claude`` binary backs the claude_code_cli provider; the image
+# The ``claude`` binary backs the ``geny_claude_code`` provider; the image
 # pins @latest at build time. These endpoints let an operator update /
 # roll back at runtime, with the choice persisted + re-applied on boot.
 

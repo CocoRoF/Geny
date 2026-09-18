@@ -35,7 +35,6 @@ export type ClaudeAuthMethod = 'login' | 'token' | 'api_key' | 'system';
 
 /** token = the CLI only generates tokens and Geny runs the tools (default).
  *  agent = the CLI runs its own loop — Geny then sees only the announcement. */
-export type ClaudeRunMode = 'token' | 'agent';
 
 export interface ModelChoice {
   id: string;
@@ -89,7 +88,7 @@ export interface LlmAccount {
   hasSecret: boolean;
   engineProvider: string;
   createdAt?: string | null;
-  claude?: { authMethod: ClaudeAuthMethod; mode: ClaudeRunMode };
+  claude?: { authMethod: ClaudeAuthMethod };
   configDir?: string;
 }
 
@@ -151,7 +150,7 @@ export interface NewAccountInput {
   baseUrl?: string;
   secret?: string;
   effort?: string;
-  claude?: { authMethod?: ClaudeAuthMethod; mode?: ClaudeRunMode };
+  claude?: { authMethod?: ClaudeAuthMethod };
 }
 
 export interface AccountPatch {
@@ -160,7 +159,7 @@ export interface AccountPatch {
   baseUrl?: string;
   effort?: string;
   secret?: string;
-  claude?: { authMethod?: ClaudeAuthMethod; mode?: ClaudeRunMode };
+  claude?: { authMethod?: ClaudeAuthMethod };
 }
 
 // ── transport ────────────────────────────────────────────────────────

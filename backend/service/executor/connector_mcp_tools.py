@@ -9,9 +9,8 @@ LIVE session's executor ToolRegistry:
     mcp_<server>_<tool>   (sanitized, ≤64 chars)
 
 Registering into the live registry bumps its version, which triggers the
-per-turn ``state.tools`` rebuild and the ``notifications/tools/list_changed``
-push to claude_code_cli — so the tools appear on the very next model
-iteration, on every backend, without a session restart.
+per-turn ``state.tools`` rebuild — so the tools appear on the very next
+model iteration, on every backend, without a session restart.
 
 The generic ``local_mcp_list`` / ``local_mcp_call`` dispatchers stay as a
 fallback (manual exploration + servers that connect mid-turn), but agents no

@@ -34,16 +34,14 @@ _AGENT_STAGE_ORDER = 12
 def _companion_attach_kwargs(workspace_ctx: dict) -> dict:
     """attach_runtime kwargs for the companion — mirrors the OWNER's contract.
 
-    INVARIANT (2026-07-15 auth regression): a companion must NEVER
-    containerize its CLI. The executor default (containerize_cli=True)
-    wraps a resolved claude_code_cli client in a ContainerCLIRunner the
-    moment a sandbox is attached — the CLI then runs inside the gapt-ws
-    container with its own baked binary and WITHOUT the auth Geny
-    configured (host OAuth / in_modal_login), failing every turn with
-    authentication_failed while the owner keeps working. The owner
-    attaches sandbox + containerize_cli=False (agent_session ~2951);
-    the companion does exactly the same: tools run IN the sandbox
-    (unified workspace), the CLI runs on the host with Geny's auth.
+    The sandbox is a TOOL surface: the companion's tools run inside the
+    session's container (one unified workspace) while the LLM is called
+    from the host with Geny's own credentials. Nothing spawns a provider
+    into the container — executor 2.68.0 removed the last path that did
+    (``containerize_cli``, which used to wrap a ``claude_code_cli``
+    client in a ContainerCLIRunner and cost us the 2026-07-15 auth
+    regression: the CLI ran in gapt-ws with its own baked binary and
+    without the auth Geny configured, failing every turn).
     """
     from geny_executor.tools.base import ToolContext
 
@@ -54,9 +52,6 @@ def _companion_attach_kwargs(workspace_ctx: dict) -> dict:
             storage_path=workspace_ctx.get("storage_path") or "",
             extras=dict(workspace_ctx.get("extras") or {}),
         ),
-        # Unconditional: even a future code path that attaches a sandbox
-        # later must not flip the CLI into a container implicitly.
-        "containerize_cli": False,
     }
     if workspace_ctx.get("sandbox") is not None:
         kwargs["sandbox"] = workspace_ctx["sandbox"]
@@ -158,7 +153,7 @@ def _make_parent_env_companion_factory(
             try:
                 pipeline.attach_runtime(**_companion_attach_kwargs(workspace_ctx))
                 logger.info(
-                    "companion runtime: tools %s; CLI on host (containerize_cli=False)",
+                    "companion runtime: tools %s; LLM called from the host",
                     "sandboxed" if workspace_ctx.get("sandbox") is not None else "on host",
                 )
             except Exception:  # noqa: BLE001 — never fail companion build

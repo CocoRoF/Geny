@@ -167,7 +167,6 @@ class AccountService:
         if kind == "claude_code":
             public["claude"] = {
                 "authMethod": row.get("claude_auth_method") or "login",
-                "mode": row.get("claude_mode") or "token",
             }
             public["configDir"] = self.claude_config_dir(account_id)
         return public
@@ -201,7 +200,6 @@ class AccountService:
             enabled=True,
             base_url=base_url,
             claude_auth_method=str(claude.get("authMethod") or "login"),
-            claude_mode=str(claude.get("mode") or "token"),
             effort=str(payload.get("effort") or ""),
             identity_json="",
             models_json="",
@@ -245,8 +243,6 @@ class AccountService:
         claude = patch.get("claude") or {}
         if "authMethod" in claude:
             model.claude_auth_method = str(claude["authMethod"] or "login")
-        if "mode" in claude:
-            model.claude_mode = str(claude["mode"] or "token")
         if "secret" in patch:
             secret = str(patch["secret"] or "").strip()
             self._secrets.set(account_id, secret or None)
@@ -362,11 +358,13 @@ class AccountService:
 
         if kind == "claude_code":
             method = row.get("claude_auth_method") or "login"
-            if (row.get("claude_mode") or "token") == "agent":
-                # The CLI runs its own loop. Kept for the rare task that wants
-                # Claude Code's native tools; the harness then only sees the
-                # announcement, so it is not the default.
-                target["engineProvider"] = "claude_code_cli"
+            # There is no second mode. A Claude Code account generates
+            # tokens; this harness runs the tools. The "agent" mode that
+            # handed the loop back to the CLI is gone (2026-09-19) — an
+            # account is a model, and a model that runs its own tools
+            # cannot share a conversation, a permission ladder or a
+            # memory with the rest of them. Rows that still say "agent"
+            # are simply read as token accounts.
             target["options"].update({
                 "binary_path": claude_auth.claude_binary(),
                 "auth_method": method,

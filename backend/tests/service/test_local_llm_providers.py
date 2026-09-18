@@ -102,7 +102,7 @@ def test_local_only_setup_resolves_to_ollama():
     cm = _StubCM(ollama_base_url="http://localhost:11434/v1")
     with _scrub_env():
         order = (
-            "claude_code_cli", "anthropic", "openai", "google", "vllm",
+            "geny_claude_code", "anthropic", "openai", "google", "vllm",
             "ollama", "lmstudio", "custom",
         )
         provider = CredentialBundleBuilder(config_manager=cm).build().preferred_provider(order=order)
@@ -112,7 +112,7 @@ def test_local_only_setup_resolves_to_ollama():
 def test_cloud_key_still_wins_over_local():
     cm = _StubCM(anthropic_api_key="sk-ant-x", ollama_base_url="http://localhost:11434/v1")
     order = (
-        "claude_code_cli", "anthropic", "openai", "google", "vllm",
+        "geny_claude_code", "anthropic", "openai", "google", "vllm",
         "ollama", "lmstudio", "custom",
     )
     provider = CredentialBundleBuilder(config_manager=cm).build().preferred_provider(order=order)

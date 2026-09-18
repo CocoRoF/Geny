@@ -1,6 +1,6 @@
 """Claude Code CLI version management — keep up-to-date + roll back.
 
-The ``claude`` binary backs geny-executor's ``claude_code_cli`` provider.
+The ``claude`` binary backs geny-executor's ``geny_claude_code`` provider.
 The Docker image installs ``@anthropic-ai/claude-code@latest`` at build
 time, which freezes the version until the next image rebuild. This module
 adds a *runtime* mechanism so an operator can:

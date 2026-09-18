@@ -185,11 +185,19 @@ class TestRoute:
         assert hop["options"]["config_dir"] == service.claude_config_dir(account["id"])
 
     @pytest.mark.asyncio
-    async def test_agent_mode_hands_the_loop_back_to_the_cli(self, service: AccountService) -> None:
+    async def test_there_is_no_mode_that_hands_the_loop_back(
+        self, service: AccountService
+    ) -> None:
+        """An account is a MODEL. The "agent" mode that handed the loop
+        back to the CLI is gone (2026-09-19) — a provider running its
+        own tools cannot share a conversation, a permission ladder or a
+        memory with the rest of them. A row that still says "agent" is
+        read as a token account, so the account keeps working."""
         account = service.create_account({"kind": "claude_code"})
         service.update_account(account["id"], {"claude": {"mode": "agent"}})
         hop = await service.resolve_hop({"accountId": account["id"]})
-        assert hop["engineProvider"] == "claude_code_cli"
+        assert hop["engineProvider"] == "geny_claude_code"
+        assert "mode" not in (service.get_account(account["id"]).get("claude") or {})
 
     @pytest.mark.asyncio
     async def test_a_hop_with_no_model_falls_back_to_the_kind_default(

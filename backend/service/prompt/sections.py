@@ -662,7 +662,6 @@ def build_agent_prompt(
     extra_system_prompt: Optional[str] = None,
     in_gapt_workspace: bool = False,
     gapt_workspace_id: Optional[str] = None,
-    gapt_cli_on_host: bool = False,
     role_protocol_override: Optional[str] = None,
     storage_path: Optional[str] = None,
     computer_use_enabled: bool = False,
@@ -825,27 +824,13 @@ def build_agent_prompt(
             if wid
             else "You have a persistent, isolated GAPT workspace at /workspace.\n"
         )
-        if gapt_cli_on_host:
-            # claude_code_cli runs on the HOST (OAuth-safe); only the GAPT/forge
-            # tools execute inside the workspace. Be explicit so the agent does
-            # workspace work through those tools, not its host-side built-ins.
-            where_line = (
-                "IMPORTANT: your built-in Read/Write/Edit/Bash tools run on the "
-                "HOST, not in this workspace. To create, edit, run, and persist "
-                "code IN the workspace (the isolated sandbox), use the GAPT tools "
-                "and forge_tool:\n"
-                "- gapt_run_command — run a shell command inside the workspace\n"
-                "- forge_tool — turn a script in the workspace into a callable tool\n"
-                "- env(action=\"save_pack\") — save [workspace + tools + skills] as a reusable pack\n"
-            )
-        else:
-            where_line = (
-                "You run inside this workspace at /workspace — your file/shell "
-                "tools operate there directly. Files persist for this session and "
-                "are isolated from the host and other sessions. Use forge_tool to "
-                "turn a script into a callable tool, and env(action=\"save_pack\") "
-                "to save [workspace + tools + skills] as a reusable pack.\n"
-            )
+        where_line = (
+            "You run inside this workspace at /workspace — your file/shell "
+            "tools operate there directly. Files persist for this session and "
+            "are isolated from the host and other sessions. Use forge_tool to "
+            "turn a script into a callable tool, and env(action=\"save_pack\") "
+            "to save [workspace + tools + skills] as a reusable pack.\n"
+        )
         # Tool names (gapt_*, forge_tool, …) are NOT listed — their schemas are
         # provided to the model. The prompt states only the non-discoverable facts:
         # where the workspace is, and that a separate persistent project space exists.

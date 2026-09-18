@@ -72,10 +72,6 @@ def _build_app() -> FastAPI:
     async def static_asset():
         return {"asset": True}
 
-    @app.get("/api/internal/mcp/{session}/rpc")
-    async def mcp_bridge(session: str):
-        return {"bridge": session}
-
     # VTuber notification streams — intentionally public (plain EventSource
     # from cookieless overlay/connector display surfaces).
     @app.get("/api/vtuber/models/stream")
@@ -143,7 +139,6 @@ def test_cookie_token_accepted(client, auth_service):
         "/health",
         "/api/auth/status",
         "/static/app.js",
-        "/api/internal/mcp/sess-1/rpc",
         "/api/vtuber/models/stream",
         "/api/vtuber/assignments/stream",
     ],
