@@ -1361,21 +1361,7 @@ export const agentWorkspaceApi = {
 
 // ==================== Framework settings (PR-F.1.x) ==============
 
-export interface FrameworkSectionSummary {
-  name: string;
-  has_schema: boolean;
-  has_data: boolean;
-  // D.2 (cycle 20260426_1) — modules that read this section at runtime.
-  readers: string[];
-}
 
-export interface FrameworkSectionResponse {
-  name: string;
-  has_schema: boolean;
-  schema: Record<string, unknown> | null;
-  values: Record<string, unknown>;
-  settings_path: string;
-}
 
 // ==================== Skills CRUD (PR-F.2.x) =====================
 
@@ -1620,17 +1606,11 @@ export const skillsApi = {
     }),
 };
 
-export const frameworkSettingsApi = {
-  list: () =>
-    apiCall<{ sections: FrameworkSectionSummary[] }>('/api/framework-settings'),
-  get: (name: string) =>
-    apiCall<FrameworkSectionResponse>(`/api/framework-settings/${encodeURIComponent(name)}`),
-  patch: (name: string, values: Record<string, unknown>) =>
-    apiCall<FrameworkSectionResponse>(`/api/framework-settings/${encodeURIComponent(name)}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ values }),
-    }),
-};
+// The framework-settings section editor (``GET|PATCH /api/framework-settings``)
+// is a server-WIDE surface with no page: every per-agent question it could
+// answer now lives on the agent's own Harness tab, which writes the session's
+// own overlay instead of ~/.geny/settings.json. The client is removed rather
+// than left as a second, unreachable way to change the same things.
 
 // ==================== Slash Commands API (PR-A.6.2) =============
 

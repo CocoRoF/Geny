@@ -11,12 +11,14 @@ const SESSION_TAB_IDS = new Set([
   'command',
   'logs',
   'storage',
-  'sessionEnvironment', // consolidated session-env tab
-  'environment',        // back-compat alias
-  'graph',              // back-compat alias
   'info',
-  'sessionTools',       // legacy direct mount
-  'tools',              // legacy
+  // Retired ids, kept in the set so a stale localStorage value is still
+  // recognised as session-scoped on its way through the redirect above.
+  'sessionEnvironment',
+  'environment',
+  'graph',
+  'sessionTools',
+  'tools',
   'memory',
   'tasks',
   'cron',
@@ -81,7 +83,9 @@ interface AppState {
   // Keyed separately because the global Environment tab and the
   // session-scoped Environment tab share no semantics.
   envSubTab: string;       // global: library/toolSets/toolCatalog/permissions/hooks/skills/mcpServers
-  sessionEnvSubTab: string; // session: manifest/tools/workspace
+  /** Which sub-tab the agent's own page opens on. Set by a retired tab
+   *  id landing here, and by nothing else — the page owns it otherwise. */
+  infoSubTab: string | null;
   sidebarCollapsed: boolean;
   mobileSidebarOpen: boolean;
   deletedSectionOpen: boolean;
@@ -105,7 +109,7 @@ interface AppState {
   openCanvasAt: (path: string) => void;
   clearCanvasFocus: () => void;
   setEnvSubTab: (id: string) => void;
-  setSessionEnvSubTab: (id: string) => void;
+  setInfoSubTab: (id: string | null) => void;
   toggleSidebar: () => void;
   setMobileSidebarOpen: (open: boolean) => void;
   toggleDeletedSection: () => void;
@@ -136,7 +140,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeTab: 'main',
   canvasFocus: null,
   envSubTab: 'library',
-  sessionEnvSubTab: 'manifest',
+  infoSubTab: null,
   sidebarCollapsed: false,
   mobileSidebarOpen: false,
   deletedSectionOpen: false,
@@ -261,36 +265,39 @@ export const useAppStore = create<AppState>((set, get) => ({
     // legacy ids we fall back to window.location. Real call sites in
     // the new code path use Next.js Link directly; this branch only
     // catches stale localStorage state.
-    const ENV_ROUTE_REDIRECT: Record<string, string> = {
-      library: '',
-      environments: '',
-      builder: '',
-      toolSets: 'mcp', // ToolSets tab dissolved; closest replacement is MCP
-      toolCatalog: 'mcp',
-      permissions: 'permissions',
-      // NOTE: `hooks` is NOT redirected — it is now the top-level user-automation
-      // ("Hooks") session tab. The env-management lifecycle-hooks editor moved
-      // under /environments and is reached via its own Link, not this id.
-      skills: 'skills',
-      mcpServers: 'mcp',
+    // Where the retired ids land now. Every one of these used to be a live
+    // tab, so they are still sitting in people's localStorage — and until
+    // 2026-09-19 they navigated to `/environments`, a route deleted when the
+    // eleven environments became one. A saved tab id took the user to a 404,
+    // or to an `activeTab` no component was registered for, which rendered as
+    // "unknown tab". Both now land on a real page.
+    //
+    // The env-management surfaces (manifest, lifecycle hooks, tool sets) are
+    // not coming back as a place: the pipeline is the same for every agent
+    // and what used to differ belongs to the session. So they resolve to the
+    // agent's own settings, which is where those questions are answered now.
+    const RETIRED_TAB_REDIRECT: Record<string, { tab: string; sub?: string }> = {
+      library: { tab: 'settings' },
+      environments: { tab: 'info', sub: 'harness' },
+      builder: { tab: 'info', sub: 'harness' },
+      environment: { tab: 'info', sub: 'harness' },
+      graph: { tab: 'info', sub: 'harness' },
+      sessionEnvironment: { tab: 'info', sub: 'harness' },
+      sessionTools: { tab: 'info', sub: 'tools' },
+      tools: { tab: 'info', sub: 'tools' },
+      toolSets: { tab: 'info', sub: 'tools' },
+      toolCatalog: { tab: 'info', sub: 'tools' },
+      mcpServers: { tab: 'info', sub: 'tools' },
+      permissions: { tab: 'settings' },
+      skills: { tab: 'settings' },
+      // NOTE: `hooks` is NOT redirected — it is the top-level user-automation
+      // tab and still exists.
     };
-    const SESSION_ENV_SUB_REDIRECT: Record<string, string> = {
-      environment: 'manifest', // legacy session-env id
-      graph: 'manifest',
-      sessionTools: 'tools',
-    };
-    if (tab in ENV_ROUTE_REDIRECT) {
-      const sub = ENV_ROUTE_REDIRECT[tab];
-      const url = sub ? `/environments?tab=${sub}` : '/environments';
-      if (typeof window !== 'undefined') {
-        window.location.href = url;
-      }
-      return;
-    }
-    if (SESSION_ENV_SUB_REDIRECT[tab]) {
+    if (tab in RETIRED_TAB_REDIRECT) {
+      const target = RETIRED_TAB_REDIRECT[tab];
       set({
-        activeTab: 'sessionEnvironment',
-        sessionEnvSubTab: SESSION_ENV_SUB_REDIRECT[tab],
+        activeTab: target.tab,
+        ...(target.sub ? { infoSubTab: target.sub } : {}),
       });
       return;
     }
@@ -316,7 +323,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ activeTab: tab });
   },
   setEnvSubTab: (id) => set({ envSubTab: id }),
-  setSessionEnvSubTab: (id) => set({ sessionEnvSubTab: id }),
+  setInfoSubTab: (id) => set({ infoSubTab: id }),
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
   toggleDeletedSection: () => set((s) => ({ deletedSectionOpen: !s.deletedSectionOpen })),

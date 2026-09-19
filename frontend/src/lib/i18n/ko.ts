@@ -1020,6 +1020,7 @@ const ko: Translations = {
       vtuber: 'VTuber',
       status: 'Status',
       harness: '하네스',
+      tools: '도구',
       worker: 'Worker',
     },
     unnamed: '(이름 없음)',

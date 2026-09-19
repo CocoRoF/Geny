@@ -241,11 +241,11 @@ class CreateSessionRequest(BaseModel):
     def _normalize_session_type_request(cls, v: Optional[str]) -> Optional[str]:
         return _normalize_session_type(v)
 
-    # (Removed 2026-06-18) sub_worker_system_prompt / sub_worker_model /
-    # sub_worker_env_id — the bespoke paired Sub-Worker is gone. A VTuber's
-    # sub-agent is now an ENVIRONMENT capability: the env declares
-    # host_selections.extras.owned_subagent and the executor builds it.
-    # Configure the sub-agent via the environment, not per session.
+    # A VTuber's companion sub-agent is a property of the SESSION, resolved
+    # from its role by ``service.sessions.attachments`` and overridable per
+    # session. It was briefly an environment capability; that stopped being
+    # true when the environments collapsed to one, and this comment went on
+    # telling people to configure it somewhere that no longer exists.
 
     # Cycle 20260422_6 PR3 — name separation
     character_display_name: Optional[str] = Field(

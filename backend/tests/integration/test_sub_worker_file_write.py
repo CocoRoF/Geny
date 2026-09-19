@@ -102,19 +102,23 @@ async def test_worker_pipeline_write_tool_rejects_escape(tmp_path) -> None:
     assert not escape.exists()
 
 
-def test_vtuber_env_has_all_built_in_tools() -> None:
-    """All-tools principle: the VTuber env now ships ``built_in == ["*"]``
-    — every framework built-in, including the write-side tools that the
-    persona used to delegate. The old role-restriction (no Write / Edit /
-    Bash) is gone by design; users narrow per-env in the editor if they
-    want a quieter persona."""
+def test_the_one_env_has_all_built_in_tools() -> None:
+    """All-tools principle: the one environment ships ``built_in == ["*"]`` —
+    every framework built-in, including the write-side tools a persona used to
+    have to delegate.
+
+    This used to be asserted twice, once per seed, back when a VTuber ran a
+    different environment from a Worker. It runs once now because they run the
+    same one; what differs between a persona and a worker is attached to the
+    session, not baked into a pipeline.
+    """
     from geny_executor.core.pipeline import Pipeline
 
-    from service.environment.templates import create_vtuber_env
+    from service.environment.templates import create_worker_env
 
-    manifest = create_vtuber_env(all_tool_names=["web_search"])
+    manifest = create_worker_env(external_tool_names=["web_search"])
     assert list(manifest.tools.built_in) == ["*"], (
-        "VTuber env must opt into every executor built-in via '*'"
+        "the environment must opt into every executor built-in via '*'"
     )
 
     pipeline = Pipeline.from_manifest(
@@ -129,5 +133,5 @@ def test_vtuber_env_has_all_built_in_tools() -> None:
     )
     for name in expected:
         assert pipeline.tool_registry.get(name) is not None, (
-            f"VTuber env dropped {name} — all-tools contract regressed."
+            f"the environment dropped {name} — all-tools contract regressed."
         )

@@ -156,79 +156,6 @@ def test_worker_pipeline_registry_contains_platform_tools() -> None:
         )
 
 
-def test_vtuber_pipeline_registry_includes_browser_and_external_dm() -> None:
-    """All-tools principle: the VTuber env no longer filters anything at
-    the manifest level. Every name in the roster — including ``browser_*``
-    and every address-primitive / external-DM name — reaches the
-    pipeline's ``tool_registry`` once the provider supplies it."""
-    from geny_executor.core.pipeline import Pipeline
-
-    from service.environment.templates import create_vtuber_env
-
-    manifest = create_vtuber_env(
-        all_tool_names=_REPRESENTATIVE_ROSTER,
-        tool_loader=_representative_loader(),
-    )
-    provider = _FakeProvider(_REPRESENTATIVE_ROSTER)
-
-    pipeline = Pipeline.from_manifest(
-        manifest,
-        api_key="sk-test",
-        strict=False,
-        adhoc_providers=[provider],
-    )
-
-    registered = set(pipeline.tool_registry.list_names())
-
-    # Counterpart DM + memory + conversational web tools present
-    assert "send_direct_message_internal" in registered, sorted(registered)
-    assert "memory_read" in registered, sorted(registered)
-    assert "web_search" in registered, sorted(registered)
-    # External DM + session_* are now present too (deny list gone)
-    for name in (
-        "send_direct_message_external",
-        "session_list",
-    ):
-        assert name in registered, (
-            f"VTuber pipeline missing {name!r}: {sorted(registered)}"
-        )
-    # Browser tools are now registered too
-    for name in ("browser_navigate", "browser_click"):
-        assert name in registered, (
-            f"VTuber pipeline missing browser tool {name!r}: "
-            f"{sorted(registered)}"
-        )
-
-
-def test_vtuber_pipeline_registers_internal_dm_tool() -> None:
-    """Cycle 20260420_8 / plan/01 completion criterion: the
-    VTuber pipeline — end-to-end via :meth:`Pipeline.from_manifest`
-    — must have ``send_direct_message_internal`` registered. This
-    closes the integration gap cycle 7-1 left open: the counterpart
-    tool class was defined and unit-tested in isolation, but never
-    landed in ``TOOLS`` export, so no VTuber pipeline ever saw it.
-    """
-    from geny_executor.core.pipeline import Pipeline
-
-    from service.environment.templates import create_vtuber_env
-
-    manifest = create_vtuber_env(
-        all_tool_names=_REPRESENTATIVE_ROSTER,
-        tool_loader=_representative_loader(),
-    )
-    pipeline = Pipeline.from_manifest(
-        manifest,
-        api_key="sk-test",
-        strict=False,
-        adhoc_providers=[_FakeProvider(_REPRESENTATIVE_ROSTER)],
-    )
-
-    registered = set(pipeline.tool_registry.list_names())
-    assert "send_direct_message_internal" in registered, sorted(registered)
-    # All-tools: external DM is now registered too (deny list gone).
-    assert "send_direct_message_external" in registered, sorted(registered)
-
-
 def test_worker_pipeline_registry_empty_when_provider_missing() -> None:
     """Smoke-guard on the failure mode the defect caused in production.
 
@@ -294,41 +221,6 @@ def test_worker_pipeline_registers_zero_externals_when_roster_empty() -> None:
     )
 
 
-def test_vtuber_pipeline_registers_no_externals_when_roster_empty() -> None:
-    """All-tools principle: the VTuber factory is a pure pass-through of
-    *all_tool_names* — the legacy three-web-tool fallback is gone. Built
-    with no roster, the pipeline registers ZERO external tools (even
-    though the provider could supply many), but ``built_in == ["*"]``
-    still registers every framework built-in — including the mutating
-    file tools that used to be excluded."""
-    from geny_executor.core.pipeline import Pipeline
-    from geny_executor.tools.built_in import BUILT_IN_TOOL_CLASSES
-
-    from service.environment.templates import create_vtuber_env
-
-    manifest = create_vtuber_env()
-    pipeline = Pipeline.from_manifest(
-        manifest,
-        api_key="sk-test",
-        strict=False,
-        adhoc_providers=[_FakeProvider(_REPRESENTATIVE_ROSTER)],
-    )
-    registered = set(pipeline.tool_registry.list_names())
-    # No external tools resolved from the empty roster.
-    externals = registered - set(BUILT_IN_TOOL_CLASSES)
-    assert externals == set(), (
-        f"VTuber env with empty roster leaked externals: {sorted(externals)}"
-    )
-    # Every framework built-in registers, including the mutating file tools.
-    for name in BUILT_IN_TOOL_CLASSES:
-        assert name in registered, (
-            f"VTuber pipeline missing framework built-in {name!r}. "
-            f"Got: {sorted(registered)}"
-        )
-    for mutating in ("Write", "Edit", "Bash"):
-        assert mutating in registered
-
-
 def test_worker_pipeline_registers_all_executor_built_ins() -> None:
     """Cycle 20260420_7 / PR-3: the worker seed env now carries
     ``manifest.tools.built_in = ["*"]``, which the executor (>= 0.27.0)
@@ -359,52 +251,6 @@ def test_worker_pipeline_registers_all_executor_built_ins() -> None:
         )
     # External coexistence still holds
     assert "memory_read" in registered
-
-
-def test_vtuber_pipeline_registers_all_built_ins() -> None:
-    """All-tools principle: the VTuber seed now declares ``built_in ==
-    ["*"]``, so the pipeline registers every framework built-in —
-    including the mutating file tools (``Write`` / ``Edit`` / ``Bash``)
-    that used to be excluded from the persona."""
-    from geny_executor.core.pipeline import Pipeline
-    from geny_executor.tools.built_in import BUILT_IN_TOOL_CLASSES
-
-    from service.environment.templates import create_vtuber_env
-
-    manifest = create_vtuber_env(
-        all_tool_names=_REPRESENTATIVE_ROSTER,
-        tool_loader=_representative_loader(),
-    )
-    pipeline = Pipeline.from_manifest(
-        manifest,
-        api_key="sk-test",
-        strict=False,
-        adhoc_providers=[_FakeProvider(_REPRESENTATIVE_ROSTER)],
-    )
-
-    registered = set(pipeline.tool_registry.list_names())
-    # Every framework built-in is present...
-    for name in BUILT_IN_TOOL_CLASSES:
-        assert name in registered, (
-            f"VTuber pipeline missing framework built-in {name!r}. "
-            f"Got: {sorted(registered)}"
-        )
-    # ...including the previously-excluded mutating file tools.
-    for mutating in ("Write", "Edit", "Bash"):
-        assert mutating in registered, (
-            f"VTuber pipeline missing mutating built-in {mutating!r}. "
-            f"Got: {sorted(registered)}"
-        )
-
-
-# ── memory tools promoted to core (upfront, no ToolSearch) ──────────
-#
-# Executor default: external tools are *deferred* — the model must
-# ToolSearch to discover them. Geny promotes the memory_* family to
-# *core* via manifest.tools.core_overrides (see _promote_core_tools in
-# templates.py), so memory schemas ship in the request payload from
-# turn 1. These tests assert the whole chain: template override →
-# Pipeline.from_manifest → registry exposure.
 
 
 def test_worker_pipeline_exposes_memory_tools_as_core() -> None:
@@ -441,28 +287,3 @@ def test_worker_pipeline_exposes_memory_tools_as_core() -> None:
     assert reg.is_exposed("ToolSearch"), "ToolSearch must remain core"
 
 
-def test_vtuber_pipeline_exposes_memory_tools_as_core() -> None:
-    """VTuber seed gets the same memory promotion (decision C) — memory_*
-    exposed, knowledge_* deferred."""
-    from geny_executor.core.pipeline import Pipeline
-
-    from service.environment.templates import create_vtuber_env
-
-    manifest = create_vtuber_env(
-        all_tool_names=_REPRESENTATIVE_ROSTER,
-        tool_loader=_representative_loader(),
-    )
-    pipeline = Pipeline.from_manifest(
-        manifest,
-        api_key="sk-test",
-        strict=False,
-        adhoc_providers=[_FakeProvider(_REPRESENTATIVE_ROSTER)],
-    )
-    reg = pipeline.tool_registry
-
-    for name in ("memory_read", "memory_write"):
-        assert reg.is_exposed(name), f"VTuber: {name!r} should be core/exposed"
-    assert not reg.is_exposed("knowledge_search"), (
-        "VTuber: knowledge_search should stay deferred"
-    )
-    assert reg.is_exposed("ToolSearch"), "VTuber: ToolSearch must remain core"

@@ -6,6 +6,7 @@ import { useCreatureStateStore } from '@/store/useCreatureStateStore';
 import { agentApi, personaPresetsApi } from '@/lib/api';
 import PersonaStudioModal from '@/components/modals/PersonaStudioModal';
 import HarnessPanel from '@/components/harness/HarnessPanel';
+import SessionToolsTab from '@/components/tabs/SessionToolsTab';
 import TriggerStudioModal from '@/components/modals/TriggerStudioModal';
 import { twMerge } from 'tailwind-merge';
 import { useI18n } from '@/lib/i18n';
@@ -41,8 +42,20 @@ export default function InfoTab() {
   const [thinkingTriggerMsg, setThinkingTriggerMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   // Sub-tab navigation: VTuber / Status
-  type SubTab = 'vtuber' | 'status' | 'harness';
+  type SubTab = 'vtuber' | 'status' | 'harness' | 'tools';
+  const requestedSubTab = useAppStore((s) => s.infoSubTab);
+  const setInfoSubTab = useAppStore((s) => s.setInfoSubTab);
   const [subTab, setSubTab] = useState<SubTab>('vtuber');
+
+  // A retired tab id (``sessionTools``, ``environment``, …) lands here asking
+  // for one of these sub-tabs. Consumed once so a later manual switch sticks.
+  useEffect(() => {
+    if (!requestedSubTab) return;
+    if (['vtuber', 'status', 'harness', 'tools'].includes(requestedSubTab)) {
+      setSubTab(requestedSubTab as SubTab);
+    }
+    setInfoSubTab(null);
+  }, [requestedSubTab, setInfoSubTab]);
 
   // Reset sub-tab when switching session
   useEffect(() => { setSubTab('vtuber'); }, [selectedSessionId]);
@@ -363,6 +376,7 @@ export default function InfoTab() {
           { id: 'vtuber' as const, label: t('info.subTabs.vtuber') },
           { id: 'status' as const, label: t('info.subTabs.status') },
           { id: 'harness' as const, label: t('info.subTabs.harness') },
+          { id: 'tools' as const, label: t('info.subTabs.tools') },
         ]).map((tab) => {
           const active = subTab === tab.id;
           return (
@@ -518,6 +532,15 @@ export default function InfoTab() {
           differently and this is where that difference lives. */}
       {subTab === 'harness' && !isDeleted && data.session_id && (
         <HarnessPanel sessionId={data.session_id} />
+      )}
+
+      {/* Which tools this agent may reach. It had a complete screen and no
+          way in: the only route to it redirected to an activeTab no component
+          was registered for, so it rendered as "unknown tab". */}
+      {subTab === 'tools' && !isDeleted && (
+        <div className="-mx-3 md:-mx-5 h-[calc(100vh-16rem)]">
+          <SessionToolsTab />
+        </div>
       )}
 
       {subTab === 'status' && !isDeleted && (liveSnapshot ?? data.creature_state) && (

@@ -67,15 +67,3 @@ def test_names_are_isolated_from_the_tool_loader_universe():
     assert vscode_names.isdisjoint(universe)
 
 
-def test_vscode_env_template_gates_and_isolates():
-    from service.environment.templates import create_vscode_env, VSCODE_ENV_ID
-
-    m = create_vscode_env()
-    assert m.metadata.id == VSCODE_ENV_ID
-    # vscode_* are NOT baked into the whitelist — they arrive via the gate.
-    assert list(getattr(m.tools, "external", []) or []) == []
-    assert bool(m.host_selections.extras.get("vscode_enabled")) is True
-    # Sandbox fs/shell built-ins are excluded so the agent uses vscode_* only.
-    built_in = set(getattr(m.tools, "built_in", []) or [])
-    assert built_in.isdisjoint({"Read", "Write", "Edit", "Bash", "Glob", "Grep"})
-    assert "AskUserQuestion" in built_in

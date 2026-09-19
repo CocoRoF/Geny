@@ -56,27 +56,3 @@ def test_worker_env_includes_blog_agent_tools() -> None:
         assert tool in external, f"{tool} missing from Worker env"
 
 
-def test_vtuber_env_includes_blog_agent_tools() -> None:
-    """VTuber env ships ALL tools too — every blog_agent_* name passed in
-    is exposed in the manifest, alongside everything else (including the
-    browser tools that used to be filtered out)."""
-    from service.environment.templates import create_vtuber_env
-
-    loader = _FakeToolLoader({
-        "send_direct_message_internal": "geny_tools",
-        "read_inbox": "geny_tools",
-        "memory_read": "memory_tools",
-    })
-    all_names = [
-        "send_direct_message_internal",
-        "read_inbox",
-        "memory_read",
-        "browser_navigate",
-        *_BLOG_TOOLS,
-    ]
-    manifest = create_vtuber_env(all_tool_names=all_names, tool_loader=loader)
-    external = list(manifest.tools.external)
-    for tool in _BLOG_TOOLS:
-        assert tool in external, f"{tool} missing from VTuber env"
-    # No filtering — browser tools are present now too.
-    assert "browser_navigate" in external

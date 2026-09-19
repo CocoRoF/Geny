@@ -150,17 +150,16 @@ def test_build_manifest_threads_provider():
     assert s6["config"]["provider"] == "geny_router"
 
 
-def test_every_seed_names_the_router():
-    """A seed no longer picks a backend. Which model answers is the
-    session's account route, so changing model never costs the user the
-    tool roster, persona and permission policy they built here."""
-    from service.environment.templates import (
-        create_vscode_env,
-        create_vtuber_env,
-        create_worker_env,
-    )
+def test_the_seed_names_the_router():
+    """The seed does not pick a backend. Which model answers is the session's
+    account route, so changing model never costs the user the tool roster,
+    persona and permission policy they built here.
 
-    for factory in (create_worker_env, create_vtuber_env, create_vscode_env):
-        m = factory().to_dict()
-        s6 = next(s for s in m["stages"] if s["name"] == "api")
-        assert s6["config"]["provider"] == "geny_router", factory.__name__
+    There is one seed. There were three; the other two were factories nothing
+    called once every role resolved to this one, and they were removed rather
+    than left as code that looked configurable and was not."""
+    from service.environment.templates import create_worker_env
+
+    m = create_worker_env().to_dict()
+    s6 = next(s for s in m["stages"] if s["name"] == "api")
+    assert s6["config"]["provider"] == "geny_router"

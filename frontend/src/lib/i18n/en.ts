@@ -1029,6 +1029,7 @@ const en = {
       vtuber: 'VTuber',
       status: 'Status',
       harness: 'Harness',
+      tools: 'Tools',
       worker: 'Worker',
     },
     unnamed: '(unnamed)',
