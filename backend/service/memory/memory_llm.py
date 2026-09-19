@@ -201,7 +201,16 @@ def _curation_account() -> Optional[tuple]:
         account = svc.get_account(account_id) or {}
         if account.get("kind") != "claude_code" or not account.get("enabled", True):
             return None
-        model = str(primary.get("model") or "").strip() or "sonnet"
+        # The cheap tier this kind declares, beside the models it is chosen
+        # from — not an id pinned in a settings row, which goes stale the day
+        # the provider retires it and then 404s every curation call.
+        from service.llm_accounts.kinds import aux_model_for
+
+        model = (
+            aux_model_for("claude_code")
+            or str(primary.get("model") or "").strip()
+            or "sonnet"
+        )
         return (
             "geny_claude_code",
             model,
@@ -226,8 +235,9 @@ def build_memory_llm() -> Optional[MemoryLLM]:
     provider is handed a model it can serve.
 
     Order: the default route's first account when it is a Claude Code
-    subscription — memory is then curated by the same model the user
-    actually talks to, on the same login, costing no extra key — and
+    subscription — curated on the same login at no extra key, on that
+    kind's declared cheap tier rather than the model the user is talking
+    to — and
     otherwise a configured key, with ``memory_model`` winning when the
     operator set one the provider can serve. A pair that cannot work
     yields ``None`` rather than a 404 three layers down.

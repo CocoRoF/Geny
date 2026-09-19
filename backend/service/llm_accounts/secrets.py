@@ -50,6 +50,19 @@ class SecretStore:
         return self._path
 
     # ── io ───────────────────────────────────────────────────────────
+    def reload(self) -> None:
+        """Drop the cache so the next read sees the file as it is now.
+
+        The cache is never invalidated on its own, so a process that has read
+        once can no longer observe a write by a SIBLING process. That is fine
+        for ordinary reads and fatal for a single-use OAuth refresh: the
+        whole point of re-reading inside the cross-process lock is to notice
+        that another process already rotated the token, and a cached copy
+        would hide exactly that.
+        """
+        with self._lock:
+            self._cache = None
+
     def _load(self) -> Dict[str, Any]:
         if self._cache is not None:
             return self._cache

@@ -180,3 +180,41 @@ def test_a_mismatched_pair_yields_no_adapter(monkeypatch, tmp_path):
     monkeypatch.setenv("MEMORY_MODEL", "claude-haiku-4-5-20251001")
 
     assert build_memory_llm() is None
+
+
+# ─────────────────────────────────────────────────────────────────
+# the cheap tier, and why it is not a pinned id
+# ─────────────────────────────────────────────────────────────────
+
+
+def test_every_declared_cheap_tier_is_a_model_that_kind_offers():
+    """The rot this replaces: an id pinned in a settings row goes stale the
+    day the provider retires it, and every curation call then spends a round
+    trip 404ing. Keeping it in the kind's own catalogue means it moves when
+    the catalogue moves — this test is what keeps that true."""
+    from service.llm_accounts.kinds import KINDS
+
+    for kind, info in KINDS.items():
+        if not info.aux_model:
+            continue
+        offered = {m.id for m in info.models}
+        assert info.aux_model in offered, (
+            f"{kind} names {info.aux_model!r} as its cheap tier but does not offer it"
+        )
+
+
+def test_a_kind_with_no_cheap_tier_keeps_the_account_model():
+    """Returning '' means 'no opinion' — the caller keeps the account's own
+    model rather than guessing an id the provider may not serve."""
+    from service.llm_accounts.kinds import aux_model_for
+
+    assert aux_model_for("vllm") == ""
+    assert aux_model_for("no-such-kind") == ""
+
+
+def test_claude_code_curates_on_haiku_not_on_the_conversation_model(monkeypatch, tmp_path):
+    """Curation is background work: it should not spend Opus tokens just
+    because that is what the user happens to be talking to."""
+    from service.llm_accounts.kinds import aux_model_for
+
+    assert aux_model_for("claude_code") == "haiku"

@@ -66,6 +66,14 @@ class KindInfo:
     #: the account owns a private CLAUDE_CONFIG_DIR (many logins side by side)
     owns_config_dir: bool = False
 
+    #: The cheap tier for background work — memory curation, summarising,
+    #: classification. It lives HERE, beside the models it is chosen from,
+    #: because the alternative rots: a model id pinned in a settings row goes
+    #: stale the day the provider retires it, and every background call then
+    #: spends a round trip 404ing. An id in this list moves when the list
+    #: moves. Empty means "use the account's own model".
+    aux_model: str = ""
+
     def to_dict(self) -> Dict[str, object]:
         return {
             "label": self.label,
@@ -83,6 +91,7 @@ class KindInfo:
 
 KINDS: Dict[str, KindInfo] = {
     "claude_code": KindInfo(
+        aux_model="haiku",
         family="subscription",
         label="Claude Code",
         short="Claude Code",
@@ -101,6 +110,7 @@ KINDS: Dict[str, KindInfo] = {
         ),
     ),
     "codex": KindInfo(
+        aux_model="gpt-5.6-luna",
         family="subscription",
         label="ChatGPT · Codex",
         short="Codex",
@@ -117,6 +127,7 @@ KINDS: Dict[str, KindInfo] = {
         ),
     ),
     "anthropic": KindInfo(
+        aux_model="claude-haiku-4-5-20251001",
         family="api",
         label="Anthropic API",
         short="Anthropic",
@@ -131,6 +142,7 @@ KINDS: Dict[str, KindInfo] = {
         ),
     ),
     "openai": KindInfo(
+        aux_model="gpt-5.6-luna",
         family="api",
         label="OpenAI API",
         short="OpenAI",
@@ -203,6 +215,19 @@ KINDS: Dict[str, KindInfo] = {
 }
 
 ACCOUNT_KINDS: List[str] = list(KINDS)
+
+
+def aux_model_for(kind: str) -> str:
+    """The cheap tier for background work on this kind, or ``""``.
+
+    Background work (memory curation, summarising) should not run on the
+    model the user chose for the conversation — it is cheaper and just as
+    good on the small one. Returning ``""`` means the caller keeps the
+    account's own model rather than guessing an id the provider may not
+    serve.
+    """
+    info = KINDS.get(kind)
+    return info.aux_model if info else ""
 
 
 def default_model_for(kind: str, discovered: Optional[List[str]] = None) -> str:

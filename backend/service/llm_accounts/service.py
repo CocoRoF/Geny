@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from service.database.models.llm_account import LLMAccountModel
-from service.llm_accounts import claude_auth, codex_auth
+from service.llm_accounts import claude_auth, codex_auth, single_use
 from service.llm_accounts.kinds import (
     ACCOUNT_KINDS,
     EFFORTS,
@@ -330,6 +330,79 @@ class AccountService:
         )
 
     # ── route resolution ─────────────────────────────────────────────
+    async def _fresh_single_use_tokens(self, account_id: str) -> Dict[str, Any]:
+        """Codex tokens, refreshed if due — without ever spending one twice.
+
+        A Codex refresh token is revoked the moment it is redeemed, so the
+        read, the POST and the write-back have to be one atomic step against
+        every other turn AND every other Geny process sharing the secret
+        file. Without that, two turns starting together both read the same
+        token, both POST it, and the loser's ``invalid_grant`` locks the
+        account out until someone signs in again.
+
+        The order is the only one that is safe:
+
+          1. take the cross-process lock;
+          2. re-read the store INSIDE it — a waiter finds the winner's fresh
+             token here and returns without POSTing at all;
+          3. refuse to POST a token already known spent;
+          4. POST, then write back;
+          5. if the write-back fails, say so and remember the fingerprint,
+             because the old pair is dead server-side and replaying it is
+             what turns a transient disk error into a lost account.
+        """
+        store_path = getattr(self._secrets, "path", None)
+        # What we believe before queuing for the lock. A waiter compares
+        # against this: if it changed while we waited, the holder did the
+        # refresh and there is nothing left to redeem.
+        before = self._secrets.get_dict(account_id).get("refresh_token")
+
+        async with single_use.refresh_guard(store_path):
+            self._secrets.reload()
+            tokens = self._secrets.get_dict(account_id)
+            if not tokens:
+                return {}
+
+            refresh_token = tokens.get("refresh_token")
+            if before and refresh_token and refresh_token != before:
+                # Someone rotated while we waited. Their token is new by
+                # definition, so redeeming again would spend a good one for
+                # nothing — and on a bad day spend the same one twice.
+                logger.debug(
+                    "codex account %s was refreshed by another holder", account_id
+                )
+                return tokens
+
+            if single_use.is_spent(refresh_token, store_path=store_path):
+                # Redeemed once already with no replacement stored. POSTing it
+                # again only confirms the loss; hand the hop over and let the
+                # wire report an auth failure the router can fail over from.
+                logger.error(
+                    "codex account %s holds a refresh token that was already "
+                    "consumed — sign in again to restore it", account_id,
+                )
+                return tokens
+
+            try:
+                fresh, refreshed = await codex_auth.ensure_fresh(tokens)
+            except ValueError as exc:
+                # A dead refresh token is an auth failure the router can fail
+                # over from — hand the hop over with what we have.
+                logger.warning("codex refresh failed for %s: %s", account_id, exc)
+                return tokens
+
+            if not refreshed:
+                return fresh
+
+            try:
+                self._secrets.set(account_id, fresh)
+            except OSError as exc:
+                single_use.mark_spent(refresh_token, store_path=store_path)
+                raise single_use.CredentialPersistError(store_path, exc) from exc
+
+            self._stamp(account_id, identity=codex_auth.identity_of(fresh))
+            return fresh
+
     async def resolve_route(self, route: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Turn a stored route into the hops ``geny_router`` resolves per call.
 
@@ -392,18 +465,7 @@ class AccountService:
                 self.claude_options(account_id, label=target["label"])
             )
         elif kind == "codex":
-            tokens = self._secrets.get_dict(account_id)
-            if tokens:
-                try:
-                    tokens, refreshed = await codex_auth.ensure_fresh(tokens)
-                    if refreshed:
-                        self._secrets.set(account_id, tokens)
-                        self._stamp(account_id, identity=codex_auth.identity_of(tokens))
-                except ValueError as exc:
-                    # A dead refresh token is an auth failure the router can
-                    # fail over from — hand the hop over with what we have and
-                    # let the wire report it.
-                    logger.warning("codex refresh failed for %s: %s", account_id, exc)
+            tokens = await self._fresh_single_use_tokens(account_id)
             target["options"].update({
                 "tokens": tokens,
                 "account_label": target["label"],
