@@ -53,10 +53,19 @@ export const formatDuration = (ms: number): string => {
 
 // ── Emotion parsing (VTuber) ──
 
+/** The emotion vocabulary, mirroring ``service/affect/taxonomy.py``.
+ *
+ *  It must be the same list on both sides: the backend strips these tags from
+ *  what a user reads, and anything it does not know it leaves on screen. Six
+ *  were missing here (``wonder``, ``love``, ``excitement``, ``curiosity``,
+ *  ``amazement``, ``satisfaction``) — including ``wonder``, which the
+ *  emitter's own docstring uses as its worked example. A backend test
+ *  compares the two lists so they cannot drift again. */
 export const EMOTIONS = [
   'neutral', 'joy', 'anger', 'disgust', 'fear', 'smirk', 'sadness', 'surprise',
   'warmth', 'curious', 'calm', 'excited', 'shy', 'proud', 'grateful',
   'playful', 'confident', 'thoughtful', 'concerned', 'amused', 'tender',
+  'wonder', 'love', 'excitement', 'curiosity', 'amazement', 'satisfaction',
 ] as const;
 
 /** Emotion → subtle color for inline badges */
@@ -85,7 +94,13 @@ export const EMOTION_COLORS: Record<string, string> = {
 };
 
 const EMOTION_SET = new Set<string>(EMOTIONS);
-const EMOTION_REGEX = new RegExp(`^\\[(${EMOTIONS.join('|')})\\]\\s*`);
+
+/** The optional ``:strength`` suffix, matching the grammar ``prompts/vtuber.md``
+ *  offers the model ("[joy:0.7] light, [joy:1.5] intense") and the backend's
+ *  own ``_STRENGTH_RE``. Without it every tag the model wrote with a strength —
+ *  which is most of them — read as no tag at all. */
+const STRENGTH = '(?:\\s*:\\s*-?\\d+(?:\\.\\d+)?)?';
+const EMOTION_REGEX = new RegExp(`^\\[\\s*(${EMOTIONS.join('|')})${STRENGTH}\\s*\\]\\s*`);
 
 /** Parse "[emotion] text" → [emotion, cleanText]. Returns ['neutral', text] if no tag. */
 export const parseEmotion = (content: string): [string, string] => {
@@ -107,8 +122,11 @@ export interface EmotionSegment {
  * Tags must be from known EMOTIONS and appear at line start.
  */
 export function splitEmotionSegments(text: string): EmotionSegment[] {
-  // Match [emotion] at start of string or after newline
-  const re = new RegExp(`(?:^|\\n)\\[(${EMOTIONS.join('|')})\\][ ]*`, 'g');
+  // Match [emotion] or [emotion:strength] at start of string or after newline
+  const re = new RegExp(
+    `(?:^|\\n)\\[\\s*(${EMOTIONS.join('|')})${STRENGTH}\\s*\\][ ]*`,
+    'g',
+  );
   const segments: EmotionSegment[] = [];
   let lastIndex = 0;
 

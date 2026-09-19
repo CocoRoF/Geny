@@ -4626,16 +4626,26 @@ class AgentSession:
                         )
 
             elif event_type == "pipeline.complete":
-                # `text.delta` events feed `accumulated_output` in real
-                # time and are the source of truth. Older executor
-                # builds (≤ 0.20.0) sent a 500-char preview as
-                # `result`, which would silently truncate long
-                # responses if we trusted it blindly. Only accept
-                # `result` when it is at least as long as what we
-                # already streamed — a safe upgrade once the executor
-                # patch (>= 0.20.1) ships full text.
+                # `result` is the pipeline's final text, AFTER Stage 17 has
+                # run. Taking it is the whole point: that stage is where a
+                # VTuber's `[joy:0.6]` cues are harvested into mood and
+                # stripped out of what the user reads.
+                #
+                # This used to accept `result` only when it was at least as
+                # long as the streamed accumulation — a guard against
+                # executor ≤ 0.20.0, which sent a 500-char preview here. The
+                # pin has been far past that for a year, and the guard was
+                # rejecting the one case where the final text is legitimately
+                # SHORTER than the stream: stripping. So the tags the emitter
+                # had already removed went back to the caller, and the
+                # emitter's documented contract ("the user-visible text never
+                # carries raw markers") was unreachable through this path.
+                #
+                # Empty still falls back to the accumulation: a turn can end
+                # with no final text at all, and the streamed tokens are
+                # better than nothing.
                 streamed_result = event_data.get("result") or ""
-                if len(streamed_result) >= len(accumulated_output):
+                if streamed_result:
                     accumulated_output = streamed_result
                 total_cost = event_data.get("total_cost_usd", 0.0) or 0.0
                 iterations = event_data.get("iterations", 0)
@@ -5001,15 +5011,11 @@ class AgentSession:
                 yield {stage_name: {"status": "exit"}}
 
             elif event_type == "pipeline.complete":
-                # See _invoke_pipeline for the rationale: prefer the
-                # streaming accumulation over a possibly preview-
-                # truncated `result` field on legacy executor builds.
+                # See _invoke_pipeline: the pipeline's final text is the one
+                # Stage 17 has already cleaned, and it is legitimately
+                # shorter than the stream whenever anything was stripped.
                 streamed_result = event_data.get("result") or ""
-                result_text = (
-                    streamed_result
-                    if len(streamed_result) >= len(accumulated_output)
-                    else accumulated_output
-                )
+                result_text = streamed_result or accumulated_output
                 total_cost = event_data.get("total_cost_usd", 0.0) or 0.0
                 iterations = event_data.get("iterations", 0)
                 yield {

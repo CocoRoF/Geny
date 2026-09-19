@@ -52,6 +52,8 @@ from service.execution.agent_executor import (
 )
 from service.logging.session_logger import get_session_logger
 
+from service.utils.text_sanitizer import sanitize_for_display
+
 logger = getLogger(__name__)
 
 router = APIRouter()
@@ -242,11 +244,20 @@ async def _stream_execution_ws(
                     )
                 for entry in new_entries:
                     entry_dict = entry.to_dict()
+                    # The avatar reads emotion cues out of the RAW message
+                    # below, so the tags have to survive until then — and the
+                    # copy that goes to the screen must not carry them. The
+                    # chat path has done this since it was written
+                    # (``chat_controller`` sanitises its ``streaming_text``);
+                    # this one forwarded the log verbatim, so the Command tab
+                    # was the one surface still showing ``[joy:0.6]``.
+                    raw_message = entry_dict.get("message") or ""
+                    if app_state:
+                        await _emit_avatar_state_for_log(entry_dict, session_id, app_state)
+                    entry_dict["message"] = sanitize_for_display(raw_message)
                     if not await _send_event(ws, "log", entry_dict, session_id):
                         logger.warning("[ExecWS:%s] connection lost while streaming logs", session_id[:8])
                         return  # Connection lost
-                    if app_state:
-                        await _emit_avatar_state_for_log(entry_dict, session_id, app_state)
                     had_data = True
                     total_logs_sent += 1
 
