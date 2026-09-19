@@ -2504,6 +2504,29 @@ class AgentSession:
             logger.warning("[%s] auto opt-in env %s → pack %s failed", self._session_id, env_id, pack_id, exc_info=True)
             return False
 
+    def read_env_overlay(self) -> Optional[Dict[str, Any]]:
+        """This session's saved env overlay, or ``None``.
+
+        The same file :meth:`_restore_env_overlay` replays at build time.
+        Read here so a settings page can say which values the session itself
+        chose, as opposed to inherited.
+        """
+        path = self._env_overlay_path()
+        if not path:
+            return None
+        import json
+        import os
+
+        if not os.path.isfile(path):
+            return None
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except Exception:  # noqa: BLE001 — an unreadable overlay is "none"
+            logger.debug("[%s] env overlay unreadable", self._session_id, exc_info=True)
+            return None
+        return data if isinstance(data, dict) else None
+
     def _restore_env_overlay(self) -> None:
         """Re-apply a previously-saved env overlay (prompt / authored skills /
         enabled tools + skills). Best-effort — additive (does not disable tools

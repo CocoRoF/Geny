@@ -2577,6 +2577,78 @@ class AgentSessionManager:
             "applies": "next_turn",
         }
 
+    async def session_harness(self, agent: Any) -> Dict[str, Any]:
+        """The effective harness of one live session, ready to render.
+
+        Assembled here rather than in the controller because three of the
+        four inputs are the manager's: the manifest the session was built
+        from, the overlay it saved, and the budgets it was given. Only the
+        pipeline belongs to the session — and it is the one that knows what
+        is actually installed.
+        """
+        from service.harness import build_harness_view
+
+        pipeline = getattr(agent, "_pipeline", None)
+        if pipeline is None:
+            raise ValueError("this session has no pipeline yet")
+
+        manifest = None
+        if self._environment_service is not None:
+            try:
+                manifest = self._environment_service.load_manifest(
+                    getattr(agent, "env_id", None) or ""
+                )
+            except Exception:  # noqa: BLE001 — labels degrade, the page still renders
+                logger.debug("manifest unavailable for the harness view", exc_info=True)
+
+        overlay = None
+        try:
+            overlay = agent.read_env_overlay()
+        except Exception:  # noqa: BLE001
+            logger.debug("overlay unavailable for the harness view", exc_info=True)
+
+        config = getattr(pipeline, "_config", None)
+        window = getattr(agent, "_context_window_budget", None)
+        # Resolved now rather than remembered: an account can be disabled or
+        # its models refreshed between turns, and a stale per-hop list would
+        # explain the budget with numbers that no longer apply.
+        hops: List[Dict[str, Any]] = []
+        try:
+            hops = await self._route_targets(
+                getattr(agent, "route", None) or self._stored_route(agent.session_id) or {}
+            )
+        except Exception:  # noqa: BLE001 — the budget still renders without them
+            logger.debug("route hops unavailable for the harness view", exc_info=True)
+        budgets = {
+            "maxIterations": {
+                "value": getattr(config, "max_iterations", None),
+                # The environment names no cap of its own, so this is the
+                # only number — which is the whole point of M1.
+                "source": "session",
+            },
+            "contextWindow": {
+                "value": getattr(config, "context_window_budget", None),
+                "source": "route" if window else "assumed",
+                "perHop": [
+                    {"label": t.get("label"), "model": t.get("model"),
+                     "window": t.get("contextWindow")}
+                    for t in hops
+                ],
+            },
+            "costCeiling": {
+                "value": getattr(config, "cost_budget_usd", None),
+                "source": "session",
+                # Only spend a backend reports can be counted, and a
+                # subscription login reports none — so a ceiling here never
+                # stops a Claude Code or Codex turn. Said out loud rather
+                # than discovered.
+                "countsOnly": "reportedSpend",
+            },
+        }
+        return build_harness_view(
+            pipeline=pipeline, manifest=manifest, overlay=overlay, budgets=budgets
+        )
+
     async def change_session_route(
         self, session_id: str, route: Dict[str, Any]
     ) -> Dict[str, Any]:

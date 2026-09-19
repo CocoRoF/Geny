@@ -838,6 +838,35 @@ async def get_session_route(
     return agent_manager.get_session_route(session_id)
 
 
+@router.get("/{session_id}/harness")
+async def get_session_harness(
+    session_id: str = Path(..., description="Session ID"),
+    auth: dict = Depends(require_auth),
+):
+    """What this agent's harness is ACTUALLY running.
+
+    Read from the session's live pipeline, not from its manifest: Geny
+    declares placeholders in the manifest and installs the real
+    implementations when the session is built, so a manifest-rendered page
+    would show ``no_persist`` on a stage that persists and an empty guard
+    chain on a session that guards.
+
+    Every value carries where it came from — ``default`` / ``manifest`` /
+    ``runtime`` / ``session`` — because knowing what runs is only half of
+    what a settings page has to answer. The other half is whether changing
+    it will stick.
+    """
+    _enforce_session_owner(session_id, auth)
+    agent = await agent_manager.ensure_session_live(session_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"AgentSession not found: {session_id}")
+    try:
+        return await agent_manager.session_harness(agent)
+    except Exception as exc:  # noqa: BLE001 — a settings page never 500s the app
+        logger.warning("harness view failed for %s: %s", session_id, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"harness view unavailable: {exc}")
+
+
 @router.put("/{session_id}/route")
 async def change_session_route(
     request: ChangeRouteRequest,
