@@ -3964,6 +3964,9 @@ const en = {
         manifest: 'pipeline',
         runtime: 'set by Geny',
         session: 'you changed it',
+        route: 'from the route',
+        assumed: 'assumed',
+        none: 'none',
       },
       unit: { turns: 'turns', tokens: 'tokens', usd: 'USD' },
       budget: {

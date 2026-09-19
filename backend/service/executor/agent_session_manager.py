@@ -2611,6 +2611,7 @@ class AgentSessionManager:
 
         config = getattr(pipeline, "_config", None)
         window = getattr(agent, "_context_window_budget", None)
+        declared = (overlay or {}).get("budgets") or {}
         # Resolved now rather than remembered: an account can be disabled or
         # its models refreshed between turns, and a stale per-hop list would
         # explain the budget with numbers that no longer apply.
@@ -2624,13 +2625,21 @@ class AgentSessionManager:
         budgets = {
             "maxIterations": {
                 "value": getattr(config, "max_iterations", None),
-                # The environment names no cap of its own, so this is the
-                # only number — which is the whole point of M1.
-                "source": "session",
+                # The environment names no cap of its own, so this is the only
+                # number; "session" means the owner set it, "default" means it
+                # is the one the session was created with.
+                "source": "session" if "maxIterations" in declared else "default",
             },
             "contextWindow": {
                 "value": getattr(config, "context_window_budget", None),
-                "source": "route" if window else "assumed",
+                # Three different answers, and reporting the wrong one is the
+                # lie this page exists to prevent: an owner who typed the
+                # number must not be told it came from the route.
+                "source": (
+                    "session" if "contextWindow" in declared
+                    else "route" if window
+                    else "assumed"
+                ),
                 "perHop": [
                     {"label": t.get("label"), "model": t.get("model"),
                      "window": t.get("contextWindow")}
@@ -2639,7 +2648,7 @@ class AgentSessionManager:
             },
             "costCeiling": {
                 "value": getattr(config, "cost_budget_usd", None),
-                "source": "session",
+                "source": "session" if "costCeiling" in declared else "none",
                 # Only spend a backend reports can be counted, and a
                 # subscription login reports none — so a ceiling here never
                 # stops a Claude Code or Codex turn. Said out loud rather
@@ -2710,8 +2719,16 @@ class AgentSessionManager:
                 )
             )
             agent._context_window_budget = derived
-            if config is not None and derived:
-                config.context_window_budget = int(derived)
+            if config is not None:
+                # No hop knows its window, so the library default stands. It
+                # has to be written: leaving the live config alone would keep
+                # the number the owner has just cleared, which is the "it
+                # reverts after a restart" behaviour in the other direction.
+                from geny_executor.llm_client.context_window import (
+                    DEFAULT_CONTEXT_WINDOW,
+                )
+
+                config.context_window_budget = int(derived or DEFAULT_CONTEXT_WINDOW)
 
         if "costCeiling" in budgets:
             ceiling = float(budgets["costCeiling"])

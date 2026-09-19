@@ -4005,6 +4005,9 @@ const ko: Translations = {
         manifest: '파이프라인',
         runtime: 'Geny 가 설치',
         session: '내가 바꿈',
+        route: '라우트에서',
+        assumed: '추정값',
+        none: '없음',
       },
       unit: { turns: '턴', tokens: '토큰', usd: 'USD' },
       budget: {

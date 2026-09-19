@@ -131,6 +131,7 @@ function BudgetRow({
   hint,
   value,
   unit,
+  source,
   busy,
   onCommit,
 }: {
@@ -138,6 +139,11 @@ function BudgetRow({
   hint: string;
   value: number | null;
   unit: string;
+  /** Who decided this number — the owner, the route, or nobody. Shown
+   *  because a budget derived from the route and one typed by hand behave
+   *  differently on the next model switch, and the page would otherwise
+   *  present them identically. */
+  source?: string;
   busy: boolean;
   onCommit: (value: number) => void;
 }) {
@@ -145,7 +151,10 @@ function BudgetRow({
   useEffect(() => setDraft(value == null ? '' : String(value)), [value]);
   return (
     <div className="flex flex-col gap-1.5 py-3 border-b border-[var(--border-color)] last:border-b-0">
-      <span className="text-[0.8125rem] font-medium">{label}</span>
+      <div className="flex items-start gap-2">
+        <span className="flex-1 text-[0.8125rem] font-medium">{label}</span>
+        {source && <SourceBadge source={source} />}
+      </div>
       <p className="text-[0.75rem] text-[var(--text-muted)] leading-relaxed">{hint}</p>
       <div className="flex items-center gap-2">
         <input
@@ -294,6 +303,7 @@ export default function HarnessPanel({ sessionId }: { sessionId: string }) {
           label={t('harness.budget.maxIterations')}
           hint={t('harness.budget.maxIterationsHint')}
           value={budgets.maxIterations?.value ?? null}
+          source={budgets.maxIterations?.source}
           unit={t('harness.unit.turns')}
           busy={busy}
           onCommit={(v) => void patch({ budgets: { maxIterations: v } })}
@@ -310,6 +320,7 @@ export default function HarnessPanel({ sessionId }: { sessionId: string }) {
               : t('harness.budget.contextWindowHint')
           }
           value={budgets.contextWindow?.value ?? null}
+          source={budgets.contextWindow?.source}
           unit={t('harness.unit.tokens')}
           busy={busy}
           onCommit={(v) => void patch({ budgets: { contextWindow: v } })}
@@ -318,6 +329,7 @@ export default function HarnessPanel({ sessionId }: { sessionId: string }) {
           label={t('harness.budget.costCeiling')}
           hint={t('harness.budget.costCeilingHint')}
           value={budgets.costCeiling?.value ?? null}
+          source={budgets.costCeiling?.source}
           unit={t('harness.unit.usd')}
           busy={busy}
           onCommit={(v) => void patch({ budgets: { costCeiling: v } })}
