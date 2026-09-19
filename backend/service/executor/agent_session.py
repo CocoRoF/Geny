@@ -3604,6 +3604,22 @@ class AgentSession:
                 f"[{self._session_id}] PipelineResumeRequester install failed: {exc}"
             )
 
+        # The OWNER's harness settings, applied last on purpose. Everything
+        # above is a default — the manifest's declaration and then Geny's
+        # runtime installs — and a default is exactly the thing an explicit
+        # choice should beat. Applied after ``_restore_env_overlay`` too, so
+        # when the agent and its owner disagree about a slot, the owner wins.
+        try:
+            from service.harness import apply_overlay, read_overlay
+
+            overlay = read_overlay(self.storage_path)
+            if overlay:
+                apply_overlay(self._pipeline, overlay)
+        except Exception as exc:  # noqa: BLE001 — settings never block a build
+            logger.warning(
+                f"[{self._session_id}] harness overlay not applied: {exc}"
+            )
+
         # TTFT (executor >=2.50.0): pre-warm the LLM backend in the
         # background AFTER all runtime wiring — TLS pool prewarm for SDK
         # providers, ``--version`` handshake for the CLI — so the

@@ -170,7 +170,10 @@ def build_harness_view(
     """
     catalogue = slot_catalogue()
     declared = _manifest_slots(manifest) if manifest is not None else {}
-    overlay_slots = dict(((overlay or {}).get("config") or {}).get("slots") or {})
+    # ``overlay`` is the OWNER's harness file (service.harness.overlay), whose
+    # slots sit at the top level. The agent's own env overlay is a different
+    # file with a different owner and is deliberately not consulted here.
+    overlay_slots = dict((overlay or {}).get("slots") or {})
 
     stages: List[Dict[str, Any]] = []
     for description in pipeline.describe():

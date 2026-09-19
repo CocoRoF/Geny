@@ -15,10 +15,24 @@ from service.harness.catalogue import (
     lock_reason,
     tier_of,
 )
+from service.harness.overlay import (
+    HarnessRejected,
+    apply_overlay,
+    merge_overlay,
+    read_overlay,
+    validate_overlay,
+    write_overlay,
+)
 from service.harness.view import build_harness_view, slot_catalogue
 
 __all__ = [
     "BASIC_SLOTS",
+    "HarnessRejected",
+    "apply_overlay",
+    "merge_overlay",
+    "read_overlay",
+    "validate_overlay",
+    "write_overlay",
     "LOCKED_SLOTS",
     "RUNTIME_INSTALLED",
     "STAGE_GROUPS",

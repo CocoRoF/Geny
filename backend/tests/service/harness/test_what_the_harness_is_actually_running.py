@@ -62,10 +62,12 @@ def _find(view, order: int, slot: str):
 class TestWhereEachValueCameFrom:
     def test_the_manifest_gets_the_credit_when_it_matches(self) -> None:
         view = build_harness_view(
-            pipeline=_pipeline(_stage(18, "memory", [_slot("strategy", "reflective", ["reflective"])])),
-            manifest=_manifest({18: {"strategies": {"strategy": "reflective"}}}),
+            pipeline=_pipeline(
+                _stage(16, "loop", [_slot("controller", "multi_dim_budget", ["standard"])])
+            ),
+            manifest=_manifest({16: {"strategies": {"controller": "multi_dim_budget"}}}),
         )
-        assert _find(view, 18, "strategy")["source"] == "manifest"
+        assert _find(view, 16, "controller")["source"] == "manifest"
 
     def test_a_value_nobody_declared_is_the_stages_own(self) -> None:
         view = build_harness_view(
@@ -89,7 +91,7 @@ class TestWhereEachValueCameFrom:
         view = build_harness_view(
             pipeline=_pipeline(_stage(2, "context", [_slot("compactor", "truncate", ["truncate"])])),
             manifest=_manifest({2: {"strategies": {"compactor": "llm_summary"}}}),
-            overlay={"config": {"slots": {"2.compactor": "truncate"}}},
+            overlay={"slots": {"2.compactor": "truncate"}},
         )
         assert _find(view, 2, "compactor")["source"] == "session"
 

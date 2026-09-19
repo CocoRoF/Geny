@@ -73,10 +73,18 @@ LOCKED_SLOTS: Dict[Tuple[int, str], str] = {
 #: the manifest declared. Reported as ``runtime`` so the page never claims the
 #: manifest's placeholder is what runs.
 RUNTIME_INSTALLED: Dict[Tuple[int, str], str] = {
+    # Compaction that also files each summary in the agent's memory.
     (2, "compactor"): "persistingCompactor",
+    # Pulls the agent's own memory into the turn's context.
+    (2, "retriever"): "memoryAware",
+    # The persona: character, mood, what it has been told about itself.
+    (3, "builder"): "personaBuilder",
     (4, "guards"): "guardChain",
     (15, "requester"): "hitlResume",
     (17, "emitters"): "affectTags",
+    # Writes the turn to the agent's memory, without re-filing what it
+    # already knows.
+    (18, "strategy"): "genyMemory",
     (20, "persister"): "sessionStorage",
 }
 

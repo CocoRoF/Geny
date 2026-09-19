@@ -2601,9 +2601,11 @@ class AgentSessionManager:
             except Exception:  # noqa: BLE001 — labels degrade, the page still renders
                 logger.debug("manifest unavailable for the harness view", exc_info=True)
 
-        overlay = None
+        overlay: Optional[Dict[str, Any]] = None
         try:
-            overlay = agent.read_env_overlay()
+            from service.harness import read_overlay
+
+            overlay = read_overlay(getattr(agent, "storage_path", None))
         except Exception:  # noqa: BLE001
             logger.debug("overlay unavailable for the harness view", exc_info=True)
 
@@ -2648,6 +2650,58 @@ class AgentSessionManager:
         return build_harness_view(
             pipeline=pipeline, manifest=manifest, overlay=overlay, budgets=budgets
         )
+
+    async def change_session_harness(
+        self, agent: Any, patch: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Change what this agent's harness runs — without ending anything.
+
+        Applied to the LIVE pipeline first and persisted second, so the
+        failure mode is "we saved something that did not take" rather than
+        "the page says it took and the file disagrees": a rejection reaches
+        the user before anything is written, and a live apply that throws
+        leaves the stored overlay untouched.
+
+        The owner's file is separate from the agent's own ``env_overlay``.
+        One file with two writers means the agent's next self-save silently
+        drops whatever the owner set, which would surface as "my setting
+        keeps reverting" and be very hard to explain.
+        """
+        from service.harness import (
+            apply_overlay,
+            merge_overlay,
+            read_overlay,
+            validate_overlay,
+            write_overlay,
+        )
+
+        pipeline = getattr(agent, "_pipeline", None)
+        if pipeline is None:
+            raise ValueError("this session has no pipeline yet")
+
+        storage = getattr(agent, "storage_path", None)
+        merged = merge_overlay(read_overlay(storage), patch or {})
+        validate_overlay(merged, pipeline=pipeline)
+        applied = apply_overlay(pipeline, merged)
+        write_overlay(storage, merged)
+
+        # The budgets also live on the session object, which is what a
+        # restart and a route change read. Without this the number would be
+        # right until the next rebuild and then quietly revert.
+        budgets = merged.get("budgets") or {}
+        if "maxIterations" in budgets:
+            agent._max_iterations = int(budgets["maxIterations"] or 0) or agent._max_iterations
+        if "contextWindow" in budgets:
+            agent._context_window_budget = int(budgets["contextWindow"] or 0) or None
+        if "costCeiling" in budgets:
+            ceiling = float(budgets["costCeiling"] or 0)
+            agent._cost_budget_usd = ceiling if ceiling > 0 else None
+
+        logger.info(
+            "🎛 session %s harness: %s",
+            agent.session_id, ", ".join(applied) if applied else "(nothing changed)",
+        )
+        return {"applied": applied, "overlay": merged}
 
     async def change_session_route(
         self, session_id: str, route: Dict[str, Any]

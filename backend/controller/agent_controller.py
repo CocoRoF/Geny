@@ -867,6 +867,46 @@ async def get_session_harness(
         raise HTTPException(status_code=500, detail=f"harness view unavailable: {exc}")
 
 
+class HarnessPatch(BaseModel):
+    """What the settings page changed. A patch, not the whole world — a form
+    that submits one field must not clear every other setting, and ``null``
+    means "go back to inherited"."""
+
+    budgets: Optional[Dict[str, Any]] = None
+    slots: Optional[Dict[str, Any]] = None
+    slotConfigs: Optional[Dict[str, Any]] = None
+
+
+@router.patch("/{session_id}/harness")
+async def change_session_harness(
+    body: HarnessPatch,
+    session_id: str = Path(..., description="Session ID"),
+    auth: dict = Depends(require_auth),
+):
+    """Change what this agent's harness runs, mid-conversation.
+
+    Takes effect on the next turn and survives a restart. Refused — with a
+    reason, before anything is written — when the change names a locked slot
+    (the tool loop is not a setting), a stage this pipeline does not have, or
+    an implementation the slot does not accept.
+    """
+    _enforce_session_owner(session_id, auth)
+    agent = await agent_manager.ensure_session_live(session_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"AgentSession not found: {session_id}")
+    from service.harness import HarnessRejected
+
+    try:
+        result = await agent_manager.change_session_harness(
+            agent, body.model_dump(exclude_none=True)
+        )
+    except HarnessRejected as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"success": True, **result}
+
+
 @router.put("/{session_id}/route")
 async def change_session_route(
     request: ChangeRouteRequest,
