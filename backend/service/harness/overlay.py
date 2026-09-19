@@ -30,6 +30,7 @@ from service.harness.catalogue import lock_reason
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "CLEARABLE_BUDGETS",
     "HARNESS_FILE",
     "HarnessRejected",
     "apply_overlay",
@@ -87,6 +88,15 @@ def write_overlay(storage_path: Optional[str], overlay: Dict[str, Any]) -> None:
     os.replace(tmp, path)
 
 
+#: Budgets with somewhere to fall back TO. Clearing one of these removes the
+#: declaration and the session re-derives it (the context window from the
+#: route's smallest hop; the ceiling to "none"). ``maxIterations`` is absent
+#: on purpose — a turn always runs some number of steps, so "automatic" would
+#: have to mean a number, and a blank field that silently means 50 is the
+#: kind of half-truth this page exists to remove.
+CLEARABLE_BUDGETS = frozenset({"contextWindow", "costCeiling"})
+
+
 def merge_overlay(current: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
     """Lay *patch* over *current*, one key at a time.
 
@@ -94,6 +104,11 @@ def merge_overlay(current: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, A
     one changed field must not clear every other setting. ``None`` is how a
     field says "go back to inherited", and it removes the key rather than
     storing a null nobody can distinguish from "not set".
+
+    A blank number field arrives as ``0``, which means the same thing for the
+    budgets that have something to fall back to — so it removes the key too,
+    rather than storing a zero the page would then render as a declared
+    budget of nothing.
     """
     merged: Dict[str, Any] = {
         "budgets": dict(current.get("budgets") or {}),
@@ -102,7 +117,10 @@ def merge_overlay(current: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, A
     }
     for section in ("budgets", "slots", "slotConfigs"):
         for key, value in (patch.get(section) or {}).items():
-            if value is None:
+            cleared = value is None or (
+                section == "budgets" and key in CLEARABLE_BUDGETS and not value
+            )
+            if cleared:
                 merged[section].pop(key, None)
             else:
                 merged[section][key] = value
@@ -132,6 +150,11 @@ def validate_overlay(overlay: Dict[str, Any], *, pipeline: Any) -> None:
             raise HarnessRejected(f"{key} 은 숫자여야 합니다") from None
         if number < 0:
             raise HarnessRejected(f"{key} 은 0 이상이어야 합니다")
+        if number == 0 and key not in CLEARABLE_BUDGETS:
+            # ``maxIterations`` has no "automatic": a turn always runs some
+            # number of steps. Zero here would read as "stop before the first
+            # one", which is never what an empty field meant.
+            raise HarnessRejected(f"{key} 은 1 이상이어야 합니다")
 
     stages = {int(getattr(s, "order", 0)): s for s in getattr(pipeline, "stages", [])}
     for key, impl in (overlay.get("slots") or {}).items():

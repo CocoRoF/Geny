@@ -2685,17 +2685,41 @@ class AgentSessionManager:
         applied = apply_overlay(pipeline, merged)
         write_overlay(storage, merged)
 
-        # The budgets also live on the session object, which is what a
-        # restart and a route change read. Without this the number would be
-        # right until the next rebuild and then quietly revert.
+        # The budgets also live on the session object, which is what a restart
+        # and a route change read. Without this the number would be right
+        # until the next rebuild and then quietly revert.
+        #
+        # A budget the owner CLEARED has to go back to what the session
+        # derives, here and on the live pipeline both — otherwise "automatic"
+        # would mean "automatic after a restart", which is the kind of
+        # half-truth this page exists to remove.
         budgets = merged.get("budgets") or {}
+        config = getattr(pipeline, "_config", None)
+
         if "maxIterations" in budgets:
-            agent._max_iterations = int(budgets["maxIterations"] or 0) or agent._max_iterations
+            agent._max_iterations = int(budgets["maxIterations"])
+
         if "contextWindow" in budgets:
-            agent._context_window_budget = int(budgets["contextWindow"] or 0) or None
+            agent._context_window_budget = int(budgets["contextWindow"])
+        else:
+            derived = route_context_window(
+                await self._route_targets(
+                    getattr(agent, "route", None)
+                    or self._stored_route(agent.session_id)
+                    or {}
+                )
+            )
+            agent._context_window_budget = derived
+            if config is not None and derived:
+                config.context_window_budget = int(derived)
+
         if "costCeiling" in budgets:
-            ceiling = float(budgets["costCeiling"] or 0)
+            ceiling = float(budgets["costCeiling"])
             agent._cost_budget_usd = ceiling if ceiling > 0 else None
+        else:
+            agent._cost_budget_usd = None
+            if config is not None:
+                config.cost_budget_usd = None
 
         logger.info(
             "🎛 session %s harness: %s",
@@ -2757,7 +2781,22 @@ class AgentSessionManager:
             # to a smaller model mid-conversation is one of the things this
             # endpoint exists for, and a budget left at the old model's size
             # would compact too late for the one now answering.
-            window = route_context_window(targets)
+            #
+            # Unless the owner set the number themselves. Re-deriving it from
+            # the route would make their setting last exactly until the next
+            # model switch and then vanish with nothing said — the same
+            # "my setting keeps reverting" failure the separate overlay file
+            # exists to prevent.
+            declared = None
+            try:
+                from service.harness import read_overlay
+
+                declared = (read_overlay(getattr(agent, "storage_path", None))
+                            .get("budgets") or {}).get("contextWindow")
+            except Exception:  # noqa: BLE001 — a missing overlay means "not set"
+                logger.debug("harness overlay unreadable on route change", exc_info=True)
+
+            window = None if declared else route_context_window(targets)
             if window and hasattr(agent, "_context_window_budget"):
                 agent._context_window_budget = window
                 try:

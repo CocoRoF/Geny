@@ -4,8 +4,9 @@ Strips the three kinds of special markers that agents emit but that
 should never reach a user-visible surface (chat room, TTS, UI):
 
 * Routing / system prefixes — ``[THINKING_TRIGGER]``,
-  ``[SUB_WORKER_RESULT]``, ``[DELEGATION_REQUEST|RESULT]``, etc.
-  These are protocol tags consumed by the classifier / router.
+  ``[SUB_WORKER_RESULT]``, ``[DELEGATION_REQUEST|RESULT]``, and the loop
+  signals ``[TASK_COMPLETE]`` / ``[BLOCKED]`` / ``[CONTINUE]``. These are
+  protocol tags consumed by the classifier / router / loop.
 * Emotion tags — ``[joy]``, ``[surprise]``, ``[smirk]``, …
   emitted deliberately by VTuber prompts and consumed by the
   avatar layer (``EmotionExtractor``). Not for humans.
@@ -45,7 +46,15 @@ SYSTEM_TAG_PATTERN = re.compile(
     r"SUB_WORKER_RESULT|"
     r"CLI_RESULT|"
     r"ACTIVITY_TRIGGER(?::\w+)?|"
-    r"SILENT)"
+    r"SILENT|"
+    # Loop signals. The pipeline reads these to decide whether a turn is
+    # over (``prompts`` teaches them; ``agent_executor`` reads them to tell
+    # narration from a tool-only turn) and a reader has no use for them —
+    # but until now nothing stripped them, so every answer ended in a
+    # visible ``[TASK_COMPLETE]`` on every surface, chat and TTS included.
+    r"TASK_COMPLETE|"
+    r"BLOCKED(?::[^]]*)?|"
+    r"CONTINUE(?::[^]]*)?)"
     # Trailing horizontal whitespace only — never newlines, so stripping a
     # tag can't swallow the blank line that separates markdown blocks.
     r"\][^\S\n]*",

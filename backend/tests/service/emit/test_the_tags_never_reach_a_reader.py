@@ -26,31 +26,62 @@ from service.affect.taxonomy import RECOGNIZED_TAGS
 from service.utils.text_sanitizer import sanitize_for_display
 
 
-class TestTheFinalTextIsTheCleanedOne:
-    """Reproduces the guard at the two call sites that had it."""
+class TestTheAccumulationIsTheTurn:
+    """``state.final_text`` is NOT the turn.
+
+    Stage 9 overwrites it on every loop iteration, so it holds the last
+    message. An agent that narrates, calls a tool, then answers has written
+    two messages; preferring ``final_text`` keeps only the second. I shipped
+    exactly that for one deploy and a three-step turn came back as 34
+    characters, with the agent's first sentence gone.
+    """
 
     @staticmethod
-    def _resolve(streamed_result: str, accumulated: str) -> str:
+    def _resolve(accumulated: str, final_text: str) -> str:
         """The rule both call sites now use."""
-        return streamed_result or accumulated
+        return sanitize_for_display(accumulated or final_text)
 
-    def test_a_shorter_final_text_is_accepted(self) -> None:
-        """Stripping is the one thing that makes it legitimately shorter, so
-        the old ``>=`` guard rejected exactly the correction it should take."""
-        streamed = "[joy:0.6] 발표 대성공했다니 정말 잘됐다!"
-        cleaned = "발표 대성공했다니 정말 잘됐다!"
-        assert len(cleaned) < len(streamed)
-        assert self._resolve(cleaned, streamed) == cleaned
+    def test_prose_written_before_a_tool_call_survives(self) -> None:
+        accumulated = "STEP-ONE 시작합니다\n\nSTEP-THREE 끝났습니다"
+        final_text = "STEP-THREE 끝났습니다"
+        out = self._resolve(accumulated, final_text)
+        assert "STEP-ONE" in out and "STEP-THREE" in out
 
-    def test_an_empty_final_text_falls_back_to_the_stream(self) -> None:
-        """A turn can end with no final text; streamed tokens beat nothing."""
-        assert self._resolve("", "partial answer") == "partial answer"
+    def test_preferring_the_final_text_would_have_lost_it(self) -> None:
+        """The shape of the regression, kept as its own assertion so the
+        reason this rule exists cannot be refactored away."""
+        accumulated = "STEP-ONE 시작합니다\n\nSTEP-THREE 끝났습니다"
+        final_text = "STEP-THREE 끝났습니다"
+        assert "STEP-ONE" not in (final_text or accumulated)
 
-    def test_the_guard_it_replaced_would_have_failed_this(self) -> None:
-        streamed, cleaned = "[joy:0.6] hi", "hi"
-        old_rule = cleaned if len(cleaned) >= len(streamed) else streamed
-        assert old_rule == streamed, "the old guard kept the tagged text"
-        assert self._resolve(cleaned, streamed) == cleaned
+    def test_nothing_streamed_falls_back_to_the_final_text(self) -> None:
+        assert self._resolve("", "only answer") == "only answer"
+
+    def test_the_boundary_is_where_the_cleaning_happens(self) -> None:
+        assert self._resolve("[joy:0.6] 축하해!", "") == "축하해!"
+
+    def test_the_real_source_follows_this_rule(self) -> None:
+        """The three above reproduce the rule; this one reads the code.
+
+        Without it they are decorative — I reverted the source and all three
+        still passed, which is the exact failure mode this session has been
+        finding everywhere else.
+        """
+        import inspect
+
+        from service.executor.agent_session import AgentSession
+
+        source = inspect.getsource(AgentSession)
+        # the accumulation wins; `result` is the empty-case fallback
+        assert "if not accumulated_output:\n                    accumulated_output = streamed_result" in source, (
+            "the turn's output no longer prefers the streamed accumulation"
+        )
+        assert "if streamed_result:\n                    accumulated_output = streamed_result" not in source, (
+            "the last message is being preferred over the turn again"
+        )
+        # …and the cleaning happens once, at the boundary
+        assert '"output": sanitize_for_display(accumulated_output)' in source
+        assert "result_text = sanitize_for_display(" in source
 
 
 class TestWhatReachesAReader:
@@ -135,3 +166,63 @@ class TestTheAvatarStillSeesThem:
         emit_at = body.index("_emit_avatar_state_for_log")
         clean_at = body.index('entry_dict["message"] = sanitize_for_display')
         assert emit_at < clean_at, "the display copy is made before the avatar reads it"
+
+
+class TestTheLoopSignalsAreNotForReaders:
+    """``[TASK_COMPLETE]`` is how the model tells the pipeline a turn is over.
+    Nothing stripped it, so every answer ended with it visible — in chat, in
+    the API response, and in whatever TTS read aloud."""
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("답변입니다.\n\n[TASK_COMPLETE]", "답변입니다."),
+            ("[BLOCKED: 권한 없음] 못 했어", "못 했어"),
+            ("[CONTINUE:next] 이어서", "이어서"),
+        ],
+    )
+    def test_they_are_stripped(self, raw: str, expected: str) -> None:
+        assert sanitize_for_display(raw) == expected
+
+    def test_a_turn_that_was_only_a_signal_becomes_empty(self) -> None:
+        """Which is what the narration check downstream reads as "it said
+        nothing" — the same answer it gave when the marker was still there."""
+        assert sanitize_for_display("[TASK_COMPLETE]") == ""
+
+    def test_the_narration_check_still_agrees(self) -> None:
+        from service.execution.agent_executor import _strip_only_loop_signals
+
+        # tool-only turn → no narration, before and after the boundary strip
+        assert not (_strip_only_loop_signals(sanitize_for_display("[TASK_COMPLETE]")) or "")
+        assert not (_strip_only_loop_signals("[TASK_COMPLETE]") or "")
+        # a real answer → narration either way
+        assert _strip_only_loop_signals(sanitize_for_display("했어요.\n[TASK_COMPLETE]"))
+
+
+class TestABudgetTheOwnerCleared:
+    """A blank number field arrives as 0. It must mean "automatic" for the
+    budgets that have an automatic, and be refused for the one that does not."""
+
+    def test_clearing_the_context_window_removes_the_declaration(self) -> None:
+        from service.harness.overlay import merge_overlay
+
+        merged = merge_overlay({"budgets": {"contextWindow": 32768}},
+                               {"budgets": {"contextWindow": 0}})
+        assert "contextWindow" not in merged["budgets"]
+
+    def test_clearing_the_ceiling_removes_it(self) -> None:
+        from service.harness.overlay import merge_overlay
+
+        merged = merge_overlay({"budgets": {"costCeiling": 2.5}},
+                               {"budgets": {"costCeiling": 0}})
+        assert "costCeiling" not in merged["budgets"]
+
+    def test_zero_turns_is_refused_rather_than_stored(self) -> None:
+        """There is no automatic number of steps, and zero would read as
+        "stop before the first one"."""
+        from service.harness.overlay import HarnessRejected, validate_overlay
+        from types import SimpleNamespace
+
+        with pytest.raises(HarnessRejected):
+            validate_overlay({"budgets": {"maxIterations": 0}},
+                             pipeline=SimpleNamespace(stages=[]))

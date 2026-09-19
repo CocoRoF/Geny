@@ -57,6 +57,7 @@ from service.sessions.models import (
 )
 from service.executor.session_freshness import SessionFreshness, FreshnessStatus
 from service.logging.session_logger import get_session_logger, SessionLogger, LogLevel, STAGE_ORDER
+from service.utils.text_sanitizer import sanitize_for_display
 
 logger = getLogger(__name__)
 
@@ -4626,26 +4627,23 @@ class AgentSession:
                         )
 
             elif event_type == "pipeline.complete":
-                # `result` is the pipeline's final text, AFTER Stage 17 has
-                # run. Taking it is the whole point: that stage is where a
-                # VTuber's `[joy:0.6]` cues are harvested into mood and
-                # stripped out of what the user reads.
+                # The streamed accumulation IS the turn. `result` is only
+                # the fallback for a backend that produced no deltas.
                 #
-                # This used to accept `result` only when it was at least as
-                # long as the streamed accumulation — a guard against
-                # executor ≤ 0.20.0, which sent a 500-char preview here. The
-                # pin has been far past that for a year, and the guard was
-                # rejecting the one case where the final text is legitimately
-                # SHORTER than the stream: stripping. So the tags the emitter
-                # had already removed went back to the caller, and the
-                # emitter's documented contract ("the user-visible text never
-                # carries raw markers") was unreachable through this path.
+                # It cannot be the other way round: Stage 9 overwrites
+                # ``state.final_text`` on every loop iteration, so `result`
+                # holds the LAST message rather than the turn. An agent that
+                # says "먼저 확인할게", calls a tool, then answers has written
+                # two messages, and preferring `result` silently keeps only
+                # the second — measured on prod as a three-step turn coming
+                # back as 34 characters.
                 #
-                # Empty still falls back to the accumulation: a turn can end
-                # with no final text at all, and the streamed tokens are
-                # better than nothing.
+                # The markers are stripped at the return boundary instead, by
+                # ``sanitize_for_display`` — the same function every other
+                # Geny surface uses, and the only one that also knows the
+                # loop signals Stage 17 never touches.
                 streamed_result = event_data.get("result") or ""
-                if streamed_result:
+                if not accumulated_output:
                     accumulated_output = streamed_result
                 total_cost = event_data.get("total_cost_usd", 0.0) or 0.0
                 iterations = event_data.get("iterations", 0)
@@ -4734,7 +4732,11 @@ class AgentSession:
             }
 
         return {
-            "output": accumulated_output,
+            # What a caller reads, cleaned once here: the emotion cues the
+            # avatar already consumed, and the loop signals the pipeline
+            # uses to decide whether a turn is over. Memory and the session
+            # log above keep the raw text.
+            "output": sanitize_for_display(accumulated_output),
             "total_cost": total_cost,
             "tool_calls": tool_calls_completed,
         }
@@ -5011,11 +5013,10 @@ class AgentSession:
                 yield {stage_name: {"status": "exit"}}
 
             elif event_type == "pipeline.complete":
-                # See _invoke_pipeline: the pipeline's final text is the one
-                # Stage 17 has already cleaned, and it is legitimately
-                # shorter than the stream whenever anything was stripped.
+                # See _invoke_pipeline: the accumulation is the turn and
+                # `result` is one message of it.
                 streamed_result = event_data.get("result") or ""
-                result_text = streamed_result or accumulated_output
+                result_text = sanitize_for_display(accumulated_output or streamed_result)
                 total_cost = event_data.get("total_cost_usd", 0.0) or 0.0
                 iterations = event_data.get("iterations", 0)
                 yield {
