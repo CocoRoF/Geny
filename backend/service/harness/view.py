@@ -208,19 +208,40 @@ def build_harness_view(
             else:
                 value = info.current_impl
 
+            options = [
+                {
+                    "name": impl,
+                    "description": (meta.get("implDescriptions") or {}).get(impl, ""),
+                    "schema": (meta.get("implSchemas") or {}).get(impl),
+                    "installed": False,
+                }
+                for impl in (info.available_impls or [])
+            ]
+            # What Geny installs at build time is an INSTANCE, not a name the
+            # stage's registry knows — ``persisting_llm_summary``,
+            # ``memory_aware``, ``geny_dedupe``. Leave it out and the dropdown
+            # cannot render its own current value: it falls back to the first
+            # option, so the page says ``llm_summary`` where the persisting
+            # one runs, and a reader who touches the control downgrades
+            # something they were never shown. Which is the exact lie this
+            # whole view exists to prevent, one mile from the end.
+            if not is_chain and value and value not in [o["name"] for o in options]:
+                options.insert(
+                    0,
+                    {
+                        "name": value,
+                        "description": (meta.get("implDescriptions") or {}).get(value, ""),
+                        "schema": None,
+                        "installed": True,
+                    },
+                )
+
             slots.append(
                 {
                     "slot": info.slot_name,
                     "value": value,
                     "isChain": is_chain,
-                    "options": [
-                        {
-                            "name": impl,
-                            "description": (meta.get("implDescriptions") or {}).get(impl, ""),
-                            "schema": (meta.get("implSchemas") or {}).get(impl),
-                        }
-                        for impl in (info.available_impls or [])
-                    ],
+                    "options": options,
                     "config": config,
                     "description": meta.get("description", ""),
                     "tier": tier_of(order, info.slot_name),

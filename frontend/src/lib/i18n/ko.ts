@@ -3989,6 +3989,7 @@ const ko: Translations = {
       saved: '적용했습니다. 다음 턴부터 반영됩니다.',
       revert: '물려받은 값으로 되돌리기',
       emptyChain: '(비어 있음)',
+      installedOption: 'Geny 가 설치한 것',
       unknown: '모름',
       section: {
         budgets: '한도',
@@ -4040,7 +4041,7 @@ const ko: Translations = {
         personaBuilder: '성격·기분·자기 자신에 대해 들은 것을 시스템 프롬프트로 만듭니다.',
         guardChain: '호출 전 검사: 컨텍스트 여유, 비용, 반복, 권한.',
         hitlResume: '사람의 승인을 기다렸다가 이어서 실행합니다.',
-        affectTags: '감정 태그를 읽어 표정·상태에 반영합니다.',
+        affectTags: '감정 태그를 읽어 표정·상태에 반영합니다. VTuber 세션에만 붙습니다.',
         genyMemory: '턴을 기억에 씁니다. 이미 아는 것은 다시 쓰지 않습니다.',
         sessionStorage: '이 세션의 저장 공간에 상태를 남깁니다.',
       },

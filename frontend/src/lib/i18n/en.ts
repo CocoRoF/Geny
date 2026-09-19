@@ -3948,6 +3948,7 @@ const en = {
       saved: 'Applied. It takes effect on the next turn.',
       revert: 'Go back to the inherited value',
       emptyChain: '(empty)',
+      installedOption: 'installed by Geny',
       unknown: 'unknown',
       section: {
         budgets: 'Limits',
@@ -3999,7 +4000,7 @@ const en = {
         personaBuilder: 'Builds the system prompt from its character, mood, and what it has been told about itself.',
         guardChain: 'Pre-flight checks: context headroom, cost, iterations, permissions.',
         hitlResume: 'Waits for a person to approve, then carries on.',
-        affectTags: 'Reads affect tags into expression and state.',
+        affectTags: 'Reads affect tags into expression and state. VTuber sessions only.',
         genyMemory: 'Writes the turn to memory, without re-filing what it already knows.',
         sessionStorage: 'Keeps state in this session\'s own storage.',
       },

@@ -18,6 +18,11 @@ export interface HarnessOption {
   name: string;
   description: string;
   schema?: { fields: HarnessField[] } | null;
+  /** This is the instance Geny installed, not a name the stage's registry
+   *  knows. Present so the dropdown can render its own current value —
+   *  without it the control falls back to the first option and the page
+   *  reports something other than what runs. */
+  installed?: boolean;
 }
 
 export interface HarnessField {

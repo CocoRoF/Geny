@@ -117,6 +117,7 @@ function SlotRow({
           {slot.options.map((o) => (
             <option key={o.name} value={o.name}>
               {o.name}
+              {o.installed ? ` (${t('harness.installedOption')})` : ''}
               {o.description ? ` — ${o.description}` : ''}
             </option>
           ))}
