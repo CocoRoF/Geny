@@ -173,6 +173,15 @@ class CreateSessionRequest(BaseModel):
         description="Default execution timeout per iteration (seconds)"
     )
 
+    cost_budget_usd: Optional[float] = Field(
+        default=None,
+        description=(
+            "Spend ceiling for one turn, in USD. None = no ceiling. Only "
+            "counts what a backend reports, so a subscription account "
+            "(which reports no cost) is never stopped by it."
+        ),
+    )
+
     # Graph execution settings
     max_iterations: Optional[int] = Field(
         default=50,

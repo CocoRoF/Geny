@@ -111,6 +111,13 @@ export interface LlmAccount {
    *  from the kind alone would show tools as off on an endpoint that has
    *  them on. */
   defaultCapabilities: EndpointCapabilities;
+  /** How much context this endpoint's models hold, in tokens.
+   *
+   *  `declared` is the operator's own statement and wins; `discovered` is
+   *  what the endpoint said when models were last refreshed, keyed by model.
+   *  The session sizes its compaction from the smaller of these across every
+   *  hop in its route. */
+  contextWindow: { declared: number | null; discovered: Record<string, number> };
   createdAt?: string | null;
   claude?: { authMethod: ClaudeAuthMethod };
   configDir?: string;
@@ -175,6 +182,8 @@ export interface NewAccountInput {
   secret?: string;
   effort?: string;
   capabilities?: EndpointCapabilities;
+  /** Tokens. 0 clears the declaration and goes back to measured/known. */
+  contextWindow?: number;
   claude?: { authMethod?: ClaudeAuthMethod };
 }
 
@@ -185,6 +194,7 @@ export interface AccountPatch {
   effort?: string;
   secret?: string;
   capabilities?: EndpointCapabilities;
+  contextWindow?: number;
   claude?: { authMethod?: ClaudeAuthMethod };
 }
 

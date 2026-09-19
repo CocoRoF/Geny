@@ -28,7 +28,12 @@ pytest.importorskip("pydantic")
 from service.executor.agent_session import AgentSession  # noqa: E402
 
 
-def _make_session(max_iterations: int) -> AgentSession:
+def _make_session(
+    max_iterations: int,
+    *,
+    context_window_budget=None,
+    cost_budget_usd=None,
+) -> AgentSession:
     """Construct a minimal AgentSession suitable for helper testing.
 
     We avoid calling ``initialize`` — only the attrs the helper reads
@@ -37,6 +42,8 @@ def _make_session(max_iterations: int) -> AgentSession:
     session = AgentSession.__new__(AgentSession)
     session._session_id = "test-session"
     session._max_iterations = max_iterations
+    session._context_window_budget = context_window_budget
+    session._cost_budget_usd = cost_budget_usd
     session._pipeline = None
     return session
 
@@ -139,3 +146,64 @@ def test_change_logged_when_value_overridden(caplog) -> None:
     assert len(transition_lines) == 1
     msg = transition_lines[0].getMessage()
     assert "50" in msg and "12" in msg
+
+
+class TestTheBudgetsThatSizeTheHarness:
+    """Two numbers the pipeline reads every turn and Geny never set.
+
+    ``context_window_budget`` sizes proactive compaction and the Stage-4
+    headroom guard: left at the library's 200_000 it compacts six times too
+    late for a local server launched at 32k, where the request overflows
+    before anything notices. ``cost_budget_usd`` is the spend ceiling — a
+    route can hold several paid accounts and nothing bounded what a turn
+    could spend on them.
+    """
+
+    @staticmethod
+    def _pipeline(**config):
+        defaults = {
+            "max_iterations": 50,
+            "context_window_budget": 200_000,
+            "cost_budget_usd": None,
+        }
+        defaults.update(config)
+        return SimpleNamespace(_config=SimpleNamespace(**defaults))
+
+    def test_the_routes_window_is_applied(self) -> None:
+        session = _make_session(50, context_window_budget=32_768)
+        session._pipeline = self._pipeline()
+        session._apply_session_limits_to_pipeline()
+        assert session._pipeline._config.context_window_budget == 32_768
+
+    def test_an_unknown_window_leaves_the_library_default(self) -> None:
+        """No hop could say. Better the documented default than a guess —
+        and the log line says it is an assumption."""
+        session = _make_session(50, context_window_budget=None)
+        session._pipeline = self._pipeline()
+        session._apply_session_limits_to_pipeline()
+        assert session._pipeline._config.context_window_budget == 200_000
+
+    def test_a_nonsense_window_is_not_applied(self) -> None:
+        session = _make_session(50, context_window_budget=0)
+        session._pipeline = self._pipeline()
+        session._apply_session_limits_to_pipeline()
+        assert session._pipeline._config.context_window_budget == 200_000
+
+    def test_a_cost_ceiling_is_applied(self) -> None:
+        session = _make_session(50, cost_budget_usd=2.5)
+        session._pipeline = self._pipeline()
+        session._apply_session_limits_to_pipeline()
+        assert session._pipeline._config.cost_budget_usd == 2.5
+
+    def test_no_ceiling_stays_no_ceiling(self) -> None:
+        session = _make_session(50, cost_budget_usd=None)
+        session._pipeline = self._pipeline()
+        session._apply_session_limits_to_pipeline()
+        assert session._pipeline._config.cost_budget_usd is None
+
+    def test_zero_means_no_ceiling_not_a_zero_ceiling(self) -> None:
+        """A 0 ceiling would stop every turn before it started."""
+        session = _make_session(50, cost_budget_usd=0)
+        session._pipeline = self._pipeline()
+        session._apply_session_limits_to_pipeline()
+        assert session._pipeline._config.cost_budget_usd is None

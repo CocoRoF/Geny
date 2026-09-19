@@ -52,6 +52,12 @@ class NewAccount(BaseModel):
     #: What this endpoint serves, for the kinds that share one client class
     #: (OpenAI-compatible + vLLM). Unknown flags are dropped by the service.
     capabilities: Optional[Dict[str, bool]] = None
+    #: Input context window of this endpoint's models, in tokens. The
+    #: operator's own statement — it beats what discovery measured, because
+    #: only they know what sits behind a private address. Send ``0`` to go
+    #: back to measured/known: a ``null`` is indistinguishable from "not
+    #: mentioned" once ``exclude_none`` has run over the patch.
+    contextWindow: Optional[int] = None
     claude: Optional[ClaudeOptions] = None
 
 
@@ -62,6 +68,7 @@ class AccountPatch(BaseModel):
     effort: Optional[str] = None
     secret: Optional[str] = None
     capabilities: Optional[Dict[str, bool]] = None
+    contextWindow: Optional[int] = None
     claude: Optional[ClaudeOptions] = None
 
 

@@ -14,7 +14,12 @@ from service.llm_accounts.kinds import (
     model_choices,
 )
 from service.llm_accounts.secrets import SecretStore, get_secret_store, secrets_path
-from service.llm_accounts.service import AccountService, accounts_root, get_account_service
+from service.llm_accounts.service import (
+    AccountService,
+    accounts_root,
+    get_account_service,
+    route_context_window,
+)
 
 __all__ = [
     "ACCOUNT_KINDS",
@@ -26,6 +31,7 @@ __all__ = [
     "accounts_root",
     "default_model_for",
     "get_account_service",
+    "route_context_window",
     "get_secret_store",
     "model_choices",
     "secrets_path",

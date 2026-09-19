@@ -475,6 +475,10 @@ const ko: Translations = {
       models: '모델',
       discover: '모델 목록 새로고침',
       moreProviders: '제공자 {n}곳 더',
+      contextWindow: '컨텍스트 창 (토큰)',
+      contextWindowAuto: '자동',
+      contextWindowHint: '비워 두면 엔드포인트에 물어보거나 모델로 판단합니다. 아무도 모르면 20만으로 가정합니다.',
+      contextWindowMeasured: '엔드포인트가 알려준 값: {range}. 다르면 여기에 적으세요.',
       capabilities: '이 주소가 할 수 있는 것',
       capabilitiesHint: '같은 주소라도 뒤에 있는 모델은 제각각입니다. 켜 두지 않으면 이미지는 글로 대체되어 전달됩니다.',
       capability: {

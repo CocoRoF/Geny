@@ -360,6 +360,7 @@ def create_worker_env(
     )
     _promote_core_tools(manifest)
     _use_llm_compactor(manifest)
+    _budget_belongs_to_the_session(manifest)
     return manifest
 
 
@@ -485,6 +486,42 @@ _CORE_PROMOTED_TOOL_PATTERNS: Dict[str, bool] = {
     "memory_*": True,
     "send_direct_message_internal": True,
 }
+
+
+
+def _budget_belongs_to_the_session(manifest: "EnvironmentManifest") -> None:
+    """Let the SESSION own the turn budget, and add the cost dimension.
+
+    The canonical manifest ships a Stage-16 cap of 30. There is one
+    environment here and every agent runs it, so a number baked into it is
+    not "this environment's limit" — it is a second, invisible limit sitting
+    on top of the one the user set, and the user's is the one shown on the
+    page. Clearing it leaves exactly one number: the session's.
+
+    The cost dimension is added at the same time and costs nothing until a
+    budget exists — ``CostBudget`` with no cap defers to
+    ``state.cost_budget_usd``, and with none of those set it never fires. It
+    is here so that a spend cap, once set, is enforced at the loop and not
+    only at the pre-flight guard.
+    """
+    try:
+        entries = manifest.stage_entries()
+        for e in entries:
+            if e.order != 16:
+                continue
+            config = dict(e.config or {})
+            # 0 = "this environment is not naming a cap" (the library reads
+            # the smaller of the two when both do).
+            config["max_turns"] = 0
+            e.config = config
+            configs = dict(e.strategy_configs or {})
+            controller = dict(configs.get("controller") or {})
+            controller["dimensions"] = ["iterations", "cost_usd"]
+            configs["controller"] = controller
+            e.strategy_configs = configs
+        manifest.set_stage_entries(entries)
+    except Exception:  # noqa: BLE001 — a template must always build
+        pass
 
 
 def _promote_core_tools(manifest: "EnvironmentManifest") -> None:

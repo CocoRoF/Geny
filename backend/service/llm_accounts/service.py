@@ -41,7 +41,7 @@ from service.llm_accounts.secrets import SecretStore, get_secret_store
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["AccountService", "get_account_service"]
+__all__ = ["AccountService", "get_account_service", "route_context_window"]
 
 
 def accounts_root() -> Path:
@@ -131,6 +131,44 @@ def _clean_capabilities(raw: Any) -> Dict[str, bool]:
     if not isinstance(raw, dict):
         return {}
     return {k: bool(v) for k, v in raw.items() if k in DECLARABLE_CAPABILITIES}
+
+
+def _clean_window(raw: Any) -> Optional[int]:
+    """A positive integer, or ``None``. Zero and junk both mean "unset"."""
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def _window_record(raw: Any) -> Dict[str, Any]:
+    """The stored ``{"declared": int|None, "discovered": {model: int}}``."""
+    data = raw if isinstance(raw, dict) else {}
+    discovered = data.get("discovered")
+    clean: Dict[str, int] = {}
+    if isinstance(discovered, dict):
+        for model, window in discovered.items():
+            value = _clean_window(window)
+            if value is not None:
+                clean[str(model)] = value
+    return {"declared": _clean_window(data.get("declared")), "discovered": clean}
+
+
+def route_context_window(targets: List[Dict[str, Any]]) -> Optional[int]:
+    """How much context a ROUTE can hold: the smallest of its hops.
+
+    A route is one conversation that must be able to continue on any hop —
+    that is what the fallbacks are for. Sizing to the primary means the
+    failover, which happens exactly when things are already going wrong,
+    walks into an overflow it cannot recover from.
+
+    ``None`` when no hop knows its own window; the caller then keeps the
+    library default and should say so rather than imply it measured it.
+    """
+    from geny_executor.llm_client.context_window import binding_context_window
+
+    return binding_context_window(t.get("contextWindow") for t in (targets or []))
 
 
 class _EventBus:
@@ -237,6 +275,7 @@ class AccountService:
             "engineProvider": info.engine_provider if info else "",
             "capabilities": _clean_capabilities(_json_loads(row.get("capabilities_json"), {})),
             "defaultCapabilities": effective_capabilities(kind),
+            "contextWindow": _window_record(_json_loads(row.get("context_window_json"), {})),
             "createdAt": row.get("created_at"),
         }
         if kind == "claude_code":
@@ -280,6 +319,9 @@ class AccountService:
             models_json="",
             status_json="",
             capabilities_json=json.dumps(_clean_capabilities(payload.get("capabilities"))),
+            context_window_json=json.dumps(
+                {"declared": _clean_window(payload.get("contextWindow")), "discovered": {}}
+            ),
             has_secret=bool(secret),
             sort_order=existing,
         )
@@ -318,6 +360,12 @@ class AccountService:
             model.effort = effort
         if "capabilities" in patch:
             model.capabilities_json = json.dumps(_clean_capabilities(patch["capabilities"]))
+        if "contextWindow" in patch:
+            # Only the DECLARED half is the operator's to set; what discovery
+            # measured stays until discovery runs again.
+            record = _window_record(_json_loads(model.context_window_json, {}))
+            record["declared"] = _clean_window(patch["contextWindow"])
+            model.context_window_json = json.dumps(record)
         claude = patch.get("claude") or {}
         if "authMethod" in claude:
             model.claude_auth_method = str(claude["authMethod"] or "login")
@@ -351,7 +399,8 @@ class AccountService:
 
     # ── observed state ───────────────────────────────────────────────
     def _stamp(self, account_id: str, *, identity: Any = None, status: Any = None,
-               models: Any = None, has_secret: Optional[bool] = None) -> None:
+               models: Any = None, has_secret: Optional[bool] = None,
+               windows: Optional[Dict[str, Any]] = None) -> None:
         row = self._row(account_id)
         if not row:
             return
@@ -362,6 +411,12 @@ class AccountService:
             model.status_json = json.dumps(status, ensure_ascii=False)
         if models is not None:
             model.models_json = json.dumps(models, ensure_ascii=False)
+        if windows is not None:
+            record = _window_record(_json_loads(model.context_window_json, {}))
+            record["discovered"] = {
+                str(k): v for k, v in (windows or {}).items() if _clean_window(v)
+            }
+            model.context_window_json = json.dumps(record)
         if has_secret is not None:
             model.has_secret = bool(has_secret)
         self._db.update(model)
@@ -546,6 +601,12 @@ class AccountService:
         # Sent only to the clients that take the kwarg: the vendor clients
         # (anthropic / openai / google / the two subscription ones) have no
         # ambiguity to resolve and would reject an unexpected argument.
+        window = self.context_window_of(account_id, model)
+        if window:
+            # Read by the session to size compaction, not by the client — the
+            # wire has no field for it.
+            target["contextWindow"] = window
+
         if info.engine_provider in CAPABILITY_AWARE_PROVIDERS:
             declared = {
                 **info.capabilities,
@@ -807,9 +868,43 @@ class AccountService:
         except Exception as exc:  # noqa: BLE001
             logger.info("model discovery failed for %s: %s", account_id, exc)
             return []
-        ids = [m.id for m in (found.models if found else []) if getattr(m, "id", "")]
-        self._stamp(account_id, models=ids)
+        models = [m for m in (found.models if found else []) if getattr(m, "id", "")]
+        ids = [m.id for m in models]
+        # The endpoints that state their window are exactly the ones whose
+        # window we could not otherwise know — an aggregator routing to
+        # hundreds of models, a vLLM server running at whatever length it was
+        # launched with. Recording it here is what lets a session size its
+        # compaction to the model instead of to a 200k assumption.
+        windows = {
+            m.id: getattr(m, "context_window", None)
+            for m in models
+            if getattr(m, "context_window", None)
+        }
+        self._stamp(account_id, models=ids, windows=windows or {})
         return ids
+
+    # ── how much context this account's models hold ──────────────────
+    def context_window_of(self, account_id: str, model: str) -> Optional[int]:
+        """The resolved window for one ``(account, model)``, or ``None``.
+
+        Resolution order is the library's: what the operator declared, then
+        what the endpoint said, then what is known about the model family.
+        ``None`` means nobody knows — which the caller should say out loud
+        rather than silently assume 200k for.
+        """
+        from geny_executor.llm_client.context_window import resolve_context_window
+
+        row = self._row(account_id)
+        if not row:
+            return None
+        info = KINDS.get(row.get("kind") or "")
+        record = _window_record(_json_loads(row.get("context_window_json"), {}))
+        return resolve_context_window(
+            declared=record.get("declared"),
+            discovered=record["discovered"].get(model),
+            model=model,
+            provider=info.engine_provider if info else "",
+        )
 
 
 _service: Optional[AccountService] = None

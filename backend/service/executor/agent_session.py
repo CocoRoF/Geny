@@ -478,6 +478,16 @@ class AgentSession:
         env_vars: Optional[Dict[str, str]] = None,
         mcp_config: Optional[MCPConfig] = None,
         max_iterations: int = 100,
+        #: How much context this session's ROUTE can hold, in tokens, or
+        #: ``None`` when no hop could say. Sizes proactive compaction and the
+        #: Stage-4 headroom guard; ``None`` keeps the library's 200k, which
+        #: is an assumption and is logged as one.
+        context_window_budget: Optional[int] = None,
+        #: Spend ceiling for ONE turn, in USD, or ``None`` for no ceiling.
+        #: Enforced by the Stage-16 cost dimension and the Stage-4 guard —
+        #: both of which only see spend a backend actually reports, so a
+        #: subscription account (which reports none) is never stopped by it.
+        cost_budget_usd: Optional[float] = None,
         role: SessionRole = SessionRole.WORKER,
         enable_checkpointing: bool = False,
         workflow_id: Optional[str] = None,
@@ -575,6 +585,8 @@ class AgentSession:
         # per environment, not via the tool preset.
         self._mcp_config = mcp_config
         self._max_iterations = max_iterations
+        self._context_window_budget = context_window_budget
+        self._cost_budget_usd = cost_budget_usd
 
         # Role
         self._role = role
@@ -2288,6 +2300,40 @@ class AgentSession:
         config = getattr(pipeline, "_config", None)
         if config is None:
             return
+        # The route's binding window. Without this the pipeline compacts at a
+        # fraction of 200_000 no matter what answers — six times too late for
+        # a local server launched at 32k, where the request overflows before
+        # compaction ever fires. ``None`` means no hop could say; the library
+        # default stands and the log says it is an assumption.
+        if hasattr(config, "context_window_budget"):
+            window = self._context_window_budget
+            if window and int(window) > 0:
+                previous = getattr(config, "context_window_budget", None)
+                if previous != int(window):
+                    config.context_window_budget = int(window)
+                    logger.info(
+                        "[%s] context window: %s → %s (from the route's smallest hop)",
+                        self._session_id, previous, int(window),
+                    )
+            else:
+                logger.info(
+                    "[%s] context window: no hop stated one — assuming %s. "
+                    "Declare it on the account, or run model discovery.",
+                    self._session_id, getattr(config, "context_window_budget", None),
+                )
+
+        if hasattr(config, "cost_budget_usd") and self._cost_budget_usd is not None:
+            try:
+                budget = float(self._cost_budget_usd)
+            except (TypeError, ValueError):
+                budget = 0.0
+            # 0 and below mean "no ceiling", which is what None already says.
+            config.cost_budget_usd = budget if budget > 0 else None
+            logger.info(
+                "[%s] cost ceiling: %s per turn",
+                self._session_id, config.cost_budget_usd or "none",
+            )
+
         if hasattr(config, "max_iterations") and self._max_iterations:
             try:
                 desired = int(self._max_iterations)

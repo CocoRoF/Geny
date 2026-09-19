@@ -474,6 +474,10 @@ const en = {
       models: 'Models',
       discover: 'Refresh model list',
       moreProviders: '{n} more providers',
+      contextWindow: 'Context window (tokens)',
+      contextWindowAuto: 'Automatic',
+      contextWindowHint: 'Leave blank to ask the endpoint or judge from the model. When nobody knows, 200,000 is assumed.',
+      contextWindowMeasured: 'The endpoint said {range}. Put a number here if that is wrong.',
       capabilities: 'What this endpoint can do',
       capabilitiesHint: 'One address, and no two models behind it are alike. Left off, images arrive as a note instead of a picture.',
       capability: {

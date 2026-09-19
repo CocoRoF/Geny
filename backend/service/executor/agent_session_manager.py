@@ -51,6 +51,7 @@ from service.executor.agent_session import (
     _DEFAULT_VTUBER_PROMPT,
     _DEFAULT_WORKER_PROMPT,
 )
+from service.llm_accounts import route_context_window
 from service.persona import CharacterPersonaProvider
 from service.lifecycle import LifecycleEvent, SessionLifecycleBus
 from service.plugin import PluginRegistry, TamagotchiPlugin
@@ -1715,6 +1716,8 @@ class AgentSessionManager:
             max_turns=request.max_turns or 50,
             timeout=request.timeout or 21600.0,
             max_iterations=request.max_iterations or 50,
+            context_window_budget=route_context_window(route_targets),
+            cost_budget_usd=request.cost_budget_usd,
             role=request.role or SessionRole.WORKER,
             enable_checkpointing=enable_checkpointing,
             workflow_id=workflow_id,
@@ -2624,6 +2627,20 @@ class AgentSessionManager:
                 ).build()
                 swap("geny_router", bundle.get("geny_router"))
                 applied = "immediately"
+            # The new route may hold less context than the old one — switching
+            # to a smaller model mid-conversation is one of the things this
+            # endpoint exists for, and a budget left at the old model's size
+            # would compact too late for the one now answering.
+            window = route_context_window(targets)
+            if window and hasattr(agent, "_context_window_budget"):
+                agent._context_window_budget = window
+                try:
+                    agent._apply_session_limits_to_pipeline()
+                except Exception:  # noqa: BLE001 — a route switch must not fail on this
+                    logger.debug(
+                        "[%s] context budget not re-applied after route change",
+                        session_id, exc_info=True,
+                    )
 
         logger.info(
             "🔀 session %s route → %s (%d hop(s), applies %s)",

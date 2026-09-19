@@ -43,6 +43,13 @@ class LLMAccountModel(BaseModel):
         # the next is a gateway in front of GPT-5. Merged over the kind's
         # declaration when the hop is built.
         capabilities_json: str = "",
+        # How much context this endpoint's models hold:
+        # ``{"declared": <int>, "discovered": {"<model>": <int>}}``.
+        # Two sources, named, because they have a precedence: the operator
+        # knows what sits behind a private address, and the endpoint knows
+        # what it was launched with. Neither is a guess, which is the point —
+        # the pipeline sizes compaction from this number.
+        context_window_json: str = "",
         has_secret: bool = False,
         sort_order: int = 0,
         **kwargs,
@@ -60,6 +67,7 @@ class LLMAccountModel(BaseModel):
         self.models_json = models_json
         self.status_json = status_json
         self.capabilities_json = capabilities_json
+        self.context_window_json = context_window_json
         self.has_secret = has_secret
         self.sort_order = sort_order
 
@@ -80,6 +88,7 @@ class LLMAccountModel(BaseModel):
             "models_json": "TEXT",
             "status_json": "TEXT",
             "capabilities_json": "TEXT",
+            "context_window_json": "TEXT",
             "has_secret": "BOOLEAN DEFAULT FALSE",
             "sort_order": "INTEGER DEFAULT 0",
         }

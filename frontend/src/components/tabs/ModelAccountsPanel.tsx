@@ -95,6 +95,9 @@ function AccountRow({ account, kinds, index, total, cli, onChanged, onLogin, onM
   const [effort, setEffort] = useState(account.effort);
   const [authMethod, setAuthMethod] = useState<ClaudeAuthMethod>(account.claude?.authMethod ?? 'login');
   const [capabilities, setCapabilities] = useState<EndpointCapabilities>(account.capabilities ?? {});
+  const [contextWindow, setContextWindow] = useState<string>(
+    account.contextWindow?.declared ? String(account.contextWindow.declared) : '',
+  );
 
   const info = kinds[account.kind];
   const needsKey = info?.secret === 'api_key' || info?.secret === 'optional_key';
@@ -103,6 +106,13 @@ function AccountRow({ account, kinds, index, total, cli, onChanged, onLogin, onM
   // tools on an endpoint that has them on, which is worse than no switch.
   const declared = { ...(account.defaultCapabilities ?? {}), ...capabilities };
   const showsCapabilities = DECLARES_ITS_ENDPOINT.has(info?.engineProvider ?? '');
+  // What the endpoint said when models were last refreshed. Shown as the
+  // field's placeholder so an operator can see there is already a real
+  // number before deciding to override it.
+  const measured = Object.values(account.contextWindow?.discovered ?? {});
+  const measuredHint = measured.length
+    ? `${Math.min(...measured).toLocaleString()} ~ ${Math.max(...measured).toLocaleString()}`
+    : '';
 
   const run = useCallback(async (key: string, work: () => Promise<void>) => {
     setBusy(key);
@@ -123,6 +133,7 @@ function AccountRow({ account, kinds, index, total, cli, onChanged, onLogin, onM
       effort,
       ...(secret ? { secret } : {}),
       ...(showsCapabilities ? { capabilities } : {}),
+      contextWindow: Number(contextWindow) > 0 ? Number(contextWindow) : 0,
       ...(account.kind === 'claude_code' ? { claude: { authMethod } } : {}),
     });
     setSecret('');
@@ -370,6 +381,23 @@ function AccountRow({ account, kinds, index, total, cli, onChanged, onLogin, onM
               </div>
             </Field>
           )}
+
+          <Field label={t('settings.models.contextWindow')}>
+            <input
+              type="number"
+              min={0}
+              inputMode="numeric"
+              className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded px-3 py-2 text-[0.8125rem] font-mono"
+              value={contextWindow}
+              onChange={(e) => setContextWindow(e.target.value)}
+              placeholder={measuredHint || t('settings.models.contextWindowAuto')}
+            />
+            <span className="text-[0.75rem] text-[var(--text-muted)]">
+              {measuredHint
+                ? t('settings.models.contextWindowMeasured', { range: measuredHint })
+                : t('settings.models.contextWindowHint')}
+            </span>
+          </Field>
 
           <Field label={t('settings.models.effort')}>
             <select
