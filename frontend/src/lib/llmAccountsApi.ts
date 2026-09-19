@@ -106,8 +106,11 @@ export interface LlmAccount {
   engineProvider: string;
   /** What THIS account declared. Empty means "whatever the kind says". */
   capabilities: EndpointCapabilities;
-  /** What the kind declares, so a toggle can show the default it inherits. */
-  kindCapabilities: EndpointCapabilities;
+  /** What this account gets if it declares nothing — the executor client's
+   *  own defaults with the kind's declaration laid over them. A toggle drawn
+   *  from the kind alone would show tools as off on an endpoint that has
+   *  them on. */
+  defaultCapabilities: EndpointCapabilities;
   createdAt?: string | null;
   claude?: { authMethod: ClaudeAuthMethod };
   configDir?: string;

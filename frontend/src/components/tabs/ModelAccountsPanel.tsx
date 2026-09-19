@@ -98,9 +98,10 @@ function AccountRow({ account, kinds, index, total, cli, onChanged, onLogin, onM
 
   const info = kinds[account.kind];
   const needsKey = info?.secret === 'api_key' || info?.secret === 'optional_key';
-  // The kind's declaration is what the account inherits when it says nothing,
-  // so the switch shows that as its starting position rather than "off".
-  const declared = { ...(account.kindCapabilities ?? {}), ...capabilities };
+  // What the account inherits when it says nothing is the switch's starting
+  // position. Drawn from the kind's declaration alone it would read "off" for
+  // tools on an endpoint that has them on, which is worse than no switch.
+  const declared = { ...(account.defaultCapabilities ?? {}), ...capabilities };
   const showsCapabilities = DECLARES_ITS_ENDPOINT.has(info?.engineProvider ?? '');
 
   const run = useCallback(async (key: string, work: () => Promise<void>) => {

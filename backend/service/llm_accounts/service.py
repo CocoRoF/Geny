@@ -73,7 +73,51 @@ DECLARABLE_CAPABILITIES: Tuple[str, ...] = (
     "supports_vision",
     "supports_tools",
     "supports_tool_choice",
+    # No switch of its own: a gateway that takes an image the USER attached
+    # and rejects the one a TOOL returned is a real quirk (hermes-agent
+    # carries it for one vendor) whose symptom is a 400 nothing in the page
+    # can explain. Declarable through the API so the escape hatch exists;
+    # left off the page because it would sit there meaning nothing to almost
+    # everyone who reads it.
+    "supports_vision_tool_results",
 )
+
+
+_EFFECTIVE_CAPABILITIES: Dict[str, Dict[str, bool]] = {}
+
+
+def effective_capabilities(kind: str) -> Dict[str, bool]:
+    """What an account of this kind gets when it declares nothing itself.
+
+    A kind's ``capabilities`` is a SPARSE override of the executor client
+    class's own defaults, which makes it the wrong thing to draw a settings
+    checkbox from: the OpenAI-compatible classes already say yes to tools, so
+    a box drawn from the kind alone renders that as "off" and invites the user
+    to turn on something already on — or to read the whole page as a lie.
+
+    So the answer is the class's declaration with the kind's laid over it,
+    asked of the library rather than remembered here, because a default
+    copied into this file is one that goes stale the next release.
+    """
+    if kind in _EFFECTIVE_CAPABILITIES:
+        return dict(_EFFECTIVE_CAPABILITIES[kind])
+    info = KINDS.get(kind)
+    resolved: Dict[str, bool] = {}
+    if info is not None and info.engine_provider in CAPABILITY_AWARE_PROVIDERS:
+        try:
+            from geny_executor.llm_client.registry import ClientRegistry
+
+            declared = ClientRegistry.get(info.engine_provider).capabilities
+            resolved = {
+                flag: bool(getattr(declared, flag))
+                for flag in DECLARABLE_CAPABILITIES
+                if hasattr(declared, flag)
+            }
+        except Exception as exc:  # noqa: BLE001 — a settings page, not a turn
+            logger.info("could not read client defaults for %s: %s", kind, exc)
+        resolved.update(_clean_capabilities(dict(info.capabilities)))
+    _EFFECTIVE_CAPABILITIES[kind] = resolved
+    return dict(resolved)
 
 
 def _clean_capabilities(raw: Any) -> Dict[str, bool]:
@@ -192,7 +236,7 @@ class AccountService:
             "hasSecret": bool(row.get("has_secret")),
             "engineProvider": info.engine_provider if info else "",
             "capabilities": _clean_capabilities(_json_loads(row.get("capabilities_json"), {})),
-            "kindCapabilities": dict(info.capabilities) if info else {},
+            "defaultCapabilities": effective_capabilities(kind),
             "createdAt": row.get("created_at"),
         }
         if kind == "claude_code":
@@ -716,7 +760,14 @@ class AccountService:
 
         target = await self.resolve_hop({"accountId": row.get("account_id"), "model": model})
         if target is None:
-            return {"ok": False, "latencyMs": 0, "error": "계정이 꺼져 있습니다"}
+            # Two ways a hop resolves to nothing, and telling the user the
+            # wrong one sends them to the wrong switch.
+            reason = (
+                "계정이 꺼져 있습니다"
+                if not row.get("enabled", True)
+                else "쓸 모델이 없습니다 — [모델 목록 새로고침] 을 눌러 주세요"
+            )
+            return {"ok": False, "latencyMs": 0, "error": reason}
         started = time.monotonic()
         client = build_client(target, notify=None, session_id=None, timeout_s=90.0)
         try:

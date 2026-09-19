@@ -31,6 +31,7 @@ from service.llm_accounts.service import (
     CAPABILITY_AWARE_PROVIDERS,
     DECLARABLE_CAPABILITIES,
     AccountService,
+    effective_capabilities,
 )
 
 from tests.service.llm_accounts.test_account_service import _FakeDb
@@ -100,19 +101,52 @@ class TestTheAccountOverrides:
         account = _make(service, "openrouter", capabilities={"supports_telepathy": True})
         assert account["capabilities"] == {}
 
-    def test_the_kinds_own_declaration_is_reported_separately(
+    def test_what_the_account_inherits_is_reported_separately(
         self, service: AccountService
     ) -> None:
         """So the settings page can show a toggle that is ON by default
         without pretending the account set it."""
         account = _make(service, "openrouter")
         assert account["capabilities"] == {}
-        assert account["kindCapabilities"] == {"supports_vision": True}
+        assert account["defaultCapabilities"]["supports_vision"] is True
 
     def test_an_update_round_trips(self, service: AccountService) -> None:
         account = _make(service, "vllm", baseUrl="http://box:8000/v1")
         updated = service.update_account(account["id"], {"capabilities": {"supports_vision": True}})
         assert updated["capabilities"] == {"supports_vision": True}
+
+
+class TestWhatTheSettingsPageIsShown:
+    """A checkbox drawn from the kind's declaration alone is a lie. The kind
+    declares a SPARSE override of the client class's defaults, and the
+    OpenAI-compatible classes already say yes to tools — so such a box would
+    render "off" on an endpoint that has them on, inviting the user to switch
+    on something already on."""
+
+    def test_the_class_default_shows_through(self) -> None:
+        assert effective_capabilities("openai_compatible")["supports_tools"] is True
+
+    def test_the_kind_lays_over_it(self) -> None:
+        """vLLM's class says no to tools; the kind says an account added here
+        is added to run this harness."""
+        assert effective_capabilities("vllm")["supports_tools"] is True
+        assert effective_capabilities("openrouter")["supports_vision"] is True
+
+    def test_it_is_asked_of_the_library_not_remembered_here(self) -> None:
+        """A default copied into Geny is one that goes stale next release."""
+        from geny_executor.llm_client.registry import ClientRegistry
+
+        for kind in ("openai_compatible", "ollama", "vllm"):
+            declared = ClientRegistry.get(KINDS[kind].engine_provider).capabilities
+            shown = effective_capabilities(kind)
+            for flag in DECLARABLE_CAPABILITIES:
+                if flag in KINDS[kind].capabilities:
+                    continue
+                assert shown[flag] == getattr(declared, flag), f"{kind}.{flag}"
+
+    def test_a_kind_with_no_declaration_point_shows_no_switches(self) -> None:
+        for kind in ("anthropic", "openai", "google", "claude_code", "codex"):
+            assert effective_capabilities(kind) == {}
 
 
 class TestOnlyWhereItIsAccepted:
