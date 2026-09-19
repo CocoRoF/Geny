@@ -39,6 +39,7 @@ import {
   type ClaudeAuthMethod,
   type CliInfo,
   type KindFamily,
+  type EndpointCapabilities,
   type KindInfo,
   type LlmAccount,
 } from '@/lib/llmAccountsApi';
@@ -50,6 +51,18 @@ import { EmbeddingSettingsCard } from './EmbeddingSettingsCard';
 import { llmBackendsApi, type ProviderHealth } from '@/lib/api';
 
 const SUBSCRIPTION_KINDS = new Set<AccountKind>(['claude_code', 'codex']);
+
+/** Clients that take an endpoint declaration — the OpenAI-compatible family
+ *  and vLLM. Everywhere else the vendor answers the question itself and
+ *  there is nothing to ask. Mirrors CAPABILITY_AWARE_PROVIDERS on the
+ *  server; the server is the one that enforces it. */
+const DECLARES_ITS_ENDPOINT = new Set(['custom', 'local', 'ollama', 'lmstudio', 'vllm']);
+
+/** The flags worth a switch, in the order they matter. */
+const CAPABILITY_FLAGS: (keyof EndpointCapabilities)[] = [
+  'supports_vision',
+  'supports_tools',
+];
 
 function toneOf(account: LlmAccount): CardStatusTone {
   if (!account.enabled) return 'neutral';
@@ -81,9 +94,14 @@ function AccountRow({ account, kinds, index, total, cli, onChanged, onLogin, onM
   const [secret, setSecret] = useState('');
   const [effort, setEffort] = useState(account.effort);
   const [authMethod, setAuthMethod] = useState<ClaudeAuthMethod>(account.claude?.authMethod ?? 'login');
+  const [capabilities, setCapabilities] = useState<EndpointCapabilities>(account.capabilities ?? {});
 
   const info = kinds[account.kind];
   const needsKey = info?.secret === 'api_key' || info?.secret === 'optional_key';
+  // The kind's declaration is what the account inherits when it says nothing,
+  // so the switch shows that as its starting position rather than "off".
+  const declared = { ...(account.kindCapabilities ?? {}), ...capabilities };
+  const showsCapabilities = DECLARES_ITS_ENDPOINT.has(info?.engineProvider ?? '');
 
   const run = useCallback(async (key: string, work: () => Promise<void>) => {
     setBusy(key);
@@ -103,6 +121,7 @@ function AccountRow({ account, kinds, index, total, cli, onChanged, onLogin, onM
       baseUrl,
       effort,
       ...(secret ? { secret } : {}),
+      ...(showsCapabilities ? { capabilities } : {}),
       ...(account.kind === 'claude_code' ? { claude: { authMethod } } : {}),
     });
     setSecret('');
@@ -331,6 +350,26 @@ function AccountRow({ account, kinds, index, total, cli, onChanged, onLogin, onM
             </>
           )}
 
+          {showsCapabilities && (
+            <Field label={t('settings.models.capabilities')}>
+              <p className="text-[0.75rem] text-[var(--text-muted)] mb-1.5">
+                {t('settings.models.capabilitiesHint')}
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {CAPABILITY_FLAGS.map((flag) => (
+                  <label key={flag} className="flex items-center gap-2 text-[0.8125rem]">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(declared[flag])}
+                      onChange={(e) => setCapabilities((prev) => ({ ...prev, [flag]: e.target.checked }))}
+                    />
+                    {t(`settings.models.capability.${flag}`)}
+                  </label>
+                ))}
+              </div>
+            </Field>
+          )}
+
           <Field label={t('settings.models.effort')}>
             <select
               className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded px-3 py-2 text-[0.8125rem]"
@@ -377,6 +416,32 @@ function AccountRow({ account, kinds, index, total, cli, onChanged, onLogin, onM
         </div>
       )}
     </SettingsCard>
+  );
+}
+
+/** The long tail of OpenAI-compatible vendors, one click away.
+ *
+ *  Every provider stays on this page whether or not it is set up — a server
+ *  with a working Codex login must not read as a server without one. That
+ *  holds at nine providers and stops holding at twenty-one, where the five
+ *  anyone uses sit under a screen of empty sections. Folded is not hidden:
+ *  the count is on the button, and a vendor you have an account on never
+ *  gets folded in the first place. */
+function MoreProviders({ count, children }: { count: number; children: React.ReactNode }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="flex flex-col gap-4">
+      <button
+        type="button"
+        className="self-start flex items-center gap-1.5 text-[0.75rem] px-2.5 py-1.5 rounded border border-[var(--border-color)] hover:bg-[var(--bg-hover)]"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <ChevronRight size={12} className={open ? 'rotate-90 transition-transform' : 'transition-transform'} />
+        {t('settings.models.moreProviders', { n: count })}
+      </button>
+      {open && children}
+    </section>
   );
 }
 
@@ -747,25 +812,38 @@ export default function ModelAccountsPanel() {
             const entries = Object.entries(kinds)
               .filter(([, info]) => info.family === family.id) as [AccountKind, KindInfo][];
             if (entries.length === 0) return null;
+            const group = (kind: AccountKind, info: KindInfo) => (
+              <ProviderGroup
+                key={kind}
+                kind={kind}
+                info={info}
+                kinds={kinds}
+                accounts={accounts.filter((a) => a.kind === kind)}
+                cli={cli}
+                order={order}
+                onChanged={() => void refresh()}
+                onLogin={setLoginFor}
+                onMove={(id, d) => void move(id, d)}
+              />
+            );
+            // A vendor you have an account on is never folded away, however
+            // long its tail — the list IS the route, and a hop you cannot
+            // see is a hop you cannot reorder.
+            const isOpen = ([kind, info]: [AccountKind, KindInfo]) =>
+              info.primary !== false || accounts.some((a) => a.kind === kind);
+            const shown = entries.filter(isOpen);
+            const folded = entries.filter((e) => !isOpen(e));
             return (
               <div key={family.id} className="flex flex-col gap-4">
                 <h4 className="text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)] border-b border-[var(--border-color)] pb-1.5">
                   {family.label}
                 </h4>
-                {entries.map(([kind, info]) => (
-                  <ProviderGroup
-                    key={kind}
-                    kind={kind}
-                    info={info}
-                    kinds={kinds}
-                    accounts={accounts.filter((a) => a.kind === kind)}
-                    cli={cli}
-                    order={order}
-                    onChanged={() => void refresh()}
-                    onLogin={setLoginFor}
-                    onMove={(id, d) => void move(id, d)}
-                  />
-                ))}
+                {shown.map(([kind, info]) => group(kind, info))}
+                {folded.length > 0 && (
+                  <MoreProviders count={folded.length}>
+                    {folded.map(([kind, info]) => group(kind, info))}
+                  </MoreProviders>
+                )}
               </div>
             );
           })}

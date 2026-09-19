@@ -60,6 +60,35 @@ def _json_loads(raw: Any, fallback: Any) -> Any:
         return fallback
 
 
+#: Capability flags an ACCOUNT may declare about its endpoint. Deliberately
+#: short: these are the three that change whether a turn works at all, and a
+#: flag nobody can explain in one line does not belong in a settings page.
+#: Anything else stays the client class's business.
+#: Executor clients whose constructor takes a ``capabilities`` declaration.
+#: The OpenAI-compatible family and vLLM: one class each, serving endpoints
+#: that have nothing in common behind the wire format.
+CAPABILITY_AWARE_PROVIDERS: Tuple[str, ...] = ("custom", "local", "ollama", "lmstudio", "vllm")
+
+DECLARABLE_CAPABILITIES: Tuple[str, ...] = (
+    "supports_vision",
+    "supports_tools",
+    "supports_tool_choice",
+)
+
+
+def _clean_capabilities(raw: Any) -> Dict[str, bool]:
+    """Keep only the declarable flags, as real booleans.
+
+    An allow-list rather than a pass-through because this value leaves the
+    database and becomes constructor input to a client class: a stray key
+    from an old row or a hand-edited API call should read as "not declared",
+    never as a crash on the first turn after a restart.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    return {k: bool(v) for k, v in raw.items() if k in DECLARABLE_CAPABILITIES}
+
+
 class _EventBus:
     """Login events fanned out to every listening UI.
 
@@ -162,6 +191,8 @@ class AccountService:
             "modelChoices": model_choices(kind, discovered if isinstance(discovered, list) else []),
             "hasSecret": bool(row.get("has_secret")),
             "engineProvider": info.engine_provider if info else "",
+            "capabilities": _clean_capabilities(_json_loads(row.get("capabilities_json"), {})),
+            "kindCapabilities": dict(info.capabilities) if info else {},
             "createdAt": row.get("created_at"),
         }
         if kind == "claude_code":
@@ -204,6 +235,7 @@ class AccountService:
             identity_json="",
             models_json="",
             status_json="",
+            capabilities_json=json.dumps(_clean_capabilities(payload.get("capabilities"))),
             has_secret=bool(secret),
             sort_order=existing,
         )
@@ -240,6 +272,8 @@ class AccountService:
             if effort and effort not in EFFORTS:
                 raise ValueError(f"알 수 없는 추론 강도입니다: {effort}")
             model.effort = effort
+        if "capabilities" in patch:
+            model.capabilities_json = json.dumps(_clean_capabilities(patch["capabilities"]))
         claude = patch.get("claude") or {}
         if "authMethod" in claude:
             model.claude_auth_method = str(claude["authMethod"] or "login")
@@ -438,6 +472,13 @@ class AccountService:
         model = str(ref.get("model") or "").strip() or default_model_for(
             kind, discovered if isinstance(discovered, list) else []
         )
+        if not model:
+            # No catalogue, no discovery, nothing typed: the hop would go out
+            # with an empty model id and come back as whatever each vendor
+            # says about that. Dropping it makes the route degrade to its next
+            # hop, which is the behaviour every other unusable account gets.
+            logger.info("account %s (%s) has no model yet — hop dropped", account_id, kind)
+            return None
         effort = str(ref.get("effort") or row.get("effort") or "").strip()
 
         target: Dict[str, Any] = {
@@ -453,6 +494,22 @@ class AccountService:
         if effort:
             target["options"]["effort"] = effort
 
+        # What this endpoint serves. The kind's declaration is the default
+        # (OpenRouter fronts vision models; a bare compatible endpoint is
+        # assumed not to), and the account overrides it, because the two
+        # kinds that need this most — ``openai_compatible`` and ``vllm`` —
+        # are exactly the ones where only the operator knows what is loaded.
+        # Sent only to the clients that take the kwarg: the vendor clients
+        # (anthropic / openai / google / the two subscription ones) have no
+        # ambiguity to resolve and would reject an unexpected argument.
+        if info.engine_provider in CAPABILITY_AWARE_PROVIDERS:
+            declared = {
+                **info.capabilities,
+                **_clean_capabilities(_json_loads(row.get("capabilities_json"), {})),
+            }
+            if declared:
+                target["options"]["capabilities"] = declared
+
         if kind == "claude_code":
             # There is no second mode. A Claude Code account generates
             # tokens; this harness runs the tools. The "agent" mode that
@@ -465,7 +522,14 @@ class AccountService:
                 self.claude_options(account_id, label=target["label"])
             )
         elif kind == "codex":
-            tokens = await self._fresh_single_use_tokens(account_id)
+            # The guarded path is chosen by the CLASSIFICATION, not by this
+            # branch knowing it is Codex: adding another rotating kind is one
+            # edit, in the set that documents why the guard exists.
+            tokens = (
+                await self._fresh_single_use_tokens(account_id)
+                if kind in single_use.SINGLE_USE_REFRESH_KINDS
+                else self._secrets.get_dict(account_id)
+            )
             target["options"].update({
                 "tokens": tokens,
                 "account_label": target["label"],

@@ -38,6 +38,11 @@ class LLMAccountModel(BaseModel):
         identity_json: str = "",
         models_json: str = "",
         status_json: str = "",
+        # What THIS endpoint serves, when the kind's default is only a
+        # guess: one OpenAI-compatible address is a laptop's llama.cpp and
+        # the next is a gateway in front of GPT-5. Merged over the kind's
+        # declaration when the hop is built.
+        capabilities_json: str = "",
         has_secret: bool = False,
         sort_order: int = 0,
         **kwargs,
@@ -54,6 +59,7 @@ class LLMAccountModel(BaseModel):
         self.identity_json = identity_json
         self.models_json = models_json
         self.status_json = status_json
+        self.capabilities_json = capabilities_json
         self.has_secret = has_secret
         self.sort_order = sort_order
 
@@ -73,6 +79,7 @@ class LLMAccountModel(BaseModel):
             "identity_json": "TEXT",
             "models_json": "TEXT",
             "status_json": "TEXT",
+            "capabilities_json": "TEXT",
             "has_secret": "BOOLEAN DEFAULT FALSE",
             "sort_order": "INTEGER DEFAULT 0",
         }

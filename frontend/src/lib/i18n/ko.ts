@@ -474,6 +474,13 @@ const ko: Translations = {
       model: '모델',
       models: '모델',
       discover: '모델 목록 새로고침',
+      moreProviders: '제공자 {n}곳 더',
+      capabilities: '이 주소가 할 수 있는 것',
+      capabilitiesHint: '같은 주소라도 뒤에 있는 모델은 제각각입니다. 켜 두지 않으면 이미지는 글로 대체되어 전달됩니다.',
+      capability: {
+        supports_vision: '이미지를 볼 수 있음',
+        supports_tools: '도구를 호출할 수 있음',
+      },
       save: '저장',
       saving: '저장 중…',
       cancel: '취소',

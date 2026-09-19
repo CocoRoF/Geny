@@ -49,6 +49,9 @@ class NewAccount(BaseModel):
     baseUrl: Optional[str] = None
     secret: Optional[str] = None
     effort: Optional[str] = None
+    #: What this endpoint serves, for the kinds that share one client class
+    #: (OpenAI-compatible + vLLM). Unknown flags are dropped by the service.
+    capabilities: Optional[Dict[str, bool]] = None
     claude: Optional[ClaudeOptions] = None
 
 
@@ -58,6 +61,7 @@ class AccountPatch(BaseModel):
     baseUrl: Optional[str] = None
     effort: Optional[str] = None
     secret: Optional[str] = None
+    capabilities: Optional[Dict[str, bool]] = None
     claude: Optional[ClaudeOptions] = None
 
 

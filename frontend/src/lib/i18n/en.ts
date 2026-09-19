@@ -473,6 +473,13 @@ const en = {
       model: 'Model',
       models: 'Models',
       discover: 'Refresh model list',
+      moreProviders: '{n} more providers',
+      capabilities: 'What this endpoint can do',
+      capabilitiesHint: 'One address, and no two models behind it are alike. Left off, images arrive as a note instead of a picture.',
+      capability: {
+        supports_vision: 'Can see images',
+        supports_tools: 'Can call tools',
+      },
       save: 'Save',
       saving: 'Saving…',
       cancel: 'Cancel',

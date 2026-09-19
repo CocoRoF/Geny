@@ -192,6 +192,17 @@ class TestClassification:
         assert "codex" in single_use.SINGLE_USE_REFRESH_KINDS
         assert "claude_code" not in single_use.SINGLE_USE_REFRESH_KINDS
 
+    def test_the_set_is_what_selects_the_guarded_path(self) -> None:
+        """Not decoration: resolve_hop consults it. A set nothing reads is a
+        comment that looks like a rule, and the next rotating provider would
+        be added to it and still go unguarded."""
+        import inspect
+
+        from service.llm_accounts.service import AccountService
+
+        source = inspect.getsource(AccountService.resolve_hop)
+        assert "SINGLE_USE_REFRESH_KINDS" in source
+
 
 class TestTheLockDegradesRatherThanBlocks:
     def test_no_store_path_still_refreshes(self, monkeypatch) -> None:

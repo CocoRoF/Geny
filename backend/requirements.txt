@@ -83,7 +83,16 @@ ddgs==9.11.4
 # Must match the version pin in backend/pyproject.toml — out-of-sync
 # pins are what caused the prod Docker build to install 1.21.0 and
 # blow up on `from geny_executor import CredentialBundle`.
-geny-executor[qdrant,ssh]>=2.70.1,<3.0.0
+# geny-executor 2.72.0 — an endpoint says what it serves.
+#
+# One client class reaches OpenRouter and a laptop's llama.cpp, so it has
+# to declare the weakest of them. 2.71.0 made vision opt-in and thereby
+# turned every image sent through OpenRouter into a placeholder; 2.72.0
+# lets the account declare its endpoint (``extras["capabilities"]``), and
+# fixes the image a TOOL returned, which the 2.71.0 lowering never saw
+# because it lives nested inside the tool_result.
+#
+geny-executor[qdrant,ssh]>=2.72.0,<3.0.0
 geny-memory-adaptor>=1.11.1
 contextifier[pdf]>=0.5.0
 # Knowledge connectors — cron schedules + DB sources (postgres/mysql/sqlite)

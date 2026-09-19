@@ -58,6 +58,23 @@ export interface KindInfo {
   defaultBaseUrl: string;
   needsBaseUrl: boolean;
   ownsConfigDir: boolean;
+  /** Shown expanded in its family, rather than folded into "more". */
+  primary: boolean;
+  /** What this vendor's endpoint serves, when the shared client class has
+   *  to assume the weakest endpoint that uses it. */
+  capabilities: EndpointCapabilities;
+}
+
+/** What an endpoint can do, beyond speaking the wire format.
+ *
+ *  OpenRouter, a company gateway and a laptop's llama.cpp all reach the
+ *  same client class. Vision above all is a property of the model behind
+ *  the address, and an undeclared image is either a rejected request or a
+ *  picture the model never saw. */
+export interface EndpointCapabilities {
+  supports_vision?: boolean;
+  supports_tools?: boolean;
+  supports_tool_choice?: boolean;
 }
 
 export interface AccountIdentity {
@@ -87,6 +104,10 @@ export interface LlmAccount {
   modelChoices: ModelChoice[];
   hasSecret: boolean;
   engineProvider: string;
+  /** What THIS account declared. Empty means "whatever the kind says". */
+  capabilities: EndpointCapabilities;
+  /** What the kind declares, so a toggle can show the default it inherits. */
+  kindCapabilities: EndpointCapabilities;
   createdAt?: string | null;
   claude?: { authMethod: ClaudeAuthMethod };
   configDir?: string;
@@ -150,6 +171,7 @@ export interface NewAccountInput {
   baseUrl?: string;
   secret?: string;
   effort?: string;
+  capabilities?: EndpointCapabilities;
   claude?: { authMethod?: ClaudeAuthMethod };
 }
 
@@ -159,6 +181,7 @@ export interface AccountPatch {
   baseUrl?: string;
   effort?: string;
   secret?: string;
+  capabilities?: EndpointCapabilities;
   claude?: { authMethod?: ClaudeAuthMethod };
 }
 

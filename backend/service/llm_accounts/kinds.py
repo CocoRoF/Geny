@@ -66,6 +66,31 @@ class KindInfo:
     #: the account owns a private CLAUDE_CONFIG_DIR (many logins side by side)
     owns_config_dir: bool = False
 
+    #: Shown expanded in its family, rather than folded into "more".
+    #:
+    #: Every provider stays on the page whether or not it is set up — a
+    #: server with a working Codex login must not read as a server without
+    #: one. That principle was written when there were nine of these. At
+    #: twenty-one it turns the page into a scroll of empty sections and
+    #: buries the five anyone uses, so the long tail folds into one group
+    #: that opens in a click. Folded is not hidden; a vendor with an account
+    #: on it is never folded.
+    primary: bool = True
+
+    #: What the ENDPOINT serves, for kinds that share one client class.
+    #:
+    #: ``openrouter`` and a laptop's llama.cpp are both ``engine_provider=
+    #: "custom"``: same wire format, nothing alike behind it. The executor's
+    #: class-level flags have to assume the weaker one, so a kind that knows
+    #: better says so here and the declaration rides to the client through
+    #: the hop's options. Vision is the one that matters in practice — an
+    #: undeclared image is either a 400 or a picture the model never saw.
+    #:
+    #: Conservative by default, and an ACCOUNT may raise it
+    #: (``capabilities_json`` on the row): which model sits behind one
+    #: OpenAI-compatible address is the operator's knowledge, not ours.
+    capabilities: Dict[str, bool] = field(default_factory=dict)
+
     #: The cheap tier for background work — memory curation, summarising,
     #: classification. It lives HERE, beside the models it is chosen from,
     #: because the alternative rots: a model id pinned in a settings row goes
@@ -86,6 +111,8 @@ class KindInfo:
             "defaultBaseUrl": self.default_base_url,
             "needsBaseUrl": self.needs_base_url,
             "ownsConfigDir": self.owns_config_dir,
+            "capabilities": dict(self.capabilities),
+            "primary": self.primary,
         }
 
 
@@ -176,10 +203,145 @@ KINDS: Dict[str, KindInfo] = {
         secret="api_key",
         default_base_url="https://openrouter.ai/api/v1",
         hint="키 하나로 여러 회사의 모델을 씁니다",
+        # An aggregator in front of Claude and GPT — the one OpenAI-compatible
+        # kind whose catalogue is multimodal end to end. Without this the
+        # shared ``custom`` class assumes a text-only local server and every
+        # attached image arrives as "[an image was attached here]".
+        capabilities={"supports_vision": True},
         models=(
             ModelChoice("anthropic/claude-sonnet-5", "Claude Sonnet 5 (OpenRouter)"),
             ModelChoice("openai/gpt-5.6-terra", "GPT-5.6 Terra (OpenRouter)"),
         ),
+    ),
+    # ── Other OpenAI-compatible vendors ──────────────────────────────
+    #
+    # Each of these is one address and a label. They exist as their own kind
+    # rather than as "OpenAI 호환 엔드포인트 + paste a URL" for the reason
+    # hermes-agent keeps 33 one-file provider profiles: the address is the
+    # part a user gets wrong, and the kind is where a vendor's quirks get
+    # recorded once we learn them. The model list stays empty on purpose —
+    # every one of these serves ``GET /v1/models``, so [모델 불러오기] is
+    # more current than any catalogue shipped in a release.
+    "deepseek": KindInfo(
+        primary=False,
+        family="api",
+        label="DeepSeek",
+        short="DeepSeek",
+        engine_provider="custom",
+        secret="api_key",
+        default_base_url="https://api.deepseek.com/v1",
+        hint="platform.deepseek.com 에서 발급한 키",
+    ),
+    "xai": KindInfo(
+        primary=False,
+        family="api",
+        label="xAI (Grok)",
+        short="xAI",
+        engine_provider="custom",
+        secret="api_key",
+        default_base_url="https://api.x.ai/v1",
+        hint="console.x.ai 에서 발급한 키",
+        capabilities={"supports_vision": True},
+    ),
+    "groq": KindInfo(
+        primary=False,
+        family="api",
+        label="Groq",
+        short="Groq",
+        engine_provider="custom",
+        secret="api_key",
+        default_base_url="https://api.groq.com/openai/v1",
+        hint="console.groq.com 에서 발급한 키 · 매우 빠른 추론",
+    ),
+    "together": KindInfo(
+        primary=False,
+        family="api",
+        label="Together AI",
+        short="Together",
+        engine_provider="custom",
+        secret="api_key",
+        default_base_url="https://api.together.xyz/v1",
+        hint="api.together.ai 에서 발급한 키 · 오픈 모델 호스팅",
+    ),
+    "fireworks": KindInfo(
+        primary=False,
+        family="api",
+        label="Fireworks AI",
+        short="Fireworks",
+        engine_provider="custom",
+        secret="api_key",
+        default_base_url="https://api.fireworks.ai/inference/v1",
+        hint="fireworks.ai 에서 발급한 키",
+    ),
+    "mistral": KindInfo(
+        primary=False,
+        family="api",
+        label="Mistral AI",
+        short="Mistral",
+        engine_provider="custom",
+        secret="api_key",
+        default_base_url="https://api.mistral.ai/v1",
+        hint="console.mistral.ai 에서 발급한 키",
+    ),
+    "moonshot": KindInfo(
+        primary=False,
+        family="api",
+        label="Moonshot (Kimi)",
+        short="Kimi",
+        engine_provider="custom",
+        secret="api_key",
+        default_base_url="https://api.moonshot.ai/v1",
+        hint="platform.moonshot.ai 에서 발급한 키",
+    ),
+    "zai": KindInfo(
+        primary=False,
+        family="api",
+        label="Z.AI (GLM)",
+        short="GLM",
+        engine_provider="custom",
+        secret="api_key",
+        default_base_url="https://api.z.ai/api/paas/v4",
+        hint="z.ai 에서 발급한 키",
+    ),
+    "alibaba": KindInfo(
+        primary=False,
+        family="api",
+        label="Alibaba (Qwen)",
+        short="Qwen",
+        engine_provider="custom",
+        secret="api_key",
+        default_base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+        hint="DashScope 키 · 국내 리전은 주소를 바꿔 주세요",
+    ),
+    "nvidia": KindInfo(
+        primary=False,
+        family="api",
+        label="NVIDIA NIM",
+        short="NVIDIA",
+        engine_provider="custom",
+        secret="api_key",
+        default_base_url="https://integrate.api.nvidia.com/v1",
+        hint="build.nvidia.com 에서 발급한 키",
+    ),
+    "deepinfra": KindInfo(
+        primary=False,
+        family="api",
+        label="DeepInfra",
+        short="DeepInfra",
+        engine_provider="custom",
+        secret="api_key",
+        default_base_url="https://api.deepinfra.com/v1/openai",
+        hint="deepinfra.com 에서 발급한 키",
+    ),
+    "huggingface": KindInfo(
+        primary=False,
+        family="api",
+        label="HuggingFace",
+        short="HF",
+        engine_provider="custom",
+        secret="api_key",
+        default_base_url="https://router.huggingface.co/v1",
+        hint="HF 토큰 · Inference Providers 라우터",
     ),
     "ollama": KindInfo(
         family="self_hosted",
@@ -201,7 +363,17 @@ KINDS: Dict[str, KindInfo] = {
         engine_provider="vllm",
         secret="optional_key",
         needs_base_url=True,
-        hint="자체 호스팅한 vLLM 엔드포인트",
+        hint="자체 호스팅한 vLLM 엔드포인트 · 도구를 쓰려면 --enable-auto-tool-choice",
+        # The executor's VLLMClient defaults say "no tools" because a vLLM
+        # server is whatever model it loaded. For an ACCOUNT in this list the
+        # answer is not open: it is being added to run this harness, and a hop
+        # with no tools cannot. Declaring it here is what keeps a vLLM account
+        # from joining a route as a model that silently ignores every tool.
+        capabilities={
+            "supports_tools": True,
+            "supports_tool_choice": True,
+            "supports_structured_output": True,
+        },
     ),
     "openai_compatible": KindInfo(
         family="self_hosted",
