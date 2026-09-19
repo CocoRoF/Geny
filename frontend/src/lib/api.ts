@@ -575,6 +575,20 @@ export const agentApi = {
   getWorkflow: (id: string) =>
     apiCall<{ id: string; name: string; preset: string; execution_backend: string }>(`/api/agents/${id}/workflow`),
 
+  /** GET /api/agents/{id}/harness — the 21 stages this agent is actually
+   *  running, read from its live pipeline with each value's origin. */
+  getHarness: (id: string) =>
+    apiCall<import('@/types/harness').HarnessView>(`/api/agents/${id}/harness`),
+
+  /** PATCH /api/agents/{id}/harness — change what it runs, mid-conversation.
+   *  A patch: one field does not clear the rest, and `null` goes back to
+   *  inherited. */
+  patchHarness: (id: string, patch: Record<string, unknown>) =>
+    apiCall<{ success: boolean; applied: string[] }>(`/api/agents/${id}/harness`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
   /** PUT /api/agents/{id}/system-prompt — update system prompt */
   updateSystemPrompt: (id: string, systemPrompt: string | null) =>
     apiCall<{ success: boolean; length: number }>(`/api/agents/${id}/system-prompt`, {

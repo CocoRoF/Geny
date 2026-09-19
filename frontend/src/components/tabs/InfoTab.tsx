@@ -5,6 +5,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { useCreatureStateStore } from '@/store/useCreatureStateStore';
 import { agentApi, personaPresetsApi } from '@/lib/api';
 import PersonaStudioModal from '@/components/modals/PersonaStudioModal';
+import HarnessPanel from '@/components/harness/HarnessPanel';
 import TriggerStudioModal from '@/components/modals/TriggerStudioModal';
 import { twMerge } from 'tailwind-merge';
 import { useI18n } from '@/lib/i18n';
@@ -40,7 +41,7 @@ export default function InfoTab() {
   const [thinkingTriggerMsg, setThinkingTriggerMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   // Sub-tab navigation: VTuber / Status
-  type SubTab = 'vtuber' | 'status';
+  type SubTab = 'vtuber' | 'status' | 'harness';
   const [subTab, setSubTab] = useState<SubTab>('vtuber');
 
   // Reset sub-tab when switching session
@@ -361,6 +362,7 @@ export default function InfoTab() {
         {([
           { id: 'vtuber' as const, label: t('info.subTabs.vtuber') },
           { id: 'status' as const, label: t('info.subTabs.status') },
+          { id: 'harness' as const, label: t('info.subTabs.harness') },
         ]).map((tab) => {
           const active = subTab === tab.id;
           return (
@@ -510,6 +512,14 @@ export default function InfoTab() {
           turns and badge refreshes propagate here without re-fetching
           the whole agent payload. Fall back to data.creature_state for
           the very first render before the store has been populated. */}
+      {/* The 21 stages this agent runs, read from its live pipeline. Here
+          rather than in the server-wide Settings page because it is a
+          property of THIS agent: two agents on one server can answer very
+          differently and this is where that difference lives. */}
+      {subTab === 'harness' && !isDeleted && data.session_id && (
+        <HarnessPanel sessionId={data.session_id} />
+      )}
+
       {subTab === 'status' && !isDeleted && (liveSnapshot ?? data.creature_state) && (
         <CreatureStatePanel snapshot={liveSnapshot ?? data.creature_state} t={t} />
       )}
