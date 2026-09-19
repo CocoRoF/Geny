@@ -1328,6 +1328,12 @@ class AgentSessionManager:
 
         credentials = CredentialBundleBuilder(
             route_targets=route_targets,
+            # Spread turns across the healthy accounts rather than asking the
+            # first one until it hits its cap. Failover only reacts once an
+            # account is already exhausted, which for subscription plans is
+            # backwards: holding two logins is meant to stop either reaching
+            # its limit. The route's order still breaks ties.
+            route_balance=bool(route.get("balance", True)),
             route_notify=self._route_notifier(session_id),
             session_id=session_id,
             route_timeout_s=request.timeout,

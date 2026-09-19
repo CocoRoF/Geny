@@ -64,10 +64,26 @@ ddgs==9.11.4
 # refused, every time, and it recovered by reading the host path out of
 # the error. Nothing to change here; the pin is the fix.
 #
+# geny-executor 2.69.0 — Claude Code through the official Agent SDK.
+#
+# Fourteen hand-built `claude -p` flags (and a table of flags learned at
+# runtime from "unknown option" stderr) became typed options. Auth is
+# unchanged — the SDK drives the same binary, so per-account
+# CLAUDE_CONFIG_DIR still gives each login its own OAuth.
+#
+# geny-executor 2.70.0 — one conversation, any provider, at any point.
+#
+# Fixes a session that could die when its model changed: the Anthropic
+# translator replayed thinking blocks, which are bound to the model that
+# produced them, so a block written by one account's model reached the
+# next account's. Also adds real load balancing — interchangeable hops
+# (same provider AND model) take turns least-recently-used instead of
+# hop 0 answering until it hits its cap.
+#
 # Must match the version pin in backend/pyproject.toml — out-of-sync
 # pins are what caused the prod Docker build to install 1.21.0 and
 # blow up on `from geny_executor import CredentialBundle`.
-geny-executor[qdrant,ssh]>=2.68.1,<3.0.0
+geny-executor[qdrant,ssh]>=2.70.1,<3.0.0
 geny-memory-adaptor>=1.11.1
 contextifier[pdf]>=0.5.0
 # Knowledge connectors — cron schedules + DB sources (postgres/mysql/sqlite)

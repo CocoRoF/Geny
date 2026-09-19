@@ -64,12 +64,14 @@ class CredentialBundleBuilder:
         config_manager: Any | None = None,
         *,
         route_targets: Optional[list] = None,
+        route_balance: bool = False,
         route_notify: Optional[Any] = None,
         session_id: Optional[str] = None,
         route_timeout_s: Optional[float] = None,
     ) -> None:
         self._cm = config_manager or get_config_manager()
         self._route_targets = list(route_targets or [])
+        self._route_balance = bool(route_balance)
         self._route_notify = route_notify
         self._session_id = session_id
         self._route_timeout_s = route_timeout_s
@@ -130,6 +132,10 @@ class CredentialBundleBuilder:
                 extras["session_id"] = self._session_id
             if self._route_timeout_s:
                 extras["timeout_s"] = float(self._route_timeout_s)
+            if self._route_balance:
+                # Spread turns across the healthy hops (least-recently-used)
+                # instead of asking the first one until it hits its cap.
+                extras["balance"] = True
             by_provider["geny_router"] = ProviderCredentials(extras=extras)
 
         return CredentialBundle(by_provider=by_provider)
