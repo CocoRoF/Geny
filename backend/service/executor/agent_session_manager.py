@@ -2577,6 +2577,17 @@ class AgentSessionManager:
             "applies": "next_turn",
         }
 
+    def _route_display(self, agent: Any) -> List[Dict[str, Any]]:
+        """This session's route as display facts — no secrets, no refresh."""
+        from service.llm_accounts import get_account_service
+
+        route = (
+            getattr(agent, "route", None)
+            or self._stored_route(agent.session_id)
+            or {}
+        )
+        return get_account_service().route_windows(route)
+
     async def session_harness(self, agent: Any) -> Dict[str, Any]:
         """The effective harness of one live session, ready to render.
 
@@ -2615,11 +2626,14 @@ class AgentSessionManager:
         # Resolved now rather than remembered: an account can be disabled or
         # its models refreshed between turns, and a stale per-hop list would
         # explain the budget with numbers that no longer apply.
+        #
+        # ``route_windows`` and not ``_route_targets``: the latter builds hops
+        # a TURN can be made with, which for a Codex account takes the
+        # refresh lock and can redeem a single-use token. Opening a settings
+        # page must not do credential work.
         hops: List[Dict[str, Any]] = []
         try:
-            hops = await self._route_targets(
-                getattr(agent, "route", None) or self._stored_route(agent.session_id) or {}
-            )
+            hops = self._route_display(agent)
         except Exception:  # noqa: BLE001 — the budget still renders without them
             logger.debug("route hops unavailable for the harness view", exc_info=True)
         budgets = {
@@ -2711,13 +2725,11 @@ class AgentSessionManager:
         if "contextWindow" in budgets:
             agent._context_window_budget = int(budgets["contextWindow"])
         else:
-            derived = route_context_window(
-                await self._route_targets(
-                    getattr(agent, "route", None)
-                    or self._stored_route(agent.session_id)
-                    or {}
-                )
-            )
+            try:
+                derived = route_context_window(self._route_display(agent))
+            except Exception:  # noqa: BLE001 — clearing must not fail on this
+                logger.debug("route unreadable while clearing a budget", exc_info=True)
+                derived = None
             agent._context_window_budget = derived
             if config is not None:
                 # No hop knows its window, so the library default stands. It

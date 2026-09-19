@@ -160,6 +160,7 @@ const ko: Translations = {
 
   // ─── Common ───
   common: {
+    retry: '다시 시도',
     save: '저장',
     cancel: '취소',
     delete: '삭제',

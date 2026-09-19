@@ -536,6 +536,51 @@ class AccountService:
             self._stamp(account_id, identity=codex_auth.identity_of(fresh))
             return fresh
 
+    def route_windows(self, route: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """``[{label, model, window}]`` for a route — display facts only.
+
+        Deliberately NOT :meth:`resolve_route`. That one builds hops a turn
+        can be made with, which for a Codex account means taking the
+        cross-process refresh lock and, when the access token is near expiry,
+        redeeming a single-use refresh token. A settings page asking "how
+        much context does this route hold" has no business doing credential
+        work, and a write-back failure there would turn a page load into a
+        lost account.
+
+        Every field here comes from the account row. Nothing is read from the
+        secret store.
+        """
+        refs: List[Dict[str, Any]] = []
+        primary = route.get("primary")
+        if isinstance(primary, dict):
+            refs.append(primary)
+        for hop in route.get("fallbacks") or []:
+            if isinstance(hop, dict):
+                refs.append(hop)
+
+        out: List[Dict[str, Any]] = []
+        for ref in refs:
+            account_id = str(ref.get("accountId") or "")
+            row = self._row(account_id)
+            if not row or not row.get("enabled", True):
+                continue
+            kind = row.get("kind") or ""
+            info = KINDS.get(kind)
+            if info is None:
+                continue
+            discovered = _json_loads(row.get("models_json"), [])
+            model = str(ref.get("model") or "").strip() or default_model_for(
+                kind, discovered if isinstance(discovered, list) else []
+            )
+            if not model:
+                continue
+            out.append({
+                "label": row.get("label") or info.short,
+                "model": model,
+                "contextWindow": self.context_window_of(account_id, model),
+            })
+        return out
+
     async def resolve_route(self, route: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Turn a stored route into the hops ``geny_router`` resolves per call.
 

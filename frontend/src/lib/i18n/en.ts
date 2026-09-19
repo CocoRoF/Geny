@@ -159,6 +159,7 @@ const en = {
 
   // ─── Common ───
   common: {
+    retry: 'Retry',
     save: 'Save',
     cancel: 'Cancel',
     delete: 'Delete',

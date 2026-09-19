@@ -135,3 +135,48 @@ class TestDiscoveryRecordsIt:
         account = _make(service, "openai_compatible", baseUrl="http://gw/v1",
                         contextWindow="lots")
         assert service.get_account(account["id"])["contextWindow"]["declared"] is None
+
+
+class TestASettingsPageDoesNotSpendCredentials:
+    """``resolve_route`` builds hops a TURN can be made with. For a Codex
+    account that means taking the cross-process refresh lock and, when the
+    access token is near expiry, redeeming a single-use refresh token — whose
+    write-back failure is how an account gets lost.
+
+    The harness page only wants labels, models and windows. It reads the
+    account rows and nothing else.
+    """
+
+    def test_it_reports_the_same_windows(self, service: AccountService) -> None:
+        big = _make(service, "anthropic")
+        small = _make(service, "openai_compatible", baseUrl="http://box/v1",
+                      contextWindow=32768)
+        route = {"primary": {"accountId": big["id"]},
+                 "fallbacks": [{"accountId": small["id"], "model": "local"}]}
+        assert [h["contextWindow"] for h in service.route_windows(route)] == [200_000, 32_768]
+
+    def test_it_never_reads_the_secret_store(
+        self, service: AccountService, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        account = _make(service, "codex")
+
+        def explode(*_a, **_kw):  # pragma: no cover - the point is not reaching it
+            raise AssertionError("a settings page read the secret store")
+
+        monkeypatch.setattr(service._secrets, "get_dict", explode)
+        monkeypatch.setattr(service._secrets, "get_str", explode)
+        assert service.route_windows({"primary": {"accountId": account["id"]}})
+
+    def test_a_disabled_hop_is_dropped(self, service: AccountService) -> None:
+        account = _make(service, "anthropic")
+        service.update_account(account["id"], {"enabled": False})
+        assert service.route_windows({"primary": {"accountId": account["id"]}}) == []
+
+    def test_a_hop_with_no_model_is_dropped(self, service: AccountService) -> None:
+        """Same rule ``resolve_hop`` applies, so the two never disagree about
+        which hops a route has."""
+        account = _make(service, "groq")
+        assert service.route_windows({"primary": {"accountId": account["id"]}}) == []
+
+    def test_an_unknown_account_is_dropped(self, service: AccountService) -> None:
+        assert service.route_windows({"primary": {"accountId": "nope"}}) == []

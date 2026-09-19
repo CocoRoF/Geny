@@ -272,9 +272,30 @@ export default function HarnessPanel({ sessionId }: { sessionId: string }) {
   }, [view]);
 
   if (!view) {
+    // A failed load used to spin here forever: the error was set but the
+    // element that renders it sits below this early return, so the one thing
+    // the reader needed was the one thing they could not see.
     return (
-      <div className="flex items-center gap-2 py-8 text-[0.8125rem] text-[var(--text-muted)]">
-        <Loader2 size={13} className="animate-spin" /> {t('common.loading')}
+      <div className="flex flex-col gap-2 py-8 text-[0.8125rem]">
+        {message?.tone === 'bad' ? (
+          <>
+            <p className="flex items-start gap-1.5 text-rose-300">
+              <AlertCircle size={12} className="mt-0.5 shrink-0" />
+              {message.text}
+            </p>
+            <button
+              type="button"
+              className="self-start px-3 py-1.5 rounded border border-[var(--border-color)] text-[0.8125rem] hover:bg-[var(--bg-hover)]"
+              onClick={() => void load()}
+            >
+              {t('common.retry')}
+            </button>
+          </>
+        ) : (
+          <span className="flex items-center gap-2 text-[var(--text-muted)]">
+            <Loader2 size={13} className="animate-spin" /> {t('common.loading')}
+          </span>
+        )}
       </div>
     );
   }
