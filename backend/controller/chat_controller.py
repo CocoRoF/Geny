@@ -371,6 +371,13 @@ class MessageResponse(BaseModel):
     file_changes: Optional[List[Dict[str, Any]]] = None
     attachments: Optional[List[Dict[str, Any]]] = None
     meta: Optional[Dict[str, Any]] = None
+    # Stored since the avatar/voice fix; listed here because this model
+    # ignores unknown keys, so history would otherwise lose them while the
+    # live socket kept them — the read-aloud button on a past message would
+    # speak neutral, and a client could not tell an autonomous line from a
+    # reply.
+    source: Optional[str] = None
+    spoken: Optional[str] = None
 
 
 class MessageListResponse(BaseModel):

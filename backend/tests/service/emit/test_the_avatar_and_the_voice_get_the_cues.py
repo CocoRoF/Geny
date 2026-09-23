@@ -143,3 +143,20 @@ class TestTheRoomKeepsThem:
 
         schema = ChatMessageModel().get_schema()
         assert schema["spoken"].startswith("TEXT") and schema["source"].startswith("VARCHAR")
+
+
+class TestHistoryKeepsThemToo:
+    """The live socket sends the stored dict; the REST history goes through a
+    response model that ignores unknown keys — and dropped both fields on
+    production while the socket carried them."""
+
+    def test_the_history_model_carries_them(self) -> None:
+        from controller.chat_controller import MessageResponse
+
+        row = {
+            "id": "m1", "type": "agent", "content": "안녕", "timestamp": "t",
+            "spoken": "[joy] 안녕", "source": "user_shared_trigger",
+        }
+        out = MessageResponse(**row).model_dump()
+        assert out["spoken"] == "[joy] 안녕"
+        assert out["source"] == "user_shared_trigger"
