@@ -184,13 +184,65 @@ def validate_overlay(overlay: Dict[str, Any], *, pipeline: Any) -> None:
                     f"{key} 에 쓸 수 없는 값입니다: {name} — 가능한 값: {', '.join(available)}"
                 )
 
-    for key in (overlay.get("slotConfigs") or {}):
+    for key, config in (overlay.get("slotConfigs") or {}).items():
         try:
             order, slot = _split(key)
         except ValueError:
             raise HarnessRejected(f"슬롯 이름 형식이 아닙니다: {key}") from None
         if lock_reason(order, slot):
             raise HarnessRejected(f"{key} 는 바꿀 수 없는 항목입니다")
+        stage = stages.get(order)
+        if stage is None:
+            raise HarnessRejected(f"{order} 단계가 이 파이프라인에 없습니다")
+        impl = (overlay.get("slots") or {}).get(key) or _current(stage, slot)
+        if isinstance(impl, str):
+            _check_config(key, impl, config)
+
+
+def _current(stage: Any, slot: str) -> Optional[str]:
+    for info in stage.describe().strategies or []:
+        if info.slot_name == slot:
+            return info.current_impl
+    return None
+
+
+def _check_config(key: str, impl: str, config: Any) -> None:
+    """Refuse a value the implementation would silently ignore.
+
+    Strategies drop an out-of-range or mistyped value in ``configure`` and
+    keep their old one, so an unchecked form would report "saved" for a
+    change that does nothing — the one outcome this page must never have.
+    """
+    if config is None:
+        return
+    if not isinstance(config, dict):
+        raise HarnessRejected(f"{key} 설정은 항목 이름과 값의 묶음이어야 합니다")
+    from service.harness.view import slot_catalogue
+
+    schema = ((slot_catalogue().get(key) or {}).get("implSchemas") or {}).get(impl)
+    if not schema:
+        return
+    fields = {f["name"]: f for f in schema.get("fields") or []}
+    for name, value in config.items():
+        field = fields.get(name)
+        if field is None:
+            continue  # reported config the schema does not describe (a chain's items)
+        kind = field.get("type")
+        label = field.get("label") or name
+        if kind in ("integer", "number"):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise HarnessRejected(f"{label} 은 숫자여야 합니다")
+            if kind == "integer" and float(value) != int(value):
+                raise HarnessRejected(f"{label} 은 정수여야 합니다")
+            low, high = field.get("minValue"), field.get("maxValue")
+            if low is not None and value < low:
+                raise HarnessRejected(f"{label} 은 {low} 이상이어야 합니다")
+            if high is not None and value > high:
+                raise HarnessRejected(f"{label} 은 {high} 이하여야 합니다")
+        elif kind == "boolean" and not isinstance(value, bool):
+            raise HarnessRejected(f"{label} 은 켜기/끄기 값이어야 합니다")
+        elif kind == "array" and not isinstance(value, list):
+            raise HarnessRejected(f"{label} 은 목록이어야 합니다")
 
 
 def _available(stage: Any, slot: str) -> Optional[List[str]]:

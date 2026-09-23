@@ -188,66 +188,93 @@ def test_affect_scope_accepted() -> None:
     assert s._pending_runtime_refresh == "affect"
 
 
-def test_memory_tuning_apply_mutates_retriever_attrs(monkeypatch) -> None:
-    """memory_tuning scope re-reads load_memory_tuning + mutates the
-    GenyMemoryRetriever instance attrs in place (Stage 2 context.retriever)."""
-    s = _bare_session()
-    retriever = SimpleNamespace(
-        _max_inject=10,
-        _recent_turns=2,
-        _enable_vector=False,
-    )
-    s._pipeline = _pipeline_with_stages([
-        _stage("context", slot_strategy=retriever, slot_name="retriever"),
-    ])
-    s._role = "worker"
+def _tuning(**over):
+    base = {
+        "max_inject_chars": 10000,
+        "recent_turns": 6,
+        "enable_vector_search": True,
+        "enable_reflection": True,
+    }
+    base.update(over)
+    return lambda *, is_vtuber: dict(base)
+
+
+def test_memory_tuning_refresh_changes_the_live_hooks(monkeypatch) -> None:
+    """The refresh writes onto the ``MemoryHooks`` the provider and the
+    Stage 2 retriever both hold — the thing retrieval actually reads.
+
+    It used to write ``_max_inject`` / ``_recent_turns`` onto the retriever
+    object, attributes of a class that no longer exists; the old test
+    checked those writes on a stand-in that had them, so it passed while
+    every real refresh logged "no slots matched" and changed nothing.
+    """
+    from geny_executor.memory.provider import MemoryHooks
 
     import service.memory.tuning as mem_cfg
 
+    s = _bare_session()
+    s._role = "worker"
+    s._memory_config = None
+    hooks = MemoryHooks(max_inject_chars=10, recent_turns=2, enable_vector_search=False)
+    s._memory_hooks = hooks
     monkeypatch.setattr(
         mem_cfg, "load_memory_tuning",
-        lambda *, is_vtuber: {
-            "max_inject_chars": 30000,
-            "recent_turns": 12,
-            "enable_vector_search": True,
-            "enable_reflection": True,
-        },
+        _tuning(max_inject_chars=30000, recent_turns=12, enable_vector_search=True),
     )
 
     s.queue_runtime_refresh("memory_tuning")
     s._apply_pending_runtime_refresh()
 
-    assert retriever._max_inject == 30000
-    assert retriever._recent_turns == 12
-    assert retriever._enable_vector is True
+    assert s._memory_hooks is hooks, "the refresh must edit the shared instance, not replace it"
+    assert (hooks.max_inject_chars, hooks.recent_turns, hooks.enable_vector_search) == (
+        30000, 12, True,
+    )
+    assert "conversations" in hooks.transcript_categories
 
 
-def test_memory_tuning_apply_mutates_strategy_attr(monkeypatch) -> None:
-    """memory_tuning scope also touches Stage 18 memory.strategy
-    (enable_reflection)."""
-    s = _bare_session()
-    strategy = SimpleNamespace(_enable_reflection=False)
-    s._pipeline = _pipeline_with_stages([
-        _stage("memory", slot_strategy=strategy, slot_name="strategy"),
-    ])
-    s._role = "worker"
+def test_memory_tuning_refresh_keeps_the_callbacks(monkeypatch) -> None:
+    """The archivers hang off the same hooks; a refresh that rebuilt the
+    bag would silently stop every conversation archive."""
+    from geny_executor.memory.provider import MemoryHooks
 
     import service.memory.tuning as mem_cfg
 
-    monkeypatch.setattr(
-        mem_cfg, "load_memory_tuning",
-        lambda *, is_vtuber: {
-            "max_inject_chars": 10000,
-            "recent_turns": 6,
-            "enable_vector_search": True,
-            "enable_reflection": True,
-        },
-    )
+    async def _archive(turn, receipt):  # noqa: ANN001
+        return None
+
+    s = _bare_session()
+    s._role = "worker"
+    s._memory_config = None
+    hooks = MemoryHooks()
+    hooks.after_record_turn = _archive
+    s._memory_hooks = hooks
+    monkeypatch.setattr(mem_cfg, "load_memory_tuning", _tuning(recent_turns=3))
 
     s.queue_runtime_refresh("memory_tuning")
     s._apply_pending_runtime_refresh()
 
-    assert strategy._enable_reflection is True
+    assert hooks.after_record_turn is _archive
+    assert hooks.recent_turns == 3
+
+
+def test_memory_tuning_refresh_honours_this_sessions_overrides(monkeypatch) -> None:
+    """Build and refresh resolve tuning through one function, so a
+    per-session override survives a refresh instead of being reverted to
+    the global value."""
+    from geny_executor.memory.provider import MemoryHooks
+
+    import service.memory.tuning as mem_cfg
+
+    s = _bare_session()
+    s._role = "worker"
+    s._memory_config = {"tuning": {"max_inject_chars": 4242}}
+    s._memory_hooks = MemoryHooks()
+    monkeypatch.setattr(mem_cfg, "load_memory_tuning", _tuning(max_inject_chars=30000))
+
+    s.queue_runtime_refresh("memory_tuning")
+    s._apply_pending_runtime_refresh()
+
+    assert s._memory_hooks.max_inject_chars == 4242
 
 
 def test_affect_apply_mutates_emitter(monkeypatch) -> None:
@@ -297,13 +324,13 @@ def test_affect_apply_no_emitter_is_silent(monkeypatch) -> None:
 def test_all_scope_includes_new_branches(monkeypatch) -> None:
     """``all`` must touch the new memory/affect branches alongside the
     permissions/hooks ones."""
+    from geny_executor.memory.provider import MemoryHooks
+
     s = _bare_session()
-    retriever = SimpleNamespace(
-        _max_inject=1, _recent_turns=1, _enable_vector=False,
-    )
+    s._memory_config = None
+    s._memory_hooks = MemoryHooks(max_inject_chars=1, recent_turns=1, enable_vector_search=False)
     emitter = SimpleNamespace(name="affect_tag", _max_tags_per_turn=1)
     s._pipeline = _pipeline_with_stages([
-        _stage("context", slot_strategy=retriever, slot_name="retriever"),
         SimpleNamespace(
             name="emit",
             emitters=SimpleNamespace(items=[emitter]),
@@ -338,7 +365,7 @@ def test_all_scope_includes_new_branches(monkeypatch) -> None:
     s._apply_pending_runtime_refresh()
 
     # Memory + affect both updated.
-    assert retriever._max_inject == 99999
+    assert s._memory_hooks.max_inject_chars == 99999
     assert emitter._max_tags_per_turn == 42
     # Permissions + hooks branches each went through refresh_runtime.
     assert s._pipeline.refresh_runtime.call_count == 2

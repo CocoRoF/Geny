@@ -4023,6 +4023,7 @@ const ko: Translations = {
       },
       question: {
         conversationGetsLong: '대화가 길어지면 어떻게 줄일까',
+        recentTurns: '직전 대화를 얼마나 다시 볼까',
         promptCache: '프롬프트를 캐시할까',
         thinkingBudget: '생각할 시간을 어떻게 줄까',
         toolsAtOnce: '도구를 동시에 쓸까',
@@ -4030,6 +4031,12 @@ const ko: Translations = {
         whenTurnEnds: '언제 턴을 끝낼까',
         whatItRemembers: '무엇을 기억할까',
         howItAnswers: '어떤 모양으로 답할까',
+      },
+      field: {
+        full_turns: '도구까지 그대로 보여 줄 턴',
+        dialogue_turns: '대화만 보여 줄 턴',
+        window_share: '컨텍스트 창에서 쓸 몫',
+        silent_markers: '침묵으로 칠 답',
       },
       locked: {
         weOwnTheLoop: '도구 루프는 이 하네스가 돌립니다. 모델에 넘기면 대화의 이식성·권한·기억을 한꺼번에 잃습니다.',

@@ -10,7 +10,7 @@ reader, not about the code:
 
 ``basic``
     Someone tuning THEIR agent. "How should it shorten a long conversation",
-    "may it run tools at the same time", "when is a turn finished". Eight
+    "may it run tools at the same time", "when is a turn finished". Nine
     slots and three budgets — the whole first screen.
 
 ``advanced``
@@ -45,6 +45,11 @@ __all__ = [
 #: text is why it earns the space.
 BASIC_SLOTS: Dict[Tuple[int, str], str] = {
     (2, "compactor"): "conversationGetsLong",
+    # Every turn starts from an empty history; this is what brings the last
+    # few back — the ones with tools as they happened, the rest as what was
+    # said. The difference between an agent that knows it already did the
+    # thing and one that does it again.
+    (2, "replay"): "recentTurns",
     (5, "strategy"): "promptCache",
     (8, "budget_planner"): "thinkingBudget",
     (10, "executor"): "toolsAtOnce",

@@ -132,6 +132,7 @@ def _source_of(
     value: Any,
     declared: Dict[int, Dict[str, Any]],
     overlay_slots: Dict[str, Any],
+    overlay_configs: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Where this slot's live value came from.
 
@@ -141,7 +142,9 @@ def _source_of(
     of an install Geny does at build time.
     """
     key = f"{order}.{slot}"
-    if key in overlay_slots:
+    # A changed setting on an unchanged implementation is still the owner's
+    # decision — without this the page offered no way back from it.
+    if key in overlay_slots or key in (overlay_configs or {}):
         return "session"
     if (order, slot) in RUNTIME_INSTALLED:
         return "runtime"
@@ -174,6 +177,7 @@ def build_harness_view(
     # slots sit at the top level. The agent's own env overlay is a different
     # file with a different owner and is deliberately not consulted here.
     overlay_slots = dict((overlay or {}).get("slots") or {})
+    overlay_configs = dict((overlay or {}).get("slotConfigs") or {})
 
     stages: List[Dict[str, Any]] = []
     for description in pipeline.describe():
@@ -248,7 +252,9 @@ def build_harness_view(
                     "question": BASIC_SLOTS.get((order, info.slot_name)),
                     "lockedBecause": lock_reason(order, info.slot_name),
                     "installedBy": RUNTIME_INSTALLED.get((order, info.slot_name)),
-                    "source": _source_of(order, info.slot_name, value, declared, overlay_slots),
+                    "source": _source_of(
+                        order, info.slot_name, value, declared, overlay_slots, overlay_configs
+                    ),
                 }
             )
 

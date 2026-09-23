@@ -14,7 +14,7 @@
  * Three screens, and which one a control lands on is a claim about the
  * reader rather than about the code:
  *
- *   기본   eight questions and three budgets. Someone tuning their agent.
+ *   기본   nine questions and three budgets. Someone tuning their agent.
  *   고급   everything else swappable, grouped the way a turn moves.
  *   잠김   what this product IS. Shown, because hiding them would make the
  *          page a lie of omission, and inert.
@@ -27,6 +27,7 @@ import { agentApi } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import type {
   HarnessBudgets,
+  HarnessField,
   HarnessSlot,
   HarnessStage,
   HarnessView,
@@ -49,18 +50,93 @@ function SourceBadge({ source }: { source: string }) {
   );
 }
 
+/** One setting of the chosen implementation, committed when the reader
+ *  leaves the field — the same rhythm as the budgets above. */
+function ConfigField({
+  field,
+  value,
+  busy,
+  onCommit,
+}: {
+  field: HarnessField;
+  value: unknown;
+  busy: boolean;
+  onCommit: (value: unknown) => void;
+}) {
+  const { t } = useI18n();
+  const key = `harness.field.${field.name}`;
+  const translated = t(key);
+  const label = translated === key ? field.label : translated;
+  const shown = value === undefined || value === null ? field.default : value;
+  const asText = Array.isArray(shown) ? shown.join(', ') : shown == null ? '' : String(shown);
+  const [draft, setDraft] = useState(asText);
+  useEffect(() => setDraft(asText), [asText]);
+
+  const commit = () => {
+    if (draft === asText) return;
+    if (field.type === 'integer' || field.type === 'number') {
+      const next = Number(draft);
+      if (draft.trim() !== '' && Number.isFinite(next)) onCommit(next);
+      else setDraft(asText);
+    } else if (field.type === 'array') {
+      onCommit(
+        draft
+          .split(',')
+          .map((part) => part.trim())
+          .filter(Boolean),
+      );
+    } else {
+      onCommit(draft);
+    }
+  };
+
+  if (field.type === 'boolean') {
+    return (
+      <label className="flex items-center gap-2 text-[0.75rem]">
+        <input
+          type="checkbox"
+          checked={Boolean(shown)}
+          disabled={busy}
+          onChange={(e) => onCommit(e.target.checked)}
+        />
+        <span>{label}</span>
+      </label>
+    );
+  }
+  const numeric = field.type === 'integer' || field.type === 'number';
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[0.75rem] text-[var(--text-secondary)]">{label}</span>
+      <input
+        type={numeric ? 'number' : 'text'}
+        step={field.type === 'number' ? 0.01 : 1}
+        min={field.minValue ?? undefined}
+        max={field.maxValue ?? undefined}
+        className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded px-3 py-1.5 text-[0.8125rem] font-mono disabled:opacity-60"
+        value={draft}
+        disabled={busy}
+        title={field.description}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+      />
+    </label>
+  );
+}
+
 function SlotRow({
   stage,
   slot,
   busy,
   onChange,
   onReset,
+  onConfigure,
 }: {
   stage: HarnessStage;
   slot: HarnessSlot;
   busy: boolean;
   onChange: (key: string, value: string) => void;
   onReset: (key: string) => void;
+  onConfigure: (key: string, config: Record<string, unknown>) => void;
 }) {
   const { t } = useI18n();
   const key = `${stage.order}.${slot.slot}`;
@@ -123,6 +199,26 @@ function SlotRow({
           ))}
         </select>
       )}
+
+      {!locked && !Array.isArray(slot.value) && (() => {
+        // The settings of what is chosen, not of every option: a form for
+        // an implementation that is not running would edit nothing.
+        const fields = slot.options.find((o) => o.name === chosen)?.schema?.fields ?? [];
+        if (!fields.length) return null;
+        return (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+            {fields.map((field) => (
+              <ConfigField
+                key={field.name}
+                field={field}
+                value={slot.config[field.name]}
+                busy={busy}
+                onCommit={(v) => onConfigure(key, { ...slot.config, [field.name]: v })}
+              />
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -255,7 +351,12 @@ export default function HarnessPanel({ sessionId }: { sessionId: string }) {
     [patch],
   );
   const resetSlot = useCallback(
-    (key: string) => void patch({ slots: { [key]: null } }),
+    // Back to inherited means the implementation AND its settings.
+    (key: string) => void patch({ slots: { [key]: null }, slotConfigs: { [key]: null } }),
+    [patch],
+  );
+  const configureSlot = useCallback(
+    (key: string, config: Record<string, unknown>) => void patch({ slotConfigs: { [key]: config } }),
     [patch],
   );
 
@@ -367,6 +468,7 @@ export default function HarnessPanel({ sessionId }: { sessionId: string }) {
             busy={busy}
             onChange={setSlot}
             onReset={resetSlot}
+            onConfigure={configureSlot}
           />
         ))}
       </Section>
@@ -384,6 +486,7 @@ export default function HarnessPanel({ sessionId }: { sessionId: string }) {
             busy={busy}
             onChange={setSlot}
             onReset={resetSlot}
+            onConfigure={configureSlot}
           />
         ))}
       </Section>
@@ -401,6 +504,7 @@ export default function HarnessPanel({ sessionId }: { sessionId: string }) {
             busy={busy}
             onChange={setSlot}
             onReset={resetSlot}
+            onConfigure={configureSlot}
           />
         ))}
       </Section>

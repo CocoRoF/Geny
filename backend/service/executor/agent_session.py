@@ -61,6 +61,13 @@ from service.utils.text_sanitizer import sanitize_for_display
 
 logger = getLogger(__name__)
 
+#: Notes that are records of the conversation itself: the per-session
+#: rollups (``conversations/``), the per-turn execution notes
+#: (``daily/execution-*.md``) and their date stream (``executions/``), and
+#: agent-to-agent DM archives. See ``_memory_hooks_policy``.
+_TRANSCRIPT_CATEGORIES = ("conversations", "executions", "dms")
+_TRANSCRIPT_PREFIXES = ("execution-",)
+
 # Memory-hygiene checks run on their OWN 1-wide pool — loop-independent
 # (fire-and-forget submit survives run_coro_sync's short-lived loops) and,
 # critically, DISTINCT from sync_async_bridge's single-worker side-effect
@@ -2092,58 +2099,183 @@ class AgentSession:
                     self._session_id,
                 )
 
-    def _reload_memory_tuning(self, pipeline: Any) -> None:
-        """O.1 (cycle 20260426_3) — re-read ``settings.json:memory.tuning``
-        and mutate the live ``GenyMemoryRetriever`` / ``GenyMemoryStrategy``
-        instances on Stage 2 (context) and Stage 18 (memory).
+    def _resolve_memory_tuning(self, is_vtuber: bool) -> Dict[str, Any]:
+        """The memory tuning this session runs with: global settings, then
+        this session's own overrides.
 
-        Mutates instance attrs directly because the executor's
-        retriever / strategy classes don't expose a "reset config"
-        method. Field names (``_max_inject``, ``_recent_turns``,
-        ``_enable_vector``, ``_enable_reflection``) come from
-        ``geny_executor.memory.retriever.GenyMemoryRetriever`` and
-        ``geny_executor.memory.strategy.GenyMemoryStrategy``. If those
-        ever rename, the change is silent (``getattr`` guards) and the
-        live session keeps the pre-refresh values.
+        One function for the build AND the runtime refresh. They used to be
+        two, and the refresh wrote to attributes of a retriever class that
+        no longer exists — it logged "no slots matched" and changed nothing,
+        so a tuning edit took effect only on the next session.
         """
-        from service.memory.tuning import load_memory_tuning
+        # G.2 (cycle 20260426_2) — per-session memory tuning knobs.
+        # Defaults match the historical hardcoded values exactly; an
+        # operator setting settings.json:memory.tuning.<field>
+        # overrides them without a code change.
+        try:
+            from service.memory.tuning import load_memory_tuning
+            _tuning = load_memory_tuning(is_vtuber=is_vtuber)
+        except Exception:
+            _tuning = {
+                "max_inject_chars": 8000 if is_vtuber else 10000,
+                "recent_turns": 6,
+                "enable_vector_search": True,
+                "enable_reflection": True,
+                # Memory v2 PR 10 — slim retriever (recent + summary +
+                # vault map only; rest via tools). Flipped here
+                # post-PR-13 once Memory Ladder doc reaches every role.
+                "slim_mode": False,
+                # Memory v2 followup — insights/ category was filling
+                # up with behavioural patterns and per-turn tactics
+                # ("greet warmly", "delegate file content tasks").
+                # Gate at ``high`` so only genuine factual learnings
+                # land. ``low`` restores legacy permissive behaviour.
+                "min_insight_importance": "high",
+            }
 
+        # Q.1 (cycle 20260426_3) — per-session memory tuning override.
+        # ``self._memory_config.tuning`` (when present) wins over the
+        # global tuning loaded above. Each field is independently
+        # overridable; missing fields fall through to the global value.
+        # Type-coerced loosely — the fields are read into private slots
+        # of GenyMemoryRetriever / Strategy so a wrong type would silent-
+        # fail at use time; we surface a warning at session-build time
+        # instead so the operator can catch it before the session runs.
+        per_session_cfg = getattr(self, "_memory_config", None) or {}
+        per_session_tuning = (
+            per_session_cfg.get("tuning")
+            if isinstance(per_session_cfg, dict)
+            else None
+        )
+        if isinstance(per_session_tuning, dict):
+            for key, validator in (
+                ("max_inject_chars", lambda v: isinstance(v, int) and v >= 1),
+                ("recent_turns", lambda v: isinstance(v, int) and v >= 0),
+                ("enable_vector_search", lambda v: isinstance(v, bool)),
+                ("enable_reflection", lambda v: isinstance(v, bool)),
+                ("slim_mode", lambda v: isinstance(v, bool)),
+                ("min_insight_importance", lambda v: isinstance(v, str) and v.lower() in ("low","medium","high","critical")),
+            ):
+                if key in per_session_tuning:
+                    candidate = per_session_tuning[key]
+                    if validator(candidate):
+                        _tuning[key] = candidate
+                    else:
+                        logger.warning(
+                            "[%s] memory_config.tuning.%s ignored — invalid "
+                            "type / value: %r",
+                            self._session_id, key, candidate,
+                        )
+        return _tuning
+
+    @staticmethod
+    def _memory_hooks_policy(_tuning: Dict[str, Any]) -> Dict[str, Any]:
+        """``MemoryHooks`` policy fields for *_tuning* — no callbacks.
+
+        The callbacks (archivers, note-write hooks) are attached separately
+        by ``_install_memory_hooks``; this is only what the tuning decides,
+        so the refresh can lay it onto the live hooks without touching them.
+        """
+        from geny_executor.memory.provider import MemoryHooks
+        from service.memory.types import CATEGORY_DESCRIPTIONS as _CATEGORY_DESCRIPTIONS
+
+        hooks_kwargs: Dict[str, Any] = dict(
+            max_inject_chars=int(_tuning["max_inject_chars"]),
+            enable_vector_search=bool(_tuning["enable_vector_search"]),
+            recent_turns=int(_tuning["recent_turns"]),
+            slim_mode=bool(_tuning.get("slim_mode", False)),
+            always_render_vault_map=bool(
+                _tuning.get("always_render_vault_map", True)
+            ),
+            vault_descriptions=dict(_CATEGORY_DESCRIPTIONS),
+        )
+        # Graph-aware retrieval (geny-executor >= 2.39.0): append
+        # graph-connected notes (Personalized PageRank over the knowledge
+        # graph) to the direct hits. Additive — never reorders/evicts a
+        # direct hit — so it's safe to default on; config-overridable via
+        # the memory tuning block. Guarded by a field check so an older
+        # executor (without these MemoryHooks fields) can't break init.
+        try:
+            from dataclasses import fields as _dc_fields
+            _hook_fields = {f.name for f in _dc_fields(MemoryHooks)}
+        except Exception:  # noqa: BLE001
+            _hook_fields = set()
+        if "graph_aware" in _hook_fields:
+            hooks_kwargs["graph_aware"] = bool(_tuning.get("graph_aware", True))
+            hooks_kwargs["graph_top_k"] = int(_tuning.get("graph_top_k", 5))
+            hooks_kwargs["graph_alpha"] = float(_tuning.get("graph_alpha", 0.5))
+        # Identity card + ambient-noise exclusion (executor >= 2.64.4).
+        # The card is the never-dropped 이름/호칭/금기 channel; screen
+        # observations stay out of the AUTOMATIC search layers (they were
+        # 59% of a real vault and drowned recall in noise).
+        if "identity_card_chars" in _hook_fields:
+            hooks_kwargs["identity_card_chars"] = int(
+                _tuning.get("identity_card_chars", 600)
+            )
+        if "search_exclude_categories" in _hook_fields:
+            hooks_kwargs["search_exclude_categories"] = tuple(
+                _tuning.get("search_exclude_categories", ("observations",))
+            )
+        if "category_boosts" in _tuning and isinstance(
+            _tuning["category_boosts"], dict
+        ):
+            hooks_kwargs["category_boosts"] = dict(_tuning["category_boosts"])
+        if "pin_budget_ratio" in _tuning:
+            # The retriever reads `layer_budget_ratio["pinned"]`.
+            # Override only the pinned slot so other layers keep
+            # the default ratio.
+            from geny_executor.memory.provider import (
+                _DEFAULT_LAYER_BUDGET_RATIO,
+            )
+
+            ratio = dict(_DEFAULT_LAYER_BUDGET_RATIO)
+            ratio["pinned"] = float(_tuning["pin_budget_ratio"])
+            hooks_kwargs["layer_budget_ratio"] = ratio
+        # Records of the conversation itself. While the executor replays the
+        # previous turns as messages, these stay out of AUTOMATIC search —
+        # the same turns were coming back under "Relevant Knowledge", and a
+        # three-turn-old "✅ success" read as a fact about now. Explicit
+        # memory_search still reaches them.
+        if "transcript_categories" in _hook_fields:
+            hooks_kwargs["transcript_categories"] = tuple(
+                _tuning.get("transcript_categories", _TRANSCRIPT_CATEGORIES)
+            )
+            hooks_kwargs["transcript_filename_prefixes"] = tuple(
+                _tuning.get("transcript_filename_prefixes", _TRANSCRIPT_PREFIXES)
+            )
+        return hooks_kwargs
+
+    def _reload_memory_tuning(self, pipeline: Any) -> None:
+        """Re-read the memory tuning and lay it onto the LIVE hooks.
+
+        The provider and the Stage 2 retriever hold the same ``MemoryHooks``
+        instance and read it on every turn, so writing the policy fields
+        onto it is the whole refresh — the callbacks attached to it
+        (archivers, note-write hooks) are left alone.
+        """
+        del pipeline  # the hooks instance is the one thing to update
+        hooks = getattr(self, "_memory_hooks", None)
+        if hooks is None:
+            logger.info(
+                "[%s] runtime refresh: memory tuning skipped (no memory provider)",
+                self._session_id,
+            )
+            return
         is_vtuber = getattr(self._role, "value", None) == "vtuber" or (
             isinstance(self._role, str) and self._role == "vtuber"
         )
-        tuning = load_memory_tuning(is_vtuber=is_vtuber)
-
+        policy = self._memory_hooks_policy(self._resolve_memory_tuning(is_vtuber))
         applied: list[str] = []
-        for stage in pipeline._stages.values():
-            slots = (
-                stage.get_strategy_slots()
-                if hasattr(stage, "get_strategy_slots")
-                else {}
-            )
-            if stage.name == "context":
-                slot = slots.get("retriever")
-                retriever = getattr(slot, "strategy", None) if slot else None
-                if retriever is not None:
-                    if hasattr(retriever, "_max_inject"):
-                        retriever._max_inject = tuning["max_inject_chars"]
-                        applied.append("max_inject_chars")
-                    if hasattr(retriever, "_recent_turns"):
-                        retriever._recent_turns = tuning["recent_turns"]
-                        applied.append("recent_turns")
-                    if hasattr(retriever, "_enable_vector"):
-                        retriever._enable_vector = tuning["enable_vector_search"]
-                        applied.append("enable_vector_search")
-            elif stage.name == "memory":
-                slot = slots.get("strategy")
-                strategy = getattr(slot, "strategy", None) if slot else None
-                if strategy is not None and hasattr(strategy, "_enable_reflection"):
-                    strategy._enable_reflection = tuning["enable_reflection"]
-                    applied.append("enable_reflection")
-
+        for key, value in policy.items():
+            if not hasattr(hooks, key):
+                continue
+            if getattr(hooks, key) != value:
+                setattr(hooks, key, value)
+                applied.append(key)
         logger.info(
-            "[%s] runtime refresh applied: memory_tuning reloaded (%s)",
+            "[%s] runtime refresh applied: memory tuning (%s)",
             self._session_id,
-            ", ".join(applied) if applied else "no slots matched",
+            ", ".join(applied) if applied else "unchanged",
         )
 
     def _reload_affect_emitter(self, pipeline: Any) -> None:
@@ -2814,65 +2946,7 @@ class AgentSession:
                 + _ADAPTIVE_PROMPT
             )
 
-        # G.2 (cycle 20260426_2) — per-session memory tuning knobs.
-        # Defaults match the historical hardcoded values exactly; an
-        # operator setting settings.json:memory.tuning.<field>
-        # overrides them without a code change.
-        try:
-            from service.memory.tuning import load_memory_tuning
-            _tuning = load_memory_tuning(is_vtuber=is_vtuber)
-        except Exception:
-            _tuning = {
-                "max_inject_chars": 8000 if is_vtuber else 10000,
-                "recent_turns": 6,
-                "enable_vector_search": True,
-                "enable_reflection": True,
-                # Memory v2 PR 10 — slim retriever (recent + summary +
-                # vault map only; rest via tools). Flipped here
-                # post-PR-13 once Memory Ladder doc reaches every role.
-                "slim_mode": False,
-                # Memory v2 followup — insights/ category was filling
-                # up with behavioural patterns and per-turn tactics
-                # ("greet warmly", "delegate file content tasks").
-                # Gate at ``high`` so only genuine factual learnings
-                # land. ``low`` restores legacy permissive behaviour.
-                "min_insight_importance": "high",
-            }
-
-        # Q.1 (cycle 20260426_3) — per-session memory tuning override.
-        # ``self._memory_config.tuning`` (when present) wins over the
-        # global tuning loaded above. Each field is independently
-        # overridable; missing fields fall through to the global value.
-        # Type-coerced loosely — the fields are read into private slots
-        # of GenyMemoryRetriever / Strategy so a wrong type would silent-
-        # fail at use time; we surface a warning at session-build time
-        # instead so the operator can catch it before the session runs.
-        per_session_cfg = self._memory_config or {}
-        per_session_tuning = (
-            per_session_cfg.get("tuning")
-            if isinstance(per_session_cfg, dict)
-            else None
-        )
-        if isinstance(per_session_tuning, dict):
-            for key, validator in (
-                ("max_inject_chars", lambda v: isinstance(v, int) and v >= 1),
-                ("recent_turns", lambda v: isinstance(v, int) and v >= 0),
-                ("enable_vector_search", lambda v: isinstance(v, bool)),
-                ("enable_reflection", lambda v: isinstance(v, bool)),
-                ("slim_mode", lambda v: isinstance(v, bool)),
-                ("min_insight_importance", lambda v: isinstance(v, str) and v.lower() in ("low","medium","high","critical")),
-            ):
-                if key in per_session_tuning:
-                    candidate = per_session_tuning[key]
-                    if validator(candidate):
-                        _tuning[key] = candidate
-                    else:
-                        logger.warning(
-                            "[%s] memory_config.tuning.%s ignored — invalid "
-                            "type / value: %r",
-                            self._session_id, key, candidate,
-                        )
-        max_inject_chars = _tuning["max_inject_chars"]
+        _tuning = self._resolve_memory_tuning(is_vtuber)
 
         curated_km = None
         if self._owner_username:
@@ -3397,61 +3471,9 @@ class AgentSession:
             # every layer (retrieval, record_turn fan-out, reflection
             # gate) sees the same policy view.
             from service.memory.dedupe_strategy import GenyDedupeStrategy
-            from service.memory.types import CATEGORY_DESCRIPTIONS as _CATEGORY_DESCRIPTIONS
 
             # ── 1. Hooks (single bag of policy + business callbacks)
-            hooks_kwargs: Dict[str, Any] = dict(
-                max_inject_chars=int(max_inject_chars),
-                enable_vector_search=bool(_tuning["enable_vector_search"]),
-                recent_turns=int(_tuning["recent_turns"]),
-                slim_mode=bool(_tuning.get("slim_mode", False)),
-                always_render_vault_map=bool(
-                    _tuning.get("always_render_vault_map", True)
-                ),
-                vault_descriptions=dict(_CATEGORY_DESCRIPTIONS),
-            )
-            # Graph-aware retrieval (geny-executor >= 2.39.0): append
-            # graph-connected notes (Personalized PageRank over the knowledge
-            # graph) to the direct hits. Additive — never reorders/evicts a
-            # direct hit — so it's safe to default on; config-overridable via
-            # the memory tuning block. Guarded by a field check so an older
-            # executor (without these MemoryHooks fields) can't break init.
-            try:
-                from dataclasses import fields as _dc_fields
-                _hook_fields = {f.name for f in _dc_fields(MemoryHooks)}
-            except Exception:  # noqa: BLE001
-                _hook_fields = set()
-            if "graph_aware" in _hook_fields:
-                hooks_kwargs["graph_aware"] = bool(_tuning.get("graph_aware", True))
-                hooks_kwargs["graph_top_k"] = int(_tuning.get("graph_top_k", 5))
-                hooks_kwargs["graph_alpha"] = float(_tuning.get("graph_alpha", 0.5))
-            # Identity card + ambient-noise exclusion (executor >= 2.64.4).
-            # The card is the never-dropped 이름/호칭/금기 channel; screen
-            # observations stay out of the AUTOMATIC search layers (they were
-            # 59% of a real vault and drowned recall in noise).
-            if "identity_card_chars" in _hook_fields:
-                hooks_kwargs["identity_card_chars"] = int(
-                    _tuning.get("identity_card_chars", 600)
-                )
-            if "search_exclude_categories" in _hook_fields:
-                hooks_kwargs["search_exclude_categories"] = tuple(
-                    _tuning.get("search_exclude_categories", ("observations",))
-                )
-            if "category_boosts" in _tuning and isinstance(
-                _tuning["category_boosts"], dict
-            ):
-                hooks_kwargs["category_boosts"] = dict(_tuning["category_boosts"])
-            if "pin_budget_ratio" in _tuning:
-                # The retriever reads `layer_budget_ratio["pinned"]`.
-                # Override only the pinned slot so other layers keep
-                # the default ratio.
-                from geny_executor.memory.provider import (
-                    _DEFAULT_LAYER_BUDGET_RATIO,
-                )
-
-                ratio = dict(_DEFAULT_LAYER_BUDGET_RATIO)
-                ratio["pinned"] = float(_tuning["pin_budget_ratio"])
-                hooks_kwargs["layer_budget_ratio"] = ratio
+            hooks_kwargs: Dict[str, Any] = self._memory_hooks_policy(_tuning)
             hooks = MemoryHooks(**hooks_kwargs)
             self._memory_provider.set_hooks(hooks)
             self._memory_hooks = hooks  # store for _install_memory_hooks

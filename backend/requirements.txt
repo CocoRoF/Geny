@@ -91,8 +91,17 @@ ddgs==9.11.4
 # replacing it — Stage 14 had been overwriting it with 30 on the turn
 # it classifies, so the 50 on the page was never the real limit.
 #
+# geny-executor 2.74.0 — the last few turns, as messages.
+#
+# Each turn used to start with no history but a flattened, tool-less
+# text of ~1.5 turns in the system prompt. The previous turns now come
+# back as real messages (the nearest two with their tool calls and
+# results), within 15% of the route's window, measured in tokens by an
+# estimator fitted to Claude; repeated calls are refused and a turn that
+# keeps making them ends.
+#
 # Must match the version pin in backend/pyproject.toml.
-geny-executor[qdrant,ssh]>=2.73.0,<3.0.0
+geny-executor[qdrant,ssh]>=2.74.0,<3.0.0
 geny-memory-adaptor>=1.11.1
 contextifier[pdf]>=0.5.0
 # Knowledge connectors — cron schedules + DB sources (postgres/mysql/sqlite)

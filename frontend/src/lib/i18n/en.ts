@@ -3982,6 +3982,7 @@ const en = {
       },
       question: {
         conversationGetsLong: 'How should it shorten a long conversation',
+        recentTurns: 'How much of the last few turns should it see again',
         promptCache: 'Should the prompt be cached',
         thinkingBudget: 'How much room to think',
         toolsAtOnce: 'May it run tools at the same time',
@@ -3989,6 +3990,12 @@ const en = {
         whenTurnEnds: 'When is a turn finished',
         whatItRemembers: 'What does it remember',
         howItAnswers: 'What shape are its answers',
+      },
+      field: {
+        full_turns: 'Turns shown with their tools',
+        dialogue_turns: 'Turns shown as conversation',
+        window_share: 'Share of the context window',
+        silent_markers: 'Answers that count as silence',
       },
       locked: {
         weOwnTheLoop: 'This harness runs the tool loop. Handing it to the model costs the conversation its portability, its permissions and its memory at once.',
