@@ -59,6 +59,49 @@ async def _send_event(ws: WebSocket, event_type: str, data: Any, session_id: str
         return False
 
 
+#: Strong references to in-flight wake tasks (a bare create_task can be
+#: garbage-collected mid-flight).
+_PREWAKE_TASKS: "set[asyncio.Task]" = set()
+
+
+def _schedule_prewake(session_id: str) -> None:
+    """Wake a dormant session when its avatar appears — in the background.
+
+    After a backend restart every session is dormant until something touches
+    it, and the first thing the user usually does with a VTuber is open its
+    avatar and, a little later, speak. The speaking used to pay for the wake:
+    pipeline build, memory provider, and a cold vector index whose warm-up
+    held Stage 2's retrieval for its full 10 s timeout — a one-line reply took
+    45-60 s on production, against ~7 s warm. The avatar arriving is the
+    earlier signal, so the wake starts there and is done by the time anyone
+    talks. An avatar on screen is the companion being present; its idle
+    triggers only run while it is awake anyway.
+
+    Idempotent (``ensure_session_live`` serialises on a per-session lock and
+    returns the live agent when there is one), never blocks the socket, never
+    raises.
+    """
+
+    async def _wake() -> None:
+        try:
+            from service.executor.agent_session_manager import get_agent_session_manager
+
+            manager = get_agent_session_manager()
+            if manager.get_agent(session_id) is not None:
+                return
+            if await manager.ensure_session_live(session_id) is not None:
+                logger.info("[AvatarWS:%s] woke the session for its avatar", session_id[:8])
+        except Exception:  # noqa: BLE001 — the avatar must work whether or not this does
+            logger.debug("[AvatarWS:%s] pre-wake failed", session_id[:8], exc_info=True)
+
+    try:
+        task = asyncio.get_running_loop().create_task(_wake())
+    except RuntimeError:
+        return
+    _PREWAKE_TASKS.add(task)
+    task.add_done_callback(_PREWAKE_TASKS.discard)
+
+
 @router.websocket("/ws/vtuber/agents/{session_id}/state")
 async def ws_avatar_state_stream(websocket: WebSocket, session_id: str):
     """
@@ -138,6 +181,7 @@ async def ws_avatar_state_stream(websocket: WebSocket, session_id: str):
                     subscribed = True
                     state_manager.subscribe(session_id, _on_state_change)
                     logger.info("[AvatarWS:%s] subscribed to avatar state", session_id[:8])
+                    _schedule_prewake(session_id)
 
                     # Send initial current state
                     current = state_manager.get_state(session_id)
