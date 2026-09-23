@@ -152,6 +152,10 @@ _DM_KINDS = frozenset({
     Kind.TOOL_RUN_SUMMARY.value,
 })
 
+#: A rotated archive's stem: ``<live stem>.<NNN>.archive`` (possibly nested
+#: by the pre-fix rotation bug). See ``_locate_or_initialise``.
+_ARCHIVE_STEM = re.compile(r"\.\d{3}\.archive(?:\.|$)")
+
 #: Sanitiser for path / filename components.
 _PATH_SAFE_RE = re.compile(r"[^A-Za-z0-9_\-]")
 
@@ -1368,6 +1372,14 @@ class ConversationArchiver:
                 if not entry.endswith(".md"):
                     continue
                 stem = entry[:-3]
+                if _ARCHIVE_STEM.search(stem):
+                    # A rotated archive shares the live file's prefix and
+                    # sorts BEFORE it ("….001.archive" < "….md"), so after
+                    # a restart cleared the cache it was picked as the live
+                    # rollup — and rotated again into "….001.archive.001.
+                    # archive", one level deeper per restart (ten deep in
+                    # production). Archives are never the live file.
+                    continue
                 if stem == exact_stem or (
                     bucket == Bucket.USER and stem.startswith(prefix_stem)
                 ):

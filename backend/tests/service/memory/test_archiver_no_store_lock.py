@@ -116,3 +116,41 @@ def test_a_file_without_frontmatter_still_yields_its_body(tmp_path):
     assert body.strip() == "프론트매터 없는 본문"
     assert meta.get("category") == "conversations"
     assert notes.calls == []
+
+
+def test_a_rotated_archive_is_never_taken_for_the_live_rollup(tmp_path):
+    """Archives share the live file's prefix and sort BEFORE it
+    ("….001.archive.md" < "….md"). After a restart emptied the cache the
+    locator picked the archive as live, and the next rotation nested it one
+    level deeper — production reached ten levels of ".001.archive"."""
+    from service.memory.conversation_archiver import Bucket, _slug_for_session_id
+
+    notes = _ExplodingNotes()
+    arch = _archiver(tmp_path, notes)
+    stem = f"{_slug_for_session_id('s-1')}__user__hello"
+    _write_rollup(tmp_path, f"conversations/{stem}.001.archive.md", title="old", body="옛날\n")
+    _write_rollup(
+        tmp_path, f"conversations/{stem}.001.archive.001.archive.md", title="older", body="더 옛날\n"
+    )
+    _write_rollup(tmp_path, f"conversations/{stem}.md", title="live", body="지금\n")
+
+    rel, _path, meta, body = arch._locate_or_initialise(
+        bucket=Bucket.USER, base_slug="user", derived_title_seed="hello",
+    )
+    assert rel == f"conversations/{stem}.md"
+    assert "지금" in body
+
+
+def test_with_only_archives_left_a_new_live_file_is_started(tmp_path):
+    from service.memory.conversation_archiver import Bucket, _slug_for_session_id
+
+    notes = _ExplodingNotes()
+    arch = _archiver(tmp_path, notes)
+    stem = f"{_slug_for_session_id('s-1')}__user__hello"
+    _write_rollup(tmp_path, f"conversations/{stem}.001.archive.md", title="old", body="옛날\n")
+
+    rel, _path, meta, body = arch._locate_or_initialise(
+        bucket=Bucket.USER, base_slug="user", derived_title_seed="hello",
+    )
+    assert ".archive" not in (rel or "")
+    assert body == ""
