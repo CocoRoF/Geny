@@ -21,9 +21,10 @@ import genyIcon from '../assets/geny_character.png'
 import { makeT, type Lang } from '../i18n'
 import {
   agents, sessions as sessionApi,
-  type AgentSummary,
+  type AgentSummary, type OutgoingAttachment,
 } from '../server'
 import AvatarBar from './AvatarBar'
+import { ATTACH_ACCEPT, PendingChips, base64ToFile, usePendingFiles } from './attachments'
 import Explorer, { type OpenedFile } from './Explorer'
 import FileView from './FileView'
 import { Icon } from './icons'
@@ -31,7 +32,9 @@ import RouteBar from './RouteBar'
 import SystemMonitorFooter from './SystemMonitorFooter'
 import Transcript from './Transcript'
 import WorkPane from './WorkPane'
+import { useAvatar } from './useAvatar'
 import { useSession } from './useSession'
+import VoiceBar from './VoiceBar'
 
 const LAST_SESSION_KEY = 'geny.chat.lastSession'
 
@@ -116,6 +119,11 @@ export function ChatApp(): ReactNode {
   const pinned = useRef(true)
 
   const live = useSession(sessionId)
+  const avatar = useAvatar()
+  const pending = usePendingFiles(t)
+  const fileInput = useRef<HTMLInputElement>(null)
+  const [dragging, setDragging] = useState(false)
+  const [grabbing, setGrabbing] = useState(false)
 
   // ── theme + language ────────────────────────────────────────────────
   // Theme is an attribute on <html>, not a class on a wrapper: a window that
@@ -199,14 +207,54 @@ export function ChatApp(): ReactNode {
 
   const send = (): void => {
     const text = draft.trim()
-    if (!text || !sessionId) return
-    live.send(text)
+    if (!sessionId || pending.uploading) return
+    const files: OutgoingAttachment[] = pending.take()
+    if (!text && files.length === 0) return
+    // Screen observation on, talking to the VTuber that is watching: the
+    // screen as it is right now goes with the message — what the avatar's own
+    // send path has always done. Inline and marked, so the server treats it as
+    // the ambient frame it is and does not keep it in the conversation.
+    const watching = isVtuber && avatar.state?.screen && avatar.state.sessionId === sessionId
+    void (async () => {
+      if (watching) {
+        const shot = await window.connector?.screenGrab?.().catch(() => null)
+        if (shot) {
+          files.push({
+            kind: 'image', mime_type: shot.mime_type, data: shot.data,
+            name: 'screen.jpg', source: 'screen_observation',
+          })
+        }
+      }
+      live.send(text, files)
+    })()
     setDraft('')
     // The box grew to fit what was typed; clearing the value does not shrink
     // it back, so a long message would leave a tall empty box behind.
     if (composer.current) composer.current.style.height = 'auto'
     composer.current?.focus()
     pinned.current = true
+  }
+
+  /** The screen, now, as a picture in the message being written. */
+  const attachScreen = async (): Promise<void> => {
+    if (grabbing) return
+    setGrabbing(true)
+    try {
+      const shot = await window.connector?.screenGrab?.()
+      if (shot) {
+        const stamp = new Date().toTimeString().slice(0, 8).replace(/:/g, '')
+        pending.add([base64ToFile(shot.data, shot.mime_type, `screen-${stamp}.jpg`)])
+      }
+    } finally {
+      setGrabbing(false)
+    }
+  }
+
+  const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>): void => {
+    const files = Array.from(e.clipboardData?.files ?? [])
+    if (files.length === 0) return
+    e.preventDefault()
+    pending.add(files)
   }
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -422,13 +470,52 @@ export function ChatApp(): ReactNode {
           )}
 
           <div className="chat-body">
-            <div className="chat-column">
+            <div
+              className={`chat-column ${dragging ? 'dragging' : ''}`}
+              onDragOver={(e) => {
+                if (!sessionId || !Array.from(e.dataTransfer.types).includes('Files')) return
+                e.preventDefault()
+                if (!dragging) setDragging(true)
+              }}
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node)) return
+                setDragging(false)
+              }}
+              onDrop={(e) => {
+                const files = Array.from(e.dataTransfer.files ?? [])
+                setDragging(false)
+                if (files.length === 0 || !sessionId) return
+                e.preventDefault()
+                pending.add(files)
+              }}
+            >
+              {dragging && <div className="drop-hint">{t('chat.attach.drop')}</div>}
               <div className="chat-log" ref={scroller} onScroll={onScroll}>
                 <Transcript messages={live.messages} calls={live.calls}
-                  running={live.running} loading={live.loading} t={t} />
+                  running={live.running} loading={live.loading} t={t}
+                  onSpeak={isVtuber && avatar.state?.tts ? avatar.speak : undefined} />
               </div>
 
               <footer className="chat-input">
+                <div className="composer-tools">
+                  <button type="button" className="tool-btn" disabled={!sessionId}
+                    title={t('chat.attach.button')} onClick={() => fileInput.current?.click()}>
+                    {Icon.paperclip}<span>{t('chat.attach.short')}</span>
+                  </button>
+                  <button type="button" className="tool-btn" disabled={!sessionId || grabbing}
+                    title={t('chat.attach.screenHint')} onClick={() => void attachScreen()}>
+                    {Icon.monitor}<span>{grabbing ? t('chat.attach.grabbing') : t('chat.attach.screen')}</span>
+                  </button>
+                  <input ref={fileInput} type="file" multiple accept={ATTACH_ACCEPT} hidden
+                    onChange={(e) => {
+                      pending.add(Array.from(e.target.files ?? []))
+                      e.target.value = ''
+                    }} />
+                  <span className="spacer" />
+                  {isVtuber && <VoiceBar avatar={avatar} t={t} />}
+                </div>
+                <PendingChips files={pending.files} notice={pending.notice}
+                  onRemove={pending.remove} t={t} />
                 <div className="composer">
                   <textarea
                     ref={composer}
@@ -444,6 +531,7 @@ export function ChatApp(): ReactNode {
                       el.style.height = `${Math.min(150, el.scrollHeight)}px`
                     }}
                     onKeyDown={onKey}
+                    onPaste={onPaste}
                   />
                   {live.running ? (
                     <button type="button" className="composer-send stop" onClick={live.stop}
@@ -452,7 +540,11 @@ export function ChatApp(): ReactNode {
                     </button>
                   ) : (
                     <button type="button" className="composer-send"
-                      disabled={!draft.trim() || !sessionId} onClick={send} title={t('chat.send')}>
+                      disabled={
+                        !sessionId || pending.uploading ||
+                        (!draft.trim() && !pending.files.some((f) => f.uploaded))
+                      }
+                      onClick={send} title={pending.uploading ? t('chat.attach.waiting') : t('chat.send')}>
                       {Icon.send}
                     </button>
                   )}

@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, powerMonitor, safeStorage, screen, session, shell, Tray } from 'electron'
+import { cleanCommand, cleanState, type AvatarState } from './avatar-bridge'
 import { spawn } from 'child_process'
 import { hostname } from 'os'
 import { basename, join, sep } from 'path'
@@ -797,7 +798,11 @@ function createOverlay(): void {
 
   overlay.on('closed', () => {
     overlay = null
+    publishAvatarState(null)
   })
+  // A crashed page stops publishing; say so rather than leaving its last
+  // state on every switch in the app.
+  overlay.webContents.on('render-process-gone', () => publishAvatarState(null))
 }
 
 // ── control window: chat / settings / login (hidden until toggled) ──────────
@@ -1392,6 +1397,42 @@ let overlayFellBack = false
 //: previous one — an ERR_ABORTED storm that could leave the window with
 //: nothing loaded at all, which is what "the avatar never appears" looked
 //: like in the field.
+/** The avatar's last published state; null while no avatar page is up. */
+let avatarState: AvatarState | null = null
+
+function publishAvatarState(next: AvatarState | null): void {
+  avatarState = next
+  for (const win of [control, overlayChip, settings, quickchat]) {
+    if (win && !win.isDestroyed()) win.webContents.send('avatar:state', avatarState)
+  }
+}
+
+/** The primary screen (or the one screen observation is set to) as a JPEG. */
+async function grabScreen(): Promise<{ data: string; mime_type: string; width: number; height: number } | null> {
+  try {
+    const display = screen.getPrimaryDisplay()
+    const scale = Math.min(1, 1920 / Math.max(1, display.size.width))
+    const size = {
+      width: Math.round(display.size.width * scale),
+      height: Math.round(display.size.height * scale),
+    }
+    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: size })
+    if (!sources.length) return null
+    const wanted = loadConfig().overlayTuning?.screenSourceId
+    const source =
+      sources.find((s) => wanted && s.id === wanted) ??
+      sources.find((s) => s.display_id === String(display.id)) ??
+      sources[0]
+    const image = source.thumbnail
+    if (image.isEmpty()) return null
+    const { width, height } = image.getSize()
+    return { data: image.toJPEG(82).toString('base64'), mime_type: 'image/jpeg', width, height }
+  } catch (e) {
+    dlog('capture', `screen grab failed: ${(e as Error)?.message}`)
+    return null
+  }
+}
+
 let overlayContentInFlight: Promise<void> | null = null
 
 function applyOverlayContent(): Promise<void> {
@@ -1405,6 +1446,8 @@ function applyOverlayContent(): Promise<void> {
 
 async function applyOverlayContentInner(): Promise<void> {
   if (!overlay) return
+  // The page is about to be replaced; whatever it last said is no longer true.
+  publishAvatarState(null)
   if (overlayFellBack) {
     // A crash loop was broken earlier; do not walk back into it. The user
     // gets the placeholder until they explicitly retry (tray → 재시작 /
@@ -3007,6 +3050,25 @@ function registerIpc(): void {
   })
 
   // Control panel picked a session → point the overlay at it.
+  // ── the avatar's switches, from any window (see avatar-bridge.ts) ──
+  // Only the avatar window may say what state the avatar is in; any window
+  // may ask it to change, and only in the few ways cleanCommand names.
+  ipcMain.on('avatar:publish', (e, raw: unknown) => {
+    if (!overlay || overlay.isDestroyed() || e.sender !== overlay.webContents) return
+    publishAvatarState(cleanState(raw))
+  })
+  ipcMain.handle('avatar:get-state', () => avatarState)
+  ipcMain.on('avatar:command', (_e, raw: unknown) => {
+    const command = cleanCommand(raw)
+    if (!command || !overlay || overlay.isDestroyed()) return
+    overlay.webContents.send('avatar:command', command)
+  })
+
+  // A picture of the screen, for the chat to attach. Taken here rather than
+  // by the avatar's screen-observation stream so it works whether or not that
+  // is on — the button is the user asking, which is the consent.
+  ipcMain.handle('screen:grab', async () => grabScreen())
+
   ipcMain.on('overlay:set-session', (_e, sessionId: string) => {
     // The chat window says which VTuber it is on every time it lands on one;
     // reloading the avatar (WebGL, a 10 MB model, physics) for the session it

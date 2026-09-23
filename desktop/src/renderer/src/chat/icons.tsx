@@ -25,6 +25,55 @@ function Svg({ children, size = 18 }: { children: ReactNode; size?: number }): R
 }
 
 export const Icon = {
+  paperclip: (
+    <Svg size={16}>
+      <path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" />
+    </Svg>
+  ),
+  monitor: (
+    <Svg size={16}>
+      <rect x="2" y="3" width="20" height="14" rx="2" />
+      <path d="M8 21h8" />
+      <path d="M12 17v4" />
+    </Svg>
+  ),
+  volume: (
+    <Svg size={15}>
+      <path d="M11 5 6 9H2v6h4l5 4V5z" />
+      <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+      <path d="M19 5a10 10 0 0 1 0 14" />
+    </Svg>
+  ),
+  mic: (
+    <Svg size={15}>
+      <rect x="9" y="2" width="6" height="12" rx="3" />
+      <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+      <path d="M12 18v4" />
+    </Svg>
+  ),
+  headset: (
+    <Svg size={15}>
+      <path d="M3 14v-3a9 9 0 0 1 18 0v3" />
+      <path d="M21 16a2 2 0 0 1-2 2h-1v-6h1a2 2 0 0 1 2 2z" />
+      <path d="M3 16a2 2 0 0 0 2 2h1v-6H5a2 2 0 0 0-2 2z" />
+    </Svg>
+  ),
+  captions: (
+    <Svg size={15}>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M7 15h4" />
+      <path d="M15 15h2" />
+      <path d="M7 11h2" />
+      <path d="M13 11h4" />
+    </Svg>
+  ),
+  talk: (
+    <Svg size={15}>
+      <circle cx="12" cy="12" r="9" />
+      <rect x="10" y="7" width="4" height="7" rx="2" />
+      <path d="M8.5 12.5a3.5 3.5 0 0 0 7 0" />
+    </Svg>
+  ),
   avatar: (
     <Svg size={15}>
       <circle cx="12" cy="12" r="9" />

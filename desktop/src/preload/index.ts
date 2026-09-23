@@ -31,6 +31,26 @@ export interface OverlayTuning {
   audioInputLabel?: string
 }
 
+/** What the avatar window is doing (see main/avatar-bridge.ts). */
+export interface AvatarState {
+  sessionId: string | null
+  tts: boolean
+  stt: boolean
+  realtime: boolean
+  captions: boolean
+  screen: boolean
+  ptt: boolean
+  speaking: boolean
+  listening: boolean
+}
+
+export type AvatarSwitch = 'tts' | 'stt' | 'realtime' | 'captions' | 'screen' | 'ptt'
+
+export type AvatarCommand =
+  | { type: 'set'; key: AvatarSwitch; value: boolean }
+  | { type: 'speak'; text: string }
+  | { type: 'hush' }
+
 /** Consent posture for an actuation capability group. */
 export type ConsentMode = 'ask' | 'session' | 'auto'
 /** Local Computer Use — per-capability consent (local bridge). */
@@ -179,6 +199,22 @@ export interface ConnectorBridge {
      *  pan/zoom + reload so the avatar returns to its default framing. */
     onResetView(cb: () => void): () => void
   }
+
+  /** The avatar's switches, from any window. The avatar window publishes and
+   *  obeys; every other window reads and asks. */
+  avatar: {
+    /** Avatar window only: report the current state. */
+    publish(state: AvatarState): void
+    /** Avatar window only: receive a command another window sent. */
+    onCommand(cb: (command: AvatarCommand) => void): () => void
+    /** The last state the avatar reported, or null when none is up. */
+    getState(): Promise<AvatarState | null>
+    onState(cb: (state: AvatarState | null) => void): () => void
+    command(command: AvatarCommand): void
+  }
+
+  /** A JPEG of the screen (raw base64), for the chat to attach. */
+  screenGrab(): Promise<{ data: string; mime_type: string; width: number; height: number } | null>
 
   /** Global hotkeys (push-to-talk + quick-chat). */
   hotkeys: {
@@ -572,6 +608,22 @@ const api: ConnectorBridge = {
     pickRoot: () => ipcRenderer.invoke('drive:pick-root'),
     setRoot: (root) => ipcRenderer.invoke('drive:set-root', root),
   },
+  avatar: {
+    publish: (state) => ipcRenderer.send('avatar:publish', state),
+    onCommand: (cb) => {
+      const h = (_e: unknown, command: AvatarCommand) => cb(command)
+      ipcRenderer.on('avatar:command', h)
+      return () => ipcRenderer.removeListener('avatar:command', h)
+    },
+    getState: () => ipcRenderer.invoke('avatar:get-state'),
+    onState: (cb) => {
+      const h = (_e: unknown, state: AvatarState | null) => cb(state)
+      ipcRenderer.on('avatar:state', h)
+      return () => ipcRenderer.removeListener('avatar:state', h)
+    },
+    command: (command) => ipcRenderer.send('avatar:command', command),
+  },
+  screenGrab: () => ipcRenderer.invoke('screen:grab'),
   hotkeys: {
     getPushToTalk: () => ipcRenderer.invoke('hotkey:get-ptt'),
     setPushToTalk: (acc) => ipcRenderer.invoke('hotkey:set-ptt', acc),

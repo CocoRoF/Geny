@@ -21,6 +21,8 @@ import dynamic from 'next/dynamic';
 import { setToken } from '@/lib/authApi';
 import { agentApi, chatApi } from '@/lib/api';
 import { useVTuberStore } from '@/store/useVTuberStore';
+import { getAudioManager } from '@/lib/audioManager';
+import { parseEmotion } from '@/components/chat';
 
 // Browser-only (pixi.js + Spine/Live2D runtime) — never SSR.
 const AvatarCanvas = dynamic(() => import('@/components/avatar/AvatarCanvas'), { ssr: false });
@@ -367,6 +369,75 @@ function AvatarOverlay() {
       audioRouting.setInputLabel(st.audioInputLabel || '');
     });
   }, []);
+
+  // ── the switches, reachable from every window (connector ≥0.30) ──
+  // This page is where voice, microphone and screen actually run, so it owns
+  // their state. It used to be the only place they could be switched — in the
+  // unlocked bar, which a locked avatar (the default) does not show — so the
+  // native chat window and the locked chip had no way to reach them. It now
+  // tells the connector what it is doing, and does what the connector relays.
+  const speakingNow = useVTuberStore((s) => (resolved ? !!s.ttsSpeaking[resolved.sid] : false));
+  const hearingNow = useVTuberStore((s) => s.realtimeListening);
+  useEffect(() => {
+    window.connector?.avatar?.publish({
+      sessionId: resolved?.sid ?? null,
+      tts: ttsEnabled,
+      stt: sttEnabled,
+      realtime: realtimeOn,
+      captions: captionsOn,
+      screen: screenOn,
+      ptt: pttActive,
+      speaking: speakingNow,
+      listening: hearingNow || pttActive,
+    });
+  }, [resolved, ttsEnabled, sttEnabled, realtimeOn, captionsOn, screenOn, pttActive, speakingNow, hearingNow]);
+
+  useEffect(() => {
+    const off = window.connector?.avatar?.onCommand((command) => {
+      const st = useVTuberStore.getState();
+      if (command.type === 'set') {
+        const v = command.value;
+        switch (command.key) {
+          case 'tts':
+            if (st.ttsEnabled !== v) st.toggleTTS();
+            break;
+          case 'stt':
+            if (st.sttEnabled !== v) st.toggleSTT();
+            break;
+          case 'realtime':
+            if (st.realtimeVoiceEnabled !== v) st.toggleRealtimeVoice();
+            break;
+          case 'captions':
+            st.setRealtimePartialsEnabled(v);
+            break;
+          case 'screen':
+            if (st.screenObservationEnabled !== v) st.toggleScreenObservation();
+            break;
+          case 'ptt':
+            // Opening the mic while the avatar talks is a barge-in, exactly as
+            // the global hotkey does it.
+            if (v && resolved && st.ttsSpeaking[resolved.sid]) {
+              st.stopSpeaking(resolved.sid);
+              if (resolved.rid) chatApi.cancelTurn(resolved.rid).catch(() => undefined);
+            }
+            setPttActive(v);
+            break;
+        }
+        return;
+      }
+      if (!resolved) return;
+      if (command.type === 'speak') {
+        const [emotion, clean] = parseEmotion(command.text);
+        if (!clean.trim()) return;
+        getAudioManager().ensureResumed();
+        if (st.ttsSpeaking[resolved.sid]) st.stopSpeaking(resolved.sid);
+        void st.speakResponse(resolved.sid, clean, emotion);
+        return;
+      }
+      if (command.type === 'hush') st.stopSpeaking(resolved.sid);
+    });
+    return () => off?.();
+  }, [resolved]);
 
   // Global push-to-talk hotkey (from the connector). On each press: if the avatar
   // is mid-TTS, barge in (cut audio + cancel the agent turn), then toggle the mic.

@@ -20,7 +20,7 @@
  */
 
 import { openSocket, type ConnState, type SocketHandle } from './socket';
-import { spoken, type Message } from './transcript';
+import { spoken, type Message, type MessageAttachment } from './transcript';
 
 export type { ConnState };
 
@@ -35,6 +35,17 @@ export interface RoomMessage {
   session_name?: string | null;
   duration_ms?: number | null;
   meta?: Record<string, unknown> | null;
+  attachments?: MessageAttachment[] | null;
+  /** agent only: the reply with its emotion cues inline, for the voice. */
+  spoken?: string | null;
+  /** agent only: where it came from (`thinking_trigger`, …); absent = a reply. */
+  source?: string | null;
+}
+
+/** Only what a screen can show: a file with no way to reach it is not one. */
+function attachmentsOf(raw: RoomMessage): MessageAttachment[] | undefined {
+  const list = (raw.attachments ?? []).filter((a) => a && (a.url || a.attachment_id));
+  return list.length ? list : undefined;
 }
 
 /**
@@ -61,11 +72,15 @@ export function foldRoomMessage(messages: Message[], raw: RoomMessage): Message[
   if (raw.type === 'user') {
     const text = String(raw.content ?? '');
     const next: Message = { key, role: 'user', text, ts };
+    const files = attachmentsOf(raw);
+    if (files) next.attachments = files;
     if (at >= 0) return replace(messages, at, next);
     // The server's copy of a message this screen already drew. Adopt its
     // identity rather than appending a twin — and only over a PENDING one,
     // so a user who really does send the same line twice gets two bubbles.
-    const pending = messages.findIndex((m) => m.role === 'user' && m.pending && m.text === text);
+    const pending = messages.findIndex(
+      (m) => m.role === 'user' && m.pending && m.text === text,
+    );
     if (pending >= 0) return replace(messages, pending, next);
     return [...messages, next];
   }
@@ -85,8 +100,11 @@ export function foldRoomMessage(messages: Message[], raw: RoomMessage): Message[
     }
 
     const said = spoken(raw.content);
-    // Silence is an answer the agent asked us not to deliver.
-    if (said.silent || !said.text) return at >= 0 ? drop(messages, at) : messages;
+    const files = attachmentsOf(raw);
+    // Silence is an answer the agent asked us not to deliver. A message whose
+    // only content is a file it sent is not silence — dropping it lost every
+    // file an agent delivered without a sentence around it.
+    if (said.silent || (!said.text && !files)) return at >= 0 ? drop(messages, at) : messages;
     const next: Message = {
       key,
       role: 'assistant',
@@ -95,6 +113,8 @@ export function foldRoomMessage(messages: Message[], raw: RoomMessage): Message[
       mood: said.mood,
       durationMs: raw.duration_ms ?? undefined,
     };
+    if (files) next.attachments = files;
+    if (raw.spoken) next.spoken = raw.spoken;
     return at >= 0 ? replace(messages, at, next) : [...messages, next];
   }
 

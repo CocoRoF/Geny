@@ -22,6 +22,22 @@ interface ConnectorConfig {
   overlayTuning?: OverlayTuning
 }
 
+interface ConnectorAvatarState {
+  sessionId: string | null
+  tts: boolean
+  stt: boolean
+  realtime: boolean
+  captions: boolean
+  screen: boolean
+  ptt: boolean
+  speaking: boolean
+  listening: boolean
+}
+type ConnectorAvatarCommand =
+  | { type: 'set'; key: 'tts' | 'stt' | 'realtime' | 'captions' | 'screen' | 'ptt'; value: boolean }
+  | { type: 'speak'; text: string }
+  | { type: 'hush' }
+
 declare global {
   interface Window {
     connector?: {
@@ -70,6 +86,16 @@ declare global {
         openExternal(url: string): void
         resetPositions?(): void
         onResetView?(cb: () => void): () => void
+      }
+      /** The avatar's switches, from any window (connector ≥0.30). The avatar
+       *  page publishes its state and obeys commands; the chat window and the
+       *  locked chip read and ask. Optional: older connectors lack it. */
+      avatar?: {
+        publish(state: ConnectorAvatarState): void
+        onCommand(cb: (command: ConnectorAvatarCommand) => void): () => void
+        getState(): Promise<ConnectorAvatarState | null>
+        onState(cb: (state: ConnectorAvatarState | null) => void): () => void
+        command(command: ConnectorAvatarCommand): void
       }
       hotkeys?: {
         getPushToTalk(): Promise<string | null>

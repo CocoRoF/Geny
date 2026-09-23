@@ -18,6 +18,7 @@ import { useState, type ReactNode } from 'react'
 import type { ToolCall } from '../../../../../shared/chat/room'
 import type { Message } from '../../../../../shared/chat/transcript'
 import { describeTool, resultView, type ResultView } from '../../../../../shared/chat/tool-view'
+import { MessageFiles } from './attachments'
 import { Icon, KIND_ICON } from './icons'
 import Markdown from './markdown'
 
@@ -204,7 +205,9 @@ function Steps({ calls, live, t }: { calls: ToolCall[]; live: boolean; t: T }): 
   )
 }
 
-function Row({ message, t }: { message: Message; t: T }): ReactNode {
+function Row({
+  message, t, onSpeak,
+}: { message: Message; t: T; onSpeak?: (text: string) => void }): ReactNode {
   // The room's own bookkeeping — "1/1 sessions responded (7.1s)". A quiet
   // centred line, the way the web has always drawn it. It is not a failure
   // and must never look like one: it arrives after every broadcast, the
@@ -231,7 +234,10 @@ function Row({ message, t }: { message: Message; t: T }): ReactNode {
     return (
       <div className="msg-row user">
         <div className="msg-col">
-          <div className={`bubble user ${message.pending ? 'pending' : ''}`}>{message.text}</div>
+          {message.text && (
+            <div className={`bubble user ${message.pending ? 'pending' : ''}`}>{message.text}</div>
+          )}
+          <MessageFiles files={message.attachments} />
           {clock(message.ts) && <span className="msg-time">{clock(message.ts)}</span>}
         </div>
       </div>
@@ -242,23 +248,38 @@ function Row({ message, t }: { message: Message; t: T }): ReactNode {
     <div className="msg-row">
       <span className="msg-avatar assistant">G</span>
       <div className="msg-col">
-        <div className="bubble assistant">
-          <Markdown text={message.text} />
-        </div>
-        {clock(message.ts) && <span className="msg-time">{clock(message.ts)}</span>}
+        {message.text && (
+          <div className="bubble assistant">
+            <Markdown text={message.text} />
+          </div>
+        )}
+        <MessageFiles files={message.attachments} />
+        <span className="msg-meta">
+          {clock(message.ts) && <span className="msg-time">{clock(message.ts)}</span>}
+          {onSpeak && message.text && (
+            // Read this one aloud, in the avatar's voice — with the emotion it
+            // was written with, when the answer carried one.
+            <button type="button" className="msg-speak" title={t('chat.voice.readAloud')}
+              onClick={() => onSpeak(message.spoken || message.text)}>
+              {Icon.volume}
+            </button>
+          )}
+        </span>
       </div>
     </div>
   )
 }
 
 export function Transcript({
-  messages, calls, running, loading, t,
+  messages, calls, running, loading, t, onSpeak,
 }: {
   messages: Message[]
   calls: ToolCall[]
   running: boolean
   loading: boolean
   t: T
+  /** Read an answer aloud in the avatar's voice; absent when no avatar is up. */
+  onSpeak?: (text: string) => void
 }): ReactNode {
   if (loading && messages.length === 0) {
     return <div className="chat-empty">{t('chat.loading')}</div>
@@ -273,7 +294,7 @@ export function Transcript({
   }
   return (
     <>
-      {messages.map((message) => <Row key={message.key} message={message} t={t} />)}
+      {messages.map((message) => <Row key={message.key} message={message} t={t} onSpeak={onSpeak} />)}
       {calls.length > 0 && (
         <div className="msg-row">
           <span className="msg-avatar assistant">G</span>

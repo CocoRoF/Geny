@@ -119,3 +119,45 @@ test('an answer that merely talks about an error is still an answer', () => {
   });
   assert.equal(folded[0].role, 'assistant');
 });
+
+test('files on a message come with it', () => {
+  const [user] = foldRoom([{
+    id: 'u1', type: 'user', content: '이거 봐줘', timestamp: 't',
+    attachments: [{ kind: 'image', name: 'a.png', url: '/static/uploads/ab/a.png' }],
+  }]);
+  assert.equal(user.attachments?.[0].url, '/static/uploads/ab/a.png');
+});
+
+test('an agent message that is only a file is not silence', () => {
+  const [msg] = foldRoom([{
+    id: 'a1', type: 'agent', content: '', timestamp: 't',
+    attachments: [{ kind: 'file', name: 'report.pdf', url: '/api/agents/s/storage-raw/report.pdf' }],
+  }]);
+  assert.ok(msg, 'a delivered file was dropped for having no sentence around it');
+  assert.equal(msg.attachments?.[0].name, 'report.pdf');
+});
+
+test('an attachment with no way to reach it is not drawn', () => {
+  const [msg] = foldRoom([{
+    id: 'u2', type: 'user', content: 'hi', timestamp: 't', attachments: [{ kind: 'image', name: 'x' }],
+  }]);
+  assert.equal(msg.attachments, undefined);
+});
+
+test('the voice text rides along with the answer', () => {
+  const [msg] = foldRoom([{
+    id: 'a2', type: 'agent', content: '좋아!', spoken: '[joy:0.6] 좋아!', timestamp: 't',
+  }]);
+  assert.equal(msg.text, '좋아!');
+  assert.equal(msg.spoken, '[joy:0.6] 좋아!');
+});
+
+test('a pending message shows its files before the server has them', () => {
+  const pending = pendingUserMessage('봐줘', [{ kind: 'image', url: '/static/uploads/x.png' }]);
+  const folded = foldRoomMessage([pending], {
+    id: 'u3', type: 'user', content: '봐줘', timestamp: 't',
+    attachments: [{ kind: 'image', url: '/static/uploads/x.png' }],
+  });
+  assert.equal(folded.length, 1);
+  assert.equal(folded[0].attachments?.length, 1);
+});

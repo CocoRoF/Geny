@@ -76,6 +76,25 @@ export interface Message {
    * two look like different messages and every turn shows the question twice.
    */
   pending?: boolean;
+  /** Files that came with the message — what the user attached, or what the
+   *  agent delivered. The web has always drawn these; a surface that ignores
+   *  them shows a file-only message as nothing at all. */
+  attachments?: MessageAttachment[];
+  /** assistant only: the answer with its emotion cues still inline
+   *  (`[joy:0.6] 좋아!`) — what a voice reads it with. `text` has them removed. */
+  spoken?: string;
+}
+
+/** A file on a message, as the room stores it (see backend `BroadcastAttachment`). */
+export interface MessageAttachment {
+  /** image | audio | file */
+  kind?: string;
+  name?: string;
+  mime_type?: string;
+  size?: number;
+  attachment_id?: string;
+  /** `/static/uploads/...` (served without auth) or an `/api/...` path. */
+  url?: string;
 }
 
 export interface LogLike {
@@ -320,8 +339,12 @@ export function foldEntry(messages: Message[], entry: LogLike, index = 0): Messa
 }
 
 /** The user's message, on screen before the server has heard it. */
-export function pendingUserMessage(text: string): Message {
-  return { key: `pending:${Date.now()}:${text.slice(0, 48)}`, role: 'user', text, pending: true };
+export function pendingUserMessage(text: string, attachments?: MessageAttachment[]): Message {
+  const message: Message = {
+    key: `pending:${Date.now()}:${text.slice(0, 48)}`, role: 'user', text, pending: true,
+  };
+  if (attachments && attachments.length) message.attachments = attachments;
+  return message;
 }
 
 export function foldAll(entries: LogLike[]): Message[] {

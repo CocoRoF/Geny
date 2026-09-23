@@ -163,6 +163,81 @@ export const avatars = {
     }, onEnd),
 }
 
+// ── files people send ────────────────────────────────────────────────
+//
+// Uploaded first (POST /api/uploads), then referenced from the message — the
+// same two steps the web chat has always taken, so a file sent from here
+// lands in the conversation exactly as one sent from there.
+
+/** A file as /api/uploads stores it. */
+export interface UploadedFile {
+  attachment_id: string
+  kind: string
+  name: string
+  mime_type: string
+  size: number
+  sha256: string
+  url: string
+}
+
+/** What a message may carry: an uploaded file, or an inline picture (the
+ *  screen, attached as it is sent — `source` keeps it out of stored history,
+ *  like the avatar's own screen frames). */
+export interface OutgoingAttachment {
+  kind: string
+  name?: string
+  mime_type?: string
+  size?: number
+  sha256?: string
+  attachment_id?: string
+  url?: string
+  data?: string
+  source?: string
+}
+
+export const uploads = {
+  send: async (files: File[]): Promise<UploadedFile[]> => {
+    const [root, token] = await Promise.all([base(), window.connector?.secureStore.get(TOKEN_KEY)])
+    const form = new FormData()
+    for (const file of files) form.append('files', file, file.name)
+    const res = await fetch(`${root}/api/uploads`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    })
+    if (res.status === 401) {
+      await window.connector?.secureStore.delete(TOKEN_KEY)
+      throw new ServerError('로그인이 만료됐습니다 — 계정 탭에서 다시 로그인하세요', 401)
+    }
+    if (!res.ok) {
+      let message = `HTTP ${res.status}`
+      try {
+        const parsed = JSON.parse(await res.text())
+        if (typeof parsed?.detail === 'string') message = parsed.detail
+      } catch { /* the status is the message */ }
+      throw new ServerError(message, res.status)
+    }
+    return ((await res.json()) as { files: UploadedFile[] }).files ?? []
+  },
+}
+
+/**
+ * A server file as something an <img> or a link can open.
+ *
+ * `/static/uploads/...` is served without a token, so its plain URL works.
+ * Anything under `/api/` needs the Authorization header, which an <img> cannot
+ * send — those are fetched and handed back as a blob URL (the caller revokes).
+ */
+export async function fileUrl(path: string): Promise<{ url: string; revoke?: () => void }> {
+  const root = await base()
+  if (!path.startsWith('/api/')) return { url: path.startsWith('http') ? path : `${root}${path}` }
+  const token = await window.connector?.secureStore.get(TOKEN_KEY)
+  const res = await fetch(`${root}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+  if (!res.ok) throw new ServerError(`HTTP ${res.status}`, res.status)
+  const url = URL.createObjectURL(await res.blob())
+  return { url, revoke: () => URL.revokeObjectURL(url) }
+}
+
 // ── model accounts ───────────────────────────────────────────────────
 
 export type AccountKind =
@@ -361,10 +436,13 @@ export const rooms = {
 
   /** Says it to the room's agent — the same door the web page and the phone
    *  use, so a message typed here lands where one typed there does. */
-  send: (roomId: string, message: string) =>
+  send: (roomId: string, message: string, attachments?: OutgoingAttachment[]) =>
     serverFetch<{ message?: RoomMessageDTO }>(
       `/api/chat/rooms/${encodeURIComponent(roomId)}/message`,
-      { method: 'POST', body: JSON.stringify({ message }) }),
+      {
+        method: 'POST',
+        body: JSON.stringify(attachments && attachments.length ? { message, attachments } : { message }),
+      }),
 
   /**
    * Where this session's conversation lives — the SERVER's answer, not ours.

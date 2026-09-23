@@ -23,7 +23,7 @@ import {
   type ConnState, type RoomHandle, type ToolCall,
 } from '../../../../../shared/chat/room'
 import { pendingUserMessage, type Message } from '../../../../../shared/chat/transcript'
-import { authToken, rooms, wsBase, type ChatRoom } from '../server'
+import { authToken, rooms, wsBase, type ChatRoom, type OutgoingAttachment } from '../server'
 
 export interface LiveSession {
   state: ConnState
@@ -34,7 +34,7 @@ export interface LiveSession {
   calls: ToolCall[]
   loading: boolean
   error: string | null
-  send(prompt: string): void
+  send(prompt: string, attachments?: OutgoingAttachment[]): void
   stop(): void
   clearError(): void
 }
@@ -136,11 +136,18 @@ export function useSession(sessionId: string | null): LiveSession {
     }
   }, [])
 
-  const send = useCallback((prompt: string) => {
+  const send = useCallback((prompt: string, attachments?: OutgoingAttachment[]) => {
     const text = prompt.trim()
-    if (!text || !sessionId) return
-    // Drawn immediately; the room's own copy replaces it in place.
-    setMessages((prev) => [...prev, pendingUserMessage(text)])
+    const files = attachments ?? []
+    // A picture alone is a message; the web has always allowed it.
+    if ((!text && files.length === 0) || !sessionId) return
+    // Drawn immediately; the room's own copy replaces it in place. Inline
+    // screen frames are not stored by the server, so they are not drawn as if
+    // they would be.
+    const shown = files.filter((f) => f.url).map((f) => ({
+      kind: f.kind, name: f.name, mime_type: f.mime_type, url: f.url, attachment_id: f.attachment_id,
+    }))
+    setMessages((prev) => [...prev, pendingUserMessage(text, shown)])
     setRunning(true)
     void (async () => {
       try {
@@ -154,7 +161,7 @@ export function useSession(sessionId: string | null): LiveSession {
           setRunning(false)
           return
         }
-        await rooms.send(room.current.id, text)
+        await rooms.send(room.current.id, text, files)
       } catch (e) {
         setError((e as Error).message)
         setRunning(false)
