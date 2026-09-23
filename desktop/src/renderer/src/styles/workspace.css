@@ -407,6 +407,11 @@
   color: var(--primary);
 }
 
+.chat-hbtn.icon-only {
+  width: 32px;
+  padding: 0;
+}
+
 .chat-banner {
   margin: 10px 28px 0;
   padding: 9px 12px;
@@ -3076,6 +3081,7 @@ button.voice-live:hover {
 .msg-files {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
   gap: 6px;
   max-width: 100%;
 }
@@ -3086,6 +3092,9 @@ button.voice-live:hover {
 
 .attach-img {
   display: block;
+  /* The box is capped, the picture fills it: a percentage cap on the image
+     alone let the box size itself from the picture's natural width. */
+  max-width: min(320px, 100%);
   padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -3096,7 +3105,7 @@ button.voice-live:hover {
 
 .attach-img img {
   display: block;
-  max-width: min(320px, 100%);
+  max-width: 100%;
   max-height: 240px;
   object-fit: contain;
 }

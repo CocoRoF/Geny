@@ -23,7 +23,7 @@ export function useAvatar(): AvatarControls {
 
   useEffect(() => {
     let alive = true
-    void window.connector?.avatar?.getState().then((s) => { if (alive) setState(s) })
+    void window.connector?.avatar?.getState().then((s) => { if (alive) setState(s) }, () => undefined)
     const off = window.connector?.avatar?.onState((s) => setState(s))
     return () => {
       alive = false

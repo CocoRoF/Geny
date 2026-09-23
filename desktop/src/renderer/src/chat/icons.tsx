@@ -25,6 +25,13 @@ function Svg({ children, size = 18 }: { children: ReactNode; size?: number }): R
 }
 
 export const Icon = {
+  openOut: (
+    <Svg size={15}>
+      <path d="M15 3h6v6" />
+      <path d="M10 14 21 3" />
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    </Svg>
+  ),
   paperclip: (
     <Svg size={16}>
       <path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" />

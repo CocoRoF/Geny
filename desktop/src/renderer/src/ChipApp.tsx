@@ -107,7 +107,7 @@ export function ChipApp(): React.ReactElement {
 
   useEffect(() => {
     let alive = true
-    void window.connector?.avatar?.getState().then((s) => { if (alive) setAvatar(s) })
+    void window.connector?.avatar?.getState().then((s) => { if (alive) setAvatar(s) }, () => undefined)
     const off = window.connector?.avatar?.onState((s) => setAvatar(s))
     return () => {
       alive = false

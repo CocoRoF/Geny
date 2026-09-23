@@ -20,7 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import genyIcon from '../assets/geny_character.png'
 import { makeT, type Lang } from '../i18n'
 import {
-  agents, sessions as sessionApi,
+  agents, serverUrl, sessions as sessionApi,
   type AgentSummary, type OutgoingAttachment,
 } from '../server'
 import AvatarBar from './AvatarBar'
@@ -199,6 +199,19 @@ export function ChatApp(): ReactNode {
     if (el) el.scrollTop = el.scrollHeight
   }, [live.messages, live.running])
 
+  // A picture on a message arrives after the message does and pushes the
+  // bottom further down; a pinned view keeps following it. (`load` does not
+  // bubble — listened for on the way down instead.)
+  useEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    const follow = (e: Event): void => {
+      if (pinned.current && (e.target as HTMLElement)?.tagName === 'IMG') el.scrollTop = el.scrollHeight
+    }
+    el.addEventListener('load', follow, true)
+    return () => el.removeEventListener('load', follow, true)
+  }, [sessionId])
+
   const onScroll = (): void => {
     const el = scroller.current
     if (!el) return
@@ -210,23 +223,12 @@ export function ChatApp(): ReactNode {
     if (!sessionId || pending.uploading) return
     const files: OutgoingAttachment[] = pending.take()
     if (!text && files.length === 0) return
-    // Screen observation on, talking to the VTuber that is watching: the
-    // screen as it is right now goes with the message — what the avatar's own
-    // send path has always done. Inline and marked, so the server treats it as
-    // the ambient frame it is and does not keep it in the conversation.
-    const watching = isVtuber && avatar.state?.screen && avatar.state.sessionId === sessionId
-    void (async () => {
-      if (watching) {
-        const shot = await window.connector?.screenGrab?.().catch(() => null)
-        if (shot) {
-          files.push({
-            kind: 'image', mime_type: shot.mime_type, data: shot.data,
-            name: 'screen.jpg', source: 'screen_observation',
-          })
-        }
-      }
-      live.send(text, files)
-    })()
+    // What you just sent is what you want to see.
+    pinned.current = true
+    // With screen observation on, the server adds the screen as it is right
+    // now to a VTuber's turn itself — through the avatar's live stream, and
+    // only when the model can see. Nothing to attach from here.
+    live.send(text, files)
     setDraft('')
     // The box grew to fit what was typed; clearing the value does not shrink
     // it back, so a long message would leave a tall empty box behind.
@@ -458,6 +460,13 @@ export function ChatApp(): ReactNode {
               <button type="button" className={`chat-hbtn ${showWork ? 'on' : ''}`}
                 onClick={() => setShowWork((v) => !v)}>
                 {Icon.eye} {t('chat.activity')}
+              </button>
+              {/* The old chat window's header had this too: the full web app,
+                  for whatever the native window does not do. */}
+              <button type="button" className="chat-hbtn icon-only" title={t('account.openInBrowser')}
+                aria-label={t('account.openInBrowser')}
+                onClick={() => void serverUrl('/').then((url) => window.connector?.windowControl.openExternal(url))}>
+                {Icon.openOut}
               </button>
             </div>
           </header>

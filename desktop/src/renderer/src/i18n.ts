@@ -524,7 +524,7 @@ export const messages: Record<string, Entry> = {
   'chat.voice.captions': { ko: '자막', en: 'Captions' },
   'chat.voice.captions.hint': { ko: '듣고 있는 말을 실시간 자막으로 보여 줍니다', en: 'Shows what it hears as live captions' },
   'chat.voice.screen': { ko: '화면 관찰', en: 'Screen' },
-  'chat.voice.screen.hint': { ko: '아바타가 화면을 봅니다. 켜 두면 보내는 메시지에 지금 화면이 함께 갑니다', en: 'The avatar watches the screen. While on, each message carries the screen as it is' },
+  'chat.voice.screen.hint': { ko: '아바타가 화면을 봅니다. 켜 두면 말을 걸 때 그 순간의 화면도 함께 봅니다', en: 'The avatar watches the screen, and sees it as it is whenever you talk to it' },
   'chat.voice.offline': { ko: '아바타 창이 열려 있지 않습니다. 음성과 화면 관찰은 아바타 창에서 돌아갑니다', en: 'The avatar window is not open. Voice and screen observation run there' },
   'chat.voice.offlineShort': { ko: '아바타 꺼짐', en: 'Avatar off' },
   'chat.voice.hush': { ko: '그만 말하기', en: 'Stop speaking' },
