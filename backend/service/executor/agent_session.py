@@ -3627,6 +3627,21 @@ class AgentSession:
                 f"[{self._session_id}] PipelineResumeRequester install failed: {exc}"
             )
 
+        # The memory provider onto Stage 2 / Stage 18 / the session runtime.
+        # ``_init_memory_provider`` tries this too, but it runs BEFORE the
+        # pipeline exists and returns early — in production the "attached
+        # directly" line never appeared, Stage 2's provider stayed None, and
+        # with it the turn replay (the previous turns as messages) and the
+        # guard's compaction snapshots were silently off. Only Stage 18 kept
+        # working, because Geny's strategy carries its own reference.
+        if self._memory_provider is not None:
+            try:
+                self._attach_provider_to_pipeline_stages()
+            except Exception as exc:  # noqa: BLE001 — logged, never blocks a build
+                logger.warning(
+                    f"[{self._session_id}] memory provider stage attach failed: {exc}"
+                )
+
         # The OWNER's harness settings, applied last on purpose. Everything
         # above is a default — the manifest's declaration and then Geny's
         # runtime installs — and a default is exactly the thing an explicit
