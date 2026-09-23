@@ -68,6 +68,11 @@ logger = getLogger(__name__)
 _TRANSCRIPT_CATEGORIES = ("conversations", "executions", "dms")
 _TRANSCRIPT_PREFIXES = ("execution-",)
 
+
+def _geny_archives_executions_itself(_state: Any) -> bool:
+    """``MemoryHooks.should_record_execution`` for Geny sessions: never."""
+    return False
+
 # Memory-hygiene checks run on their OWN 1-wide pool — loop-independent
 # (fire-and-forget submit survives run_coro_sync's short-lived loops) and,
 # critically, DISTINCT from sync_async_bridge's single-worker side-effect
@@ -3475,6 +3480,13 @@ class AgentSession:
             # ── 1. Hooks (single bag of policy + business callbacks)
             hooks_kwargs: Dict[str, Any] = self._memory_hooks_policy(_tuning)
             hooks = MemoryHooks(**hooks_kwargs)
+            # Geny archives each execution itself (memory_manager →
+            # daily/execution-*.md + the conversations rollup). Once Stage 18
+            # holds the provider, the executor would ALSO file every turn —
+            # a dated LTM Q/A and an ``insights`` note, a category retrieval
+            # boosts — which is the same turn coming back as "knowledge"
+            # the replay work exists to stop.
+            hooks.should_record_execution = _geny_archives_executions_itself
             self._memory_provider.set_hooks(hooks)
             self._memory_hooks = hooks  # store for _install_memory_hooks
 

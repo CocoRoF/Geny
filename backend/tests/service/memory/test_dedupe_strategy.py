@@ -120,3 +120,32 @@ def test_stamping_never_raises_on_odd_message_shapes() -> None:
         {"user": {"event_id": "EVT-1"}},
     )
     assert len(out) == 3
+
+
+def test_replayed_turns_are_not_stamped_as_this_turn() -> None:
+    """The replay puts earlier turns in front of this one and moves the
+    executor's record watermark past them. Stamping starts at that
+    watermark — otherwise the first REPLAYED user message would take this
+    turn's event id, and the real one would get a derived copy."""
+    from geny_executor.memory.strategy import STM_RECORDED_KEY
+
+    hint = {"user": {"event_id": "EVT-NOW", "kind": "user_chat", "direction": "inbound"}}
+    replayed = [
+        {"role": "user", "content": [{"type": "text", "text": "earlier question"}]},
+        {"role": "assistant", "content": [{"type": "text", "text": "earlier answer"}]},
+    ]
+    current = {"role": "user", "content": "now"}
+    state = _state([*replayed, current], hint)
+    state.metadata[STM_RECORDED_KEY] = len(replayed)
+    GenyDedupeStrategy()._stamp_pending_metadata(state)
+
+    assert "metadata" not in state.messages[0]
+    assert (state.messages[-1].get("metadata") or {}).get("event_id") == "EVT-NOW"
+
+
+def test_geny_never_asks_the_executor_to_file_executions() -> None:
+    """Geny archives each execution itself; the executor's own record would
+    file every turn a second time as an ``insights`` note."""
+    from service.executor.agent_session import _geny_archives_executions_itself
+
+    assert _geny_archives_executions_itself(object()) is False
