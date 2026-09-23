@@ -94,10 +94,29 @@ def db_register_session(db_manager, session_id: str, info: Dict[str, Any]) -> bo
         placeholders = ", ".join(["%s"] * len(columns))
         col_names = ", ".join(columns)
 
-        # UPSERT — update all columns on conflict
+        # UPSERT — columns are replaced, ``extra_data`` is MERGED.
+        #
+        # This is called with a status snapshot of the live session
+        # (``SessionInfo``) every time it goes idle, is evicted, or wakes —
+        # and that snapshot only knows ``SessionInfo``'s fields. Replacing
+        # the blob wholesale erased every key written through ``update()``
+        # that ``SessionInfo`` does not carry: the avatar a VTuber was given
+        # (``assigned_model``) went on the session's first idle, so after
+        # the next restart the avatar was simply gone. Keys the snapshot does
+        # carry still win; keys it does not know about survive.
         set_clause = ", ".join(
-            f"{c} = EXCLUDED.{c}" for c in columns if c != "session_id"
+            f"{c} = EXCLUDED.{c}"
+            for c in columns
+            if c not in ("session_id", "extra_data")
         )
+        if "extra_data" in columns:
+            merge = (
+                f"extra_data = CASE "
+                f"WHEN {TABLE}.extra_data IS NULL OR {TABLE}.extra_data = '' "
+                f"THEN EXCLUDED.extra_data "
+                f"ELSE ({TABLE}.extra_data::jsonb || EXCLUDED.extra_data::jsonb)::text END"
+            )
+            set_clause = f"{set_clause}, {merge}" if set_clause else merge
         query = (
             f"INSERT INTO {TABLE} ({col_names}) VALUES ({placeholders}) "
             f"ON CONFLICT (session_id) DO UPDATE SET {set_clause}, "

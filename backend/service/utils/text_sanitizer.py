@@ -323,6 +323,39 @@ def sanitize_for_display(text: str | None) -> str:
     return _collapse_display_whitespace(text)
 
 
+def sanitize_for_speech(text: str | None) -> str:
+    """The turn as the avatar and the voice consume it: protocol gone, affect kept.
+
+    ``sanitize_for_display`` is for READERS and removes the emotion cues —
+    rightly, nobody should read ``[joy:0.6]``. But the cues are not noise to
+    everything: they are how the avatar picks its expression and how TTS picks
+    the emotional reference of the voice. When the display text became the
+    only text a turn handed on (2026-09-19), both lost them and went
+    permanently neutral.
+
+    So a turn carries two texts. This one strips what no consumer wants —
+    reasoning blocks and the routing / loop signals (``[TASK_COMPLETE]``,
+    ``[SILENT]``, …) — and keeps the ``[emotion]`` / ``[emotion:0.7]`` cues
+    in place, inline, where the model put them.
+    """
+    if not text:
+        return ""
+    text = THINK_BLOCK_PATTERN.sub("", text)
+    text = THINK_OPEN_PATTERN.sub("", text)
+    text = SYSTEM_TAG_PATTERN.sub("", text)
+    return _collapse_display_whitespace(text)
+
+
+def spoken_if_different(raw: str | None, display: str | None) -> str | None:
+    """``sanitize_for_speech(raw)`` when it says more than ``display`` — i.e.
+    when there were cues to keep — else ``None``, so a message without any
+    does not store its text twice."""
+    spoken = sanitize_for_speech(raw)
+    if not spoken or spoken == (display or ""):
+        return None
+    return spoken
+
+
 def sanitize_for_tts(text: str | None) -> str:
     """Display-sanitised + emoji / emoticon / markdown stripped.
 

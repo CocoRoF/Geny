@@ -79,8 +79,12 @@ class TestTheAccumulationIsTheTurn:
         assert "if streamed_result:\n                    accumulated_output = streamed_result" not in source, (
             "the last message is being preferred over the turn again"
         )
-        # …and the cleaning happens once, at the boundary
-        assert '"output": sanitize_for_display(accumulated_output)' in source
+        # …and the cleaning happens once, at the boundary — with the cued
+        # copy for the avatar and the voice taken from the same text, so the
+        # two can never describe different turns.
+        assert "display_output = sanitize_for_display(accumulated_output)" in source
+        assert '"output": display_output' in source
+        assert "spoken_if_different(accumulated_output, display_output)" in source
         assert "result_text = sanitize_for_display(" in source
 
 

@@ -24,6 +24,8 @@ class ChatMessageModel(BaseModel):
         timestamp: str = "",
         file_changes: str = None,
         attachments: str = None,
+        spoken: str = None,
+        source: str = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -43,6 +45,14 @@ class ChatMessageModel(BaseModel):
         # ``upload_controller.UploadedFile``. NULL when the user turn
         # had no attachments.
         self.attachments = attachments
+        # The reply with its emotion cues inline (``[joy:0.6] 좋아!``) — what
+        # the avatar and the voice read. ``content`` is the version for people
+        # and carries none. NULL when the reply had no cues.
+        self.spoken = spoken
+        # Where an agent message came from (``thinking_trigger``,
+        # ``sub_worker_reply``, …). The web decides from this whether to speak
+        # it; without the column every autonomous message was read aloud.
+        self.source = source
 
     def get_table_name(self) -> str:
         return "chat_messages"
@@ -61,6 +71,8 @@ class ChatMessageModel(BaseModel):
             "timestamp": "VARCHAR(100) DEFAULT ''",
             "file_changes": "TEXT DEFAULT NULL",
             "attachments": "TEXT DEFAULT NULL",
+            "spoken": "TEXT DEFAULT NULL",
+            "source": "VARCHAR(50) DEFAULT NULL",
         }
 
     @classmethod
@@ -86,7 +98,8 @@ class ChatMessageModel(BaseModel):
         known_fields = {
             "message_id", "room_id", "type", "content",
             "session_id", "session_name", "role", "duration_ms", "cost_usd", "timestamp",
-            "file_changes", "attachments", "id", "created_at", "updated_at",
+            "file_changes", "attachments", "spoken", "source",
+            "id", "created_at", "updated_at",
         }
         known_data = {k: v for k, v in data.items() if k in known_fields}
         return cls(**known_data)

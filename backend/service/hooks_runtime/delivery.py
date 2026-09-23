@@ -102,6 +102,8 @@ def post_autonomous_message(session_id: str, result: Any, *, source: str = "hook
             "duration_ms": getattr(result, "duration_ms", None),
             "cost_usd": getattr(result, "cost_usd", None),
             "source": source,
+            # The emotion cues, for the avatar and the voice (see ExecutionResult.spoken).
+            "spoken": getattr(result, "spoken", None),
         }
         # Files delivered via SendUserFile during this autonomous turn
         # (workspace-canvas P1) — same attachments contract as chat turns.

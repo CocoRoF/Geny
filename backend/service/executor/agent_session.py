@@ -57,7 +57,7 @@ from service.sessions.models import (
 )
 from service.executor.session_freshness import SessionFreshness, FreshnessStatus
 from service.logging.session_logger import get_session_logger, SessionLogger, LogLevel, STAGE_ORDER
-from service.utils.text_sanitizer import sanitize_for_display
+from service.utils.text_sanitizer import sanitize_for_display, spoken_if_different
 
 logger = getLogger(__name__)
 
@@ -4780,15 +4780,23 @@ class AgentSession:
                 "tool_calls": tool_calls_completed,
             }
 
-        return {
-            # What a caller reads, cleaned once here: the emotion cues the
-            # avatar already consumed, and the loop signals the pipeline
-            # uses to decide whether a turn is over. Memory and the session
-            # log above keep the raw text.
-            "output": sanitize_for_display(accumulated_output),
+        display_output = sanitize_for_display(accumulated_output)
+        result_payload: Dict[str, Any] = {
+            # What a READER gets: no emotion cues, no loop signals. Memory and
+            # the session log above keep the raw text.
+            "output": display_output,
             "total_cost": total_cost,
             "tool_calls": tool_calls_completed,
         }
+        # What the AVATAR and the VOICE get: the same turn with its emotion
+        # cues still in place. This used to be the claim that the avatar had
+        # "already consumed" them — it had not; it reads the result AFTER this
+        # return, so from the day the display text became the only text, every
+        # expression and every voice was neutral.
+        spoken = spoken_if_different(accumulated_output, display_output)
+        if spoken:
+            result_payload["spoken"] = spoken
+        return result_payload
 
     async def _astream_pipeline(
         self,
@@ -5065,16 +5073,19 @@ class AgentSession:
                 # See _invoke_pipeline: the accumulation is the turn and
                 # `result` is one message of it.
                 streamed_result = event_data.get("result") or ""
-                result_text = sanitize_for_display(accumulated_output or streamed_result)
+                raw_text = accumulated_output or streamed_result
+                result_text = sanitize_for_display(raw_text)
                 total_cost = event_data.get("total_cost_usd", 0.0) or 0.0
                 iterations = event_data.get("iterations", 0)
-                yield {
-                    "__end__": {
-                        "final_answer": result_text,
-                        "total_cost": total_cost,
-                        "iteration": iterations,
-                    }
+                end: Dict[str, Any] = {
+                    "final_answer": result_text,
+                    "total_cost": total_cost,
+                    "iteration": iterations,
                 }
+                spoken = spoken_if_different(raw_text, result_text)
+                if spoken:
+                    end["spoken"] = spoken
+                yield {"__end__": end}
 
             elif event_type == "pipeline.error":
                 success = False

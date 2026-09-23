@@ -24,6 +24,8 @@ interface ChatMessage {
   durationMs?: number;
   fileChanges?: FileChanges[];
   attachments?: ChatAttachment[];
+  /** The reply with its emotion cues — what TTS reads. See ChatRoomMessage.spoken. */
+  spoken?: string;
 }
 
 // ── Compact execution log panel for VTuber ──
@@ -143,6 +145,9 @@ export default function VTuberChatPanel({
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [agentProgress, setAgentProgress] = useState<AgentProgressState[] | null>(null);
   const [broadcastActive, setBroadcastActive] = useState(false);
+  // The same fact for the socket callback, which is created once per room and
+  // would otherwise read the value from when it was made.
+  const turnActiveRef = useRef(false);
   const [streamingTexts, setStreamingTexts] = useState<Record<string, { content: string; session_name: string; role: string }>>({});
   // Pending image / file attachments for the next outgoing message.
   // Each entry is the result of POST /api/uploads (already on disk).
@@ -207,6 +212,7 @@ export default function VTuberChatPanel({
       durationMs: msg.duration_ms ?? undefined,
       fileChanges: msg.file_changes,
       attachments: msg.attachments,
+      spoken: msg.spoken ?? undefined,
     };
   }, []);
 
@@ -349,18 +355,33 @@ export default function VTuberChatPanel({
                 // an owned sub-agent's completion arrives when the VTuber is
                 // idle / post-turn (never concurrent with a user turn), so the
                 // VTuber should speak it. Do not add it to this list.
+                //
+                // The rule is about OVERLAP, not about staying quiet: a
+                // background message is spoken when nothing else is — the
+                // avatar's idle remark on an otherwise silent desktop is the
+                // point of a VTuber. `source` never reached this panel from
+                // July (the room is replayed from the DB, which had no column
+                // for it), so every autonomous line was spoken; muting them
+                // all now that it arrives would take away what the user has
+                // been living with, to fix a bug that was about collisions.
                 const isAutoTriggered =
                   msg.source === 'thinking_trigger' ||
                   msg.source === 'sub_worker_reply' ||
                   msg.source === 'inbox_drain';
-                if (isAutoTriggered) {
-                  // skip auto-TTS for auto-triggered messages
+                const somethingElseIsSpeaking =
+                  turnActiveRef.current ||
+                  !!useVTuberStore.getState().ttsSpeaking[sessionId];
+                if (isAutoTriggered && somethingElseIsSpeaking) {
+                  // a user turn is running or audio is playing — don't talk over it
                 } else if (ttsHandledMsgIdsRef.current.has(msg.id)) {
                   // TTS-fix: dedup against double-fired handlers
                   // (StrictMode, stale closure rebinds, etc.)
                 } else {
                   ttsHandledMsgIdsRef.current.add(msg.id);
-                  const [emotion, cleanText] = parseEmotion(displayMsg.content);
+                  // The emotion comes from the CUED text: ``content`` is the
+                  // reader's copy and has none, which is what left every
+                  // reply spoken in the neutral voice.
+                  const [emotion, cleanText] = parseEmotion(msg.spoken || displayMsg.content);
                   if (cleanText.trim()) {
                     const store = useVTuberStore.getState();
                     if (store.ttsEnabled) {
@@ -429,9 +450,11 @@ export default function VTuberChatPanel({
             } else if (eventType === 'broadcast_status') {
               const status = eventData as unknown as { finished: boolean };
               setBroadcastActive(!status.finished);
+              turnActiveRef.current = !status.finished;
             } else if (eventType === 'broadcast_done') {
               setAgentProgress(null);
               setBroadcastActive(false);
+              turnActiveRef.current = false;
               // Safety net: ensure the subtitle settles even if the final message
               // arrived without a matching session_id — the box can then dismiss.
               useVTuberStore.getState().settleSubtitle(sessionId);
@@ -851,7 +874,7 @@ export default function VTuberChatPanel({
                   onClick={() => {
                     // iOS WebKit: user gesture 컨텍스트에서 AudioContext 활성화 보장
                     getAudioManager().ensureResumed();
-                    const [emo, clean] = parseEmotion(msg.content);
+                    const [emo, clean] = parseEmotion(msg.spoken || msg.content);
                     if (clean.trim()) {
                       if (ttsSpeaking) stopSpeaking(sessionId);
                       speakResponse(sessionId, clean, emo);

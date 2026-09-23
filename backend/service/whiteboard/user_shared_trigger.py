@@ -280,6 +280,7 @@ def _save_trigger_response_to_chat(
                 "duration_ms": getattr(result, "duration_ms", None),
                 "cost_usd": getattr(result, "cost_usd", None),
                 "source": "user_shared_trigger",
+                "spoken": getattr(result, "spoken", None),
                 "metadata": {
                     "spotlight_item_id": item.item_id,
                     "source_filename": item.source_filename,

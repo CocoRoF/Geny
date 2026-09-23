@@ -164,9 +164,11 @@ class SessionStore:
             except Exception as e:
                 logger.warning(f"[SessionStore] DB register failed for {session_id}: {e}")
 
-        # JSON backup
+        # JSON backup — merged for the same reason the DB row is: a status
+        # snapshot must not erase what was written beside it (the avatar
+        # binding, above all).
         with self._lock:
-            self._data[session_id] = record
+            self._data[session_id] = {**self._data.get(session_id, {}), **record}
             self._save()
 
         logger.info(f"[SessionStore] Registered session {session_id}")

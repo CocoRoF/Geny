@@ -988,6 +988,9 @@ async def _run_turn(
                     "role": role,
                     "duration_ms": result.duration_ms,
                     "cost_usd": result.cost_usd,
+                    # The reply with its emotion cues, for the avatar and the
+                    # voice. ``content`` is what people read and has none.
+                    "spoken": result.spoken,
                 }
                 if result_attachments:
                     msg_data["attachments"] = result_attachments

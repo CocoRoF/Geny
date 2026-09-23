@@ -261,6 +261,7 @@ def _save_external_reply_to_chat_room(
             "duration_ms": getattr(result, "duration_ms", None),
             "cost_usd": getattr(result, "cost_usd", None),
             "source": "blog_agent_reply",
+            "spoken": getattr(result, "spoken", None),
         })
 
         logger.info(

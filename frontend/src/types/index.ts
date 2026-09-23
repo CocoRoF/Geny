@@ -207,6 +207,12 @@ export interface ChatRoomMessage {
    * - ``undefined`` — direct user-initiated reply (default; spoken).
    */
   source?: string | null;
+  /**
+   * The reply with its emotion cues still inline (``[joy:0.6] 좋아!``) —
+   * what the voice and the avatar read. ``content`` is the version for
+   * people and has had them removed. Absent when the reply had no cues.
+   */
+  spoken?: string | null;
 }
 
 /**

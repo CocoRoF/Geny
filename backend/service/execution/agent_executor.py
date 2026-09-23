@@ -110,6 +110,16 @@ class ExecutionResult:
     # Fully-qualified exception class name for cases where no
     # structured code is available — useful for Sentry / log grouping.
     exception_type: Optional[str] = None
+    # ``output`` with its emotion cues still inline — ``[joy:0.6] 좋아!`` —
+    # for the two consumers that act on them: the avatar's expression and
+    # the voice's emotional reference. ``None`` when the turn had no cues,
+    # in which case ``output`` is all there is to say.
+    spoken: Optional[str] = None
+
+    @property
+    def spoken_text(self) -> Optional[str]:
+        """What the avatar and TTS should read: the cued text, else the output."""
+        return self.spoken or self.output
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -209,10 +219,12 @@ async def _emit_avatar_state(session_id: str, result: 'ExecutionResult') -> None
 
         mood = await _load_mood_for_session(session_id)
 
-        if result.success and result.output:
-            # Extract emotion from agent output text
+        if result.success and result.spoken_text:
+            # The cued text, not the display text: the display text has had
+            # every ``[emotion]`` removed, and extracting from it is what left
+            # the avatar on the mood fallback for every reply.
             emotion, index = extractor.resolve_emotion(
-                result.output, "completed", mood=mood
+                result.spoken_text, "completed", mood=mood
             )
             await state_manager.update_state(
                 session_id=session_id,
@@ -1238,6 +1250,11 @@ async def _execute_core(
             cost_usd=result_cost,
             tool_calls=result_tool_calls,
             attachments=result_attachments,
+            spoken=(
+                (invoke_result.get("spoken") or None)
+                if isinstance(invoke_result, dict) and not invoke_failed
+                else None
+            ),
         )
         holder["result"] = result.to_dict()
         return result
@@ -1733,6 +1750,7 @@ def _save_subworker_reply_to_chat_room(
             "duration_ms": result.duration_ms,
             "cost_usd": result.cost_usd,
             "source": "sub_worker_reply",
+            "spoken": result.spoken,
         }
         # Files the sub-worker delivered via SendUserFile (workspace-canvas P1)
         # ride along to the VTuber's chat room as attachments.
@@ -1809,6 +1827,7 @@ def _save_drain_to_chat_room(
             # decide auto-TTS. Background drains stay suppressed; an owned
             # sub-agent completion (source="subagent_result") is TTS-eligible.
             "source": source,
+            "spoken": result.spoken,
         }
         if getattr(result, "attachments", None):
             _drain_msg["attachments"] = list(result.attachments)

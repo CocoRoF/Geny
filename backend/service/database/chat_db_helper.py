@@ -276,8 +276,8 @@ def db_add_message(db_manager, room_id: str,
 
         query = (
             f"INSERT INTO {MESSAGES_TABLE} "
-            f"(message_id, room_id, type, content, session_id, session_name, role, duration_ms, cost_usd, timestamp, file_changes, attachments) "
-            f"VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+            f"(message_id, room_id, type, content, session_id, session_name, role, duration_ms, cost_usd, timestamp, file_changes, attachments, spoken, source) "
+            f"VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
             f"ON CONFLICT (message_id) DO NOTHING "
             f"RETURNING id"
         )
@@ -294,6 +294,8 @@ def db_add_message(db_manager, room_id: str,
             timestamp,
             fc_json,
             att_json,
+            message.get("spoken") or None,
+            (message.get("source") or None),
         ))
 
         result = dict(message)
@@ -384,6 +386,12 @@ def db_get_messages(db_manager, room_id: str, *, limit: int = 0, before: str = "
                 "duration_ms": r.get("duration_ms", 0),
                 "cost_usd": r.get("cost_usd"),
             }
+            # Only when present, so a message without cues or a source looks
+            # exactly as it always did.
+            if r.get("spoken"):
+                msg["spoken"] = r["spoken"]
+            if r.get("source"):
+                msg["source"] = r["source"]
             # Deserialize file_changes from JSON string
             fc_str = r.get("file_changes")
             if fc_str:
