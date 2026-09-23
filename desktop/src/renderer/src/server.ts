@@ -73,6 +73,10 @@ export async function serverFetch<T>(path: string, init: RequestInit = {}): Prom
 export function serverStream(
   path: string,
   onEvent: (event: Record<string, unknown>) => void,
+  /** Called once when the stream ends by itself (server restart, network) —
+   *  not when the caller stopped it. Lets a follower reconnect only when it
+   *  has to, instead of on a timer. */
+  onEnd?: () => void,
 ): () => void {
   const controller = new AbortController()
   void (async () => {
@@ -107,9 +111,56 @@ export function serverStream(
       }
     } catch {
       /* aborted, or the connection dropped — the caller re-subscribes */
+    } finally {
+      if (!controller.signal.aborted) onEnd?.()
     }
   })()
   return () => controller.abort()
+}
+
+/** An absolute URL on the configured server — for an <img> that cannot
+ *  carry the Authorization header (`/static/...` is served without one). */
+export async function serverUrl(path: string): Promise<string> {
+  return `${await base()}${path}`
+}
+
+// ── the avatar ───────────────────────────────────────────────────────
+//
+// Which puppet a VTuber session wears. The avatar window renders whatever is
+// assigned here and follows every change the moment it happens (the server
+// streams assignments), so changing it from this window is the whole job.
+
+export interface AvatarModel {
+  name: string
+  display_name: string
+  /** live2d | mmd | spine */
+  runtime?: string
+  thumbnail?: string | null
+  description?: string
+}
+
+export const avatars = {
+  list: () => serverFetch<{ models: AvatarModel[] }>('/api/vtuber/models'),
+  of: (sessionId: string) =>
+    serverFetch<{ session_id: string; model: AvatarModel | null }>(
+      `/api/vtuber/agents/${encodeURIComponent(sessionId)}/model`),
+  assign: (sessionId: string, modelName: string) =>
+    serverFetch<{ status: string; model_name: string }>(
+      `/api/vtuber/agents/${encodeURIComponent(sessionId)}/model`,
+      { method: 'PUT', body: JSON.stringify({ model_name: modelName }) }),
+  clear: (sessionId: string) =>
+    serverFetch<{ status: string }>(
+      `/api/vtuber/agents/${encodeURIComponent(sessionId)}/model`, { method: 'DELETE' }),
+  /** Every (un)assignment, from any screen, as it happens. Returns a stop. */
+  follow: (
+    onChange: (sessionId: string, modelName: string | null) => void,
+    onEnd?: () => void,
+  ): (() => void) =>
+    serverStream('/api/vtuber/assignments/stream', (event) => {
+      if (event.event === 'assignment_changed' && typeof event.session_id === 'string') {
+        onChange(event.session_id, typeof event.model_name === 'string' ? event.model_name : null)
+      }
+    }, onEnd),
 }
 
 // ── model accounts ───────────────────────────────────────────────────

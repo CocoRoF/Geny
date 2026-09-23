@@ -3008,6 +3008,10 @@ function registerIpc(): void {
 
   // Control panel picked a session → point the overlay at it.
   ipcMain.on('overlay:set-session', (_e, sessionId: string) => {
+    // The chat window says which VTuber it is on every time it lands on one;
+    // reloading the avatar (WebGL, a 10 MB model, physics) for the session it
+    // already shows would make every chat-window open flash the avatar.
+    if (!sessionId || sessionId === loadConfig().overlaySession) return
     saveConfig({ overlaySession: sessionId })
     applyOverlayContent()
   })

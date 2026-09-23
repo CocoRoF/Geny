@@ -25,6 +25,14 @@ function Svg({ children, size = 18 }: { children: ReactNode; size?: number }): R
 }
 
 export const Icon = {
+  avatar: (
+    <Svg size={15}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.5 14.5a4.5 4.5 0 0 0 7 0" />
+      <path d="M9 9.5h.01" />
+      <path d="M15 9.5h.01" />
+    </Svg>
+  ),
   chat: (
     <Svg>
       <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.6 8.6 0 0 1-3.8-.9L3 21l1.9-5.1A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z" />

@@ -34,11 +34,15 @@ export function RouteBar({ sessionId, t }: { sessionId: string | null; t: T }): 
       if (!sessionId) {
         setRoute(listed.defaultRoute)
         setLast(null)
+        setError(null)
         return
       }
       const current = await agents.route(sessionId)
       setRoute(current.route ?? listed.defaultRoute)
       setLast(current.last_route ?? null)
+      // A later success clears an earlier failure. It never did, so one 502
+      // while the server restarted stayed in the header for good.
+      setError(null)
     } catch (e) {
       setError((e as Error).message)
     }

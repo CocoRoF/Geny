@@ -23,6 +23,7 @@ import {
   agents, sessions as sessionApi,
   type AgentSummary,
 } from '../server'
+import AvatarBar from './AvatarBar'
 import Explorer, { type OpenedFile } from './Explorer'
 import FileView from './FileView'
 import { Icon } from './icons'
@@ -247,6 +248,17 @@ export function ChatApp(): ReactNode {
   }, [starting, list, t])
 
   const current = list.find((s) => s.session_id === sessionId) ?? null
+  const isVtuber = current?.role === 'vtuber'
+
+  // The avatar window shows the VTuber you are talking to. The page this
+  // window replaced did this on every pick; the native chat never did, so
+  // switching to another VTuber here left the old one on the desktop. Only
+  // VTubers: a worker has no avatar, and pointing the window at one would
+  // blank it. Main ignores a repeat of the session it already shows, so this
+  // does not reload the avatar each time the window opens.
+  useEffect(() => {
+    if (sessionId && isVtuber) window.connector?.windowControl.setOverlaySession(sessionId)
+  }, [sessionId, isVtuber])
   // Running sessions get their own group at the top. They are then left OUT
   // of the list below it: showing the same session twice, in two identical
   // rows, reads as a duplicate rather than as a shortcut.
@@ -393,6 +405,7 @@ export function ChatApp(): ReactNode {
               </div>
             </div>
             <div className="chat-header-actions">
+              {isVtuber && <AvatarBar sessionId={sessionId} t={t} />}
               <RouteBar sessionId={sessionId} t={t} />
               <button type="button" className={`chat-hbtn ${showWork ? 'on' : ''}`}
                 onClick={() => setShowWork((v) => !v)}>

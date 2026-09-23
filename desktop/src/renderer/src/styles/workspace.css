@@ -1485,6 +1485,47 @@
   color: var(--muted);
 }
 
+/* ── the avatar picker (shares the route picker's shape) ──────────────── */
+
+.avatar-btn-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--primary);
+}
+
+.avatar-menu {
+  min-width: 280px;
+}
+
+.avatar-item-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.avatar-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.avatar-thumb {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--panel-2);
+}
+
+.avatar-thumb.placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
 /* ── new-session modal ────────────────────────────────────────────────── */
 
 .modal-backdrop {
