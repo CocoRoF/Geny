@@ -70,6 +70,13 @@
   --error-border: #f6c1c1;
   --success: #2eb146;
   --warning: #f59f00;
+  --warning-soft: rgba(245, 159, 0, 0.1);
+  --warning-border: rgba(245, 159, 0, 0.38);
+  /* An off switch: grey on light, a lifted grey on dark — the light value
+     on a dark page reads as a lit control. */
+  --switch-off: #d0d5dd;
+  /* The app's own top bar (main paints the OS buttons in the same colour). */
+  --titlebar-h: 34px;
 
   --radius-sm: 6px;
   --radius-md: 8px;
@@ -112,6 +119,7 @@
     --assistant-bubble-text: #e7e9ee;
     --error-bg: #2a1c1c;
     --error-border: #5a2b2b;
+    --switch-off: #3a3f49;
     color-scheme: dark;
   }
 }
@@ -130,6 +138,7 @@
   --assistant-bubble-text: #e7e9ee;
   --error-bg: #2a1c1c;
   --error-border: #5a2b2b;
+  --switch-off: #3a3f49;
   color-scheme: dark;
 }
 

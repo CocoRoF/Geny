@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 
 import genyIcon from '../assets/geny_character.png'
 import { makeT, type Lang } from '../i18n'
+import { SettingsView, sectionOf, type Section } from '../settings/SettingsView'
 import {
   agents, serverUrl, sessions as sessionApi,
   type AgentSummary, type OutgoingAttachment,
@@ -30,6 +31,7 @@ import FileView from './FileView'
 import { Icon } from './icons'
 import RouteBar from './RouteBar'
 import SystemMonitorFooter from './SystemMonitorFooter'
+import TitleBar from './TitleBar'
 import Transcript from './Transcript'
 import WorkPane from './WorkPane'
 import { useAvatar } from './useAvatar'
@@ -37,6 +39,7 @@ import { useSession } from './useSession'
 import VoiceBar from './VoiceBar'
 
 const LAST_SESSION_KEY = 'geny.chat.lastSession'
+const TOKEN_KEY = 'geny_auth_token'
 
 /**
  * A dropped socket is not a dropped turn: the server keeps working whether or
@@ -93,6 +96,11 @@ export function ChatApp(): ReactNode {
    *  is worth opening at all — you can leave it open while you keep talking. */
   const [files, setFiles] = useState<OpenedFile[]>([])
   const [tab, setTab] = useState<string>('chat')
+  /** Settings is a tab like a file: open or not, and which section. */
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [section, setSection] = useState<Section>('account')
+  /** Whether there is an account on this computer; null until known. */
+  const [signedIn, setSignedIn] = useState<boolean | null>(null)
 
   const openFile = useCallback((file: OpenedFile) => {
     setFiles((prev) => {
@@ -165,11 +173,54 @@ export function ChatApp(): ReactNode {
     }
   }, [])
 
-  useEffect(() => { void refreshList() }, [refreshList])
   useEffect(() => {
+    void window.connector?.secureStore.get(TOKEN_KEY)
+      .then((token) => setSignedIn(!!token))
+      .catch(() => setSignedIn(false))
+  }, [])
+
+  const openSettings = useCallback((at?: Section | null) => {
+    setSettingsOpen(true)
+    if (at) setSection(at)
+    setTab('settings')
+  }, [])
+
+  const closeSettings = useCallback(() => {
+    setSettingsOpen(false)
+    setTab((current) => (current === 'settings' ? 'chat' : current))
+  }, [])
+
+  // The gear: open settings, or close it when it is what you are looking at
+  // (Dex's toggle).
+  const pressSettings = useCallback(() => {
+    if (settingsOpen && tab === 'settings') closeSettings()
+    else openSettings()
+  }, [settingsOpen, tab, openSettings, closeSettings])
+
+  // Asked for from elsewhere — the tray, the chip, the avatar, Ctrl+, — and
+  // whatever was asked before this page was listening.
+  useEffect(() => {
+    const off = window.connector?.settingsView?.onOpen((raw) => {
+      openSettings(sectionOf(raw))
+      void window.connector?.settingsView?.takePending().catch(() => undefined)
+    })
+    void window.connector?.settingsView?.takePending().then((pending) => {
+      if (pending) openSettings(sectionOf(pending.section))
+    }, () => undefined)
+    return () => { off?.() }
+  }, [openSettings])
+
+  // No account: the app opens on signing in.
+  useEffect(() => {
+    if (signedIn === false) openSettings('account')
+  }, [signedIn, openSettings])
+
+  useEffect(() => { if (signedIn) void refreshList() }, [refreshList, signedIn])
+  useEffect(() => {
+    if (!signedIn) return
     const timer = setInterval(() => { void refreshList() }, 20_000)
     return () => clearInterval(timer)
-  }, [refreshList])
+  }, [refreshList, signedIn])
 
   useEffect(() => {
     if (!sessionId) return
@@ -302,7 +353,9 @@ export function ChatApp(): ReactNode {
   // rows, reads as a duplicate rather than as a shortcut.
   const running = list.filter((s) => s.status === 'running')
   const idle = list.filter((s) => s.status !== 'running')
-  const lamp = lampFor(live.state, live.running, t)
+  const lamp = signedIn === false
+    ? { tone: 'offline' as const, label: t('chat.state.signedOut') }
+    : lampFor(live.state, live.running, t)
 
   const sessionRow = (session: AgentSummary): ReactNode => (
     <button
@@ -324,7 +377,13 @@ export function ChatApp(): ReactNode {
     </button>
   )
 
+  const context = tab === 'settings'
+    ? t('set.title')
+    : files.find((f) => f.key === tab)?.name ?? current?.session_name ?? null
+
   return (
+    <div className="app-frame">
+    <TitleBar context={context} />
     <div className="workspace">
       <nav className="activity-bar">
         <span className="ab-logo"><img src={genyIcon} alt="Geny" draggable={false} /></span>
@@ -347,8 +406,9 @@ export function ChatApp(): ReactNode {
           </button>
         </div>
         <div className="ab-bottom">
-          <button type="button" className="ab-btn" title={t('chat.openSettings')}
-            onClick={() => window.connector?.windowControl.openSettings()}>
+          <button type="button" className={`ab-btn ${tab === 'settings' ? 'active' : ''}`}
+            title={t('chat.openSettings')} onClick={pressSettings}>
+            {tab === 'settings' && <span className="ab-ind" />}
             {Icon.settings}
           </button>
         </div>
@@ -385,7 +445,9 @@ export function ChatApp(): ReactNode {
               {listError && <div className="side-error">{listError}</div>}
               {idle.map(sessionRow)}
               {list.length === 0 && !listError && (
-                <div className="side-empty">{t('chat.noSessions')}</div>
+                <div className="side-empty">
+                  {signedIn === false ? t('set.signedOut.sidebar') : t('chat.noSessions')}
+                </div>
               )}
             </div>
           </>
@@ -408,6 +470,19 @@ export function ChatApp(): ReactNode {
                 {current?.session_name || t('chat.tabChat')}
               </span>
             </button>
+            {settingsOpen && (
+              <button type="button"
+                className={`tab-item ${tab === 'settings' ? 'active' : ''}`}
+                onClick={() => setTab('settings')}
+                onAuxClick={(e) => { if (e.button === 1) closeSettings() }}>
+                <span className="tab-icon">{Icon.settings}</span>
+                <span className="tab-label">{t('set.title')}</span>
+                <span className="tab-close" role="button" aria-label={t('explorer.close')}
+                  onClick={(e) => { e.stopPropagation(); closeSettings() }}>
+                  {Icon.close}
+                </span>
+              </button>
+            )}
             {files.map((file) => (
               <button key={file.key} type="button"
                 className={`tab-item ${tab === file.key ? 'active' : ''}`}
@@ -423,7 +498,12 @@ export function ChatApp(): ReactNode {
           </div>
         </div>
 
-        {tab !== 'chat' && (() => {
+        {tab === 'settings' && (
+          <SettingsView t={t} lang={lang} section={section} onSection={setSection}
+            signedIn={signedIn === true} />
+        )}
+
+        {tab !== 'chat' && tab !== 'settings' && (() => {
           const file = files.find((f) => f.key === tab)
           return file ? <FileView sessionId={file.sessionId} name={file.name}
             path={file.path} content={file.content} binary={file.binary}
@@ -431,6 +511,16 @@ export function ChatApp(): ReactNode {
         })()}
 
         <div className="chat" hidden={tab !== 'chat'}>
+          {signedIn === false ? (
+            <div className="chat-signed-out">
+              <img src={genyIcon} alt="" draggable={false} />
+              <strong>{t('set.signedOut.title')}</strong>
+              <p>{t('set.signedOut.body')}</p>
+              <button type="button" className="set-btn primary" onClick={() => openSettings('account')}>
+                {Icon.user}{t('set.signedOut.action')}
+              </button>
+            </div>
+          ) : (<>
           <header className="chat-header">
             <div className="chat-title">
               <span className="agent-mark">G</span>
@@ -556,12 +646,12 @@ export function ChatApp(): ReactNode {
 
             {showWork && sessionId && <WorkPane sessionId={sessionId} t={t} />}
           </div>
+          </>)}
         </div>
       </main>
 
       <SystemMonitorFooter t={t} state={lamp} />
-
-
+    </div>
     </div>
   )
 }

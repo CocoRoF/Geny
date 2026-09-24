@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, powerMonitor, safeStorage, screen, session, shell, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, powerMonitor, safeStorage, screen, session, shell, Tray } from 'electron'
 import { cleanCommand, cleanState, type AvatarState } from './avatar-bridge'
 import { spawn } from 'child_process'
 import { hostname } from 'os'
@@ -336,8 +336,6 @@ function saveConfig(patch: Partial<ConnectorConfig>): ConnectorConfig {
   if ('lang' in patch && next.lang !== prevLang) {
     try { rebuildTrayMenu() } catch { /* tray not yet created */ }
     try { buildAppMenu() } catch { /* menu not yet built */ }
-    // Native window title is set at creation time — refresh it live too.
-    try { settings?.setTitle(nt('window.settingsTitle')) } catch { /* not created */ }
   }
   return next
 }
@@ -460,7 +458,6 @@ const NATIVE_MESSAGES: Record<string, { ko: string; en: string }> = {
   'act.capDisabled': { ko: '이 동작이 꺼져 있습니다 (설정 → 로컬 컴퓨터 제어)', en: 'This action is disabled (Settings → Local Computer Use)' },
   // quick-chat delivery errors
   // window titles
-  'window.settingsTitle': { ko: 'Geny 설정', en: 'Geny Settings' },
 }
 function nt(key: string, vars?: Record<string, string | number>): string {
   const entry = NATIVE_MESSAGES[key]
@@ -494,7 +491,7 @@ let dpiSettleUntil = 0
 // Persist a window's geometry on move/resize (debounced). Skips minimized /
 // maximized / fullscreen states, and waits out an in-flight DPI transition so the
 // SETTLED bounds are saved, not the mid-rescale ones.
-function attachBoundsPersistence(win: BrowserWindow, key: 'overlay' | 'control' | 'settings'): void {
+function attachBoundsPersistence(win: BrowserWindow, key: 'overlay' | 'control'): void {
   let timer: ReturnType<typeof setTimeout> | null = null
   const run = () => {
     if (win.isDestroyed() || win.isMinimized() || win.isMaximized() || win.isFullScreen()) return
@@ -607,7 +604,7 @@ function isVisibleOnSomeDisplay(b: WinBounds): boolean {
 // entirely off-screen (invisible, "lost"). Pull only those windows back onto the
 // nearest display — leave still-visible windows exactly where the user put them.
 function ensureWindowsOnScreen(): void {
-  for (const win of [overlay, control, settings, quickchat]) {
+  for (const win of [overlay, control, quickchat]) {
     if (!win || win.isDestroyed()) continue
     const b = win.getBounds()
     if (isVisibleOnSomeDisplay(b)) continue
@@ -635,8 +632,7 @@ function resetWindowPositions(): void {
     overlay.show()
     overlay.webContents.send('overlay:reset-view') // reset avatar pan/zoom (localStorage view)
   }
-  if (control && !control.isDestroyed()) control.setBounds(centered(640, 760))
-  if (settings && !settings.isDestroyed()) settings.setBounds(centered(640, 720))
+  if (control && !control.isDestroyed()) control.setBounds(centered(1120, 780))
   // quick-chat re-centers on its next summon now that quickChatBar is cleared.
 }
 
@@ -803,7 +799,44 @@ function createOverlay(): void {
   overlay.webContents.on('render-process-gone', () => publishAvatarState(null))
 }
 
-// ── control window: chat / settings / login (hidden until toggled) ──────────
+// ── the main window's chrome ────────────────────────────────────────────────
+//
+// No menu bar and no system title bar: the window draws its own top bar in
+// the app's colours, and the OS paints only its buttons over it (Windows and
+// Linux: minimize/maximize/close as a title-bar overlay; macOS: the traffic
+// lights, inset). The old window carried a native title bar and a
+// "Geny · 편집 · 보기" menu row above the app — two strips of the OS's grey
+// over a dark app, and a menu for things the app already does itself.
+//
+// The theme is one value in two places: `nativeTheme.themeSource` (what
+// Chromium tells the page with prefers-color-scheme, and what the macOS
+// frame follows) and the overlay colours below, which must equal the page's
+// --panel so the buttons sit on the bar rather than on a patch beside it.
+const TITLEBAR_H = 34
+const IS_MAC = process.platform === 'darwin'
+
+function chromeColors(): { page: string; bar: string; symbol: string } {
+  return nativeTheme.shouldUseDarkColors
+    ? { page: '#16181d', bar: '#1d1f23', symbol: '#c9ced6' }
+    : { page: '#f7f8fa', bar: '#ffffff', symbol: '#40444d' }
+}
+
+function applyThemeSource(theme?: string): void {
+  nativeTheme.themeSource = theme === 'dark' || theme === 'light' ? theme : 'system'
+}
+
+function paintChrome(): void {
+  if (!control || control.isDestroyed()) return
+  const c = chromeColors()
+  control.setBackgroundColor(c.page)
+  if (!IS_MAC) {
+    try {
+      control.setTitleBarOverlay({ color: c.bar, symbolColor: c.symbol, height: TITLEBAR_H })
+    } catch { /* no overlay on this platform build */ }
+  }
+}
+
+// ── control window: the app (conversation, files, settings) ─────────────────
 function createControl(): void {
   const wa = screen.getPrimaryDisplay().workArea
   const b = restoreWinBounds(loadConfig().control, {
@@ -820,6 +853,13 @@ function createControl(): void {
     minHeight: 520,
     show: false,
     title: 'Geny',
+    backgroundColor: chromeColors().page,
+    ...(IS_MAC
+      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 12, y: 10 } }
+      : {
+          titleBarStyle: 'hidden' as const,
+          titleBarOverlay: { color: chromeColors().bar, symbolColor: chromeColors().symbol, height: TITLEBAR_H },
+        }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
@@ -832,6 +872,11 @@ function createControl(): void {
       plugins: true,
     },
   })
+  // The application menu stays (it is what makes copy/paste and the
+  // shortcuts work, and on macOS it lives in the system bar anyway); only
+  // its row inside the window goes, and Alt does not bring it back.
+  control.setAutoHideMenuBar(false)
+  control.setMenuBarVisibility(false)
   control.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
@@ -845,7 +890,7 @@ function createControl(): void {
     // window (and no single-instance lock to piggyback on) — closing the
     // LAST visible UI surface must quit instead of stranding a zombie app.
     if (!appQuitting) {
-      if (!tray && !settings?.isVisible()) {
+      if (!tray) {
         app.quit()
         return
       }
@@ -874,50 +919,26 @@ async function applyControlContent(): Promise<void> {
   loadRoute(control, 'control')
 }
 
-// ── settings window: server URL / account / auto-update (local, always open) ─
-let settings: BrowserWindow | null = null
-function createSettings(): void {
-  const wa = screen.getPrimaryDisplay().workArea
-  const b = restoreWinBounds(loadConfig().settings, {
-    width: 640, height: 720,
-    x: Math.round(wa.x + (wa.width - 640) / 2),
-    y: Math.round(wa.y + (wa.height - 720) / 2),
-  })
-  settings = new BrowserWindow({
-    width: b.width,
-    height: b.height,
-    x: b.x,
-    y: b.y,
-    minWidth: 560,
-    minHeight: 600,
-    show: false,
-    title: nt('window.settingsTitle'),
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  })
-  attachContentResilience(settings, () => settings && loadRoute(settings, 'settings'))
-  attachBoundsPersistence(settings, 'settings')
-  loadRoute(settings, 'settings')
-  settings.on('close', (e) => {
-    // Same tray-less rule as the control window: closing the last visible
-    // UI surface with no tray to summon it back means quit, not zombie.
-    if (!appQuitting) {
-      if (!tray && !control?.isVisible()) {
-        app.quit()
-        return
-      }
-      e.preventDefault()
-      settings?.hide()
-    }
-  })
-}
-function showSettings(): void {
-  if (!settings) createSettings()
-  settings?.show()
-  settings?.focus()
+// ── settings: a view of the main window, not a window of its own ─────────
+//
+// Settings used to be a second window — a 640px column of cards that opened
+// beside the app, over it, or behind it, and was also the sign-in screen.
+// It is a view of the main window now, the way Dex does it: the gear in the
+// activity bar, Ctrl+, , the tray, the chip and the avatar all land in the
+// same place, and signing in is simply what that view shows while there is
+// no account.
+//
+// A request can arrive before the window has a page to hear it (the tray on
+// a cold start, a window just created). It is kept until the page takes it,
+// and the page takes it once it is listening — so it is neither lost nor
+// replayed on the next reload.
+let pendingSettings: { section: string | null } | null = null
+function showSettings(section?: string | null): void {
+  pendingSettings = { section: section ?? null }
+  if (!control) createControl()
+  control?.show()
+  control?.focus()
+  control?.webContents.send('app:open-settings', pendingSettings.section)
 }
 
 // ── quick-chat window: Spotlight-style floating input ───────────────────────
@@ -1097,7 +1118,7 @@ async function toggleQuickChat(): Promise<void> {
   // Logged-out → there's no VTuber to message; route the user to login instead.
   const token = await getStoredToken()
   if (!token || !loadConfig().serverUrl) {
-    showSettings()
+    showSettings('account')
     return
   }
   positionQuickChat()
@@ -1121,17 +1142,12 @@ async function refreshAll(): Promise<void> {
     return
   }
   const token = await getStoredToken()
-  dlog('refresh', `windows: token=${token ? 'yes' : 'no'} → ${token ? 'control' : 'settings'}`)
-  if (token) {
-    settings?.hide()
-    control?.show()
-  } else {
-    control?.hide()
-    showSettings()
-  }
+  dlog('refresh', `windows: token=${token ? 'yes' : 'no'} → control`)
+  // One window either way: signed out, its page opens on sign-in.
+  control?.show()
 }
 
-function loadRoute(win: BrowserWindow, route: 'overlay' | 'control' | 'settings' | 'quickchat' | 'chip'): void {
+function loadRoute(win: BrowserWindow, route: 'overlay' | 'control' | 'quickchat' | 'chip'): void {
   if (isDev && process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/index.html?window=${route}`)
   } else {
@@ -1352,7 +1368,7 @@ let avatarState: AvatarState | null = null
 
 function publishAvatarState(next: AvatarState | null): void {
   avatarState = next
-  for (const win of [control, overlayChip, settings, quickchat]) {
+  for (const win of [control, overlayChip, quickchat]) {
     if (win && !win.isDestroyed()) win.webContents.send('avatar:state', avatarState)
   }
 }
@@ -2091,7 +2107,7 @@ function showControl(): void {
 // Clear the stored JWT and send both windows back to their logged-out state.
 async function logout(): Promise<void> {
   await clearStoredToken()
-  await refreshAll() // logged out → hides panel, shows settings/login
+  await refreshAll() // signed out → the window opens on sign-in
 }
 
 // ── global hotkeys (push-to-talk + quick-chat) ──────────────────────────────
@@ -2257,6 +2273,10 @@ function registerIpc(): void {
   ipcMain.handle('config:set', (_e, patch: Partial<ConnectorConfig>) => {
     const prevServer = loadConfig().serverUrl
     const next = saveConfig(patch)
+    if ('theme' in patch) {
+      applyThemeSource(next.theme)
+      paintChrome()
+    }
     // Push the merged config to the avatar overlay so its capability drivers
     // (TTS/STT/screen) apply overlayTuning changes live — no reload.
     overlay?.webContents.send('config:changed', next)
@@ -2374,7 +2394,15 @@ function registerIpc(): void {
   ipcMain.on('app:refresh', () => void refreshAll())
 
   // Open the settings window (from the panel's gear button or app menu).
-  ipcMain.on('settings:open', () => showSettings())
+  ipcMain.on('settings:open', (_e, section?: string) =>
+    showSettings(typeof section === 'string' ? section : null))
+  // The page asks once it is listening; whatever was asked for before that
+  // is handed over exactly once.
+  ipcMain.handle('settings:take-pending', () => {
+    const taken = pendingSettings
+    pendingSettings = null
+    return taken
+  })
 
   // Reset all window positions/sizes + the avatar view (settings → 위치 초기화).
   ipcMain.on('windows:reset-positions', () => resetWindowPositions())
@@ -3188,21 +3216,24 @@ app.whenReady().then(() => {
   // Reconcile the OS login item with the saved preference (default off) — keeps
   // the autostart entry in sync if the app moved or the setting changed offline.
   applyAutoLaunch(loadConfig().autoLaunch === true)
+  // The saved theme before any window exists, so the first frame is right.
+  applyThemeSource(loadConfig().theme)
+  // "System" follows the OS live; the bar has to follow with it.
+  nativeTheme.on('updated', () => paintChrome())
   // Restore the Linux click-through opt-in BEFORE the overlay first applies
   // its mouse policy (applyOverlayContent reads this flag).
   // (legacy `linuxClickThrough` opt-in retired — main hit-tests now)
   buildAppMenu()
   createOverlay()
   createControl()
-  createSettings()
   createQuickChat()
   createTray()
 
   // Re-establish the session BEFORE deciding which window to show: validate the
   // stored JWT and mint a fresh-expiry one (or drop it if truly dead), so a
   // restart re-logs-in cleanly instead of showing "saved but not working". Then
-  // show the right window: logged in → the /connector panel; logged out → the
-  // settings/login window. (The avatar overlay always runs.)
+  // show the main window — on the conversation, or on sign-in when there is
+  // no account. (The avatar overlay always runs.)
   void (async () => {
     await validateAndRefreshAuth()
     await refreshAll()

@@ -25,6 +25,137 @@ function Svg({ children, size = 18 }: { children: ReactNode; size?: number }): R
 }
 
 export const Icon = {
+  user: (
+    <Svg size={16}>
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </Svg>
+  ),
+  sliders: (
+    <Svg size={16}>
+      <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />
+    </Svg>
+  ),
+  cpu: (
+    <Svg size={16}>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <rect x="9" y="9" width="6" height="6" />
+      <path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3" />
+    </Svg>
+  ),
+  pointer: (
+    <Svg size={16}>
+      <path d="m4 4 7.07 17 2.51-7.39L21 11.07z" />
+    </Svg>
+  ),
+  cloud: (
+    <Svg size={16}>
+      <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+    </Svg>
+  ),
+  plug: (
+    <Svg size={16}>
+      <path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z" />
+    </Svg>
+  ),
+  keyboard: (
+    <Svg size={16}>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8" />
+    </Svg>
+  ),
+  info: (
+    <Svg size={16}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 16v-4M12 8h.01" />
+    </Svg>
+  ),
+  sun: (
+    <Svg size={14}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+    </Svg>
+  ),
+  moon: (
+    <Svg size={14}>
+      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+    </Svg>
+  ),
+  display: (
+    <Svg size={14}>
+      <rect x="2" y="3" width="20" height="14" rx="2" />
+      <path d="M8 21h8M12 17v4" />
+    </Svg>
+  ),
+  appWindow: (
+    <Svg size={14}>
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="M2 8h20M6 6h.01M9 6h.01" />
+    </Svg>
+  ),
+  caretDown: (
+    <Svg size={14}>
+      <path d="m6 9 6 6 6-6" />
+    </Svg>
+  ),
+  arrowUp: (
+    <Svg size={14}>
+      <path d="m18 15-6-6-6 6" />
+    </Svg>
+  ),
+  arrowDown: (
+    <Svg size={14}>
+      <path d="m6 9 6 6 6-6" />
+    </Svg>
+  ),
+  trash: (
+    <Svg size={14}>
+      <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </Svg>
+  ),
+  logout: (
+    <Svg size={14}>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+    </Svg>
+  ),
+  power: (
+    <Svg size={14}>
+      <path d="M12 2v10M18.4 6.6a9 9 0 1 1-12.77.04" />
+    </Svg>
+  ),
+  copy: (
+    <Svg size={14}>
+      <rect x="9" y="9" width="13" height="13" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </Svg>
+  ),
+  download: (
+    <Svg size={14}>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+    </Svg>
+  ),
+  key: (
+    <Svg size={16}>
+      <circle cx="7.5" cy="15.5" r="5.5" />
+      <path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3" />
+    </Svg>
+  ),
+  pause: (
+    <Svg size={14}>
+      <rect x="6" y="4" width="4" height="16" rx="1" />
+      <rect x="14" y="4" width="4" height="16" rx="1" />
+    </Svg>
+  ),
+  play: (
+    <Svg size={14}>
+      <path d="m6 3 14 9-14 9V3z" />
+    </Svg>
+  ),
+  sync: (
+    <Svg size={14}>
+      <path d="M21 12a9 9 0 0 1-15 6.7L3 16M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M3 21v-5h5" />
+    </Svg>
+  ),
   openOut: (
     <Svg size={15}>
       <path d="M15 3h6v6" />

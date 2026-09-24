@@ -116,6 +116,8 @@ export interface ConnectorBridge {
   /** Which window this renderer is: 'overlay' (avatar), 'settings'/'control', or
    *  'quickchat' (the floating Spotlight-style input bar). */
   windowKind: 'overlay' | 'control' | 'settings' | 'quickchat' | 'chip'
+  /** The OS, for chrome that differs by platform (macOS's traffic lights). */
+  platform: string
 
   /** Connector app version (package.json), for the settings window. */
   appVersion(): Promise<string>
@@ -185,8 +187,8 @@ export interface ConnectorBridge {
     refresh(): void
     /** Set which session the floating overlay renders, and reload it. */
     setOverlaySession(sessionId: string): void
-    /** Open the settings window (server URL / account / auto-update). */
-    openSettings(): void
+    /** Open settings — a view of the main window — optionally at a section. */
+    openSettings(section?: string): void
     /** Restart the whole connector app (reloads overlay/panel + native code). */
     restart(): void
     /** Open a URL in the user's default browser (e.g. the Geny web app). */
@@ -229,6 +231,13 @@ export interface ConnectorBridge {
      *  new combo (so a registered key isn't intercepted during capture). */
     pause(): void
     resume(): void
+  }
+
+  /** The main window's settings view: requests to open it (tray, chip,
+   *  menu, Ctrl+,) and the one that arrived before the page was listening. */
+  settingsView: {
+    onOpen(cb: (section: string | null) => void): () => void
+    takePending(): Promise<{ section: string | null } | null>
   }
 
   /** Quick-chat bar (the 'quickchat' window). It sends by itself; main only
@@ -446,6 +455,7 @@ const api: ConnectorBridge = {
     : _wk === 'quickchat' ? 'quickchat'
     : _wk === 'chip' ? 'chip'
     : 'overlay',
+  platform: process.platform,
   appVersion: () => ipcRenderer.invoke('app:version'),
   debug: {
     log: (line) => ipcRenderer.send('debug:log', line),
@@ -500,7 +510,7 @@ const api: ConnectorBridge = {
     openControl: () => ipcRenderer.send('control:open'),
     refresh: () => ipcRenderer.send('app:refresh'),
     setOverlaySession: (sessionId) => ipcRenderer.send('overlay:set-session', sessionId),
-    openSettings: () => ipcRenderer.send('settings:open'),
+    openSettings: (section) => ipcRenderer.send('settings:open', section),
     restart: () => ipcRenderer.send('app:restart'),
     openExternal: (url) => ipcRenderer.send('app:open-external', url),
     reloadPanel: () => ipcRenderer.send('app:reload-control'),
@@ -616,6 +626,14 @@ const api: ConnectorBridge = {
     setQuickChat: (acc) => ipcRenderer.invoke('hotkey:set-quickchat', acc),
     pause: () => ipcRenderer.send('hotkey:pause'),
     resume: () => ipcRenderer.send('hotkey:resume'),
+  },
+  settingsView: {
+    onOpen: (cb) => {
+      const h = (_e: unknown, section: string | null) => cb(section)
+      ipcRenderer.on('app:open-settings', h)
+      return () => ipcRenderer.removeListener('app:open-settings', h)
+    },
+    takePending: () => ipcRenderer.invoke('settings:take-pending'),
   },
   quickChat: {
     close: () => ipcRenderer.send('quickchat:close'),

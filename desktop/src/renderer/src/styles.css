@@ -7,7 +7,7 @@
  *
  *   tokens      the language: surfaces, ink, meaning, space, type, motion
  *   base        reset, page, scrollbars, focus
- *   components  the shared parts (buttons, fields, cards, tabs, menus)
+ *   settings    the window frame and the settings tab
  *   workspace   the chat window: rail, conversation, ledger, status bar
  *   overlay     the transparent always-on-top surfaces (avatar, quick chat)
  *
@@ -16,6 +16,6 @@
  */
 @import './styles/tokens.css';
 @import './styles/base.css';
-@import './styles/components.css';
 @import './styles/workspace.css';
+@import './styles/settings.css';
 @import './styles/overlay.css';
