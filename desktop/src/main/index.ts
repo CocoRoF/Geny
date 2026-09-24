@@ -459,8 +459,6 @@ const NATIVE_MESSAGES: Record<string, { ko: string; en: string }> = {
   'act.deniedByUser': { ko: '사용자가 거부함', en: 'Denied by the user' },
   'act.capDisabled': { ko: '이 동작이 꺼져 있습니다 (설정 → 로컬 컴퓨터 제어)', en: 'This action is disabled (Settings → Local Computer Use)' },
   // quick-chat delivery errors
-  'qc.emptyMessage': { ko: '빈 메시지', en: 'Empty message' },
-  'qc.loginRequired': { ko: '로그인이 필요합니다', en: 'Sign-in required' },
   // window titles
   'window.settingsTitle': { ko: 'Geny 설정', en: 'Geny Settings' },
 }
@@ -1104,54 +1102,6 @@ async function toggleQuickChat(): Promise<void> {
   }
   positionQuickChat()
   showQuickChatOnTop()
-}
-
-// Relay a quick-chat message to the current VTuber via the /connector page's
-// existing chat send. Returns whether it was delivered (false → not logged in /
-// panel not ready, so the bar can surface a hint).
-interface QuickChatPayload {
-  text: string
-  images?: Array<{ name: string; type: string; dataUrl: string }>
-}
-
-const QC_MAX_IMAGES = 4
-// data URL overhead ≈ 4/3 of raw bytes; 14 MiB string ≈ 10 MiB image.
-const QC_MAX_DATAURL_CHARS = 14 * 1024 * 1024
-
-function sanitizeQuickImages(images: unknown): QuickChatPayload['images'] {
-  if (!Array.isArray(images)) return undefined
-  const out: NonNullable<QuickChatPayload['images']> = []
-  for (const img of images.slice(0, QC_MAX_IMAGES)) {
-    if (!img || typeof img !== 'object') continue
-    const { name, type, dataUrl } = img as Record<string, unknown>
-    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) continue
-    if (dataUrl.length > QC_MAX_DATAURL_CHARS) continue
-    out.push({
-      name: typeof name === 'string' && name ? name.slice(0, 200) : 'pasted.png',
-      type: typeof type === 'string' && type.startsWith('image/') ? type : 'image/png',
-      dataUrl,
-    })
-  }
-  return out.length ? out : undefined
-}
-
-async function deliverQuickChat(
-  payload: string | QuickChatPayload,
-): Promise<{ ok: boolean; error?: string }> {
-  // Accept both the structured form and the legacy bare string.
-  const raw = typeof payload === 'string' ? { text: payload } : payload ?? { text: '' }
-  const body = (raw.text ?? '').trim()
-  const images = sanitizeQuickImages(raw.images)
-  if (!body && !images) return { ok: false, error: nt('qc.emptyMessage') }
-  const token = await getStoredToken()
-  if (!token || !loadConfig().serverUrl) return { ok: false, error: nt('qc.loginRequired') }
-  const fresh = !control
-  if (!control) createControl()
-  // A window created a moment ago has not mounted its listener yet, and an
-  // early send is dropped with no sign that it was.
-  if (fresh) await new Promise((r) => setTimeout(r, 450))
-  control!.webContents.send('connector:quick-send', { text: body, images })
-  return { ok: true }
 }
 
 // Re-evaluate everything after login/logout/url-change: window content + which
@@ -2501,11 +2451,6 @@ function registerIpc(): void {
     setTimeout(() => { suppressQuickChatPosSave = false }, 120)
   })
 
-  ipcMain.handle('quickchat:submit', async (_e, payload: string | QuickChatPayload) => {
-    const r = await deliverQuickChat(payload)
-    if (r.ok) dismissQuickChat()
-    return r
-  })
   // Esc / cancel from the bar.
   ipcMain.on('quickchat:close', () => dismissQuickChat())
 

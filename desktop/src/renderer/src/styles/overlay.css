@@ -93,8 +93,25 @@ body,
   opacity: 0.85;
 }
 
-/* ── quick-chat bar (floating Spotlight-style input) ────────────────────────── */
+/* ── quick chat (the floating bar the hotkey summons) ─────────────────────
+
+   One look, whatever the app theme: an opaque near-black card with light
+   text. It floats over anything — a game, a white document — and the old
+   see-through card took its text colour from the LIGHT tokens, which on a
+   dark card meant typing nobody could read. Its palette is its own, so a
+   theme change elsewhere cannot do that to it again. */
 .qc-root {
+  --qc-bg: #0b0c0f;
+  --qc-raised: #16181d;
+  --qc-hover: #1f2229;
+  --qc-line: #2a2e37;
+  --qc-ink: #f2f4f8;
+  --qc-ink-2: #c4c9d3;
+  --qc-faint: #8b919d;
+  --qc-accent: #4c74ff;
+  --qc-ok: #5ad48a;
+  --qc-err: #ff8a8a;
+
   height: 100vh;
   width: 100vw;
   box-sizing: border-box;
@@ -103,34 +120,36 @@ body,
   justify-content: center;
   padding: 14px;
   background: transparent;
-  color: var(--text);
-  /* Belt & braces: the window tracks the card's height, so the page should
-     never overflow — but a transient frame between growth and the window
+  color: var(--qc-ink);
+  /* The window tracks the card's height; a frame between growth and the
      resize must not flash scrollbars. */
   overflow: hidden;
 }
+
 .qc-card {
   width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 10px;
   border-radius: 16px;
-  border: 1px solid var(--line);
-  background: rgba(16, 16, 22, 0.82);
-  backdrop-filter: blur(20px) saturate(1.4);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
-  padding: 12px 14px 9px;
+  border: 1px solid var(--qc-line);
+  background: var(--qc-bg);
+  color: var(--qc-ink);
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.6);
   animation: qc-rise 0.16s cubic-bezier(0.22, 1, 0.36, 1);
-  /* The card is the drag handle — grab anywhere except the input/send button to
-     move the bar; the spot is remembered between summons. */
+  /* The card is the handle: drag it anywhere but the controls to move the
+     bar; the spot is remembered between summons. */
   -webkit-app-region: drag;
   cursor: grab;
 }
-.qc-card:active {
-  cursor: grabbing;
+
+.qc-card.capturing {
+  opacity: 0;
+  animation: none;
 }
-.gy--light .qc-card {
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 18px 60px rgba(31, 28, 52, 0.22), inset 0 0 0 1px rgba(15, 23, 42, 0.04);
-}
+
 @keyframes qc-rise {
   from {
     opacity: 0;
@@ -142,143 +161,288 @@ body,
   }
 }
 
-.qc-bar {
+@media (prefers-reduced-motion: reduce) {
+  .qc-card { animation: none; }
+}
+
+/* Who it goes to. */
+.qc-head {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 8px;
+  min-height: 18px;
 }
+
+.qc-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--qc-ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qc-target.none {
+  font-weight: 500;
+  color: var(--qc-faint);
+  white-space: normal;
+}
+
+.qc-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--qc-ok);
+}
+
+.qc-target.none .qc-dot {
+  background: var(--qc-faint);
+}
+
+.qc-dot.speaking {
+  background: var(--qc-accent);
+  animation: qc-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes qc-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.qc-speaking {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--qc-accent);
+}
+
+/* The input row. Not a drag region: typing, selecting and dropping files
+   here must not move the window. */
+.qc-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 8px 8px 8px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--qc-line);
+  background: var(--qc-raised);
+  -webkit-app-region: no-drag;
+  cursor: text;
+  transition: border-color 0.15s ease;
+}
+
+.qc-bar:focus-within {
+  border-color: #3d4452;
+}
+
 .qc-input {
   flex: 1;
   min-width: 0;
+  max-height: 220px;
+  padding: 7px 0;
   border: none;
   outline: none;
   background: transparent;
-  color: var(--text);
+  color: var(--qc-ink);
+  caret-color: var(--qc-accent);
   font-family: inherit;
-  font-size: 17px;
-  line-height: 1.35;
+  font-size: 16px;
+  line-height: 1.45;
   resize: none;
-  max-height: 240px;
   overflow-y: auto;
-  /* The window grows with content; past max-height the textarea scrolls but
-     the scrollbar itself stays invisible (caret-follow keeps UX intact). */
   scrollbar-width: none;
-  padding: 4px 0;
-  /* Editing must work even though the window disables selection globally. */
+  /* The window disables selection globally; editing must still select. */
   -webkit-user-select: text;
   user-select: text;
-  /* Not a drag region — typing/selection here must not move the window. */
-  -webkit-app-region: no-drag;
-  cursor: text;
 }
+
+/* The global keyboard ring would draw a box inside the box. */
+.qc-input:focus,
+.qc-input:focus-visible {
+  box-shadow: none;
+}
+
 .qc-input::placeholder {
-  color: var(--faint);
+  color: var(--qc-faint);
+}
+
+.qc-input:disabled {
+  cursor: default;
+}
+
+.qc-input::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .qc-send {
   flex: none;
   width: 36px;
   height: 36px;
-  border-radius: 10px;
   border: none;
-  background: var(--accent-deep);
+  border-radius: 10px;
+  background: var(--qc-accent);
   color: #fff;
-  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 14px rgba(79, 124, 255, 0.34);
+  cursor: pointer;
   transition: filter 0.15s ease, transform 0.08s ease, opacity 0.15s ease;
-  /* Clickable, not a drag region. */
-  -webkit-app-region: no-drag;
 }
+
 .qc-send svg {
   width: 17px;
   height: 17px;
 }
+
 .qc-send:hover:not(:disabled) {
-  filter: brightness(1.1);
+  filter: brightness(1.12);
 }
+
 .qc-send:active:not(:disabled) {
   transform: scale(0.94);
 }
+
 .qc-send:disabled {
-  opacity: 0.4;
+  background: var(--qc-hover);
+  color: var(--qc-faint);
   cursor: default;
-  box-shadow: none;
 }
 
-.qc-foot {
-  margin-top: 8px;
-  padding: 0 2px 1px;
-  min-height: 16px;
-}
-.qc-hint {
-  font-size: 11px;
-  color: var(--faint);
-  line-height: 1.4;
-}
-.qc-hint.qc-ok {
-  color: var(--ok);
-}
-.qc-hint.qc-err {
-  color: var(--err);
-}
-.qc-hint kbd {
-  display: inline-block;
-  padding: 1px 5px;
-  border-radius: 5px;
-  border: 1px solid var(--line-strong);
-  background: var(--hover);
-  color: var(--dim);
-  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', monospace;
-  font-size: 10px;
-  line-height: 1.5;
-}
-
-/* Quick-chat pasted-image thumbnails */
-.qc-thumbs {
-  display: flex;
-  gap: 8px;
-  padding: 10px 12px 0;
-  flex-wrap: wrap;
-}
-.qc-thumb {
-  position: relative;
-  width: 52px;
-  height: 52px;
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid var(--gy-border, rgba(255, 255, 255, 0.14));
-  flex: 0 0 auto;
-}
-.qc-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.qc-thumb-x {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(0, 0, 0, 0.62);
+.qc-send.busy:disabled {
+  background: var(--qc-accent);
   color: #fff;
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
+}
+
+.qc-spin {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: qc-spin 0.7s linear infinite;
+}
+
+@keyframes qc-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Files waiting to go: the chat's chips, on this card's colours. */
+.qc-card .attach-pending {
+  -webkit-app-region: no-drag;
+}
+
+.qc-card .attach-chip {
+  border-color: var(--qc-line);
+  background: var(--qc-raised);
+  color: var(--qc-ink-2);
+}
+
+.qc-card .attach-chip.error {
+  border-color: rgba(255, 138, 138, 0.4);
+  background: rgba(255, 138, 138, 0.08);
+  color: var(--qc-err);
+}
+
+.qc-card .attach-chip-x {
+  color: var(--qc-faint);
+}
+
+.qc-card .attach-chip-x:hover {
+  background: var(--qc-hover);
+  color: var(--qc-ink);
+}
+
+.qc-card .attach-chip-busy {
+  color: var(--qc-accent);
+}
+
+/* Attach buttons and the keys. */
+.qc-foot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+}
+
+.qc-tool {
+  flex: none;
   display: grid;
   place-items: center;
+  width: 28px;
+  height: 26px;
   padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--qc-ink-2);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
 }
-.qc-thumb-x:hover { background: rgba(220, 60, 60, 0.9); }
 
-.qc-input::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-  display: none;
+.qc-tool svg {
+  width: 15px;
+  height: 15px;
+}
+
+.qc-tool:hover:not(:disabled) {
+  background: var(--qc-hover);
+  color: var(--qc-ink);
+}
+
+.qc-tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.qc-tool:focus-visible,
+.qc-send:focus-visible {
+  box-shadow: 0 0 0 2px rgba(76, 116, 255, 0.55);
+}
+
+.qc-hint {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--qc-faint);
+}
+
+.qc-sep {
+  width: 3px;
+  height: 3px;
+  margin: 0 5px;
+  border-radius: 50%;
+  background: var(--qc-line);
+}
+
+.qc-hint.qc-ok {
+  color: var(--qc-ok);
+}
+
+.qc-hint.qc-err {
+  color: var(--qc-err);
+  text-align: right;
+}
+
+.qc-hint kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--qc-line);
+  background: var(--qc-raised);
+  color: var(--qc-ink-2);
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', monospace;
+  font-size: 10.5px;
+  line-height: 1.5;
 }

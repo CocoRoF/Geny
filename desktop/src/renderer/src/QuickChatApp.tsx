@@ -1,66 +1,85 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+
+import type { AvatarState } from '../../preload/index'
+import { ATTACH_ACCEPT, PendingChips, base64ToFile, usePendingFiles } from './chat/attachments'
+import { Icon } from './chat/icons'
 import { makeT, type Lang } from './i18n'
+import { agents, rooms } from './server'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Quick-chat bar — the floating, Spotlight-style input summoned by the global
-// hotkey (default Cmd/Ctrl+Shift+Enter). Type a message, hit Enter, and it's
-// relayed to the CURRENT VTuber's chat (the overlaySession) through the
-// /connector page's own send path — so the avatar answers via the usual TTS.
+// Quick chat — the floating bar the global hotkey summons (default
+// Cmd/Ctrl+Shift+Enter), for talking to the avatar's VTuber without leaving
+// whatever is on screen: a game, a document, a call.
 //
-// The window itself is PERMANENT: main keeps a transparent, top-most, on-screen
-// window alive at all times (like the avatar overlay, so it layers above a
-// full-screen game). What appears/disappears is the CARD — this component only
-// paints it while `visible`, toggled by main's opened/dismissed events. Dismiss
-// on Esc or focus-loss (main detects blur). Re-themes via the shared `.gy` tokens.
+// It talks to the VTuber the AVATAR is showing and sends from here, through
+// the same room endpoint the chat and the web use; the avatar hears the reply
+// on its own subscription and speaks it. It used to hand the text to the chat
+// window instead, which sent it to whichever session that window happened to
+// have open, dropped the pictures, and reported success before anything had
+// been sent.
+//
+// The window itself is PERMANENT: main keeps a transparent, top-most window
+// alive at all times (like the avatar, so it layers above a full-screen game).
+// What appears and disappears is the card. The card is always dark and
+// opaque: it floats over anything at all, and a see-through card over a light
+// page is text nobody can read.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type Phase = 'idle' | 'sending' | 'sent' | 'error'
 
-/** A pasted image, carried as a data URL through the relay chain. The web
- *  side converts it back to a File and runs the SAME resize+upload path as
- *  the in-app composer, so caps/formats stay in one place. */
-export interface QuickImage {
+interface Target {
+  sessionId: string
   name: string
-  type: string
-  dataUrl: string
 }
 
-const MAX_IMAGES = 4
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024
-
-const sendIcon = (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M22 2 11 13" />
-    <path d="M22 2 15 22l-4-9-9-4z" />
-  </svg>
-)
+/** The VTuber the avatar is showing — what the avatar reports, else the one
+ *  it was last told to show. */
+async function resolveTarget(): Promise<Target | null> {
+  const state: AvatarState | null =
+    (await window.connector?.avatar?.getState().catch(() => null)) ?? null
+  let sessionId = state?.sessionId ?? null
+  if (!sessionId) {
+    const config = await window.connector?.serverConfig.get().catch(() => null)
+    sessionId = (config as { overlaySession?: string } | null)?.overlaySession ?? null
+  }
+  if (!sessionId) return null
+  const list = await agents.list().catch(() => [])
+  const agent = list.find((a) => a.session_id === sessionId)
+  return { sessionId, name: agent?.session_name || '' }
+}
 
 export function QuickChatApp() {
   const [visible, setVisible] = useState(false)
+  const [capturing, setCapturing] = useState(false)
   const [text, setText] = useState('')
-  const [images, setImages] = useState<QuickImage[]>([])
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState('')
-  const [dark, setDark] = useState(true)
   const [lang, setLang] = useState<Lang>('ko')
+  const [target, setTarget] = useState<Target | null>(null)
+  const [targetKnown, setTargetKnown] = useState(false)
+  const [speaking, setSpeaking] = useState(false)
   const t = makeT(lang)
+  const pending = usePendingFiles(t)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
-  const sentTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Resolve the bar's theme + language from the connector config (theme falls
-  // back to OS; language falls back to the OS-derived default from main).
-  const resolveTheme = useCallback(() => {
-    const sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    window.connector?.serverConfig
-      .get()
-      .then(async (c) => {
-        const mode = c.theme ?? 'system'
-        setDark(mode === 'system' ? sysDark : mode === 'dark')
-        const osLang = (await window.connector?.appDefaultLang?.().catch(() => 'ko' as Lang)) ?? 'ko'
-        setLang(c.lang ?? osLang)
-      })
-      .catch(() => setDark(sysDark))
+  // Always dark: the shared parts drawn inside the card (the file chips) take
+  // their colours from the dark tokens, not from whatever the app theme is.
+  useEffect(() => {
+    document.documentElement.dataset.theme = 'dark'
+  }, [])
+
+  const refresh = useCallback(() => {
+    void window.connector?.serverConfig.get().then(async (c) => {
+      const osLang = (await window.connector?.appDefaultLang?.().catch(() => 'ko' as Lang)) ?? 'ko'
+      setLang(c.lang ?? osLang)
+    }).catch(() => undefined)
+    void resolveTarget().then((found) => {
+      setTarget(found)
+      setTargetKnown(true)
+    })
   }, [])
 
   const focusInput = useCallback(() => {
@@ -70,52 +89,57 @@ export function QuickChatApp() {
     el.select()
   }, [])
 
-  // Paint the card on summon (reset + focus), erase it on dismiss. The window
-  // stays alive either way — only the card mounts/unmounts.
+  // Summoned: paint, find out who it is going to, focus. What was typed and
+  // not sent is still there — clicking away by accident loses nothing, and
+  // it is selected, so typing replaces it.
   useEffect(() => {
-    resolveTheme()
+    refresh()
     const offOpen = window.connector?.quickChat?.onOpened?.(() => {
-      if (sentTimer.current) clearTimeout(sentTimer.current)
-      setText('')
-      setImages([])
+      if (closeTimer.current) clearTimeout(closeTimer.current)
       setPhase('idle')
       setError('')
       setVisible(true)
-      resolveTheme()
+      refresh()
       setTimeout(focusInput, 20)
     })
-    const offDismiss = window.connector?.quickChat?.onDismissed?.(() => {
-      setVisible(false)
-    })
+    const offDismiss = window.connector?.quickChat?.onDismissed?.(() => setVisible(false))
     return () => { offOpen?.(); offDismiss?.() }
-  }, [resolveTheme, focusInput])
+  }, [refresh, focusInput])
 
-  // When the window gains OS keyboard focus (main grabs it a tick after summon),
-  // re-focus the input so the user can type immediately — no click needed.
+  // The avatar switching VTubers retargets the bar; its voice shows here too.
+  useEffect(() => {
+    let last: string | null = null
+    return window.connector?.avatar?.onState((s) => {
+      setSpeaking(!!s?.speaking)
+      const sid = s?.sessionId ?? null
+      if (sid !== last) {
+        last = sid
+        if (sid) void resolveTarget().then(setTarget)
+      }
+    })
+  }, [])
+
+  // Main grabs OS focus a tick after the summon; put the caret in the box.
   useEffect(() => {
     const onWinFocus = () => { if (visible) focusInput() }
     window.addEventListener('focus', onWinFocus)
     return () => window.removeEventListener('focus', onWinFocus)
   }, [visible, focusInput])
 
-  // Auto-grow the textarea; past the cap it scrolls (scrollbar hidden by CSS).
   useEffect(() => {
     const el = inputRef.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 240)}px`
-  }, [text])
+    el.style.height = `${Math.min(el.scrollHeight, 220)}px`
+  }, [text, visible])
 
-  // The WINDOW follows the card: multi-line text and thumbnail rows grow the
-  // card, and main resizes the window to fit — so the page itself never
-  // scrolls (no ugly scrollbars, Spotlight-style downward growth).
+  // The window follows the card, so the page itself never scrolls.
   useEffect(() => {
     if (!visible) return
     const el = cardRef.current
     if (!el) return
     const report = () => {
-      // + root padding (14px top/bottom).
-      const h = Math.ceil(el.getBoundingClientRect().height) + 28
+      const h = Math.ceil(el.getBoundingClientRect().height) + 28 // root padding
       window.connector?.quickChat?.resize?.(h)
     }
     report()
@@ -124,72 +148,62 @@ export function QuickChatApp() {
     return () => ro.disconnect()
   }, [visible])
 
-  // Pasted images: capture image items from the clipboard into thumbnails.
-  // Text-only pastes fall through to the textarea untouched.
-  const onPaste = useCallback((e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items
-    if (!items) return
-    const files: File[] = []
-    for (let i = 0; i < items.length; i++) {
-      const it = items[i]
-      if (it.kind === 'file') {
-        const f = it.getAsFile()
-        if (f && f.type.startsWith('image/')) files.push(f)
-      }
-    }
-    if (!files.length) return
-    e.preventDefault()
+  const addFiles = useCallback((files: File[]) => {
+    if (files.length === 0) return
+    setPhase('idle')
     setError('')
-    const room = MAX_IMAGES - images.length
-    if (room <= 0) {
-      setPhase('error')
-      setError(t('qc.tooManyImages'))
-      return
-    }
-    for (const f of files.slice(0, room)) {
-      if (f.size > MAX_IMAGE_BYTES) {
-        setPhase('error')
-        setError(t('qc.imageTooLarge'))
-        continue
-      }
-      const reader = new FileReader()
-      reader.onload = () => {
-        const dataUrl = String(reader.result || '')
-        if (!dataUrl.startsWith('data:')) return
-        setImages((prev) =>
-          prev.length >= MAX_IMAGES
-            ? prev
-            : [...prev, { name: f.name || `pasted-${Date.now()}.png`, type: f.type, dataUrl }],
-        )
-      }
-      reader.readAsDataURL(f)
-    }
-  }, [images.length, t])
-
-  const removeImage = useCallback((idx: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== idx))
+    pending.add(files)
     setTimeout(focusInput, 0)
-  }, [focusInput])
+  }, [pending, focusInput])
 
-  const submit = useCallback(async () => {
-    const body = text.trim()
-    if ((!body && images.length === 0) || phase === 'sending') return
+  const onPaste = (e: React.ClipboardEvent) => {
+    const files = Array.from(e.clipboardData?.files ?? [])
+    if (files.length === 0) return // plain text pastes as usual
+    e.preventDefault()
+    addFiles(files)
+  }
+
+  // The screen as it is — without this bar in the picture: the card steps
+  // out of the way for the capture and comes back with it attached.
+  const attachScreen = async () => {
+    if (capturing) return
+    setCapturing(true)
+    await new Promise((r) => setTimeout(r, 140))
+    try {
+      const shot = await window.connector?.screenGrab?.()
+      if (shot) {
+        const stamp = new Date().toTimeString().slice(0, 8).replace(/:/g, '')
+        addFiles([base64ToFile(shot.data, shot.mime_type, `screen-${stamp}.jpg`)])
+      }
+    } catch (e) {
+      setPhase('error')
+      setError((e as Error).message)
+    } finally {
+      setCapturing(false)
+    }
+  }
+
+  const ready = pending.files.some((f) => f.uploaded)
+  const canSend = !!target && phase !== 'sending' && !pending.uploading && (!!text.trim() || ready)
+
+  const submit = async () => {
+    if (!canSend || !target) return
     setPhase('sending')
     setError('')
-    const r = await window.connector?.quickChat?.submit({ text: body, images })
-    if (r?.ok) {
-      setPhase('sent')
+    try {
+      const room = await rooms.forSession(target.sessionId)
+      await rooms.send(room.id, text.trim(), pending.peek())
+      // Cleared only once it is sent: a failure keeps the text and the files.
+      pending.clear()
       setText('')
-      setImages([])
-      // Main hides the bar on success; show a brief confirmation in case it lingers.
-      if (sentTimer.current) clearTimeout(sentTimer.current)
-      sentTimer.current = setTimeout(() => setPhase('idle'), 1400)
-    } else {
+      setPhase('sent')
+      closeTimer.current = setTimeout(() => window.connector?.quickChat?.close(), 650)
+    } catch (e) {
       setPhase('error')
-      setError(r?.error || t('qc.sendFailed'))
+      setError((e as Error).message || t('qc.sendFailed'))
       setTimeout(focusInput, 0)
     }
-  }, [text, images, phase, focusInput, t])
+  }
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -197,64 +211,90 @@ export function QuickChatApp() {
       setVisible(false)
       window.connector?.quickChat?.close()
     } else if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-      // isComposing guard: don't send while an IME candidate is being confirmed.
+      // isComposing: Enter that confirms a Korean/Japanese syllable is not a send.
       e.preventDefault()
       void submit()
     }
   }
 
-  const canSend = (!!text.trim() || images.length > 0) && phase !== 'sending'
-
-  // Window stays alive always; paint the card only while summoned so the rest of
-  // the time the window is fully transparent (and click-through, set by main).
   if (!visible) return <div className="qc-root" />
 
+  const to = target
+    ? (target.name ? t('qc.to', { name: target.name }) : t('qc.toUnnamed'))
+    : null
+
   return (
-    <div className={`qc-root gy ${dark ? '' : 'gy--light'}`}>
-      <div className="qc-card" ref={cardRef}>
-        {images.length > 0 && (
-          <div className="qc-thumbs">
-            {images.map((img, i) => (
-              <div key={`${img.name}-${i}`} className="qc-thumb">
-                <img src={img.dataUrl} alt={img.name} />
-                <button
-                  className="qc-thumb-x"
-                  onClick={() => removeImage(i)}
-                  aria-label={t('qc.removeImage')}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="qc-bar">
+    <div className="qc-root">
+      <div className={`qc-card ${capturing ? 'capturing' : ''}`} ref={cardRef}>
+        <div className="qc-head">
+          <span className={`qc-target ${target ? '' : 'none'}`}>
+            <span className={`qc-dot ${speaking ? 'speaking' : ''}`} />
+            {to ?? (targetKnown ? t('qc.noTarget') : t('qc.finding'))}
+          </span>
+          {speaking && <span className="qc-speaking">{t('chat.voice.speaking')}</span>}
+        </div>
+
+        <div
+          className="qc-bar"
+          onDragOver={(e) => {
+            if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
+          }}
+          onDrop={(e) => {
+            const files = Array.from(e.dataTransfer.files ?? [])
+            if (files.length === 0) return
+            e.preventDefault()
+            addFiles(files)
+          }}
+        >
           <textarea
             ref={inputRef}
             className="qc-input"
             value={text}
             rows={1}
-            placeholder={t('qc.placeholder')}
-            onChange={(e) => setText(e.target.value)}
+            placeholder={target ? t('qc.placeholder') : ''}
+            disabled={targetKnown && !target}
+            onChange={(e) => {
+              setText(e.target.value)
+              if (phase === 'error' || phase === 'sent') setPhase('idle')
+            }}
             onKeyDown={onKeyDown}
             onPaste={onPaste}
             spellCheck={false}
             autoFocus
           />
-          <button className="qc-send" onClick={() => void submit()} disabled={!canSend} aria-label={t('qc.sendAria')}>
-            {sendIcon}
+          <button type="button" className={`qc-send ${phase === 'sending' ? 'busy' : ''}`}
+            onClick={() => void submit()} disabled={!canSend}
+            title={pending.uploading ? t('chat.attach.waiting') : t('qc.sendAria')}
+            aria-label={t('qc.sendAria')}>
+            {phase === 'sending' ? <span className="qc-spin" /> : Icon.send}
           </button>
         </div>
+
+        <PendingChips files={pending.files} notice={pending.notice} onRemove={pending.remove} t={t} />
+
         <div className="qc-foot">
+          <button type="button" className="qc-tool" disabled={!target}
+            title={t('chat.attach.button')} onClick={() => fileInput.current?.click()}>
+            {Icon.paperclip}
+          </button>
+          <button type="button" className="qc-tool" disabled={!target || capturing}
+            title={t('chat.attach.screenHint')} onClick={() => void attachScreen()}>
+            {Icon.monitor}
+          </button>
+          <input ref={fileInput} type="file" multiple accept={ATTACH_ACCEPT} hidden
+            onChange={(e) => {
+              addFiles(Array.from(e.target.files ?? []))
+              e.target.value = ''
+            }} />
           {phase === 'error' ? (
-            <span className="qc-hint qc-err">⚠ {error}</span>
+            <span className="qc-hint qc-err">{error}</span>
           ) : phase === 'sent' ? (
             <span className="qc-hint qc-ok">{t('qc.sent')}</span>
-          ) : phase === 'sending' ? (
-            <span className="qc-hint">{t('qc.sending')}</span>
           ) : (
             <span className="qc-hint">
-              <kbd>Enter</kbd> {t('qc.footSend')} · <kbd>Shift</kbd>+<kbd>Enter</kbd> {t('qc.footNewline')} · <kbd>Esc</kbd> {t('qc.footClose')} · {t('qc.footPaste')}
+              <kbd>Enter</kbd> {t('qc.footSend')}
+              <span className="qc-sep" /><kbd>Shift</kbd><kbd>Enter</kbd> {t('qc.footNewline')}
+              <span className="qc-sep" /><kbd>Esc</kbd> {t('qc.footClose')}
             </span>
           )}
         </div>

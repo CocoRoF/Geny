@@ -178,18 +178,6 @@ export function ChatApp(): ReactNode {
     composer.current?.focus()
   }, [sessionId])
 
-  // ── the quick-chat bar delivers here ────────────────────────────────
-  const sendLive = live.send
-  useEffect(() => {
-    const off = window.connector?.messaging.onQuickSend((payload) => {
-      const text = (typeof payload === 'string' ? payload : payload?.text ?? '').trim()
-      if (text) sendLive(text)
-    })
-    return () => { off?.() }
-    // `live` is a fresh object every render; depending on it would resubscribe
-    // on every keystroke.
-  }, [sendLive])
-
   // ── scrolling ───────────────────────────────────────────────────────
   // Follow the answer, unless the user scrolled up to read something. Yanking
   // someone back to the bottom mid-sentence is worse than a stale view.

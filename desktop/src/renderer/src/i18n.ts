@@ -301,11 +301,14 @@ export const messages: Record<string, Entry> = {
   'overlay.handleTitle': { ko: '드래그: 이동 · 더블클릭: 설정 열기', en: 'Drag: move · Double-click: open settings' },
 
   // ── quick-chat bar ──
-  'qc.placeholder': { ko: '현재 VTuber에게 보낼 메시지…', en: 'Message to send to the current VTuber…' },
+  'qc.placeholder': { ko: '말을 걸어 보세요', en: 'Say something' },
+  'qc.to': { ko: '{name}에게', en: 'To {name}' },
+  'qc.toUnnamed': { ko: 'VTuber에게', en: 'To the VTuber' },
+  'qc.finding': { ko: '보낼 곳을 찾는 중', en: 'Finding the VTuber' },
+  'qc.noTarget': { ko: '아바타에 VTuber가 없습니다. 채팅에서 VTuber를 고르면 여기서 말을 걸 수 있습니다', en: 'The avatar has no VTuber. Pick one in the chat to talk to it from here' },
   'qc.sendAria': { ko: '전송', en: 'Send' },
   'qc.sendFailed': { ko: '전송 실패', en: 'Failed to send' },
-  'qc.sent': { ko: '✓ 전송됨 — VTuber가 답합니다', en: '✓ Sent — the VTuber will reply' },
-  'qc.sending': { ko: '전송 중…', en: 'Sending…' },
+  'qc.sent': { ko: '보냈습니다', en: 'Sent' },
   'qc.footSend': { ko: '전송', en: 'send' },
   'qc.footNewline': { ko: '줄바꿈', en: 'newline' },
 
@@ -385,10 +388,6 @@ export const messages: Record<string, Entry> = {
   'agents.failures': { ko: '실패', en: 'Failures' },
 
   'qc.footClose': { ko: '닫기', en: 'close' },
-  'qc.footPaste': { ko: '이미지 붙여넣기 가능', en: 'paste images' },
-  'qc.tooManyImages': { ko: '이미지는 최대 4장까지 첨부할 수 있어요', en: 'Up to 4 images per message' },
-  'qc.imageTooLarge': { ko: '이미지가 너무 큽니다 (10MB 이하)', en: 'Image too large (max 10 MB)' },
-  'qc.removeImage': { ko: '이미지 제거', en: 'Remove image' },
 
   // ── models tab additions ──
   'models.order': { ko: '응답 순서', en: 'Answering order' },

@@ -48,6 +48,11 @@ export function usePendingFiles(t: T): {
   notice: string | null
   add(list: File[]): void
   remove(id: string): void
+  /** What was uploaded, as message attachments — the composer keeps them. */
+  peek(): OutgoingAttachment[]
+  /** Empty the composer. */
+  clear(): void
+  /** peek, then clear. */
   take(): OutgoingAttachment[]
 } {
   const [files, setFiles] = useState<PendingFile[]>([])
@@ -103,9 +108,8 @@ export function usePendingFiles(t: T): {
     setNotice(null)
   }, [])
 
-  /** What was uploaded, as message attachments; the composer is emptied. */
-  const take = useCallback((): OutgoingAttachment[] => {
-    const out = filesRef.current
+  const peek = useCallback((): OutgoingAttachment[] =>
+    filesRef.current
       .filter((f) => f.uploaded)
       .map((f) => {
         const u = f.uploaded as UploadedFile
@@ -113,15 +117,23 @@ export function usePendingFiles(t: T): {
           kind: u.kind, name: u.name, mime_type: u.mime_type, size: u.size,
           sha256: u.sha256, attachment_id: u.attachment_id, url: u.url,
         }
-      })
+      }), [])
+
+  const clear = useCallback(() => {
     for (const f of filesRef.current) if (f.preview) URL.revokeObjectURL(f.preview)
+    filesRef.current = []
     setFiles([])
     setNotice(null)
-    return out
   }, [])
 
+  const take = useCallback((): OutgoingAttachment[] => {
+    const out = peek()
+    clear()
+    return out
+  }, [peek, clear])
+
   const uploading = files.some((f) => !f.uploaded && !f.error)
-  return { files, uploading, notice, add, remove, take }
+  return { files, uploading, notice, add, remove, peek, clear, take }
 }
 
 /** The chips above the composer. */

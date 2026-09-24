@@ -231,14 +231,9 @@ export interface ConnectorBridge {
     resume(): void
   }
 
-  /** Quick-chat input bar (the 'quickchat' window) → relay to the VTuber chat. */
+  /** Quick-chat bar (the 'quickchat' window). It sends by itself; main only
+   *  shows, sizes and dismisses it. */
   quickChat: {
-    /** Send the typed text (+ pasted images as data URLs) to the current
-     *  VTuber; main closes the bar on ok. */
-    submit(payload: {
-      text: string
-      images?: Array<{ name: string; type: string; dataUrl: string }>
-    }): Promise<{ ok: boolean; error?: string }>
     /** Dismiss the bar (Esc / blur). */
     close(): void
     /** Content height changed (multi-line text / thumbnails) — main grows the
@@ -248,21 +243,6 @@ export interface ConnectorBridge {
     onOpened(cb: () => void): () => void
     /** Fired when main dismisses the bar (blur/submit/Esc) — stop painting. */
     onDismissed(cb: () => void): () => void
-  }
-
-  /** Inbound messaging from the connector → the /connector chat page reuses its
-   *  own send path when a quick-chat message arrives. */
-  messaging: {
-    /** Subscribe to quick-chat relays; returns a disposer. Payload is the
-     *  structured `{ text, images? }` form (legacy bars sent a bare string —
-     *  consumers should accept both). */
-    onQuickSend(
-      cb: (
-        payload:
-          | string
-          | { text: string; images?: Array<{ name: string; type: string; dataUrl: string }> },
-      ) => void,
-    ): () => void
   }
 
   /** GitHub Releases auto-update controls. */
@@ -638,7 +618,6 @@ const api: ConnectorBridge = {
     resume: () => ipcRenderer.send('hotkey:resume'),
   },
   quickChat: {
-    submit: (payload) => ipcRenderer.invoke('quickchat:submit', payload),
     close: () => ipcRenderer.send('quickchat:close'),
     resize: (h) => ipcRenderer.send('quickchat:resize', h),
     onOpened: (cb) => {
@@ -650,18 +629,6 @@ const api: ConnectorBridge = {
       const h = () => cb()
       ipcRenderer.on('quickchat:dismissed', h)
       return () => ipcRenderer.removeListener('quickchat:dismissed', h)
-    },
-  },
-  messaging: {
-    onQuickSend: (cb) => {
-      const h = (
-        _e: unknown,
-        payload:
-          | string
-          | { text: string; images?: Array<{ name: string; type: string; dataUrl: string }> },
-      ) => cb(payload)
-      ipcRenderer.on('connector:quick-send', h)
-      return () => ipcRenderer.removeListener('connector:quick-send', h)
     },
   },
 }
