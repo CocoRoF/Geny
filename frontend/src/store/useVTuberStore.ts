@@ -4,6 +4,7 @@ import { getAudioManager } from '@/lib/audioManager';
 import { consumeSentenceStream } from '@/lib/ttsSentenceStream';
 import { dispatchSpeakChunks } from '@/lib/ttsChunkStream';
 import { SentenceStreamExtractor } from '@/lib/sentenceBoundaryDetector';
+import { voiceSentence } from '@/lib/speechEmotion';
 import type { Live2dModelInfo, AvatarState, VTuberLogEntry } from '@/types';
 
 const MAX_LOGS = 500;
@@ -105,6 +106,8 @@ const _ttsAbortControllers: Map<string, AbortController> = new Map();
 const _liveTurnIndex: Map<string, number> = new Map();
 const _liveAbortControllersByTurn: Map<string, AbortController> = new Map();
 const _liveEmittedByTurn: Map<string, number> = new Map(); // turnId → next seq
+// turnId → the emotion the next sentence inherits (a cue carries until the next).
+const _liveEmotionByTurn: Map<string, string> = new Map();
 // 짧은 문장은 묶어서 내보낸다. TTS 요청 1건당 fixed 오버헤드 (커넥션 풀
 // + GPU 워밍업 + RTF 비효율) 가 크기 때문에, "안녕!" (3자) 같은 미니
 // 클립 여러 개로 GPU/네트워크를 도배하면 오히려 전체 지연이 늘어난다.
@@ -814,6 +817,7 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
     _liveTurnIndex.set(sessionId, nextIdx);
     const newTurn = `${sessionId}:${nextIdx}`;
     _liveEmittedByTurn.set(newTurn, 0);
+    _liveEmotionByTurn.delete(newTurn);
     // **중요**: AudioManager 의 expected seq 를 0 으로 미리 박아둔다.
     // 이거 안 하면 seq=1 응답이 seq=0 보다 빨리 도착했을 때 expected=1
     // 로 잠겨 seq=0 이 영영 재생 안 되는 순서 뒤바뀜 버그 발생.
@@ -839,7 +843,12 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
     const newSentences = _liveExtractor.push(turnId, fullText);
     if (newSentences.length === 0) return;
 
-    for (const sentence of newSentences) {
+    for (const raw of newSentences) {
+      // The sentence in its own voice, with the cues taken out of it.
+      const voiced = voiceSentence(raw, _liveEmotionByTurn.get(turnId) ?? emotion);
+      _liveEmotionByTurn.set(turnId, voiced.carry);
+      const sentence = voiced.text;
+      if (!sentence) continue;
       const nextSeq = _liveEmittedByTurn.get(turnId) ?? 0;
       _liveEmittedByTurn.set(turnId, nextSeq + 1);
 
@@ -864,7 +873,7 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
       // 는 단일-문장이라 항상 0 이므로, `seqOffset` 으로 턴 전역 seq 공간
       // 으로 매핑하여 AudioManager 가 엄격 순서로 재생하도록 한다.
       void dispatchSpeakChunks(
-        { sentences: [sentence], emotion, turn_id: turnId },
+        { sentences: [sentence], emotion: voiced.emotion, turn_id: turnId },
         {
           sessionId,
           seqOffset: nextSeq,
@@ -913,6 +922,7 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
       // live 미발화 → fullText 전체를 한 발에. extractor 버퍼를 명시적으로
       // 비워서 이후 호출의 holding 잔여를 차단.
       _liveExtractor.reset(turnId);
+      _liveEmotionByTurn.delete(turnId);
       const trimmed = (fullText ?? '').trim();
       if (!trimmed) return;
       toSend = [trimmed];
@@ -921,7 +931,11 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
       if (toSend.length === 0) return;
     }
 
-    for (const sentence of toSend) {
+    for (const raw of toSend) {
+      const voiced = voiceSentence(raw, _liveEmotionByTurn.get(turnId) ?? emotion);
+      _liveEmotionByTurn.set(turnId, voiced.carry);
+      const sentence = voiced.text;
+      if (!sentence) continue;
       const nextSeq = _liveEmittedByTurn.get(turnId) ?? 0;
       _liveEmittedByTurn.set(turnId, nextSeq + 1);
       // 턴별 AbortController 재사용 (pushStreamingText 가 만든 것과 동일).
@@ -933,7 +947,7 @@ export const useVTuberStore = create<VTuberState>((set, get) => ({
       set((s) => ({ ttsSpeaking: { ...s.ttsSpeaking, [sessionId]: true } }));
       getAudioManager().noteTurnDispatch(turnId);
       void dispatchSpeakChunks(
-        { sentences: [sentence], emotion, turn_id: turnId },
+        { sentences: [sentence], emotion: voiced.emotion, turn_id: turnId },
         {
           sessionId,
           seqOffset: nextSeq,

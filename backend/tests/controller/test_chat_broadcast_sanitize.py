@@ -16,7 +16,7 @@ handle.
 
 from __future__ import annotations
 
-from service.utils.text_sanitizer import sanitize_for_display
+from service.utils.text_sanitizer import sanitize_for_display, sanitize_for_speech
 
 
 def _apply_stream_chunk(state: dict, chunk: str) -> None:
@@ -25,6 +25,7 @@ def _apply_stream_chunk(state: dict, chunk: str) -> None:
     raw = (state.get("streaming_raw") or "") + (chunk or "")
     state["streaming_raw"] = raw
     state["streaming_text"] = sanitize_for_display(raw)
+    state["streaming_spoken"] = sanitize_for_speech(raw)
 
 
 def test_partial_tag_split_across_chunks_resolves_once_complete() -> None:
@@ -71,3 +72,32 @@ def test_multiple_emotion_tags_stripped_in_order() -> None:
 
     assert state["streaming_text"] == "안녕 반가워"
     assert "[joy]" in state["streaming_raw"]
+
+
+def test_the_voice_stream_is_always_a_prefix_of_what_the_turn_ends_with() -> None:
+    """2026-09-24: a reply with a mood change mid-way was spoken twice.
+
+    The avatar speaks sentences as they complete, then finishes the turn
+    from the message's ``spoken`` text and speaks only what is left. It
+    streamed from ``streaming_text`` (cues stripped) but finished from
+    ``spoken`` (cues kept), so at the first mid-reply cue the finished text
+    stopped starting with what had been said, and the whole reply went out
+    again. The voice now streams from ``streaming_spoken``: at every chunk it
+    must be a prefix of the text the turn ends with.
+    """
+    raw_full = (
+        "[calm:0.3] 어, 타이틀 화면 떴네 — 로고에 캐릭터들 쫙 나와있어. "
+        "[curious:0.4] 오른쪽 아래엔 내 창이 그대로. 이제 뭐 누를 거야?"
+    )
+    final_spoken = sanitize_for_speech(raw_full)
+    state: dict = {}
+    for i in range(0, len(raw_full), 3):
+        _apply_stream_chunk(state, raw_full[i:i + 3])
+        assert final_spoken.startswith(state["streaming_spoken"]), state["streaming_spoken"]
+    assert state["streaming_spoken"] == final_spoken
+    # The reader's stream is not: with the opening cue taken off (the avatar
+    # does that on both sides) it stops lining up at the mid-reply cue —
+    # which is why the voice cannot stream from it.
+    after_opening_cue = final_spoken.split("] ", 1)[1]
+    assert not after_opening_cue.startswith(state["streaming_text"])
+

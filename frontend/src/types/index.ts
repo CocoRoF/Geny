@@ -284,6 +284,9 @@ export interface AgentProgressState {
   status: 'pending' | 'executing' | 'completed' | 'failed' | 'queued';
   thinking_preview: string | null;
   streaming_text: string | null;
+  /** The same stream with its [emotion] cues kept — what the voice speaks
+   *  from, so it lines up with the turn's final ``spoken`` text. */
+  streaming_spoken?: string | null;
   elapsed_ms?: number;
   last_activity_ms?: number;
   last_tool_name?: string;

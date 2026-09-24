@@ -25,7 +25,7 @@ from service.auth.auth_middleware import require_auth
 from service.utils.background import spawn_background
 from service.chat.conversation_store import get_chat_store
 from service.executor import get_agent_session_manager
-from service.utils.text_sanitizer import sanitize_for_display
+from service.utils.text_sanitizer import sanitize_for_display, sanitize_for_speech
 from service.execution.agent_executor import (
     execute_command,
     is_executing,
@@ -164,6 +164,12 @@ class AgentExecutionState:
     status: str = "pending"  # pending | executing | completed | failed | queued
     thinking_preview: Optional[str] = None  # Latest log message (1 line)
     streaming_text: Optional[str] = None  # Sanitized view of streaming_raw — what the UI renders
+    # The same stream as the voice hears it: protocol gone, [emotion] cues
+    # kept. The avatar speaks sentences as they complete; it has to speak
+    # them from the SAME text it later finishes the turn with (``spoken``),
+    # or the finished text no longer starts with what was already said and
+    # the whole reply is spoken a second time.
+    streaming_spoken: Optional[str] = None
     streaming_raw: Optional[str] = None  # Raw accumulator: next token may complete a partial tag, so strip only after concatenation
     started_at: Optional[float] = None
     last_activity_at: Optional[float] = None  # monotonic timestamp of last log entry
@@ -311,6 +317,7 @@ def _build_agent_progress_data(astate: AgentExecutionState) -> dict:
         "status": astate.status,
         "thinking_preview": astate.thinking_preview,
         "streaming_text": astate.streaming_text,
+        "streaming_spoken": astate.streaming_spoken,
     }
     if astate.started_at:
         data["elapsed_ms"] = int((now - astate.started_at) * 1000)
@@ -888,6 +895,7 @@ async def _run_turn(
                                 raw = (agent_state.streaming_raw or "") + (entry.message or "")
                                 agent_state.streaming_raw = raw
                                 agent_state.streaming_text = sanitize_for_display(raw)
+                                agent_state.streaming_spoken = sanitize_for_speech(raw)
                                 agent_state.last_activity_at = time.monotonic()
                                 had_new = True
                                 continue

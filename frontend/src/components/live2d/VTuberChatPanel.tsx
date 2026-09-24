@@ -172,6 +172,15 @@ export default function VTuberChatPanel({
   // can't make the same message trigger TTS twice. Each message id can
   // only enter the TTS pipeline once for the lifetime of this panel.
   const ttsHandledMsgIdsRef = useRef<Set<string>>(new Set());
+  // Which text this turn's live speech came from: the stream with its
+  // emotion cues (``streaming_spoken``), the reader's stream without them
+  // (an older server), or nothing yet. The end of the turn has to continue
+  // from the SAME text — finishing a cue-less live stream with the cued
+  // ``spoken`` reply made the finished text stop matching what had been
+  // said at its first mid-reply cue, and the whole reply was spoken again.
+  const liveSourceRef = useRef<'spoken' | 'display' | null>(null);
+  // User messages already seen, so each opens exactly one voice turn.
+  const turnOpenedForRef = useRef<Set<string>>(new Set());
 
   // TTS store
   const ttsEnabled = useVTuberStore((s) => s.ttsEnabled);
@@ -287,6 +296,18 @@ export default function VTuberChatPanel({
                 return [...prev, displayMsg];
               });
 
+              // A message someone said opens this reply's voice turn —
+              // whoever sent it. Only this window's own send paths (panel,
+              // push-to-talk, hands-free) used to open one; a message from
+              // the desktop chat or the quick chat reused the previous
+              // turn's bookkeeping. Opening a second, empty turn after a
+              // local send is harmless: nothing has been spoken in it yet.
+              if (msg.type === 'user' && !turnOpenedForRef.current.has(msg.id)) {
+                turnOpenedForRef.current.add(msg.id);
+                useVTuberStore.getState().beginTTSTurn(sessionId);
+                liveSourceRef.current = null;
+              }
+
               // Drop every memory subsystem event from this turn into
               // the VTuber LOGS panel so the operator can watch
               // MemoryProvider activity (note writes, vector indexing,
@@ -381,10 +402,20 @@ export default function VTuberChatPanel({
                   // The emotion comes from the CUED text: ``content`` is the
                   // reader's copy and has none, which is what left every
                   // reply spoken in the neutral voice.
-                  const [emotion, cleanText] = parseEmotion(msg.spoken || displayMsg.content);
+                  const [emotion, spokenText] = parseEmotion(msg.spoken || displayMsg.content);
+                  // Finish from the text the live speech came from (see
+                  // liveSourceRef): cue-less live → the reader's text, voiced
+                  // in the reply's opening emotion; otherwise the cued text.
+                  const live = liveSourceRef.current;
+                  const cleanText = live === 'display' ? parseEmotion(displayMsg.content)[1] : spokenText;
+                  liveSourceRef.current = null;
                   if (cleanText.trim()) {
                     const store = useVTuberStore.getState();
                     if (store.ttsEnabled) {
+                      // Nothing was spoken live (a one-shot reply, or an
+                      // autonomous remark between turns): a fresh turn, so
+                      // the whole reply is spoken once, in its own voice.
+                      if (live === null) store.beginTTSTurn(sessionId);
                       if (isTabVisibleRef.current) {
                         // beginTTSTurn 이 handleSend 시점에 호출되어 새 턴이
                         // 이미 열렸다. live 가 한 클립이라도 뿌렸으면 finalize
@@ -440,8 +471,12 @@ export default function VTuberChatPanel({
                   // 무너지고 finalizeTTSTurn 이 turn 에 클립이 없는 줄 알고
                   // fullText 를 한번 더 합성 → 중복 발화 발생.
                   if (ttsLive && agent.session_id === sessionId) {
-                    const [liveEmotion, liveClean] = parseEmotion(agent.streaming_text);
+                    // The cued stream when the server sends it — the same
+                    // text the turn will finish with.
+                    const source = agent.streaming_spoken ? 'spoken' : 'display';
+                    const [liveEmotion, liveClean] = parseEmotion(agent.streaming_spoken || agent.streaming_text);
                     if (liveClean.trim()) {
+                      liveSourceRef.current = source;
                       store.pushStreamingText(sessionId, liveClean, liveEmotion);
                     }
                   }
