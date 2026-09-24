@@ -4,7 +4,7 @@ import { getAudioManager } from '@/lib/audioManager';
 import { consumeSentenceStream } from '@/lib/ttsSentenceStream';
 import { dispatchSpeakChunks } from '@/lib/ttsChunkStream';
 import { SentenceStreamExtractor } from '@/lib/sentenceBoundaryDetector';
-import { voiceSentence } from '@/lib/speechEmotion';
+import { opensWithCue, voiceSentence } from '@/lib/speechEmotion';
 import type { Live2dModelInfo, AvatarState, VTuberLogEntry } from '@/types';
 
 const MAX_LOGS = 500;
@@ -115,7 +115,8 @@ const _liveEmotionByTurn: Map<string, string> = new Map();
 // 20자 임계값은 한국어 1-2 어절 ≈ 한 호흡 분량. 이 정도면 fixed 오버
 // 헤드 대비 합성 시간 비율이 충분히 합리적.
 const LIVE_TTS_MIN_CHARS = 20;
-const _liveExtractor = new SentenceStreamExtractor({ minChars: LIVE_TTS_MIN_CHARS });
+// A mood change starts its own clip even when the sentence before it is short.
+const _liveExtractor = new SentenceStreamExtractor({ minChars: LIVE_TTS_MIN_CHARS, breakBefore: opensWithCue });
 
 function _currentTurnId(sessionId: string): string {
   const idx = _liveTurnIndex.get(sessionId) ?? 0;

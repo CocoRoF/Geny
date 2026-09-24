@@ -41,3 +41,10 @@ export function voiceSentence(sentence: string, carry: string): VoicedSentence {
   const text = sentence.replace(CUE, '').replace(/[^\S\n]{2,}/g, ' ').trim();
   return { text, emotion, carry: next };
 }
+
+/** Whether a sentence opens with a known cue — a mood change, which must not
+ *  be merged into the previous sentence's clip (one clip, one voice). */
+export function opensWithCue(sentence: string): boolean {
+  const leading = LEADING_CUE.exec(sentence)?.[1]?.toLowerCase();
+  return !!leading && KNOWN.has(leading);
+}

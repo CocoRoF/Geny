@@ -141,6 +141,12 @@ export interface ExtractorOptions {
   minChars?: number;
   /** 두 문장을 이어붙일 때 사이에 넣는 구분자 (default ' ') */
   joiner?: string;
+  /**
+   * 이 문장 앞에서는 병합하지 않는다 — 보류 중이던 짧은 문장을 먼저 내보낸다.
+   * 감정 cue 로 시작하는 문장이 그 예: 짧은 문장과 한 클립으로 묶이면 클립
+   * 하나는 한 감정으로만 합성되므로 분위기 전환이 사라진다.
+   */
+  breakBefore?: (sentence: string) => boolean;
 }
 
 export class SentenceStreamExtractor {
@@ -148,10 +154,12 @@ export class SentenceStreamExtractor {
   private _holding = new Map<string, string>();
   private readonly _minChars: number;
   private readonly _joiner: string;
+  private readonly _breakBefore?: (sentence: string) => boolean;
 
   constructor(opts: ExtractorOptions = {}) {
     this._minChars = Math.max(0, opts.minChars ?? 0);
     this._joiner = opts.joiner ?? ' ';
+    this._breakBefore = opts.breakBefore;
   }
 
   /**
@@ -166,6 +174,10 @@ export class SentenceStreamExtractor {
     const out: string[] = [];
     let buf = this._holding.get(key) ?? '';
     for (const s of sentences) {
+      if (buf && this._breakBefore?.(s)) {
+        out.push(buf);
+        buf = '';
+      }
       buf = buf ? `${buf}${this._joiner}${s}` : s;
       if (buf.length >= this._minChars) {
         out.push(buf);

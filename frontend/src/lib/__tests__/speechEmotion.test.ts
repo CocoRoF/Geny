@@ -14,7 +14,7 @@ import { describe, it, expect } from 'vitest';
 
 import { parseEmotion } from '../../components/chat/chat-utils';
 import { SentenceStreamExtractor } from '../sentenceBoundaryDetector';
-import { voiceSentence } from '../speechEmotion';
+import { opensWithCue, voiceSentence } from '../speechEmotion';
 
 // A real reply (room ed3efe84, message 9248).
 const SPOKEN =
@@ -24,7 +24,7 @@ const SPOKEN =
 
 /** Stream `text` in small steps, then finish the turn, as the panel does. */
 function speakStreamed(text: string): { text: string; emotion: string }[] {
-  const ex = new SentenceStreamExtractor({ minChars: 20 });
+  const ex = new SentenceStreamExtractor({ minChars: 20, breakBefore: opensWithCue });
   const out: { text: string; emotion: string }[] = [];
   let carry: string | null = null;
   const say = (sentences: string[], emotion: string) => {
@@ -85,3 +85,23 @@ describe('a streamed reply with a mood change', () => {
     expect(said.find((s) => s.text.startsWith('오른쪽'))?.emotion).toBe('curious');
   });
 });
+
+describe('a short sentence before a mood change', () => {
+  // Room ed3efe84, message 9283: the first sentence is under the 20-char
+  // clip minimum, so it used to be merged with the next — and the one clip
+  // was voiced calm, losing the excitement.
+  const said = speakStreamed('[calm:0.3] 응, 목소리 잘 들려. [excitement:0.6] 이번엔 끊기는 것도 없고 딱 깔끔하네!');
+
+  it('is its own clip, so each keeps its voice', () => {
+    expect(said).toEqual([
+      { text: '응, 목소리 잘 들려.', emotion: 'calm' },
+      { text: '이번엔 끊기는 것도 없고 딱 깔끔하네!', emotion: 'excitement' },
+    ]);
+  });
+
+  it('short sentences without a mood change are still merged', () => {
+    const merged = speakStreamed('[calm] 응. 그래. 좋아. 알겠어.');
+    expect(merged).toEqual([{ text: '응. 그래. 좋아. 알겠어.', emotion: 'calm' }]);
+  });
+});
+
