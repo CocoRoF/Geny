@@ -548,6 +548,17 @@ Detailed flow → [`docs/error_codes.md`](docs/error_codes.md).
 
 ---
 
+## Articles
+
+How Geny came together — the harness, voice (TTS) inference and memory — from the author's blog ([hrletsgo.me](https://hrletsgo.me/en)).
+
+| Article | Korean |
+|---|---|
+| [Building Geny-Harness: A Personal AI Assistant with Memory](https://hrletsgo.me/en/documents/building-geny-harness-ai-assistant-memory-agent) | [한국어](https://hrletsgo.me/documents/geny-harness-engineering-build-your-own-assistant) |
+| [TTS Inference Deep Dive — Part 1: Adopting OmniVoice](https://hrletsgo.me/en/documents/tts-inference-omnivoice-integration) | [한국어](https://hrletsgo.me/documents/tts-inference-1-omnivoice-intro) |
+| [Dissecting Streaming TTS Inference Bottlenecks](https://hrletsgo.me/en/documents/streaming-tts-inference-bottleneck-analysis) | [한국어](https://hrletsgo.me/documents/tts-inference-2-streaming-bottleneck) |
+| [Harness Engineering: How to Give AI Agents Real Memory](https://hrletsgo.me/en/documents/ai-agent-memory-architecture-harness-engineering) | [한국어](https://hrletsgo.me/documents/harness-engineering-memory-architecture) |
+
 ## Related projects
 
 Part of **the Geny ecosystem** — see [The Geny ecosystem](#the-geny-ecosystem) above:
