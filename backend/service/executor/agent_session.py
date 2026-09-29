@@ -3824,6 +3824,19 @@ class AgentSession:
             )
             return False
 
+    def turn_cost_so_far(self) -> float:
+        """What the running (or last) turn has cost, from its own state.
+
+        A stopped turn returns no result, so its cost used to go unrecorded —
+        every model call it had already made included. The executor stops the
+        run before the stop reaches the caller, so the figure is final by then.
+        """
+        state = getattr(self, "_running_turn_state", None)
+        try:
+            return float(getattr(state, "total_cost_usd", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+
     async def _pipeline_events_scoped(
         self, input_text: str, state: Any, hydrated: bool,
         *, attachments: Optional[List[Dict[str, Any]]] = None,
@@ -3999,6 +4012,10 @@ class AgentSession:
                 }
             else:
                 pipeline_input = input_text
+            # The turn's state, for a stop: the consumer is cancelled and
+            # never sees the run's last events, so what the turn cost so far
+            # is read from here (``turn_cost_so_far``).
+            self._running_turn_state = state
             async for event in self._pipeline.run_stream(pipeline_input, state):
                 yield event
         finally:

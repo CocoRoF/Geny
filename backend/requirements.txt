@@ -110,7 +110,15 @@ ddgs==9.11.4
 # and the model. A failed or stopped turn is now recorded; "[COMPLETE]" next
 # to a tool call no longer ends a turn unread; Stage 19 no longer rewrites
 # summary.md (the rolling digest) on every turn.
-geny-executor[qdrant,ssh]>=2.75.0,<3.0.0
+#
+# geny-executor 2.76.0 — a long turn remembers its own request.
+#
+# A turn long enough to compact lost its request and first tool calls from
+# memory, and the "summary" was a fixed sentence because this backend sets
+# no per-stage compaction model. The recap is now written by the session's
+# model from the tool work too, the request is kept verbatim, the kept tail
+# is sized by tokens, and closing a session stops its running turn.
+geny-executor[qdrant,ssh]>=2.76.0,<3.0.0
 geny-memory-adaptor>=1.11.1
 contextifier[pdf]>=0.5.0
 # Knowledge connectors — cron schedules + DB sources (postgres/mysql/sqlite)

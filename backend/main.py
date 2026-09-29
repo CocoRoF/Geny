@@ -346,6 +346,17 @@ async def lifespan(app: FastAPI):
         logger.info("   - SessionStore: JSON files (database unavailable)")
         logger.info("   - ChatStore: JSON files (database unavailable)")
 
+    # Room turns the last process started and never finished. Nothing is
+    # running yet, so every one still open died with it.
+    try:
+        from service.chat.open_turns import close_dead_turns
+
+        closed = close_dead_turns(chat_store, lambda _room: False)
+        if closed:
+            logger.info(f"   - ChatStore: closed {closed} turn(s) cut off by the last shutdown")
+    except Exception:  # noqa: BLE001 — never block startup on bookkeeping
+        logger.warning("   - ChatStore: could not close cut-off turns", exc_info=True)
+
     # ── Step 4: Connect Logging & Memory to DB ─────────────────────────
     print_step_banner("LOGGING", "SESSION LOGGING & MEMORY", "Connecting logging and memory to database...")
     from service.logging.session_logger import set_log_database

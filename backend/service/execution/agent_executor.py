@@ -1281,11 +1281,34 @@ async def _execute_core(
     except asyncio.CancelledError:
         duration_ms = int((time.time() - start_time) * 1000)
         logger.warning("Execution cancelled for %s", session_id)
+        # A stopped turn still paid for every model call it made before the
+        # stop; it used to be logged with no response and no cost at all.
+        cancelled_cost: Optional[float] = None
+        try:
+            probe = getattr(agent, "turn_cost_so_far", None)
+            cancelled_cost = float(probe()) if callable(probe) else None
+        except Exception:  # noqa: BLE001 — accounting must not break the stop
+            cancelled_cost = None
+        if session_logger:
+            session_logger.log_response(
+                success=False,
+                error="Execution cancelled",
+                duration_ms=duration_ms,
+                cost_usd=cancelled_cost,
+                env_id=log_env_id,
+                role=log_role,
+            )
+        if cancelled_cost and cancelled_cost > 0:
+            try:
+                _get_session_store().increment_cost(session_id, cancelled_cost)
+            except Exception:
+                logger.debug("Cost persistence failed for %s", session_id, exc_info=True)
         result = ExecutionResult(
             success=False,
             session_id=session_id,
             error="Execution cancelled",
             duration_ms=duration_ms,
+            cost_usd=cancelled_cost,
         )
         holder["error"] = "Execution cancelled"
         holder["result"] = result.to_dict()

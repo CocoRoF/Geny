@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from service.auth.auth_middleware import require_auth
 from service.utils.background import spawn_background
+from service.chat import open_turns
 from service.chat.conversation_store import get_chat_store
 from service.executor import get_agent_session_manager
 from service.utils.text_sanitizer import sanitize_for_display, sanitize_for_speech
@@ -220,6 +221,11 @@ BroadcastState = TurnState
 
 # room_id -> the turn running in it
 _active_turns: Dict[str, TurnState] = {}
+
+
+def _turn_running(room_id: str) -> bool:
+    running = _active_turns.get(room_id)
+    return running is not None and not running.finished
 _active_broadcasts = _active_turns  # ws/chat_stream.py still says this
 # room_id -> asyncio.Event signalling "new message was saved"
 _room_new_msg_events: Dict[str, asyncio.Event] = {}
@@ -554,6 +560,10 @@ async def get_room_messages(
     if not room:
         raise HTTPException(status_code=404, detail=f"Room not found: {room_id}")
 
+    # A turn this room started that is no longer running, and never said how
+    # it ended, died with the process — close it off before showing history.
+    open_turns.close_dead_turns(store, _turn_running, room_id)
+
     # Fetch one extra to detect whether more messages exist
     fetch_limit = (limit + 1) if limit > 0 else 0
     raw_messages = store.get_messages(room_id, limit=fetch_limit, before=before or "")
@@ -733,6 +743,9 @@ async def send_to_room(
         },
     )
     _active_turns[room_id] = state
+    # On disk too: if the process goes away mid-turn, the next start closes
+    # the question off instead of leaving it looking unanswered-but-busy.
+    open_turns.open_turn(room_id, turn_id, user_msg)
 
     # Say so before the work starts, so a client that just connected sees the
     # agent as busy rather than as silent.
@@ -1181,7 +1194,10 @@ async def _run_turn(
                 except asyncio.CancelledError:
                     pass
 
-    await _invoke_one(session_id)
+    try:
+        await _invoke_one(session_id)
+    finally:
+        open_turns.close_turn(room_id, state.turn_id)
 
     # No summary line. "1/1 sessions responded (7.1s)" was a scoreboard for a
     # fan-out that no longer exists, and it landed in the conversation after

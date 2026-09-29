@@ -21,7 +21,8 @@ import logging
 from typing import Any, Dict, Optional
 
 from geny_executor.core.state import PipelineState
-from geny_executor.memory.strategy import STM_RECORDED_KEY, ProviderDrivenStrategy
+from geny_executor.core.compaction import unrecorded_messages
+from geny_executor.memory.strategy import ProviderDrivenStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +63,13 @@ class GenyDedupeStrategy(ProviderDrivenStrategy):
         pending = state.metadata.get(_PENDING_KEY) or {}
         if not pending:
             return
-        # The executor's own record watermark (one key since 2.74.1): the
-        # un-recorded tail is exactly what the parent is about to record,
-        # and it is the key compaction translates. Geny used to keep a
-        # second cursor here, which a compaction left pointing past the end
-        # of the shortened history — nothing got stamped after it.
-        recorded_count = int(state.metadata.get(STM_RECORDED_KEY, 0) or 0)
-        new_messages = state.messages[recorded_count:]
+        # Exactly what the parent is about to record: the messages a
+        # compaction removed before they were recorded (2.76.0 — the turn's
+        # own request, on a turn long enough to compact), then the tail past
+        # the executor's watermark. Geny used to keep a second cursor here,
+        # which a compaction left pointing past the end of the shortened
+        # history — nothing got stamped after it.
+        new_messages = unrecorded_messages(state)
 
         applied = {"user": False, "assistant": False}
         for msg in new_messages:

@@ -31,6 +31,7 @@ from typing import Any, Optional
 
 from geny_executor.core.state import PipelineState
 from geny_executor.stages.s02_context.artifact.default.compactors import (
+    SUMMARY_PREFIX,
     LLMSummaryCompactor,
 )
 
@@ -64,11 +65,15 @@ class PersistingLLMSummaryCompactor(LLMSummaryCompactor):
         return "persisting_llm_summary"
 
     async def compact(self, state: PipelineState) -> None:
-        old_count = len(state.messages)
+        before = list(state.messages)
+        old_count = len(before)
         await super().compact(state)
         new_count = len(state.messages)
-        # Compaction is a no-op when history is short — bail early.
-        if new_count >= old_count:
+        # Compaction is a no-op when history is short — bail early. Compared
+        # by the head message, not the length: the compacted history also
+        # carries the request being worked on, so a small compaction can
+        # come out no shorter than it went in.
+        if not state.messages or (before and state.messages[0] is before[0]):
             return
 
         if self._memory_manager is None:
@@ -89,7 +94,11 @@ class PersistingLLMSummaryCompactor(LLMSummaryCompactor):
                     for b in summary_text
                     if isinstance(b, dict) and b.get("type") == "text"
                 )
-            replaced = old_count - new_count + 2  # +2 = the summary pair just inserted
+            if isinstance(summary_text, str) and summary_text.startswith(SUMMARY_PREFIX):
+                summary_text = summary_text[len(SUMMARY_PREFIX):]
+            # The messages that are gone: everything but what was kept.
+            kept = {id(m) for m in state.messages}
+            replaced = sum(1 for m in before if id(m) not in kept) or max(0, old_count - new_count)
             # ``record_compaction`` is a SYNC chain (CompactionArchiver)
             # that reaches ``run_coro_sync`` for its vault note write.
             # ``compact`` runs ON the main event loop, so calling it inline
