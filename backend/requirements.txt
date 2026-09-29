@@ -118,7 +118,15 @@ ddgs==9.11.4
 # no per-stage compaction model. The recap is now written by the session's
 # model from the tool work too, the request is kept verbatim, the kept tail
 # is sized by tokens, and closing a session stops its running turn.
-geny-executor[qdrant,ssh]>=2.76.0,<3.0.0
+#
+# geny-executor 2.77.0 — the tool loop's safeguards.
+#
+# Calls run in the order written; plain-meaning inputs are fixed instead of
+# rejected; a refused call is not asked again; Write will not replace a file
+# the agent has not seen (this backend carries the ledger across turns);
+# MCP calls and stalled model streams time out; a turn past 2M/5M input
+# tokens or at its step limit reports instead of stopping mid-work.
+geny-executor[qdrant,ssh]>=2.77.0,<3.0.0
 geny-memory-adaptor>=1.11.1
 contextifier[pdf]>=0.5.0
 # Knowledge connectors — cron schedules + DB sources (postgres/mysql/sqlite)

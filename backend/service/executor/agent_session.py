@@ -3872,6 +3872,21 @@ class AgentSession:
             )
             return False
 
+    #: ``state.shared`` keys that belong to the conversation, not the turn.
+    #: Each turn starts from a fresh state, so without carrying them the
+    #: agent "had never read" the file it read one message ago, and Write
+    #: refused to replace it (executor 2.77.0's read-before-overwrite).
+    _SESSION_SHARED_KEYS = ("executor.file_witnessed",)
+
+    def _carry_session_shared(self, state: Any) -> None:
+        previous = getattr(self, "_running_turn_state", None)
+        if previous is None or previous is state:
+            return
+        for key in self._SESSION_SHARED_KEYS:
+            value = getattr(previous, "shared", {}).get(key)
+            if value is not None and key not in state.shared:
+                state.shared[key] = list(value) if isinstance(value, list) else value
+
     def turn_cost_so_far(self) -> float:
         """What the running (or last) turn has cost, from its own state.
 
@@ -4381,6 +4396,7 @@ class AgentSession:
         # resolved metadata for at least one role.
         if pending_metadata:
             _state.metadata["_pending_message_metadata"] = pending_metadata
+        self._carry_session_shared(_state)
 
         # Creature state hydrate (PR-X3-5). Skipped when no state_provider
         # is wired — classic session mode. A failed hydrate leaves
@@ -4466,14 +4482,22 @@ class AgentSession:
                     if event_data.get("is_error"):
                         name = event_data.get("name", "unknown")
                         duration_ms = event_data.get("duration_ms", 0)
+                        # Why it failed (executor 2.77.0 carries it) — the
+                        # log used to say only that it had.
+                        reason = str(event_data.get("error") or "").strip()
+                        first = reason.splitlines()[0][:200] if reason else ""
                         session_logger.log(
                             level=LogLevel.TOOL_RESULT,
-                            message=f"Tool {name} failed ({duration_ms}ms)",
+                            message=(
+                                f"Tool {name} failed ({duration_ms}ms): {first}"
+                                if first else f"Tool {name} failed ({duration_ms}ms)"
+                            ),
                             metadata={
                                 "tool_name": name,
                                 "tool_id": event_data.get("tool_use_id"),
                                 "is_error": True,
                                 "duration_ms": duration_ms,
+                                "result_preview": reason[:1000] or None,
                             },
                         )
                     # PR-E.4.1 — append complete events too so the panel
@@ -4975,6 +4999,7 @@ class AgentSession:
         # Cycle 20260501_1 C — stamp the pending metadata for s18.
         if pending_metadata:
             _state.metadata["_pending_message_metadata"] = pending_metadata
+        self._carry_session_shared(_state)
 
         # Creature state hydrate (PR-X3-5, mirrors _invoke_pipeline).
         _state_registry = self._build_state_registry()
