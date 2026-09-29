@@ -36,7 +36,7 @@ def test_defaults_when_section_absent(stub_section) -> None:
     stub_section["value"] = {}
     out = tuning.load_memory_tuning(is_vtuber=False)
     assert out["max_inject_chars"] == 10000
-    assert out["recent_turns"] == 6
+    assert out["recent_turns"] == 3
     assert out["enable_vector_search"] is True
     assert out["enable_reflection"] is True
     assert out["pin_budget_ratio"] == 0.30
@@ -119,11 +119,11 @@ def test_malformed_max_inject_falls_back(stub_section) -> None:
 
 def test_malformed_recent_turns_falls_back(stub_section) -> None:
     stub_section["value"] = {"tuning": {"recent_turns": "many"}}
-    assert tuning.load_memory_tuning(is_vtuber=False)["recent_turns"] == 6
+    assert tuning.load_memory_tuning(is_vtuber=False)["recent_turns"] == 3
 
 
 def test_non_dict_tuning_falls_back(stub_section) -> None:
     stub_section["value"] = {"tuning": "garbage"}
     out = tuning.load_memory_tuning(is_vtuber=False)
-    assert out["recent_turns"] == 6
+    assert out["recent_turns"] == 3
     assert out["max_inject_chars"] == 10000

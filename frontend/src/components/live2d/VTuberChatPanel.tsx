@@ -392,7 +392,10 @@ export default function VTuberChatPanel({
                 const somethingElseIsSpeaking =
                   turnActiveRef.current ||
                   !!useVTuberStore.getState().ttsSpeaking[sessionId];
-                if (isAutoTriggered && somethingElseIsSpeaking) {
+                if (msg.source === 'interrupted') {
+                  // What was said before a stop or a failure — kept in the
+                  // conversation, not read aloud: the user just stopped it.
+                } else if (isAutoTriggered && somethingElseIsSpeaking) {
                   // a user turn is running or audio is playing — don't talk over it
                 } else if (ttsHandledMsgIdsRef.current.has(msg.id)) {
                   // TTS-fix: dedup against double-fired handlers

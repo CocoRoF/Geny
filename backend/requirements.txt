@@ -101,7 +101,16 @@ ddgs==9.11.4
 # keeps making them ends.
 #
 # Must match the version pin in backend/pyproject.toml.
-geny-executor[qdrant,ssh]>=2.74.2,<3.0.0
+# geny-executor 2.75.0 — the past as messages only; a stop stops.
+#
+# The previous turns reached the model twice: replayed as messages, and as
+# "[recent_message] stm-N: [assistant] [{'type': 'tool_use', …}]" text from
+# a second retrieval pass this backend switched on by attaching the provider
+# to Stage 2. A stop only unwound the stream — the run kept calling tools
+# and the model. A failed or stopped turn is now recorded; "[COMPLETE]" next
+# to a tool call no longer ends a turn unread; Stage 19 no longer rewrites
+# summary.md (the rolling digest) on every turn.
+geny-executor[qdrant,ssh]>=2.75.0,<3.0.0
 geny-memory-adaptor>=1.11.1
 contextifier[pdf]>=0.5.0
 # Knowledge connectors — cron schedules + DB sources (postgres/mysql/sqlite)

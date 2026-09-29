@@ -89,7 +89,9 @@ def load_memory_tuning(*, is_vtuber: bool) -> Dict[str, Any]:
         "recent_turns": (
             int(tuning["recent_turns"])
             if isinstance(tuning.get("recent_turns"), int)
-            else 6
+            # Logical turns since executor 2.75 (it counted rows), and only
+            # the text fallback for a turn the replay does not cover.
+            else 3
         ),
         "enable_vector_search": (
             bool(tuning["enable_vector_search"])

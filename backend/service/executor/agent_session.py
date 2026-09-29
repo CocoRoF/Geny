@@ -2123,7 +2123,9 @@ class AgentSession:
         except Exception:
             _tuning = {
                 "max_inject_chars": 8000 if is_vtuber else 10000,
-                "recent_turns": 6,
+                # Logical turns since executor 2.75 (it was rows), and only
+                # the fallback when the turn replay is not in play.
+                "recent_turns": 3,
                 "enable_vector_search": True,
                 "enable_reflection": True,
                 # Memory v2 PR 10 — slim retriever (recent + summary +

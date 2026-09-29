@@ -1059,14 +1059,34 @@ async def _run_turn(
                 )
                 _notify_room(room_id)
             elif not result.success:
-                # Execution failed (timeout, error, etc.)
+                # Execution failed (timeout, error, etc.) or was stopped.
                 logger.warning(
                     "[Broadcast:%s] session=%s FAILED: %s",
                     room_id[:8], session_id[:8], result.error,
                 )
+                stopped = (result.error or "") == "Execution cancelled"
+                # What the agent had said before it stopped is kept, marked
+                # as unfinished — it used to vanish, leaving only an error
+                # line (and, for a stop, the English "Execution cancelled").
+                partial = (
+                    (agent_state.streaming_text or "").strip() if agent_state else ""
+                )
+                if partial:
+                    store.add_message(room_id, {
+                        "type": "agent",
+                        "content": partial,
+                        "session_id": session_id,
+                        "session_name": sname,
+                        "role": role,
+                        "duration_ms": result.duration_ms,
+                        "source": "interrupted",
+                    })
                 store.add_message(room_id, {
                     "type": "system",
-                    "content": result.error or "실행에 실패했습니다",
+                    "content": (
+                        "응답을 멈췄습니다" if stopped
+                        else (result.error or "실행에 실패했습니다")
+                    ),
                 })
                 if agent_state:
                     agent_state.status = "failed"
