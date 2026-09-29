@@ -380,6 +380,54 @@ def _bridge_cli_stream_event(
         )
 
 
+#: Compaction events the session log shows. A compaction rewrites what the
+#: model sees mid-turn; without these it happened silently, and a turn that
+#: "forgot" something had nothing in its log to say why.
+_COMPACTION_EVENTS = frozenset({
+    "context.compacted",
+    "context.compaction_scheduled",
+    "context.compaction_failed",
+    "memory.compaction.summarized",
+    "memory.compaction.llm_failed",
+})
+
+
+def _bridge_compaction_event(
+    session_logger: Any,
+    event_type: str,
+    event_data: Dict[str, Any],
+    iteration: int,
+) -> None:
+    """One compaction event as a stage line in the session log. Best-effort."""
+    try:
+        d = event_data or {}
+        if event_type == "context.compacted":
+            message = (
+                f"context compacted ({d.get('trigger', '?')}, {d.get('strategy', '?')}): "
+                f"{d.get('messages_before', '?')} → {d.get('messages_after', '?')} messages, "
+                f"~{d.get('saved_tokens_estimate', 0)} tokens saved"
+            )
+        elif event_type == "context.compaction_scheduled":
+            message = f"compaction scheduled in the background ({d.get('snapshot_messages', '?')} messages)"
+        elif event_type == "memory.compaction.summarized":
+            message = (
+                f"compaction summary written by {d.get('model', '?')}: "
+                f"{d.get('old_count', '?')} messages → {d.get('summary_chars', 0)} chars"
+            )
+        else:
+            message = f"{event_type}: {d.get('error', 'failed')}"
+        session_logger.log_stage_event(
+            event_type="compaction",
+            message=message,
+            stage_name="context",
+            stage_order=STAGE_ORDER.get("context"),
+            iteration=iteration or 0,
+            data={"event": event_type, **dict(d)},
+        )
+    except Exception:  # noqa: BLE001 — observability must never break execution
+        logger.debug("compaction event bridge failed for %s", event_type, exc_info=True)
+
+
 _DEFAULT_WORKER_PROMPT = """\
 You are an autonomous AI agent. Complete the user's task.
 
@@ -4674,6 +4722,12 @@ class AgentSession:
                         data=dict(event_data),
                     )
 
+                elif event_type in _COMPACTION_EVENTS:
+                    _bridge_compaction_event(
+                        session_logger, event_type, event_data,
+                        event.iteration if hasattr(event, "iteration") else 0,
+                    )
+
                 # Structured provider-error envelopes reach the session
                 # log as a sentence the user can act on. Tool events are
                 # NOT bridged — Stage 10 logs every dispatch itself.
@@ -5059,6 +5113,12 @@ class AgentSession:
                                 )
                             except Exception:  # noqa: BLE001
                                 pass
+
+                elif event_type in _COMPACTION_EVENTS:
+                    _bridge_compaction_event(
+                        session_logger, event_type, event_data,
+                        event.iteration if hasattr(event, "iteration") else 0,
+                    )
 
                 # Mirror of the _invoke_pipeline bridge: structured
                 # provider-error envelopes to the SessionLogger.
