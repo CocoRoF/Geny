@@ -47,7 +47,10 @@ of anything stated there. The **Vault Map** summarises what's stored.
 
 When intent is ambiguous and the answer may already be remembered, consult memory
 before asking something the user may have already answered — and pin facts worth
-always knowing. Do this silently; don't announce the lookup."""
+always knowing. Do this silently; don't announce the lookup.
+
+Your earlier turns in this conversation are in the message history: treat them as
+history, not as facts to re-verify, and act on the current request."""
 
 
 class HostMemoryToolsBlock(PromptBlock):

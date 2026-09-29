@@ -159,6 +159,54 @@ class MemoryWriteTool(BaseTool):
 # Memory Read Tool
 # ============================================================================
 
+#: Suggestions on a miss, and how many filenames are compared.
+_MISS_SUGGESTIONS = 5
+_MISS_SCAN_LIMIT = 500
+
+
+def _note_names(notes) -> list:
+    return [str(n.get("filename")) for n in (notes or [])[:_MISS_SCAN_LIMIT] if n.get("filename")]
+
+
+def _read_miss_payload(filename: str, names: list) -> str:
+    """"Not found" with the real filenames closest to the one asked for.
+
+    A bare "Note not found" left the model guessing the next name — it
+    invents filenames from titles, and each wrong guess is another round
+    trip. The vault assigns the names; show the nearest ones.
+    """
+    import difflib
+
+    payload = {"error": f"Note not found: {filename}"}
+    if not names:
+        payload["hint"] = "This memory has no notes yet. Write one with memory_write before reading."
+        return json.dumps(payload, ensure_ascii=False)
+    base = filename.rsplit("/", 1)[-1]
+    by_base = {n.rsplit("/", 1)[-1]: n for n in names}
+    close = difflib.get_close_matches(filename, names, n=_MISS_SUGGESTIONS, cutoff=0.5)
+    close += [
+        by_base[b]
+        for b in difflib.get_close_matches(base, list(by_base), n=_MISS_SUGGESTIONS, cutoff=0.5)
+        if by_base[b] not in close
+    ]
+    payload["did_you_mean"] = close[:_MISS_SUGGESTIONS] or names[:_MISS_SUGGESTIONS]
+    payload["hint"] = (
+        "Filenames are assigned by the memory, not chosen by you — do not guess them. "
+        "Use memory_search (by content) or memory_list (by category) to get a real "
+        "filename, then read that."
+    )
+    return json.dumps(payload, ensure_ascii=False)
+
+
+async def _read_miss(mem, filename: str) -> str:
+    try:
+        alist = getattr(mem, "alist_notes", None)
+        notes = await alist() if callable(alist) else mem.list_notes()
+    except Exception:  # noqa: BLE001 — the miss is still a miss
+        notes = []
+    return _read_miss_payload(filename, _note_names(notes))
+
+
 
 class MemoryReadTool(BaseTool):
     """Read a specific memory note by filename."""
@@ -183,7 +231,7 @@ class MemoryReadTool(BaseTool):
 
         note = mem.read_note(filename)
         if note is None:
-            return _error(f"Note not found: {filename}")
+            return _read_miss_payload(filename, _note_names(mem.list_notes()))
         return _ok(note)
 
     async def arun(self, session_id: str, filename: str) -> str:
@@ -193,7 +241,7 @@ class MemoryReadTool(BaseTool):
         aread = getattr(mem, "aread_note", None)
         note = await aread(filename) if callable(aread) else mem.read_note(filename)
         if note is None:
-            return _error(f"Note not found: {filename}")
+            return await _read_miss(mem, filename)
         return _ok(note)
 
 

@@ -380,6 +380,29 @@ def _bridge_cli_stream_event(
         )
 
 
+def _turn_tool_stats(state: Any) -> Dict[str, int]:
+    """Tool calls this turn made and how many failed, from its own messages
+    (the replayed turns in front of it excluded)."""
+    try:
+        window = (getattr(state, "metadata", {}) or {}).get("memory.short_term_window")
+        start = int(window.get("messages") or 0) if isinstance(window, dict) else 0
+        calls = failures = 0
+        last_failed = False
+        for message in (getattr(state, "messages", None) or [])[start:]:
+            content = message.get("content") if isinstance(message, dict) else None
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "tool_result":
+                    calls += 1
+                    last_failed = bool(block.get("is_error"))
+                    if last_failed:
+                        failures += 1
+        return {"tool_calls": calls, "tool_failures": failures, "tool_last_failed": int(last_failed)}
+    except Exception:  # noqa: BLE001 — a statistic, never a failure
+        return {}
+
+
 def _log_turn_usage(session_logger: Any, usage: Any) -> None:
     """One line per turn: model calls, prompt size, and how much of it the
     prompt cache served. The turn's dollar figure alone could not say
@@ -4865,6 +4888,7 @@ class AgentSession:
                         "final_answer": accumulated_output,
                         "total_cost": total_cost,
                         "iteration": iterations,
+                        **_turn_tool_stats(_state),
                     },
                     duration_ms=duration_ms,
                     execution_number=self._execution_count,
@@ -5260,6 +5284,7 @@ class AgentSession:
                         "final_answer": accumulated_output,
                         "total_cost": total_cost,
                         "iteration": iterations,
+                        **_turn_tool_stats(_state),
                     },
                     duration_ms=duration_ms,
                     execution_number=self._execution_count,

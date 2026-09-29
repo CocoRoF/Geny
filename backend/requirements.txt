@@ -134,7 +134,14 @@ ddgs==9.11.4
 # after turn (and Stage 5 marks it); thinking-trigger turns no longer push
 # the conversation out; one silence rule; stale tool output is trimmed past
 # 30k history tokens; each turn logs its usage and cache share.
-geny-executor[qdrant,ssh]>=2.78.0,<3.0.0
+#
+# geny-executor 2.79.0 — quality.
+#
+# The date line is local with a weekday (GENY_TIMEZONE); memory I/O is off
+# the event loop; cache markers stay out of memory; a failed STM write is
+# retried; an image-only request still searches memory; on the Claude Code
+# route the request's images and PDFs stay attached through the tool loop.
+geny-executor[qdrant,ssh]>=2.79.0,<3.0.0
 geny-memory-adaptor>=1.11.1
 contextifier[pdf]>=0.5.0
 # Knowledge connectors — cron schedules + DB sources (postgres/mysql/sqlite)

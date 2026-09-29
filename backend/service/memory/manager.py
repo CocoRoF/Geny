@@ -85,6 +85,32 @@ def _content_to_text(content: Any) -> str:
         return str(content)
 
 
+#: How a recorded execution ended: done, done with failed tool calls, or not.
+OUTCOME_MARK = {"ok": "✅", "partial": "⚠️", "failed": "❌"}
+
+
+def classify_outcome(
+    success: bool, *, tool_calls: int = 0, tool_failures: int = 0, last_failed: bool = False
+) -> str:
+    """``partial`` when the turn finished but its tools did not: it ended on
+    a failed call, or at least half of its calls failed. A failure the agent
+    worked around (a missing file, then the right one) is not partial."""
+    if not success:
+        return "failed"
+    if tool_failures and (last_failed or tool_failures * 2 >= max(1, tool_calls)):
+        return "partial"
+    return "ok"
+
+
+def _outcome_of(success: bool, result_state: Dict[str, Any]) -> str:
+    return classify_outcome(
+        success,
+        tool_calls=int(result_state.get("tool_calls") or 0),
+        tool_failures=int(result_state.get("tool_failures") or 0),
+        last_failed=bool(result_state.get("tool_last_failed")),
+    )
+
+
 class SessionMemoryManager:
     """Per-session memory facade.
 
@@ -2228,9 +2254,10 @@ class SessionMemoryManager:
                     auto_tags = self._extract_execution_tags(
                         input_text, result_state,
                     )
-                    status_tag = "success" if success else "failure"
+                    outcome = _outcome_of(success, result_state)
+                    status_tag = {"ok": "success", "partial": "partial"}.get(outcome, "failure")
                     all_tags = ["execution", status_tag] + auto_tags
-                    imp = "medium" if success else "high"
+                    imp = "medium" if outcome == "ok" else "high"
                     title = (
                         f"Execution #{execution_number} — "
                         f"{input_text[:60].strip()}"
@@ -2311,7 +2338,8 @@ class SessionMemoryManager:
         Returns:
             Formatted markdown string.
         """
-        status_icon = "✅" if success else "❌"
+        outcome = _outcome_of(success, result_state)
+        status_icon = OUTCOME_MARK[outcome]
 
         # --- Extract fields from state ---
         difficulty = result_state.get("difficulty", "unknown")
@@ -2362,6 +2390,20 @@ class SessionMemoryManager:
             f"> **Duration:** {duration_str}"
             f" | **Iterations:** {iteration}/{max_iterations}"
         )
+        tool_calls = int(result_state.get("tool_calls") or 0)
+        if tool_calls:
+            failures = int(result_state.get("tool_failures") or 0)
+            tools_line = f"> **Tools:** {tool_calls} call(s)"
+            if failures:
+                tools_line += f" · {failures} failed"
+            lines.append(tools_line)
+        if outcome == "partial":
+            # A ✅ on a turn whose tools failed later read, from memory, as
+            # "that was done" — XGEN saw an agent believe a tool it never
+            # built existed.
+            lines.append(
+                "> **Outcome:** partial — some tool calls failed; do not treat the task as done"
+            )
         lines.append("")
 
         # Screen frames the persona saw during this turn (promoted to the
