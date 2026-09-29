@@ -33,6 +33,13 @@ def _builder_map() -> Dict[str, Any]:
         "datetime": DateTimeBlock,
         "memory_context": MemoryContextBlock,
     }
+    try:
+        # Geny's time zone rule (GENY_TIMEZONE → TIMEZONE → Asia/Seoul).
+        from service.persona.datetime_block import GenyDateTimeBlock
+
+        builders["datetime"] = GenyDateTimeBlock
+    except ImportError:
+        pass
     # Cycle 20260503_7 — Geny's host-side memory tool catalogue.
     # Optional import so a settings.json that doesn't reference
     # ``host_memory_tools`` continues to work even if the host module

@@ -67,3 +67,15 @@ def test_silence_follows_the_executor_rule():
     assert is_silent_reply("[SILENT]")
     assert is_silent_reply("[neutral] [SILENT]")
     assert not is_silent_reply("[SILENT] 사실 할 말이 있어")
+
+
+def test_the_date_line_follows_genys_timezone_rule(monkeypatch):
+    from service.persona.blocks_resolver import resolve_tail_blocks
+    from service.persona.datetime_block import GenyDateTimeBlock
+
+    monkeypatch.delenv("GENY_TIMEZONE", raising=False)
+    monkeypatch.setenv("TIMEZONE", "Asia/Seoul")
+    line = GenyDateTimeBlock().render(PipelineState())
+    assert "Asia/Seoul (UTC+09:00)" in line
+    blocks = resolve_tail_blocks("vtuber") or []
+    assert any(isinstance(b, GenyDateTimeBlock) for b in blocks)

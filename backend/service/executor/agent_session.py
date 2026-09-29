@@ -3246,8 +3246,10 @@ class AgentSession:
             self._role.value if self._role and hasattr(self._role, "value")
             else "worker"
         )
+        from service.persona.datetime_block import GenyDateTimeBlock
+
         _tail_blocks = resolve_tail_blocks(_role_key) or [
-            DateTimeBlock(),
+            GenyDateTimeBlock(),
             MemoryContextBlock(),
         ]
         # Idempotent append — settings-driven configurations that
