@@ -380,6 +380,29 @@ def _bridge_cli_stream_event(
         )
 
 
+def _log_turn_usage(session_logger: Any, usage: Any) -> None:
+    """One line per turn: model calls, prompt size, and how much of it the
+    prompt cache served. The turn's dollar figure alone could not say
+    whether the cache was working. Best-effort."""
+    if not session_logger or not isinstance(usage, dict) or not usage.get("calls"):
+        return
+    try:
+        share = float(usage.get("cache_read_share") or 0.0)
+        session_logger.log(
+            level=LogLevel.INFO,
+            message=(
+                f"usage: {usage.get('calls')} call(s), prompt "
+                f"{int(usage.get('first_prompt_tokens') or 0):,}→"
+                f"{int(usage.get('max_prompt_tokens') or 0):,} tokens, "
+                f"{int(usage.get('input_tokens') or 0):,} read in total "
+                f"({share:.0%} from cache), {int(usage.get('output_tokens') or 0):,} written"
+            ),
+            metadata={"type": "turn_usage", **usage},
+        )
+    except Exception:  # noqa: BLE001 — observability must never break execution
+        logger.debug("turn usage log failed", exc_info=True)
+
+
 #: Compaction events the session log shows. A compaction rewrites what the
 #: model sees mid-turn; without these it happened silently, and a turn that
 #: "forgot" something had nothing in its log to say why.
@@ -4793,6 +4816,7 @@ class AgentSession:
                     accumulated_output = streamed_result
                 total_cost = event_data.get("total_cost_usd", 0.0) or 0.0
                 iterations = event_data.get("iterations", 0)
+                _log_turn_usage(session_logger, event_data.get("usage"))
 
             elif event_type == "pipeline.error":
                 success = False
@@ -5181,6 +5205,7 @@ class AgentSession:
                 result_text = sanitize_for_display(raw_text)
                 total_cost = event_data.get("total_cost_usd", 0.0) or 0.0
                 iterations = event_data.get("iterations", 0)
+                _log_turn_usage(session_logger, event_data.get("usage"))
                 end: Dict[str, Any] = {
                     "final_answer": result_text,
                     "total_cost": total_cost,

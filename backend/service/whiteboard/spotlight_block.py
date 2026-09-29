@@ -37,6 +37,10 @@ class SpotlightContextBlock(PromptBlock):
     and identity blocks but ahead of the heavier memory recall.
     """
 
+    #: Different from one turn to the next — kept out of the cached system
+    #: prefix (executor volatile placement: the turn's <session-context>).
+    volatile = True
+
     @property
     def name(self) -> str:
         return "whiteboard_spotlight"

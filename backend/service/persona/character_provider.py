@@ -57,6 +57,10 @@ logger = logging.getLogger(__name__)
 _CHARACTER_MARKER = "## Character Personality"
 
 
+#: ``state.shared`` slot holding this turn's event-seed pick (None included).
+_EVENT_SEED_PICK_KEY = "geny.event_seed_pick"
+
+
 class CharacterPersonaProvider:
     """Default ``PersonaProvider`` replicating the legacy side-door behavior."""
 
@@ -302,18 +306,26 @@ class CharacterPersonaProvider:
         shared = getattr(state, "shared", None)
         if not isinstance(shared, dict):
             return None
+        # Once per turn. Stage 3 resolves the persona on every step of the
+        # loop, and each resolve drew a new weighted-random seed — the
+        # prompt changed between steps of one turn, and the model was told
+        # about a different "event" at each of them.
+        if _EVENT_SEED_PICK_KEY in shared:
+            return shared[_EVENT_SEED_PICK_KEY]
         creature = shared.get(CREATURE_STATE_KEY)
         if creature is None:
             return None
         meta = shared.get(SESSION_META_KEY) or {}
         try:
-            return self._event_seed_pool.pick(creature, meta)
+            picked = self._event_seed_pool.pick(creature, meta)
         except Exception:
             logger.debug(
                 "event seed pool raised during pick — suppressing",
                 exc_info=True,
             )
-            return None
+            picked = None
+        shared[_EVENT_SEED_PICK_KEY] = picked
+        return picked
 
     # ── Internals ─────────────────────────────────────────────────────
 

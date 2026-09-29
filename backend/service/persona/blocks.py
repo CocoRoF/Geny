@@ -113,6 +113,10 @@ class MoodBlock(PromptBlock):
     appended so the LLM has texture, e.g. ``joy with excitement``.
     """
 
+    #: Changes turn to turn — kept out of the cached system prefix
+    #: (executor volatile placement: the turn's <session-context>).
+    volatile = True
+
     @property
     def name(self) -> str:
         return "mood"
@@ -157,6 +161,10 @@ class RelationshipBlock(PromptBlock):
     it needs to.
     """
 
+    #: Changes turn to turn — kept out of the cached system prefix
+    #: (executor volatile placement: the turn's <session-context>).
+    volatile = True
+
     @property
     def name(self) -> str:
         return "relationship"
@@ -182,6 +190,10 @@ class VitalsBlock(PromptBlock):
     has its own band table so the adjective reflects the creature's
     lived experience, not the raw number.
     """
+
+    #: Changes turn to turn — kept out of the cached system prefix
+    #: (executor volatile placement: the turn's <session-context>).
+    volatile = True
 
     @property
     def name(self) -> str:
@@ -349,6 +361,10 @@ class ProgressionBlock(PromptBlock):
     block never raises mid-turn.
     """
 
+    #: Changes turn to turn — kept out of the cached system prefix
+    #: (executor volatile placement: the turn's <session-context>).
+    volatile = True
+
     @property
     def name(self) -> str:
         return "progression"
@@ -510,6 +526,10 @@ class AcclimationBlock(PromptBlock):
     expected to override Stage when they conflict; one tight block
     keeps that override surface obvious to the LLM.
     """
+
+    #: Changes turn to turn — kept out of the cached system prefix
+    #: (executor volatile placement: the turn's <session-context>).
+    volatile = True
 
     @property
     def name(self) -> str:

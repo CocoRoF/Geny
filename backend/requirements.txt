@@ -126,7 +126,15 @@ ddgs==9.11.4
 # the agent has not seen (this backend carries the ledger across turns);
 # MCP calls and stalled model streams time out; a turn past 2M/5M input
 # tokens or at its step limit reports instead of stopping mid-work.
-geny-executor[qdrant,ssh]>=2.77.0,<3.0.0
+#
+# geny-executor 2.78.0 — the replay can be cached; the agent's own turns
+# stay out of its slots.
+#
+# The replay window holds its start so its older part is the same text turn
+# after turn (and Stage 5 marks it); thinking-trigger turns no longer push
+# the conversation out; one silence rule; stale tool output is trimmed past
+# 30k history tokens; each turn logs its usage and cache share.
+geny-executor[qdrant,ssh]>=2.78.0,<3.0.0
 geny-memory-adaptor>=1.11.1
 contextifier[pdf]>=0.5.0
 # Knowledge connectors — cron schedules + DB sources (postgres/mysql/sqlite)

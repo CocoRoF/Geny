@@ -437,11 +437,12 @@ def is_silent_reply(text: Optional[str]) -> bool:
     no-response marker (thinking-trigger protocol). Tolerant of stray
     whitespace/punctuation but nothing more — any real sentence after
     the marker counts as a spoken reply."""
-    t = (text or "").strip()
-    if not t.upper().startswith("[SILENT]"):
-        return False
-    rest = t[len("[SILENT]"):].strip()
-    return len(rest) <= 2 and not any(ch.isalnum() for ch in rest)
+    # The executor's rule, so the replay and this agree on what silence is
+    # (they did not: "[SILENT]." was silence here and a conversation turn
+    # there). It also reads past leading cue tags ("[neutral] [SILENT]").
+    from geny_executor.memory.short_term_window import is_silence_text
+
+    return is_silence_text(text or "")
 
 
 def build_graph_from_index(idx: Optional[Dict[str, Any]]) -> Dict[str, Any]:

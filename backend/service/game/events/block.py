@@ -29,6 +29,10 @@ class EventSeedBlock(PromptBlock):
     prompt dialect across all CreatureState-derived blocks.
     """
 
+    #: Different from one turn to the next — kept out of the cached system
+    #: prefix (executor volatile placement: the turn's <session-context>).
+    volatile = True
+
     def __init__(self, seed: EventSeed) -> None:
         self._seed = seed
 
