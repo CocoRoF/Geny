@@ -11,7 +11,7 @@
 #                        required — open the UI and add a key (or point it at a
 #                        local Ollama). TTS falls back to cloud edge-tts.
 #   ./geny up --full     full stack: + avatar-editor (inits the git submodule)
-#                        + omnivoice/whisper local GPU TTS/STT (needs NVIDIA).
+#                        + omnivoice local GPU TTS (needs NVIDIA).
 #   ./geny down          stop the stack
 #   ./geny restart [svc] recreate everything (or one service)
 #   ./geny logs [svc]    follow logs
@@ -129,7 +129,7 @@ cmd_up() {
 
   if [ "$full" = 1 ]; then
     ensure_submodules
-    info "Building + starting the FULL stack (avatar-editor + GPU TTS/STT)…"
+    info "Building + starting the FULL stack (avatar-editor + GPU TTS)…"
     $COMPOSE --profile audio-local up -d --build
   else
     info "Building + starting the LITE stack (postgres + backend + frontend, GPU-free)…"
@@ -142,9 +142,10 @@ cmd_up() {
   echo
   ok "Geny is up."
   printf "${C_BOLD}  Open:${C_RESET} http://localhost:%s\n" "$fport"
-  printf "${C_DIM}  First run → create the admin account, then Settings → LLM 백엔드:\n"
-  printf "    • Local & keyless: start Ollama, open the Ollama card, Discover models.\n"
-  printf "    • Cloud: paste an Anthropic / OpenAI / Google key into its card.${C_RESET}\n"
+  printf "${C_DIM}  First run → create the admin account, then 설정 › 모델 → add an account:\n"
+  printf "    • Subscription: sign in with Claude Code or ChatGPT (Codex).\n"
+  printf "    • API key: Anthropic, OpenAI, Gemini, OpenRouter and more.\n"
+  printf "    • Local & keyless: an Ollama / vLLM / OpenAI-compatible address.${C_RESET}\n"
   printf "${C_DIM}  Diagnose anytime: ./geny doctor   ·   Logs: ./geny logs backend${C_RESET}\n"
 }
 
@@ -251,7 +252,7 @@ geny — one-command runner for the Geny stack
 
   ./geny up [--full]    start the stack (default: lite, GPU-free, no submodule,
                         no LLM key required). --full adds the avatar-editor and
-                        local GPU TTS/STT (NVIDIA).
+                        local GPU TTS (OmniVoice, NVIDIA).
   ./geny down           stop the stack
   ./geny restart [svc]  restart everything (or one service)
   ./geny logs [svc]     follow logs
@@ -260,9 +261,9 @@ geny — one-command runner for the Geny stack
   ./geny update         git pull + rebuild + restart (lite)
   ./geny help
 
-First run: ./geny up → open http://localhost:3000 → create admin → Settings →
-LLM 백엔드 → add a key, or Discover models on the Ollama card for a keyless
-local model.
+First run: ./geny up → open http://localhost:3000 → create admin → 설정 › 모델
+→ add an account: a Claude Code / ChatGPT login, an API key, or a local
+Ollama / vLLM address for a keyless model.
 EOF
 }
 

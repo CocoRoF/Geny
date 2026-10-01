@@ -1,595 +1,344 @@
 <p align="center">
-  <img src="img/Geny_full_logo.png" alt="Geny" width="520"/>
+  <img src="img/Geny_full_logo.png" alt="Geny" width="440"/>
 </p>
 
 <h1 align="center">Geny — <em>Geny Execute, Not You</em></h1>
 
-<p align="center"><em>지니가 할게, 넌 가만히 있어.</em></p>
-
 <p align="center">
-수다스러운 Live2D / Spine VTuber 와 tool 을 굴리는 Sub-Worker 를 짝지어, 3D 도시에서 협업하는 모습을 시각화하고, 5개 LLM backend 를 설정 한 번으로 전환하는 <strong>멀티 에이전트 VTuber + 자율 워커</strong> 플랫폼.
+얼굴과 목소리와 기억을 가진 AI 에이전트를 내 서버에서.<br/>
+일을 하고, 한 일을 기억하고, 할 말이 있으면 먼저 말을 거는 에이전트.
 </p>
 
 <p align="center">
-<a href="README.md">English README</a> ·
-<a href="docs/architecture.md">아키텍처</a> ·
-<a href="docs/providers.md">LLM Providers</a> ·
-<a href="docs/sessions.md">Session &amp; Delegation</a> ·
-<a href="docs/environments.md">Environments</a> ·
-<a href="docs/error_codes.md">Error Codes</a>
+<a href="README.md">English</a> ·
+<a href="#빠른-시작">빠른 시작</a> ·
+<a href="#엘렌과-둘러보기">둘러보기</a> ·
+<a href="#앱">앱</a> ·
+<a href="#설치">설치</a> ·
+<a href="docs/providers.md">모델 계정</a>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
-  <a href="https://github.com/CocoRoF/Geny/releases/latest"><img src="https://img.shields.io/github/v/release/CocoRoF/Geny?label=%EB%8D%B0%EC%8A%A4%ED%81%AC%ED%83%91%20%EC%A0%91%EC%86%8D%EA%B8%B0&color=8b5cf6" alt="최신 릴리스"></a>
+  <a href="https://github.com/CocoRoF/Geny/releases/latest"><img src="https://img.shields.io/github/v/release/CocoRoF/Geny?label=apps&color=8b5cf6" alt="최신 앱 릴리스"></a>
   <a href="https://pypi.org/project/geny-executor/"><img src="https://img.shields.io/pypi/v/geny-executor?label=geny-executor&color=3775a9" alt="geny-executor on PyPI"></a>
   <img src="https://img.shields.io/badge/python-3.11%2B-3776ab" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/next.js-16-black" alt="Next.js 16">
   <a href="https://github.com/CocoRoF/Geny/stargazers"><img src="https://img.shields.io/github/stars/CocoRoF/Geny?style=social" alt="GitHub stars"></a>
 </p>
 
+<p align="center">
+  <img src="img/readme/hero-vtuber.png" alt="웹 앱의 Geny 에이전트 엘렌: 대화 옆에 선 Live2D 아바타" width="100%"/>
+</p>
+<p align="center"><sub>웹 앱의 엘렌(<code>ellen_new</code>). 날씨를 찾아보고, 워드 문서를 만들고, 자기소개를 했습니다.<br/><em>"안녕, 나는 엘렌. 말은 많지 않지만, 필요한 순간엔 옆에서 정확하게 도울게."</em></sub></p>
+
+---
+
+## Geny 는
+
+Geny 서버 하나를 띄우면, 그 위에 내 에이전트들이 삽니다. 에이전트 하나는 끝나지 않는 대화 하나이고, 저마다 페르소나·아바타·목소리·기억·작업공간을 가집니다. 대답만 하지 않습니다. 도구를 부르고, 파일과 오피스 문서를 만들고, 웹을 찾아보고, 샌드박스에서 코드를 돌리고, 스스로 자동화를 걸어 두고, 할 말이 생기면 먼저 말을 겁니다.
+
+같은 에이전트를 세 곳에서 만납니다. **웹 앱**, 아바타가 화면 위에 사는 **데스크톱 앱**, 그리고 **휴대폰**. 어디서 열어도 같은 대화입니다. 답하는 모델은 내가 고릅니다. **Claude Code** 나 **ChatGPT(Codex)** 구독으로 로그인하거나, 16곳 중 아무 곳의 API 키를 넣거나, 내 **Ollama / vLLM** 서버 주소를 적으면 되고, 대화 도중에도 바꿀 수 있습니다.
+
+모든 것은 PyPI 에 공개된 21단계 에이전트 파이프라인 [`geny-executor`](https://github.com/CocoRoF/geny-executor) 위에서 돕니다. LangChain 도 LangGraph 도 쓰지 않습니다.
+
+## 빠른 시작
+
 ```bash
-# 60초 시작 — GPU 불필요, API 키 불필요
 git clone https://github.com/CocoRoF/Geny.git && cd Geny && ./geny up
-# → http://localhost:3000 접속
+# → http://localhost:3000 을 열고 관리자 계정을 만든 다음
+#   설정 › 모델 → 계정 추가
 ```
 
-<p align="center"><sub>상세 옵션·프로파일·수동 설치 → <a href="#설치">설치</a></sub></p>
-
-## Geny 에코시스템
-
-이 프로젝트들은 함께 동작하도록 만들어졌습니다. **Geny** 가 스택 최상단의 제품이고, 그 아래는 전부 단독으로도 쓸 수 있는 빌딩 블록입니다. **➡️ 가 현재 위치입니다.**
-
-| 프로젝트 | 무엇인가 | 스택에서의 역할 |
-|---|---|---|
-| ➡️ [**Geny**](https://github.com/CocoRoF/Geny) | 멀티 에이전트 VTuber + 자율 워커 플랫폼 | 최상위 제품 — 아래 전부를 사용 |
-| [**geny-executor**](https://github.com/CocoRoF/geny-executor) | 21단계 manifest 기반 에이전트 파이프라인 · PyPI · Apache-2.0 | 모든 것이 돌아가는 엔진 |
-| [**GAPT**](https://github.com/CocoRoF/geny-adapted-project-toolkit) | 셀프호스트 AI DevOps 플랫폼 — 샌드박스·편집·빌드·배포 | 에이전트가 실제 레포를 안전하게 다루는 곳 |
-| [**geny-avatar**](https://github.com/CocoRoF/geny-avatar) | AI 텍스처 생성 기반 2D 라이브 아바타 에디터 | Geny 의 얼굴이 만들어지는 곳 |
-| [**edit2docs**](https://github.com/CocoRoF/edit2docs) | AI-agent-native DOCX/XLSX/PPTX 엔진 · PyPI · Apache-2.0 | 에이전트가 오피스 문서를 생성·편집·미리보기하는 방법 |
-| [**AN-Web**](https://github.com/CocoRoF/an-web) | AI-native 헤드리스 브라우저 엔진 · PyPI | 에이전트가 웹을 읽고 검색하는 방법 |
-
-<details>
-<summary>서로 어떻게 연결되는가</summary>
-
-```
-                  Geny — 최상위 제품 (아래 전부를 사용)
-                    │
-      ┌─────────────┼──────────────┐
-   에이전트 엔진     아바타        샌드박스 + 배포
-      │             │              │
-      ▼             ▼              ▼
- geny-executor  geny-avatar      GAPT
-  (엔진)        (아바타 에디터)  (AI DevOps 플랫폼)
-      │
-      ├── edit2docs  (문서: 생성 · 편집 · 네이티브 미리보기)
-      └── AN-Web     (웹: 브라우징 · 읽기 · 검색)
-```
-
-</details>
+시작할 때 GPU 도 API 키도 필요 없습니다. 로컬 Ollama 로도 되고, 음성은 클라우드 edge-tts 로 대신합니다. 자세한 건 [설치](#설치)에.
 
 ---
 
-<!-- 📸 IMAGE NEEDED: hero 스크린샷 — 에이전트가 걸어다니는 3D 도시 + VTuber 채팅 패널 + Live2D 아바타 -->
-> 📸 **이미지 필요** — _hero 스크린샷: 에이전트가 걸어다니는 3D 도시, VTuber 채팅 패널, Live2D 아바타._
+## 엘렌과 둘러보기
 
----
+아래 화면은 모두 실제 화면입니다. Geny 운영 서버, 에이전트 `ellen_new`, 그리고 위의 그 대화. 웹과 휴대폰은 Playwright 로, 데스크톱은 앱에 들어 있는 스크린샷 도구로 찍었습니다. 계정 이메일과 다른 비공개 에이전트의 이름은 흐리게 가렸습니다.
 
-## 데스크탑 접속기 다운로드
+### 바탕화면에 산다
 
-데스크탑 하단에 떠 있는 **VTuber 접속기** — 서버는 그대로 두고, 화면 하단에 살아있는 아바타를 띄웁니다.
+<p align="center">
+  <img src="img/readme/desktop-composite.png" alt="데스크톱 앱: 화면 오른쪽 아래에 뜬 엘렌의 아바타, 빠른 대화 창, 엘렌이 만든 문서를 연 앱 창" width="100%"/>
+</p>
+<p align="center"><sub>데스크톱 앱의 세 창(아바타 오버레이, 빠른 대화 창 <kbd>Ctrl/Cmd</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd>, 메인 창)을 실제로 찍어 배경화면 위에 합성했습니다.</sub></p>
 
-<!-- 📸 IMAGE NEEDED: 데스크탑 접속기 — 실제 바탕화면 하단에 떠 있는 아바타 + 트레이 메뉴 -->
-> 📸 **이미지 필요** — _데스크탑 접속기: 실제 바탕화면 하단의 떠 있는 아바타 + 트레이 메뉴._
+**데스크톱 앱**은 아바타를 화면 위에 올려 둡니다. 투명하고, 늘 위에 있고, 아바타를 건드리는 곳이 아니면 클릭이 그대로 뒤로 지나갑니다. 빠른 대화 창으로, 눌러서 말하기(<kbd>Ctrl/Cmd</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd>)로, 핸즈프리로 말을 걸고, 화면을 보여 주고, 내가 고른 마이크와 스피커로 듣고 말하게 할 수 있습니다. 메인 창은 작업 공간입니다. 모든 에이전트의 파일이 탐색기 하나에 있고, 문서는 그 자리에서 열리고, 대화가 그 옆에 있습니다.
 
-### 1) 설치 파일 — **[➡️ 최신 릴리스(Releases)에서 받기](https://github.com/CocoRoF/Geny/releases/latest)**
+<table>
+<tr>
+<td width="50%"><img src="img/readme/desktop-chat.png" alt="데스크톱 앱: 엘렌과의 대화"/></td>
+<td width="50%"><img src="img/readme/desktop-file-viewer.png" alt="데스크톱 앱: 탐색기에서 연 엘렌의 워드 문서"/></td>
+</tr>
+<tr>
+<td><sub>웹과 같은 대화입니다. 머리글에서 이 에이전트의 아바타와 모델을 바꿉니다.</sub></td>
+<td><sub>엘렌이 방금 만든 <code>이번주_할일.docx</code>. 서버가 그려서 보여 줍니다.</sub></td>
+</tr>
+<tr>
+<td><img src="img/readme/desktop-route.png" alt="데스크톱 앱: 대화 도중 모델 바꾸기"/></td>
+<td><img src="img/readme/desktop-avatars.png" alt="데스크톱 앱: 아바타 고르기, Live2D 와 MMD 3D 모델"/></td>
+</tr>
+<tr>
+<td><sub>대화 도중에 모델을 바꿔도 대화 기록·도구·기억은 그대로입니다.</sub></td>
+<td><sub>아바타는 Live2D 나 MMD(3D) 모델 중에서 고릅니다.</sub></td>
+</tr>
+</table>
 
-| OS | 파일 | 설치 / 첫 실행 |
-|---|---|---|
-| **Windows** | `Geny-Setup-*.exe` | 더블클릭 → SmartScreen 경고 시 **자세히 → 실행** (현재 무서명) |
-| **macOS** | `Geny-*.dmg` | 열어서 Applications 로 드래그 → 첫 실행은 **우클릭 → 열기** (Gatekeeper) |
-| **Linux** | `Geny-*.AppImage` / `*.deb` | AppImage: `chmod +x Geny-*.AppImage && ./Geny-*.AppImage` · deb: `sudo dpkg -i Geny-*.deb` |
+### 주머니 속에도
 
-> 설치 파일이 안 보이면 릴리스가 빌드 중입니다 — 공개 repo 라서 GitHub Actions 가 macOS/Windows/Linux 설치 파일을 자동 생성합니다.
+<p align="center">
+  <img src="img/readme/mobile.png" alt="Android/iOS 앱: 엘렌과의 대화, 설정 화면" width="560"/>
+</p>
+<p align="center"><sub>휴대폰 앱에서도 같은 대화방이 열립니다. 앱 소스를 react-native-web 으로 띄워 찍었기 때문에 실제 폰과 글꼴이 조금 다릅니다.</sub></p>
 
-### 2) 실행 후 — **3가지만 입력하면 바로 사용**
+### 일을 하고, 한 일이 보인다
 
-1. **Geny 서버 주소** — 기본값 `https://geny-x.hrletsgo.me` 가 채워져 있습니다 (직접 호스팅 중이면 그 주소).
-2. **admin 아이디**
-3. **admin 비밀번호**
+<table>
+<tr>
+<td width="50%"><img src="img/readme/web-canvas.png" alt="웹 앱: 에이전트 작업공간의 슬라이드를 미리 보는 캔버스 탭"/></td>
+<td width="50%"><img src="img/readme/web-cloud.png" alt="웹 앱: 내 PC 와 에이전트가 함께 쓰는 Geny 클라우드"/></td>
+</tr>
+<tr>
+<td><sub><b>캔버스</b>: 에이전트의 작업공간을 그대로 미리 봅니다. 이미지, PDF, 코드, 오피스 문서(pptx / docx / xlsx, <a href="https://github.com/CocoRoF/edit2docs">edit2docs</a> 가 그림).</sub></td>
+<td><sub><b>클라우드</b>: 연결한 PC 와 에이전트가 함께 쓰는 저장소 하나. 에이전트는 각자 그 안의 자기 폴더에서 일합니다.</sub></td>
+</tr>
+</table>
 
-→ **로그인** 하면 토큰이 OS 키체인에 저장되고 하단에 아바타가 떠서 바로 사용 가능합니다. (아바타 드래그 = 이동, 트레이 아이콘 = 설정/업데이트/종료)
+에이전트에게는 처음부터 도구가 있습니다. 파일과 셸([GAPT](https://github.com/CocoRoF/geny-adapted-project-toolkit) 샌드박스 안에서도), 웹 검색과 가져오기, 브라우저([AN-Web](https://github.com/CocoRoF/an-web)), 오피스 문서, SSH, Jira·Confluence, Google Workspace, 이메일, 그리고 MCP 서버(GitHub, Notion, Slack, Postgres, Brave, filesystem, Composio, 임의의 HTTP 엔드포인트). 대부분의 도구는 에이전트가 찾을 때만 불러오므로, 목록이 길어도 매 턴 비용이 늘지 않습니다. 대화에서 *"매일 아침 9시에 … 찾아서 알려 줘"* 라고 하면 에이전트가 직접 자동화를 만들고, **훅** 탭에 나타납니다. 동료 하위 에이전트에게 맡긴 일을 포함해 뒤에서 도는 작업은 **작업** 탭에 보입니다.
 
-### 자동 업데이트
+### 기억한다
 
-v0.3.0 부터 접속기는 **GitHub Releases 를 통해 스스로 업데이트**합니다 — 실행 중 새 릴리스를 감지해 내려받고, 재시작 시 적용(트레이 → *업데이트 확인* 으로 수동 확인도 가능). Windows·Linux(AppImage) 는 무서명으로도 동작하며, macOS 자동 업데이트는 코드서명 이후 활성화됩니다. *한 번만 수동 설치하면 이후 버전은 자동.*
+<p align="center">
+  <img src="img/readme/web-memory-graph.png" alt="Opsidian: 엘렌의 기억 저장소를 그래프로" width="100%"/>
+</p>
+<p align="center"><sub>기억 브라우저 Opsidian. 엘렌의 저장소(대화, 하루 요약, 관찰, 실행 기록)를 그래프로 봅니다.</sub></p>
 
-### 소스에서 직접 빌드
+모든 턴이 기록됩니다. 최근 몇 턴은 다음 턴에 실제 메시지로 다시 들어가고, 그보다 오래된 것은 관련이 있을 때 저장소에서 찾아옵니다. 저장소의 색인과 검색은 내 서버에서 Synapse 가 맡습니다. 내가 건넨 문서는 따로 **지식** 저장소(Synapse 또는 Qdrant)에 둡니다.
 
-```bash
-git clone https://github.com/CocoRoF/Geny.git
-cd Geny/desktop
-npm install
-npm run dev          # 개발 실행
-npm run dist:win     # / dist:mac / dist:linux — 설치 파일 직접 생성
-```
+### 내 에이전트로 만들기
 
-자세히: [`desktop/README.md`](desktop/README.md) · 설계: [`dev_docs/vtuber-desktop/PLAN.md`](dev_docs/vtuber-desktop/PLAN.md)
+<table>
+<tr>
+<td width="50%"><img src="img/readme/web-persona-studio.png" alt="페르소나: MBTI, 아키타입, 성격 프리셋"/></td>
+<td width="50%"><img src="img/readme/web-trigger-studio.png" alt="먼저 말 걸기: 에이전트가 스스로 말을 꺼내는 때"/></td>
+</tr>
+<tr>
+<td><sub><b>페르소나</b>: MBTI, 에니어그램, 캐릭터 아키타입, 성격(OCEAN)·표현 슬라이더, 말투와 감정. 프리셋에서 시작하거나 직접 만듭니다.</sub></td>
+<td><sub><b>먼저 말 걸기</b>: 얼마나 기다렸다가, 어떤 상황에서 얼마나 자주 말을 꺼낼지. 침묵, 아침·저녁, 동료가 일하는 중, 화면을 공유하는 중.</sub></td>
+</tr>
+<tr>
+<td><img src="img/readme/web-harness.png" alt="하네스 탭: 에이전트의 한도와 파이프라인 선택"/></td>
+<td><img src="img/readme/web-voice-studio.png" alt="Voice Studio: 합성, 목소리 복제와 디자인"/></td>
+</tr>
+<tr>
+<td><sub><b>하네스</b>: 에이전트별 한도(반복 횟수, 컨텍스트 창, 비용)와 파이프라인의 동작. 대화가 길어지면 줄이는 법, 직전 대화를 얼마나 다시 볼지, 캐시, 생각, 도구 동시 실행. 값마다 어디서 왔는지 표시됩니다.</sub></td>
+<td><sub><b>Voice Studio</b>: OmniVoice 로 목소리를 복제하거나 디자인합니다. 감정별 레퍼런스 녹음, 배치 합성, 도구.</sub></td>
+</tr>
+</table>
 
----
+### 어떤 모델이든, 내 계정으로
 
-## Geny 가 무엇인가
+<table>
+<tr>
+<td width="50%"><img src="img/readme/web-settings-models.png" alt="설정 › 모델: 계정과 응답 순서"/></td>
+<td width="50%"><img src="img/readme/web-logs.png" alt="로그 탭: 턴마다의 모든 단계, 토큰 사용량과 캐시 비율"/></td>
+</tr>
+<tr>
+<td><sub><b>모델</b>: 내 계정들을 답하는 순서대로. 위 계정이 답할 수 없으면 답이 시작되기 전에 다음 계정이 이어받습니다.</sub></td>
+<td><sub><b>로그</b>: 명령, 응답, 도구 호출, 그리고 턴마다 한 줄의 사용량(호출 수, 프롬프트 크기, 캐시에서 읽은 비율).</sub></td>
+</tr>
+</table>
 
-<img src="img/Geny_Charactor.png" align="right" width="200" alt="Geny 캐릭터"/>
-
-| 개념 | 역할 |
+| 종류 | 제공자 |
 |---|---|
-| **VTuber 세션** | 대화의 얼굴. Live2D / Spine 아바타, 페르소나 prompt, TTS, 감정 tag. 사용자와 대화하고, 실제 작업은 짝지어진 Sub-Worker 에게 위임. |
-| **Sub-Worker 세션** | 실행 레이어. tool 사용 agent — 파일/쉘/웹 fetch/MCP-bridge 호스트 tool 모두. 결과는 구조화된 `[SUB_WORKER_RESULT]` 메시지로 보고. |
-| **Environment** | 21개 stage + provider + tool set 을 모두 핀하는 직렬화된 [`EnvironmentManifest`](docs/environments.md) artifact. 단일 artifact, 결정적 재생산. |
-| **3D 도시 플레이그라운드** | Three.js / React Three Fiber 대시보드 — 세션이 절차적으로 생성된 도시를 걸어다니는 캐릭터로 표현. |
-| **5개 LLM backend** | `anthropic` / `openai` / `google` / `vllm` (self-host) / `claude_code_cli` — env 단위로 선택, 코드 변경 없음. |
-| **Stable error code** | 모든 executor 실패가 안정된 `exec.<component>.<reason>` 코드로 표면화. Frontend 가 한국어/영어 actionable 메시지로 i18n 렌더. |
+| 구독 로그인 | Claude Code (Pro / Max, 여러 계정을 나란히), ChatGPT · Codex (Plus / Pro / Business) |
+| API 키 | Anthropic, OpenAI, Google Gemini, OpenRouter, DeepSeek, xAI, Groq, Together, Fireworks, Mistral, Moonshot, Z.ai, Alibaba, NVIDIA, DeepInfra, Hugging Face |
+| 직접 운영 | Ollama, vLLM, OpenAI 호환 엔드포인트 (비전·도구·컨텍스트 창 지정, 모델 목록 조회) |
 
-Backend 는 [`geny-executor`](https://github.com/CocoRoF/geny-executor) 위에서 구축 — 21단계 manifest 기반 agent pipeline (LangChain 없음, LangGraph 없음). Frontend 는 Next.js 16 + R3F 기반 3D + Pixi.js (whiteboard / 2D overlay) + 한국어/영어 i18n.
+구독 계정은 글을 만드는 데만 씁니다. 도구는 전부 Geny 가 직접 돌리므로, 어느 모델이 불러도 도구는 똑같이 동작합니다. 자세히 → [`docs/providers.md`](docs/providers.md)
 
 ---
 
-## 아키텍처 (한 눈에)
+## 앱
 
-<!-- 📸 IMAGE NEEDED: 아래 ASCII 맵을 대체/보완할 다이어그램 -->
+모든 앱은 한 버전을 쓰고 같은 [릴리스](https://github.com/CocoRoF/Geny/releases/latest)에서 나옵니다 (현재 **v0.31.0**).
 
-```
-┌────────────────────────── Geny ──────────────────────────────────┐
-│                                                                  │
-│  Frontend (Next.js 16 + R3F + Pixi)                              │
-│   ├── 3D City Playground (Three.js / R3F)                        │
-│   ├── VTuber chat panel + Live2D / Spine 아바타                  │
-│   ├── Environment editor (21-stage manifest UI)                  │
-│   ├── LLM Backends 설정 (5 provider 카드)                        │
-│   ├── Memory / Knowledge / Whiteboard tab                        │
-│   └── Logs tab (i18n 처리된 error code, tool trace, stage event) │
-│                                                                  │
-│  Backend (FastAPI)                                               │
-│   ├── controller/  ← FastAPI routes (sessions, env, vtuber, …)   │
-│   ├── service/                                                   │
-│   │   ├── executor/    ← geny-executor 연결                      │
-│   │   ├── gapt/        ← GAPT client + workspace provider        │
-│   │   ├── environment/ ← manifest store + 템플릿                 │
-│   │   ├── llm_patches/ ← 한국어 에러 envelope + CLI tool tap     │
-│   │   ├── memory/      ← 세션 memory v2 + vector retrieval       │
-│   │   ├── permission/  ← per-tool ACL 평가기                     │
-│   │   ├── vtuber/      ← Live2D / Spine 라이브러리 + thinking-tg │
-│   │   └── chat/        ← chat-room store + delegation 라우팅     │
-│   ├── tools/  ← auto-load Python tool (send DM, memory, …)       │
-│   ├── mcp/    ← auto-load MCP server config                      │
-│   ├── scripts/geny_mcp_bridge.py ← CLI 용 per-session MCP wrap   │
-│   └── prompts/  ← role markdown (vtuber.md, worker.md, …)        │
-│                                                                  │
-│  geny-executor ≥2.47  (PyPI 의존)                                │
-│   ├── 21-stage agent pipeline                                    │
-│   ├── 5개 LLM client 구현                                        │
-│   ├── ContainerCLIRunner + SandboxHandle (샌드박스에서 CLI 실행)│
-│   └── ExecutorErrorCode taxonomy                                 │
-│                                                                  │
-│  gapt/  ← GAPT submodule (샌드박스/devops 플랫폼)                │
-│   ├── server/  FastAPI control plane (projects/workspaces/…)     │
-│   ├── per-workspace 컨테이너 (git · fs · terminal · preview)    │
-│   └── deploy pipeline (compose / ssh / webhook target)           │
-└──────────────────────────────────────────────────────────────────┘
-```
+| 앱 | 파일 | 설치 |
+|---|---|---|
+| **Windows** | `Geny-Setup-<버전>.exe` | 실행합니다. SmartScreen 이 뜨면 **추가 정보 → 실행** (서명 없음). |
+| **macOS** (Apple Silicon) | `Geny-<버전>-arm64.dmg` | *Geny* 를 응용 프로그램으로 끌어 놓고, 처음엔 **오른쪽 클릭 → 열기**. |
+| **Linux** | `Geny-<버전>.AppImage` · `geny-connector_<버전>_amd64.deb` | AppImage: `chmod +x` 후 실행 (Ubuntu 22.04+ 는 `sudo apt install libfuse2`). deb: `sudo dpkg -i`. 로그인 토큰 보관에 gnome-keyring 이나 KWallet 이 필요합니다. |
+| **Android** | `Geny-<버전>.apk` | 출처를 알 수 없는 앱 설치를 허용합니다. 임시 키로 서명돼 있어 릴리스끼리는 그대로 업데이트되지만, 나중에 정식 키로 바뀌면 한 번은 지우고 다시 깔아야 합니다. |
+| **iOS** | `Geny-<버전>-ios-unsigned.ipa` | 서명되지 않았습니다. 직접 서명하거나 사이드로딩 도구로 설치하세요. |
 
-전체 아키텍처 문서 → [`docs/architecture.md`](docs/architecture.md).
-Geny ⇄ GAPT 통합 → [`docs/analysis/gapt-integration-plan.md`](docs/analysis/gapt-integration-plan.md).
+**처음 실행:** Geny 서버 주소, 아이디, 비밀번호를 넣습니다. 토큰은 OS 키체인에 들어갑니다. 데스크톱 앱은 Windows 와 Linux(AppImage)에서 GitHub 릴리스로 스스로 업데이트합니다. macOS 자동 업데이트에는 정식 서명 빌드가 필요합니다.
 
----
+**데스크톱 앱에만 있는 것:** 아바타 오버레이와 조작 칩, 빠른 대화 창, 장치를 고를 수 있는 눌러서 말하기·핸즈프리 음성, 화면 관찰, 내 컴퓨터 조작(허락하기 전엔 꺼져 있음), 에이전트가 다루는 전용 브라우저, 에이전트가 부를 수 있는 로컬 MCP 서버, 그리고 드라이브(연결한 에이전트마다 작업공간이 이 PC 의 폴더와 실시간으로 동기화되거나 드라이브처럼 연결됨). 설정은 메인 창의 탭 하나에 있습니다.
 
-## 주요 기능
-
-### VTuber ↔ Sub-Worker pairing
-모든 VTuber 세션은 자동으로 Sub-Worker 와 짝지어집니다. VTuber 는 대화와 페르소나를 담당, Sub-Worker 가 실제 작업. 위임은 단일 MCP-bridge tool (`mcp__geny__send_direct_message_internal`) 로 흐름 — [`docs/sessions.md`](docs/sessions.md) 참조.
-
-### 5개 LLM backend, 하나의 selector
-설정 → LLM 백엔드 에 5개 provider (Anthropic / OpenAI / Google / vLLM / Claude Code CLI) 각각 health probe + auth flow 카드 제공. 모든 environment 의 Stage 6 가 드롭다운으로 선택 — [`docs/providers.md`](docs/providers.md) 참조.
-
-<!-- 📸 IMAGE NEEDED: 설정 → LLM 백엔드 — 5개 provider 카드 + health 상태 -->
-> 📸 **이미지 필요** — _설정 → LLM 백엔드: 5개 provider 카드와 health 상태._
-
-### Manifest 기반 environment
-Pipeline 은 `EnvironmentManifest` JSON artifact 로 정의됨 — 21 stage, slot 마다 strategy 1개, 버전 관리. UI 의 environment editor 가 모든 preset (worker / VTuber / Sub-Worker) 을 코드 없이 customise 가능 — [`docs/environments.md`](docs/environments.md) 참조.
-
-<!-- 📸 IMAGE NEEDED: Environment editor — 21단계 manifest UI + strategy 드롭다운 -->
-> 📸 **이미지 필요** — _Environment editor: 21단계 manifest UI + strategy 드롭다운._
-
-### Per-session MCP wrap (Claude Code CLI)
-세션이 `claude_code_cli` 를 Stage 6 backend 로 핀하면, Geny 는 per-session MCP bridge 를 attach 해 spawned CLI 의 LLM 이 **Geny 의 tool registry** 를 `mcp__geny__<tool>` 로 보게 함 — 파일 작업, web fetch, memory, blog publisher, sub-worker delegation 모두 CLI 의 agentic loop 안에서 native 호출 가능.
-
-### Stable error code + i18n
-모든 executor exception 은 안정된 `exec.<component>.<reason>` 코드를 carry. 세션 로그가 raw 영어 서버 에러 대신 한국어 메시지 + 권장 다음 단계를 렌더 — [`docs/error_codes.md`](docs/error_codes.md) 참조.
-
-### 3D 도시 플레이그라운드
-활성 세션이 절차적 Kenney-asset 도시 안에서 걸어다니는 캐릭터로 표현됨. A* pathfinding, 본 애니메이션, 시간대 사이클. R3F + Drei + Three.js.
-
-<!-- 📸 IMAGE NEEDED: 3D 도시 플레이그라운드 — 절차적 도시를 걸어다니는 에이전트 + 시간대 조명 -->
-> 📸 **이미지 필요** — _3D 도시 플레이그라운드: 절차적 도시를 걸어다니는 에이전트 + 시간대 조명._
-
-### Live2D + Spine + AI-bake 아바타
-Geny 에 별도 puppet-editor 서비스 ([`geny-avatar`](https://github.com/CocoRoF/geny-avatar)) 가 git submodule 로 포함됨. Spine 또는 Cubism puppet 업로드, 레이어 분해, 마스크 페인팅, AI 텍스처 재생성, Geny 의 VTuber 라이브러리에 직접 bake.
-
-### TTS / STT / 음성 노트
-출력은 edge-tts, 입력은 Whisper, 다화자 장면은 OmniVoice 통합. 음성 노트 기능으로 whiteboard 에 받아쓰기 가능.
-
-### Knowledge whiteboard + Memory v2
-세션 메모리가 `geny-executor` 의 Stage 2 (Context) + Stage 18 (Memory) 를 거침 — progressive disclosure, vault map, vector retrieval. Knowledge whiteboard 는 다이어그램 작업용 협업 Pixi.js 캔버스.
-
-### Multi-pod 지원
-Redis 기반 세션 메타데이터 sharding 으로 여러 backend pod 가 한 사용자를 서빙 — 클라우드 배포에 유용.
-
-### 샌드박스 프로젝트 & 배포 (GAPT)
-프로젝트 / 워크스페이스 / 샌드박스 / 배포는 **[GAPT](https://github.com/CocoRoF/geny-adapted-project-toolkit)** (`geny-adapted-project-toolkit`) 에 위임되며, [`gapt/`](gapt/) 에 **git submodule** 로 포함됩니다 (`main` 추적; `git pull` 시 [`.githooks/post-merge`](.githooks/post-merge) 로 자동 롤). GAPT 는 각 워크스페이스를 격리 컨테이너에서 실행하고 (git · 파일 작업 · 터미널 · dev-server 프리뷰 · compose/ssh 배포 타깃), Postgres 기반 + Caddy 라우팅. Geny 는 자체 에이전트 런타임(페르소나 · 음성 · 감정 · 메모리)을 유지하면서 executor 의 `ContainerCLIRunner` 로 세션을 GAPT 워크스페이스에 연결 — 에이전트는 샌드박스 안에서 코드를 편집하고, Geny 의 해자는 호스트 측에 그대로 남습니다. 에이전트는 GAPT 의 41-tool MCP 로 GAPT 를 직접 조종할 수도 있습니다. 설계: [`docs/analysis/gapt-integration-plan.md`](docs/analysis/gapt-integration-plan.md) · 배포 + 테스트: [`docs/operations/gapt-test-guide.md`](docs/operations/gapt-test-guide.md).
-
----
-
-## 프로젝트 구조
-
-```
-geny/
-├── README.md / README_ko.md          # 이 hub
-├── img/                              # 로고/스크린샷
-├── docs/                             # 주제별 문서 (architecture, sessions, …)
-├── backend/                          # FastAPI + geny-executor 호스트
-│   ├── main.py                       # 앱 entry + executor 연결
-│   ├── pyproject.toml                # geny-executor >= 2.47.0 pin
-│   ├── controller/                   # FastAPI routes
-│   │   ├── agent_controller.py       # 세션 + 스트림 + invoke
-│   │   ├── llm_backends_controller.py# 5 provider health + auth
-│   │   ├── mcp_bridge_controller.py  # per-session MCP RPC
-│   │   ├── vtuber_*.py               # VTuber 라이브러리 + chat + thinking
-│   │   ├── memory_*.py               # memory + knowledge + opsidian
-│   │   ├── chat_controller.py        # chat-room CRUD
-│   │   ├── environment_controller.py # manifest editor backend
-│   │   └── …                         # cron, whiteboard, voice-notes, …
-│   ├── service/
-│   │   ├── executor/                 # AgentSessionManager + AgentSession
-│   │   ├── gapt/                     # GAPT client + workspace provider
-│   │   ├── environment/              # manifest store + 템플릿
-│   │   ├── llm_patches.py            # 한국어 에러 envelope + CLI tool tap
-│   │   ├── memory/                   # 세션 memory v2
-│   │   ├── permission/               # per-tool ACL
-│   │   ├── vtuber/                   # Live2D / Spine 라이브러리 + trigger
-│   │   ├── chat/                     # chat-room store + delegation
-│   │   ├── config/                   # ConfigManager + 설정 카드
-│   │   ├── logging/                  # SessionLogger (error_code 지원)
-│   │   └── …
-│   ├── tools/                        # auto-load Python tool
-│   │   ├── built_in/                 # messaging, memory, knowledge
-│   │   └── custom/                   # web_search, browser, whiteboard, blog
-│   ├── mcp/                          # auto-load MCP server config
-│   ├── scripts/geny_mcp_bridge.py    # CLI MCP wrap 용 stdio bridge
-│   └── prompts/                      # role markdown (vtuber.md, worker.md, …)
-├── frontend/                         # Next.js 16 + R3F + Pixi
-│   └── src/
-│       ├── components/               # tab, modal, panel, env_management/…
-│       ├── lib/                      # api.ts, i18n/, modelCatalog.ts, …
-│       ├── store/                    # Zustand store
-│       └── types/                    # 공유 TypeScript type
-├── vendor/geny-avatar/               # puppet-editor submodule
-├── gapt/                             # GAPT git submodule (main 추적)
-│   ├── server/                       # FastAPI control plane (projects/workspaces/…)
-│   ├── compose/                      # GAPT compose stack (postgres/redis/caddy/…)
-│   ├── docker/workspace/             # per-workspace 샌드박스 이미지
-│   └── mcp/                          # GAPT 용 41-tool 에이전트 MCP
-└── docker-compose.{yml,dev,prod}.yml # compose stack
-```
-
-개발자용 backend 내부 아키텍처 맵은 [`backend/docs/`](backend/docs/) 와 [`docs/architecture.md`](docs/architecture.md) 참조.
-
----
-
-## 기술 스택
-
-| Layer | 기술 |
-|---|---|
-| **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS v4, Zustand 5, Pixi.js |
-| **3D 엔진** | Three.js, React Three Fiber, Drei |
-| **아바타** | Live2D Cubism, Spine 4, [geny-avatar](https://github.com/CocoRoF/geny-avatar) 에디터 |
-| **Backend** | Python 3.11+, FastAPI, Uvicorn |
-| **Agent pipeline** | [`geny-executor`](https://github.com/CocoRoF/geny-executor) (21 stage, 5 provider) |
-| **LLM SDK** | `anthropic`, `openai`, `google-genai` + vLLM (OpenAI 호환) + Claude Code CLI subprocess |
-| **MCP** | 호스트 attach 서버 + per-session CLI MCP wrap |
-| **TTS / STT** | edge-tts (출력), Whisper (입력), OmniVoice (다화자) |
-| **Persistence** | PostgreSQL (sessions, memory, knowledge), Redis (multi-pod 메타데이터, optional) |
-| **Container** | Docker Compose (dev / prod 프로필 + OAuth 자격증명 생존을 위한 named volume) |
+소스에서 빌드: [`desktop/README.md`](desktop/README.md) (`npm install && npm run dev`). 휴대폰 앱은 [`mobile/`](mobile/) (Expo). VS Code 확장(미리보기)은 [`vscode-extension/`](vscode-extension/).
 
 ---
 
 ## 설치
 
-### 한 줄 설치 (추천) — `./geny up`
-
-GPU·API 키·submodule 없이 가장 빠르게 띄우는 경량(lite) 경로입니다.
+### `./geny` 한 줄
 
 ```bash
 git clone https://github.com/CocoRoF/Geny.git
 cd Geny
-./geny up            # postgres + backend + frontend (GPU-free, 키 0개)
+./geny up            # postgres + backend + frontend (GPU·키·서브모듈 없이)
 ```
 
-`./geny up`이 알아서: docker/compose 확인 → `.env` 시드(없으면 sample 복사) → 빌드·기동 → 백엔드 healthy 대기 → 접속 URL 안내. **http://localhost:3000** 접속 → 관리자 계정 생성 → **Settings → LLM 백엔드**에서:
-
-- **로컬·키 0개**: Ollama를 켠 뒤 Ollama 카드에서 *모델 검색* → 바로 사용.
-- **클라우드**: Anthropic / OpenAI / Google 키를 해당 카드에 붙여넣기.
-
-기타 명령:
+`./geny up` 은 Docker 를 확인하고, `.env.sample` 로 `.env` 를 만들고, 빌드하고, 띄우고, 백엔드가 준비될 때까지 기다린 뒤 주소를 알려 줍니다. **http://localhost:3000** 을 열어 관리자 계정을 만들고, **설정 › 모델** 에서 계정을 추가하세요. Claude Code 나 ChatGPT 로그인, API 키, 또는 로컬 Ollama·vLLM 서버 주소면 됩니다.
 
 ```bash
-./geny up --full     # + 아바타 에디터(submodule) + 로컬 GPU TTS/STT (NVIDIA 필요)
-./geny doctor        # 호스트 설정 진단 ( --fix 로 .env 시드·submodule 초기화 )
-./geny logs backend  # 로그 추적
-./geny update        # git pull + 재빌드 + 재시작
-./geny down          # 정지
+./geny up --full     # + 아바타 편집기(git 서브모듈) + OmniVoice 로컬 TTS (NVIDIA GPU)
+./geny doctor        # 호스트 점검 ( --fix 는 .env 와 서브모듈을 채움 )
+./geny logs backend  # 로그 보기
+./geny update        # git pull, 다시 빌드, 재시작
+./geny down          # 중지
 ```
 
-> lite 스택은 음성(TTS)이 클라우드 edge-tts로 동작합니다. 자체호스팅 고품질 음성(OmniVoice)·STT(Whisper)는 NVIDIA GPU가 있을 때 `./geny up --full`로 켜집니다.
-
-### Docker (수동)
+### Docker Compose
 
 ```bash
-# 1. submodule 포함 clone (gapt + geny-avatar + geny-licensed-assets)
 git clone --recurse-submodules https://github.com/CocoRoF/Geny.git
 cd Geny
-# --recurse-submodules 없이 clone 했다면:
-#   git submodule update --init --recursive
-# main 추적 submodule (gapt, geny-avatar) 을 매 pull 마다 자동 롤:
-#   git config core.hooksPath .githooks   # 1회; `submodule update --remote` 실행
-# GAPT 를 최신 upstream main 으로 갱신:
-#   git submodule update --remote gapt && git add gapt && git commit -m "chore: bump gapt"
-
-# 2. 설정
-cp backend/.env.example backend/.env
-# backend/.env 편집 — 최소 ANTHROPIC_API_KEY 설정 (또는 Settings 의 OAuth 사용)
-
-# 3. 실행
-docker compose up --build
+cp .env.sample .env                       # 포트, 데이터베이스, 시간대
+cp backend/.env.example backend/.env      # 선택: 키와 스위치
+docker compose up -d --build
 ```
-
-**http://localhost:3000** 접속.
-
-Compose 프로필:
 
 | 파일 | 용도 |
 |---|---|
-| `docker-compose.yml` | 기본 dev 스택 |
-| `docker-compose.dev.yml` / `dev-core.yml` | hot-reload bind mount 가 있는 dev |
-| `docker-compose.prod.yml` / `prod-core.yml` | nginx 뒤의 프로덕션 |
+| `docker-compose.yml` | 기본 스택: postgres, backend, frontend, 아바타 편집기, OmniVoice (`--profile audio-local`) |
+| `docker-compose.dev.yml` · `dev-core.yml` | 핫 리로드 개발용 (`dev` 는 Whisper STT 와 OmniVoice 추가) |
+| `docker-compose.prod.yml` · `prod-core.yml` | nginx 뒤 운영용 (`prod` 는 Qdrant, Whisper STT, OmniVoice, autoheal 추가) |
 
-커스텀 port + 데이터 디렉토리는 [`docs/architecture.md`](docs/architecture.md) 참조.
+`.env` 의 주요 값: `BACKEND_PORT`, `FRONTEND_PORT`, `POSTGRES_*`, `TIMEZONE`. 나머지(모델 계정, 목소리, 채널, 도구)는 앱의 **설정** 에서 정합니다.
 
-### Manual 설정
+### 다른 곳에서 말 걸기
 
-비-Docker 개발은 [`docs/architecture.md`](docs/architecture.md) 의 확장 섹션 참조. 최소 요구사항: Python 3.11+, Node.js 18+, Claude Code CLI (`npm i -g @anthropic-ai/claude-code`), 최소 1개 provider 자격증명.
+Discord, Telegram, Slack 봇으로도 에이전트와 대화할 수 있습니다(**설정 › Channels**). 카카오와 Microsoft Teams 는 준비 중으로 표시돼 있습니다.
 
-**문서 편집/미리보기에 추가 시스템 패키지가 필요 없습니다.** 세션 Canvas 탭의 오피스 문서(pptx/docx/xlsx) 미리보기는 [edit2docs](https://github.com/CocoRoF/edit2docs) 네이티브 OOXML 렌더 파이프라인(geny-executor ≥2.44)으로 동작 — LibreOffice·poppler 는 더 이상 필요 없고 Docker 이미지에서도 제거됐습니다(~500 MB 경량화). 한국어 문서도 기본 렌더가 정상입니다.
+### API
 
----
-
-## Avatar Editor (geny-avatar)
-
-Geny 에는 Next.js puppet-editor 서비스 ([`geny-avatar`](https://github.com/CocoRoF/geny-avatar)) 가 git submodule (`vendor/geny-avatar`) 로 포함돼 있습니다. Spine 또는 Cubism puppet 업로드, 레이어 분해, 마스크 페인팅, AI (gpt-image-2 / SAM) 텍스처 재생성, Geny VTuber 라이브러리에 직접 bake (`(Editor)` 접미사로 표시).
-
-`vendor/geny-avatar` 는 버전 관리된 `post-merge` hook ([`.githooks/post-merge`](.githooks/post-merge)) 으로 `main` 을 추적 — 서버가 매번 `git pull` 마다 submodule 을 fast-forward 합니다.
+앱이 하는 일은 모두 REST + WebSocket API 를 거칩니다 (로그인한 상태에서 백엔드의 `/docs` 에 전체 목록이 있습니다).
 
 ```bash
-git config core.hooksPath .githooks       # clone 마다 1회
-git pull                                  # vendor/geny-avatar fast-forward
-docker compose -f docker-compose.prod.yml --profile tts-local up -d --build avatar-editor backend
-```
+TOKEN=$(curl -s -X POST localhost:8000/api/auth/login -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"…"}' | jq -r .access_token)
+H="Authorization: Bearer $TOKEN"
 
-상세 통합 문서 → [`docs/_archive/`](docs/_archive/) (geny-avatar 통합 sprint).
+curl -s -X POST localhost:8000/api/agents -H "$H" -H 'Content-Type: application/json' \
+  -d '{"session_name":"ellen","role":"vtuber"}'                       # 에이전트 만들기
+curl -s localhost:8000/api/chat/rooms/for-session/<session_id> -H "$H" # 그 에이전트의 대화방
+curl -s -X POST localhost:8000/api/chat/rooms/<room_id>/message -H "$H" \
+  -H 'Content-Type: application/json' -d '{"message":"안녕, 엘렌"}'   # 말 걸기
+curl -s -X POST localhost:8000/api/agents/<session_id>/invoke -H "$H" \
+  -H 'Content-Type: application/json' -d '{"input_text":"…"}'         # 한 턴 돌리고 답 받기
+```
 
 ---
 
-## 환경 변수
+## 구조
 
-`backend/.env` 에 설정:
+```mermaid
+flowchart LR
+  subgraph clients[클라이언트]
+    web[웹 앱<br/>Next.js]
+    desk[데스크톱 앱<br/>Electron]
+    phone[휴대폰 앱<br/>Expo]
+    chan[Discord · Telegram · Slack]
+  end
+  subgraph server[Geny 서버]
+    api[FastAPI 백엔드<br/>대화방 · 세션 · 도구 · 기억]
+    exe[geny-executor<br/>21단계 파이프라인]
+    mem[(기억 저장소<br/>Synapse)]
+    db[(PostgreSQL)]
+  end
+  subgraph models[모델 계정 — 순서대로]
+    sub[Claude Code · Codex]
+    keys[API 키]
+    local[Ollama · vLLM]
+  end
+  voice[OmniVoice TTS<br/>Whisper STT]
+  sandbox[GAPT 샌드박스]
+  clients --> api --> exe --> models
+  exe --> mem
+  api --> db
+  api --> voice
+  exe --> sandbox
+```
 
-| 변수 | 설명 | 기본값 |
+턴 하나는 21단계 파이프라인 하나를 지납니다. 입력 → 컨텍스트(최근 턴을 메시지로 다시 넣고 기억을 찾아옴) → 시스템 프롬프트 → 가드 → 캐시 → 모델 호출 → 해석 → 도구 → 평가 → 반복 → 기억 → 요약. 모든 에이전트가 같은 파이프라인을 씁니다. 다른 것은 세션에 붙어 있는 것들(페르소나, 도구, 동료, 트리거)이고, 세부 동작은 세션의 **하네스** 탭에서 조정합니다.
+
+### Geny 생태계
+
+| 프로젝트 | 무엇인가 | 역할 |
 |---|---|---|
-| `APP_HOST` | 서버 bind 주소 | `0.0.0.0` |
-| `APP_PORT` | 서버 port | `8000` |
-| `DEBUG_MODE` | verbose logging | `false` |
-| `ANTHROPIC_API_KEY` | Anthropic key (Settings OAuth 도 가능) | — |
-| `OPENAI_API_KEY` | OpenAI key (Settings 에서 붙여넣기 가능) | — |
-| `GOOGLE_API_KEY` | Google GenAI key | — |
-| `GITHUB_TOKEN` | PR 자동화용 GitHub PAT | — |
-| `USE_REDIS` | Redis multi-pod 메타데이터 활성화 | `false` |
-| `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | Redis | `localhost` / `6379` / — |
-| `GENY_AGENT_STORAGE_ROOT` | 세션 저장 경로 | `/data/geny_agent_sessions` (Docker) |
-
-Frontend 의 `API_URL` env (shell, build-time) 가 backend target 을 override — [`docs/architecture.md`](docs/architecture.md) 참조.
+| ➡️ [**Geny**](https://github.com/CocoRoF/Geny) | 얼굴·목소리·기억을 가진 자체 호스팅 에이전트 | 제품 |
+| [**geny-executor**](https://github.com/CocoRoF/geny-executor) | 21단계 에이전트 파이프라인 · PyPI · Apache-2.0 | 엔진 |
+| [**GAPT**](https://github.com/CocoRoF/geny-adapted-project-toolkit) | 자체 호스팅 AI DevOps: 샌드박스, 편집, 빌드, 배포 | 에이전트가 코드를 돌리는 곳 (서브모듈 `gapt/`) |
+| [**geny-avatar**](https://github.com/CocoRoF/geny-avatar) | AI 텍스처 생성이 들어간 2D 아바타 편집기 | 아바타를 만드는 곳 (서브모듈 `vendor/geny-avatar`) |
+| [**edit2docs**](https://github.com/CocoRoF/edit2docs) | AI 네이티브 DOCX / XLSX / PPTX 엔진 · PyPI | 문서: 생성, 편집, 미리보기 |
+| [**AN-Web**](https://github.com/CocoRoF/an-web) | AI 네이티브 헤드리스 브라우저 · PyPI | 웹: 탐색, 읽기, 검색 |
 
 ---
 
-## 빠른 API 투어
+## 저장소
 
-Geny 는 `/api/` 아래에 REST + SSE 노출:
-
-```bash
-# VTuber 세션 생성 (Sub-Worker 자동 페어링)
-curl -X POST http://localhost:8000/api/sessions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "session_name": "geny-1",
-    "role": "vtuber",
-    "env_id": "template-vtuber-env",
-    "character_display_name": "Geny"
-  }'
-
-# 세션 리스트
-curl http://localhost:8000/api/sessions
-
-# VTuber 에게 메시지 (복잡 task 는 자동 Sub-Worker 위임)
-curl -X POST http://localhost:8000/api/chat/rooms/<room_id>/messages \
-  -H "Content-Type: application/json" \
-  -d '{"content": "test.txt 만들어서 자기소개 적어놔"}'
-
-# 세션 로그 스트림 (SSE)
-curl -N http://localhost:8000/api/command/logs/<session_id>/stream
+```
+Geny/
+├── backend/            FastAPI 서버: 컨트롤러, 서비스, 도구, 프롬프트, 스킬
+├── frontend/           Next.js 16 웹 앱 (데스크톱 아바타용 /overlay 도 여기서)
+├── desktop/            Electron 앱: 아바타 오버레이, 빠른 대화, 작업 창
+├── mobile/             Android·iOS 용 Expo 앱
+├── shared/chat/        데스크톱과 휴대폰 앱이 함께 쓰는 채팅 코어
+├── vscode-extension/   VS Code 확장 (미리보기)
+├── omnivoice/          자체 호스팅 TTS 서비스
+├── whisper-stt/        자체 호스팅 STT 서비스 (vLLM)
+├── drive-daemon/       에이전트 작업공간용 드라이브 마운트 (Go)
+├── gapt/               GAPT 샌드박스 플랫폼 (git 서브모듈)
+├── vendor/geny-avatar/ 아바타 편집기 (git 서브모듈)
+├── nginx/ · deploy/    운영용 리버스 프록시와 배포 스크립트
+├── docs/               주제별 문서
+└── geny                한 줄 실행기
 ```
 
-| Endpoint 그룹 | 용도 |
+| 층 | 기술 |
 |---|---|
-| `/api/sessions` | 세션 CRUD + status |
-| `/api/agent/sessions/{id}/invoke` | one-shot invoke |
-| `/api/command/logs/{id}/stream` | SSE 로그 스트림 (i18n 용 error_code 포함) |
-| `/api/chat/rooms/*` | chat-room store (VTuber ↔ 사용자) |
-| `/api/environments` | manifest CRUD + 템플릿 |
-| `/api/llm-backends` | 5 provider health, auth, login flow |
-| `/api/internal/mcp/{sid}/rpc` | per-session MCP bridge (CLI wrap) |
-| `/api/vtuber/library` | Live2D / Spine 모델 레지스트리 |
-| `/api/memory/*` | 세션 memory + knowledge whiteboard |
+| 웹 | Next.js 16, React 19, TypeScript, Tailwind CSS 4, Zustand 5 |
+| 아바타 | Live2D Cubism (pixi-live2d-display), Spine, MMD 3D (babylon-mmd), [geny-avatar](https://github.com/CocoRoF/geny-avatar) |
+| 데스크톱 | Electron 33, electron-vite, React 19, electron-updater |
+| 휴대폰 | Expo 53, React Native 0.79 |
+| 서버 | Python 3.11+, FastAPI, PostgreSQL |
+| 에이전트 엔진 | [`geny-executor`](https://github.com/CocoRoF/geny-executor) ≥ 2.79 |
+| 기억 | Synapse ([geny-memory-adaptor](https://pypi.org/project/geny-memory-adaptor/)), Qdrant (지식, 선택) |
+| 음성 | OmniVoice, vLLM 위의 Whisper, Edge / OpenAI / ElevenLabs TTS |
+| 문서 · 웹 | [edit2docs](https://github.com/CocoRoF/edit2docs), [AN-Web](https://github.com/CocoRoF/an-web) |
 
-전체 API 레퍼런스 → backend 실행 중 `/docs` (FastAPI 자동 생성).
-
----
-
-## Tools & Skills
-
-### DB 기반 커스텀 tool (UI 기반 — 추천)
-
-Python 작성 없이 HTTP API 를 tool 로 등록 — **환경관리 → 커스텀 도구** 탭:
-
-| Backend kind | 역할 |
-|---|---|
-| `http` | HTTP 요청 전송. URL/헤더/바디에 `${arg:foo}` / `${secret:KEY}` / `${session:session_id}` placeholder |
-| `mcp_proxy` | upstream MCP 서버의 tool 을 새 이름 + 선택적 schema overlay 로 재노출 |
-| `builtin_alias` | 기존 `backend/tools/custom/*_tools.py` Python tool 위 metadata overlay — Geny 는 `blog_agent_*` 패밀리를 이 방식의 샘플로 제공 |
-
-전체 가이드 → [`docs/custom_tools.md`](docs/custom_tools.md).
-
-`custom_tools` 테이블의 JSONB row 로 저장 (모델: [`backend/service/database/models/custom_tool.py`](backend/service/database/models/custom_tool.py)) 되고, 매 CRUD 변경 시 live `ToolLoader` 로 hot-reload — 프로세스 재시작 없음.
-
-### MCP 서버 auto-load
-
-`backend/mcp/` 에 `.json` 떨어뜨리면 env manifest 가 pull-in 한 모든 세션에서 사용 가능:
-
-```jsonc
-// backend/mcp/github.json
-{
-  "type": "http",
-  "url": "https://api.github.com/mcp/",
-  "description": "GitHub MCP server"
-}
-```
-
-[`backend/mcp/README.md`](backend/mcp/README.md) 참조.
-
-### Python tool auto-register
-
-`backend/tools/custom/` 에 `*_tools.py` 떨어뜨리기:
-
-```python
-# backend/tools/custom/search_db_tools.py
-from tools.base import tool
-
-@tool
-def search_database(query: str) -> str:
-    """데이터베이스 검색"""
-    return f"검색 결과: {query}"
-
-TOOLS = [search_database]
-```
-
-[`backend/tools/README.md`](backend/tools/README.md) 참조. 더 풍부한 UX(설명/schema 편집/UI 에서 dry-run)는 위 **DB 기반 커스텀 tool** 경로 권장.
-
-### Skills (SKILL.md)
-
-세션마다 번들되는 슬래시 커맨드형 skill. Geny 는 여러 tier 제공:
-
-- `executor` — `geny-executor` 자체에 번들.
-- `geny` — 1st-party Geny skill (`backend/skills/bundled/`).
-- `sample` — Geny 제공 *템플릿* (`backend/skills/samples/`), 자기 skill 로 복사해 사용.
-- `user` — 운영자 제공 (`~/.geny/skills/`, `skills.user_skills_enabled` 로 opt-in).
-
-**환경관리 → SKILLS** 탭에서 관리.
-
-### Per-session MCP wrap (Claude Code CLI)
-
-세션의 Stage 6 provider 가 `claude_code_cli` 일 때, Geny 는 stdio MCP bridge (`scripts/geny_mcp_bridge.py`) 를 통해 자신의 tool registry 를 spawned CLI 의 LLM 에 attach. CLI 의 LLM 이 `send_direct_message_internal`, `memory_write`, `web_search` 등을 `mcp__geny__<tool>` 로 보고 native 호출 가능 — 전체 흐름은 [`docs/sessions.md`](docs/sessions.md) 참조.
+더 보기: [`docs/providers.md`](docs/providers.md) (모델 계정과 라우트) · [`docs/custom_tools.md`](docs/custom_tools.md) (코드 없이 HTTP 도구) · [`docs/error_codes.md`](docs/error_codes.md) · [`desktop/README.md`](desktop/README.md). `docs/` 의 일부 문서는 단일 파이프라인 개편 이전 내용이라, 기준은 코드입니다.
 
 ---
 
-## 에러 핸들링 + i18n
+## 기여
 
-모든 executor exception 이 안정된 [`ExecutorErrorCode`](https://github.com/CocoRoF/geny-executor/blob/main/docs/error_codes.md) (예: `exec.cli.auth_failed`) 를 carry. Backend 가 `SessionLogger` 를 거쳐 SSE payload 로 전달, frontend 가 `executor.<code>` i18n 룩업으로 한국어 메시지 + actionable 다음 단계를 렌더. raw 영어 서버 메시지 대신 사용자가 보는 것:
+이슈와 PR 을 환영합니다. 버그, 문서, 번역, 아바타, 도구와 스킬 모두 기여입니다.
 
-> Claude Code CLI 인증이 만료됐어요. 설정 → LLM 백엔드 → Claude Code (CLI) 카드의 ‘다시 로그인’을 누르거나 `ANTHROPIC_API_KEY` 를 붙여넣어 주세요.
+1. `./geny up` 으로 로컬 스택을 띄워 재현하거나 그 위에서 만듭니다.
+2. 큰 작업은 이슈부터, 작은 수정은 바로 PR 로.
 
-전체 흐름 → [`docs/error_codes.md`](docs/error_codes.md).
-
----
-
-## Cross-platform 지원
-
-- **Windows**: `%LOCALAPPDATA%\geny_agent_sessions`, `.cmd`/`.exe` 자동 감지.
-- **macOS / Linux**: `/tmp/geny_agent_sessions` (호스트) → `/data/geny_agent_sessions` (컨테이너).
-
----
+Geny 가 쓸모 있었다면 ⭐ 하나가 다른 사람이 Geny 를 찾는 데 도움이 됩니다.
 
 ## 커뮤니티
 
-| 기여자 | 내용 | Link |
+| 기여자 | 내용 | 링크 |
 |---|---|---|
-| <a href="https://github.com/SonAIengine"><img src="https://avatars.githubusercontent.com/u/166786347?v=4&s=48" width="48" height="48" alt="Son Seong Jun" title="Son Seong Jun"/></a> [`graph-tool-call`](https://github.com/SonAIengine/graph-tool-call) | Tool-Search-Logic 영감 | — |
-
----
-
-## 관련 프로젝트
-
-**Geny 에코시스템** — 위 [Geny 에코시스템](#geny-에코시스템) 섹션 참조:
-
-- [**geny-executor**](https://github.com/CocoRoF/geny-executor) — Geny backend 가 돌아가는 21단계 에이전트 파이프라인 (Apache-2.0)
-- [**GAPT**](https://github.com/CocoRoF/geny-adapted-project-toolkit) — Geny 가 프로젝트 & 배포를 위임하는 샌드박스 / DevOps 플랫폼 (`gapt/` submodule)
-- [**geny-avatar**](https://github.com/CocoRoF/geny-avatar) — Geny 에 아바타를 bake 하는 puppet 에디터 (`vendor/geny-avatar` submodule)
-
----
-
-## 기여하기
-
-이슈와 PR 을 환영합니다 — 버그 리포트, 문서, 번역, 아바타, tool/skill 전부 좋습니다. 가장 빠른 시작:
-
-1. `./geny up` (60초 로컬 스택) → 재현하거나 그 위에서 개발.
-2. [`docs/`](docs/) 의 아키텍처 / 세션 / 환경 가이드 확인.
-3. 큰 변경은 이슈 먼저, 작은 수정은 바로 PR.
-
-Geny 가 유용했다면 ⭐ 하나가 다른 사람들이 찾는 데 큰 도움이 됩니다.
-
----
+| <a href="https://github.com/SonAIengine"><img src="https://avatars.githubusercontent.com/u/166786347?v=4&s=48" width="48" height="48" alt="Son Seong Jun" title="Son Seong Jun"/></a> [`graph-tool-call`](https://github.com/SonAIengine/graph-tool-call) | 도구 검색 로직의 영감 | — |
 
 ## 라이선스
 
-[Apache License 2.0](LICENSE). Copyright 2026 CocoRoF — [NOTICE](NOTICE) 참조.
-
----
-
-## 버전 히스토리
-
-| 날짜 | 주요 변경 |
-|---|---|
-| 2026-07-06 | Opsidian 3D 지식 그래프를 [@cocorof/graphier](https://github.com/CocoRoF/graphier) 기반으로 재구축 — WebGL 인스턴싱·무리히트 필터·미니맵 |
-| 2026-07-06 | 화면 관측(vision) 파이프라인 엔드투엔드 수리 (geny-executor 2.45 CLI vision wire) |
-| 2026-07-05 | geny-executor 2.44 — edit2docs 네이티브 렌더로 LibreOffice 없는 문서 미리보기 |
-| 2026-07-04 | geny-executor 2.43 — AN-Web + edit2docs 엔진 기반 Browser*/Doc* 빌트인 |
-| 2026-07-03 | Deferred tool search — tool schema 를 매 턴 선적재 대신 온디맨드 로드 |
-| 2026-05-22 | Doc 재정비 — README EN/KO, docs/* 주제별 문서 |
-| 2026-05-22 | Phase 2: executor error code → frontend i18n (PR #830) |
-| 2026-05-21 | geny-executor 2.1.0 — `ExecutorErrorCode` taxonomy + 구조화된 event payload |
-| 2026-05-20 | geny-executor 2.0.6 — copilot_cli 제거 + compat patch 4종 upstream |
-| 2026-05-19 | Phase I — claude_code_cli MCP wrap (per-session bridge + tool_use strip + observability tap) |
-| 2026-04-29 | host_selections (env-scoped hook / skill / permission picker) |
-
-전체 로그 → [GitHub commit history](https://github.com/CocoRoF/Geny/commits/main).
-
----
-
-> _현재 사용자 모드: 한국어가 주 — 영어는 ENG 버튼으로 즉시 전환 가능._
+[Apache License 2.0](LICENSE). Copyright 2026 CocoRoF — [NOTICE](NOTICE) 참고. 스크린샷 속 아바타 모델의 권리는 각 제작자에게 있습니다.
