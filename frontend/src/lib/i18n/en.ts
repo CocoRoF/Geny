@@ -4131,6 +4131,17 @@ const en = {
       whatItRemembers: 'What does it remember',
       howItAnswers: 'What shape are its answers',
     },
+    questionHint: {
+      conversationGetsLong: 'When the context window fills up, the earlier part is summarised to make room.',
+      recentTurns: 'The last turns come back as real messages; the nearest ones keep their tool calls.',
+      promptCache: 'The parts that do not change are cached, so re-reading them costs less.',
+      thinkingBudget: 'How many tokens it may spend thinking before it answers.',
+      toolsAtOnce: 'Whether independent tool calls run together.',
+      delegation: 'Whether it may hand work to a sub-agent.',
+      whenTurnEnds: 'Whether it keeps going after a tool result or answers now.',
+      whatItRemembers: 'What is kept in memory when a turn ends.',
+      howItAnswers: 'The form its answer takes.',
+    },
     field: {
       full_turns: 'Turns shown with their tools',
       dialogue_turns: 'Turns shown as conversation',

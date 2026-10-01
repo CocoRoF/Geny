@@ -149,11 +149,17 @@ function SlotRow({
     ? t(`harness.question.${slot.question}`)
     : `${stage.order}. ${t(`harness.stage.${stage.name}`) ?? stage.name} · ${slot.slot}`;
 
+  // A basic question explains itself in the reader's language; the
+  // pipeline's own description (English, from the library) is the fallback.
+  const hintKey = slot.question ? `harness.questionHint.${slot.question}` : '';
+  const hint = hintKey ? t(hintKey) : '';
   const note = locked
     ? t(`harness.locked.${slot.lockedBecause}`)
     : slot.installedBy
       ? t(`harness.installed.${slot.installedBy}`)
-      : slot.description;
+      : hint && hint !== hintKey
+        ? hint
+        : slot.description;
 
   return (
     <div className="flex flex-col gap-1.5 py-3 border-b border-[var(--border-color)] last:border-b-0">

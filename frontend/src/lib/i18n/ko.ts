@@ -4172,6 +4172,17 @@ const ko: Translations = {
       whatItRemembers: '무엇을 기억할까',
       howItAnswers: '어떤 모양으로 답할까',
     },
+    questionHint: {
+      conversationGetsLong: '컨텍스트 창이 차면 앞부분을 요약해 자리를 만듭니다.',
+      recentTurns: '직전 대화를 메시지 그대로 다시 보여 줍니다. 가까운 턴은 도구 기록까지 함께 봅니다.',
+      promptCache: '변하지 않는 앞부분을 캐시해 같은 내용을 다시 읽는 비용을 줄입니다.',
+      thinkingBudget: '답하기 전에 생각에 쓸 수 있는 토큰의 양입니다.',
+      toolsAtOnce: '서로 영향이 없는 도구 호출을 한꺼번에 실행할지 정합니다.',
+      delegation: '하위 에이전트에게 일을 맡길 수 있는지 정합니다.',
+      whenTurnEnds: '도구 결과를 보고 더 이어 갈지, 여기서 답을 마칠지 정합니다.',
+      whatItRemembers: '턴이 끝날 때 무엇을 기억에 남길지 정합니다.',
+      howItAnswers: '답을 어떤 형식으로 내보낼지 정합니다.',
+    },
     field: {
       full_turns: '도구까지 그대로 보여 줄 턴',
       dialogue_turns: '대화만 보여 줄 턴',
