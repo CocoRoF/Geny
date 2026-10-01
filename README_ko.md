@@ -177,6 +177,17 @@ git clone https://github.com/CocoRoF/Geny.git && cd Geny && ./geny up
 
 **데스크톱 앱에만 있는 것:** 아바타 오버레이와 조작 칩, 빠른 대화 창, 장치를 고를 수 있는 눌러서 말하기·핸즈프리 음성, 화면 관찰, 내 컴퓨터 조작(허락하기 전엔 꺼져 있음), 에이전트가 다루는 전용 브라우저, 에이전트가 부를 수 있는 로컬 MCP 서버, 그리고 드라이브(연결한 에이전트마다 작업공간이 이 PC 의 폴더와 실시간으로 동기화되거나 드라이브처럼 연결됨). 설정은 메인 창의 탭 하나에 있습니다.
 
+<table>
+<tr>
+<td width="50%"><img src="img/readme/desktop-settings-models.png" alt="데스크톱 앱 설정: 모델 계정과 응답 순서"/></td>
+<td width="50%"><img src="img/readme/desktop-settings-voice.png" alt="데스크톱 앱 설정: 말하기 단축키, 스피커와 마이크"/></td>
+</tr>
+<tr>
+<td><sub>데스크톱 앱의 <b>설정 › 모델</b>. 웹과 같은 계정, 같은 순서입니다.</sub></td>
+<td><sub><b>설정 › 음성</b>: 말하기 단축키, 아바타 볼륨, 말할 스피커와 들을 마이크.</sub></td>
+</tr>
+</table>
+
 소스에서 빌드: [`desktop/README.md`](desktop/README.md) (`npm install && npm run dev`). 휴대폰 앱은 [`mobile/`](mobile/) (Expo). VS Code 확장(미리보기)은 [`vscode-extension/`](vscode-extension/).
 
 ---

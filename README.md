@@ -177,6 +177,17 @@ All apps share one version and ship from the same [release](https://github.com/C
 
 **What the desktop app adds:** the avatar overlay and its control chip, the quick-chat bar, push-to-talk and hands-free voice with device selection, screen observation, local control of your computer (off until you allow it), a dedicated browser the agent can drive, local MCP servers the agent can call, and Drive — a folder on this PC where each connected agent's workspace stays in sync (or mounts like a drive). Settings live in a tab of the main window.
 
+<table>
+<tr>
+<td width="50%"><img src="img/readme/desktop-settings-models.png" alt="Desktop app settings: model accounts and the order they answer in"/></td>
+<td width="50%"><img src="img/readme/desktop-settings-voice.png" alt="Desktop app settings: push-to-talk key, speaker and microphone"/></td>
+</tr>
+<tr>
+<td><sub><b>Settings › Models</b> in the desktop app: the same accounts and order as on the web.</sub></td>
+<td><sub><b>Settings › Voice</b>: the push-to-talk key, the avatar's volume, which speaker it talks through and which microphone it hears.</sub></td>
+</tr>
+</table>
+
 Build from source: [`desktop/README.md`](desktop/README.md) (`npm install && npm run dev`). The phone app is in [`mobile/`](mobile/) (Expo). A VS Code extension (preview) is in [`vscode-extension/`](vscode-extension/).
 
 ---
