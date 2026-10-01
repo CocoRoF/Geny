@@ -92,7 +92,12 @@ export default function RightPanel() {
 
   // Stats for vault overview
   const stats = memoryStats;
-  const categories = stats?.categories || userStats?.categories || {};
+  // Before the full index (megabytes, loaded only by the tag/backlink panels)
+  // the vault's size comes from the cheap stats call; what only the index
+  // knows reads "—", not 0 — a 2,000-note vault said "0 files".
+  const totals = (isUserMode || isCuratorMode) ? null : opsidian.vaultTotals;
+  const unknown = '—';
+  const categories = stats?.categories || userStats?.categories || totals?.categories || {};
 
   return (
     <div className="obs-rpanel">
@@ -225,17 +230,17 @@ export default function RightPanel() {
           <div className="obs-rp-props">
             <div className="obs-rp-prop">
               <span className="obs-rp-prop-key">Total Files</span>
-              <span className="obs-rp-prop-val">{isUserMode ? (userStats?.total_files ?? 0) : (stats?.total_files ?? 0)}</span>
+              <span className="obs-rp-prop-val">{isUserMode ? (userStats?.total_files ?? 0) : (stats?.total_files ?? totals?.total_files ?? unknown)}</span>
             </div>
             <div className="obs-rp-prop">
               <span className="obs-rp-prop-key">Total Characters</span>
-              <span className="obs-rp-prop-val">{(isUserMode ? (userStats?.total_chars ?? 0) : (memoryIndex?.total_chars ?? 0)).toLocaleString()}</span>
+              <span className="obs-rp-prop-val">{isUserMode ? (userStats?.total_chars ?? 0).toLocaleString() : (memoryIndex?.total_chars ?? totals?.total_chars)?.toLocaleString() ?? unknown}</span>
             </div>
             {!isUserMode && (
               <>
                 <div className="obs-rp-prop">
                   <span className="obs-rp-prop-key">LTM Entries</span>
-                  <span className="obs-rp-prop-val">{stats?.long_term_entries ?? 0}</span>
+                  <span className="obs-rp-prop-val">{stats?.long_term_entries ?? unknown}</span>
                 </div>
                 {/* Memory v2 PR 5 — STM count is now a deep-link
                     into the Conversation view (Stream tab). Hover
@@ -250,17 +255,17 @@ export default function RightPanel() {
                   <span className="obs-rp-prop-key" style={{ textDecoration: 'underline dotted' }}>
                     STM Entries
                   </span>
-                  <span className="obs-rp-prop-val">{stats?.short_term_entries ?? 0}</span>
+                  <span className="obs-rp-prop-val">{stats?.short_term_entries ?? unknown}</span>
                 </div>
               </>
             )}
             <div className="obs-rp-prop">
               <span className="obs-rp-prop-key">Total Tags</span>
-              <span className="obs-rp-prop-val">{isUserMode ? (userStats?.total_tags ?? 0) : (stats?.total_tags ?? 0)}</span>
+              <span className="obs-rp-prop-val">{isUserMode ? (userStats?.total_tags ?? 0) : (stats?.total_tags ?? unknown)}</span>
             </div>
             <div className="obs-rp-prop">
               <span className="obs-rp-prop-key">Total Links</span>
-              <span className="obs-rp-prop-val">{stats?.total_links ?? 0}</span>
+              <span className="obs-rp-prop-val">{isUserMode ? (userStats?.total_links ?? 0) : (stats?.total_links ?? unknown)}</span>
             </div>
             {stats?.last_write && (
               <div className="obs-rp-prop">

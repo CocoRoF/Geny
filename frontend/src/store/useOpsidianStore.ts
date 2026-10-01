@@ -18,6 +18,13 @@ import type {
 export type ViewMode = 'editor' | 'graph' | 'search' | 'conversation' | 'digest';
 export type SidebarPanel = 'files' | 'tags' | 'backlinks';
 
+/** What `/memory/stats` answers: the vault's size, without the index. */
+export interface VaultTotals {
+  total_files: number;
+  total_chars: number;
+  categories: Record<string, number>;
+}
+
 export interface OpsidianState {
   // Sessions
   sessions: SessionInfo[];
@@ -34,6 +41,10 @@ export interface OpsidianState {
   // folders are expanded, `loadedDays` records which day pages have
   // already been pulled so re-expanding costs nothing.
   overview: MemoryOverview | null;
+  /** The vault's size from the cheap stats endpoint — files, characters and
+   *  categories — so the stats panels can say something true before (and
+   *  without) the full index. Tags, links and STM/LTM need the index. */
+  vaultTotals: VaultTotals | null;
   daysByCategory: Record<string, { day: string; count: number }[]>;
   loadedDays: Record<string, boolean>;
   /** The whole-vault index (tag map, backlinks) — expensive, so it is
@@ -90,6 +101,7 @@ export interface OpsidianState {
    *  what every day / folder expansion uses. */
   mergeFiles: (f: Record<string, MemoryFileInfo>) => void;
   setOverview: (o: MemoryOverview | null) => void;
+  setVaultTotals: (v: VaultTotals | null) => void;
   setCategoryDays: (category: string, days: { day: string; count: number }[]) => void;
   markDayLoaded: (key: string) => void;
   setFullIndexLoaded: (v: boolean) => void;
@@ -127,6 +139,7 @@ const initialState = {
   memoryStats: null as MemoryStats | null,
   loading: false,
   overview: null as MemoryOverview | null,
+  vaultTotals: null as VaultTotals | null,
   daysByCategory: {} as Record<string, { day: string; count: number }[]>,
   loadedDays: {} as Record<string, boolean>,
   fullIndexLoaded: false,
@@ -166,6 +179,7 @@ export const useOpsidianStore = create<OpsidianState>((set) => ({
   setFiles: (f) => set({ files: f }),
   mergeFiles: (f) => set((s) => ({ files: { ...s.files, ...f } })),
   setOverview: (o) => set({ overview: o }),
+  setVaultTotals: (v) => set({ vaultTotals: v }),
   setCategoryDays: (category, days) =>
     set((s) => ({ daysByCategory: { ...s.daysByCategory, [category]: days } })),
   markDayLoaded: (key) =>

@@ -105,12 +105,22 @@ export async function openNote(
  *  expanded. */
 export async function openVault(sessionId: string): Promise<void> {
   const store = useOpsidianStore.getState();
-  const [overview, cats] = await Promise.all([
+  const [overview, cats, totals] = await Promise.all([
     memoryApi.getOverview(sessionId),
     memoryApi.listCategories(sessionId),
+    // 136 bytes against the index's megabytes: enough for the stats panels
+    // to show the vault's real size instead of zeros.
+    memoryApi.getStats(sessionId).catch(() => null),
   ]);
   store.setOverview(overview);
   store.setCategories(cats.categories || []);
+  if (totals) {
+    store.setVaultTotals({
+      total_files: Number(totals.total_files) || 0,
+      total_chars: Number((totals as { total_chars?: number }).total_chars) || 0,
+      categories: totals.categories || {},
+    });
+  }
 }
 
 /** Step 2 — one category's day buckets (date-grouped categories), or its

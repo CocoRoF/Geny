@@ -51,22 +51,22 @@ export default function StatusBar({ onRefresh }: { onRefresh: () => void }) {
     ? (curatedStore.stats?.total_files ?? 0)
     : isUserMode
       ? (userStore.stats?.total_files ?? 0)
-      : (opsidian.memoryStats?.total_files ?? 0);
+      : (opsidian.memoryStats?.total_files ?? opsidian.vaultTotals?.total_files ?? 0);
   const totalChars = isCuratorMode
     ? (curatedStore.stats?.total_chars ?? 0)
     : isUserMode
       ? (userStore.stats?.total_chars ?? 0)
-      : (opsidian.memoryIndex?.total_chars ?? 0);
+      : (opsidian.memoryIndex?.total_chars ?? opsidian.vaultTotals?.total_chars ?? 0);
   const totalTags = isCuratorMode
     ? (curatedStore.stats?.total_tags ?? 0)
     : isUserMode
       ? (userStore.stats?.total_tags ?? 0)
-      : (opsidian.memoryStats?.total_tags ?? 0);
+      : (opsidian.memoryStats?.total_tags ?? '—');  // only the full index knows
   const totalLinks = isCuratorMode
     ? (curatedStore.stats?.total_links ?? 0)
     : isUserMode
       ? (userStore.stats?.total_links ?? 0)
-      : (opsidian.memoryStats?.total_links ?? 0);
+      : (opsidian.memoryStats?.total_links ?? '—');  // only the full index knows
   const loading = isCuratorMode
     ? curatedStore.loading
     : isUserMode ? userStore.loading : opsidian.loading;

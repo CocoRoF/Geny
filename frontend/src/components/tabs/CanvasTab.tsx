@@ -225,11 +225,16 @@ export default function CanvasTab() {
   const refresh = useCallback(async () => {
     if (!selectedSessionId) return;
     try {
-      const res = await agentApi.listStorage(selectedSessionId);
+      // The workspace scope, not 'all': `workspace/` is a link into the
+      // user's cloud, and the whole-session listing does not follow it —
+      // every agent's canvas read "the workspace is empty" while its files
+      // sat right there. Paths here are relative to the workspace; the rest
+      // of this tab (and storage-raw) speaks session-root paths.
+      const res = await agentApi.listStorage(selectedSessionId, 'workspace');
       setFiles(
-        (res.files || []).filter(
-          (f) => !(f.is_dir ?? f.is_directory) && f.path.startsWith('workspace/'),
-        ),
+        (res.files || [])
+          .filter((f) => !(f.is_dir ?? f.is_directory))
+          .map((f) => ({ ...f, path: `workspace/${f.path}` })),
       );
     } catch { /* session may be dormant; keep last view */ }
   }, [selectedSessionId]);
